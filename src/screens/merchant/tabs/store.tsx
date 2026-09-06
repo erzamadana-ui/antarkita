@@ -97,7 +97,7 @@ export default function MerchantStore() {
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[font.body, { fontWeight: '700' }, it.danger && { color: colors.danger }]} numberOfLines={1}>{it.title}</Text>
-                    {it.subtitle ? <Text style={font.tiny} numberOfLines={1}>{it.subtitle}</Text> : null}
+                    {it.subtitle ? <Text style={font.tiny} numberOfLines={2}>{it.subtitle}</Text> : null}
                   </View>
                   <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
                 </PressableScale>

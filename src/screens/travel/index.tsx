@@ -24,9 +24,9 @@ const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 type Mode = 'shared' | TravelRequestKind;
 const MODES: { key: Mode; label: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
-  { key: 'shared', label: 'Kursi bersama', icon: 'people-outline' },
-  { key: 'charter', label: 'Carter privat', icon: 'car-outline' },
-  { key: 'daily', label: 'Sopir harian', icon: 'calendar-outline' },
+  { key: 'shared', label: 'Kursi', icon: 'people-outline' },
+  { key: 'charter', label: 'Carter', icon: 'car-outline' },
+  { key: 'daily', label: 'Sopir', icon: 'calendar-outline' },
 ];
 const MIN_LEAD_MS = 2 * 3600e3;
 const requestStatusColor = (st: TravelRequest['status']) => st === 'completed' ? colors.success : st === 'cancelled' || st === 'expired' ? colors.danger : st === 'offered' ? colors.accent : colors.travel;
@@ -118,7 +118,7 @@ export default function TravelScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>{cities.filter((c) => c.id !== from).map((c) => <Chip key={c.id} label={c.name} active={to === c.id} onPress={() => setTo(c.id)} />)}</ScrollView>
           <Text style={font.label}>Tanggal berangkat</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            <Pressable onPress={() => setDay(null)} style={[s.day, !day && { backgroundColor: colors.primary, borderColor: colors.primary }]}><Text style={{ fontSize: 12, fontWeight: '700', color: !day ? '#fff' : colors.textMuted }}>Semua</Text><Text style={{ fontSize: 16, fontWeight: '800', color: !day ? '#fff' : colors.text }}>10 hr</Text></Pressable>
+            <Pressable onPress={() => setDay(null)} style={[s.day, !day && { backgroundColor: colors.primary, borderColor: colors.primary }]}><Text style={{ fontSize: 12, fontWeight: '700', color: !day ? '#fff' : colors.textMuted }}>Semua</Text><Text style={{ fontSize: 15, fontWeight: '800', color: !day ? '#fff' : colors.text }} numberOfLines={1}>10 hr</Text></Pressable>
             {days.map((d, i) => { const active = day && d.getTime() === day.getTime(); return (
               <Pressable key={i} onPress={() => setDay(d)} style={[s.day, active && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
                 <Text style={{ fontSize: 12, fontWeight: '700', color: active ? '#fff' : colors.textMuted }}>{i === 0 ? 'Hari ini' : i === 1 ? 'Besok' : DAY_NAMES[d.getDay()]}</Text>
@@ -458,7 +458,7 @@ const s = StyleSheet.create({
   hero: { backgroundColor: '#fff', borderRadius: radius.lg, padding: 12, borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   heroArt: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
   group: { gap: 10, backgroundColor: '#fff', borderRadius: radius.lg, padding: 14, borderWidth: 1, borderColor: colors.border, ...shadow.soft },
-  day: { width: 58, paddingVertical: 8, borderRadius: radius.md, alignItems: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff' },
+  day: { width: 62, paddingVertical: 8, borderRadius: radius.md, alignItems: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff' },
   trip: { padding: 12, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff', ...shadow.soft },
   thumb: { width: 64, height: 64, borderRadius: 16, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
   rowArrow: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.tint },

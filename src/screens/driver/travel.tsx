@@ -10,7 +10,7 @@ import { ServiceIllustration } from '@/components/ServiceArt';
 import { CallButton } from '@/components/call/IncomingCall';
 import { useCities, usePartnerTrips } from '@/hooks/useTravel';
 import { useAuth } from '@/store/auth';
-import { supabase, rpc } from '@/lib/supabase';
+import { supabase, rpc, realtimeChannel } from '@/lib/supabase';
 import { colors, font, radius, shadow, motion } from '@/lib/theme';
 import { rupiah, formatSchedule, cityName, tripStatusLabel, travelStatusLabel, travelKindLabel, travelRequestStatusLabel, accommodationLabel } from '@/lib/format';
 import type { TravelPartner, TravelRoute, TravelManifestRow, TravelTrip, TravelOpenRequest } from '@/lib/types';
@@ -185,7 +185,7 @@ function RequestsTab({ me }: { me: TravelPartner | null }) {
   const load = async () => { try { setRows(await rpc<TravelOpenRequest[]>('travel_partner_open_requests')); } catch (e) { setRows([]); toast.error((e as Error).message); } };
   useEffect(() => {
     load();
-    const ch = supabase.channel('tp-open-requests').on('postgres_changes', { event: '*', schema: 'public', table: 'travel_requests' }, load).on('postgres_changes', { event: '*', schema: 'public', table: 'travel_offers' }, load).subscribe();
+    const ch = realtimeChannel('tp-open-requests').on('postgres_changes', { event: '*', schema: 'public', table: 'travel_requests' }, load).on('postgres_changes', { event: '*', schema: 'public', table: 'travel_offers' }, load).subscribe();
     return () => { supabase.removeChannel(ch); };
   }, []);
   if (rows === null) return <Text style={font.small}>Memuat permintaan…</Text>;

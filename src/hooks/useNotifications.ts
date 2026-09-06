@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase, rpc } from '@/lib/supabase';
+import { supabase, rpc, realtimeChannel } from '@/lib/supabase';
 import type { AppNotification } from '@/lib/types';
 
 export function useNotifications(uid?: string | null) {
@@ -13,7 +13,7 @@ export function useNotifications(uid?: string | null) {
   useEffect(() => { reload(); }, [reload]);
   useEffect(() => {
     if (!uid) return;
-    const ch = supabase.channel(`notif:${uid}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` }, ({ new: row }) => setItems((p) => [row as AppNotification, ...p])).subscribe();
+    const ch = realtimeChannel(`notif:${uid}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` }, ({ new: row }) => setItems((p) => [row as AppNotification, ...p])).subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [uid]);
   const unread = items.filter((n) => !n.read_at).length;

@@ -1,6 +1,6 @@
 // Tiket aduan & CS online — daftar tiket, detail + pesan realtime
 import { useCallback, useEffect, useState } from 'react';
-import { supabase, rpc } from '@/lib/supabase';
+import { supabase, rpc, realtimeChannel } from '@/lib/supabase';
 import type { Ticket, TicketMessage } from '@/lib/types';
 
 export function useMyTickets(userId?: string | null) {
@@ -14,7 +14,7 @@ export function useMyTickets(userId?: string | null) {
   useEffect(() => { reload(); }, [reload]);
   useEffect(() => {
     if (!userId) return;
-    const ch = supabase.channel(`tickets:${userId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'tickets', filter: `user_id=eq.${userId}` }, reload).subscribe();
+    const ch = realtimeChannel(`tickets:${userId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'tickets', filter: `user_id=eq.${userId}` }, reload).subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [userId, reload]);
   const openCount = tickets.filter((t) => !['resolved', 'closed'].includes(t.status)).length;
@@ -37,7 +37,7 @@ export function useTicket(id?: string | null) {
   useEffect(() => { reload(); }, [reload]);
   useEffect(() => {
     if (!id) return;
-    const ch = supabase.channel(`ticket:${id}`)
+    const ch = realtimeChannel(`ticket:${id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ticket_messages', filter: `ticket_id=eq.${id}` }, ({ new: row }) => setMessages((p) => (p.some((x) => x.id === (row as TicketMessage).id) ? p : [...p, row as TicketMessage])))
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tickets', filter: `id=eq.${id}` }, ({ new: row }) => setTicket((p) => ({ ...(p ?? {}), ...(row as Ticket) })))
       .subscribe();

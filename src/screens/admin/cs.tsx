@@ -8,7 +8,7 @@ import { Row, Badge, Button, toast, Input, Chip, Avatar, Empty } from '@/compone
 import { LiveDot, PressableScale } from '@/components/motion';
 import { TicketChat } from '@/components/TicketChat';
 import { useTicket } from '@/hooks/useTickets';
-import { rpc, supabase } from '@/lib/supabase';
+import { rpc, supabase, realtimeChannel } from '@/lib/supabase';
 import { useAuth } from '@/store/auth';
 import { colors, font, radius, glass, motion, shadow } from '@/lib/theme';
 import { timeAgo, formatDate, ticketStatusLabel, ticketStatusColor, ticketCategoryLabel, ticketPriorityLabel, ticketPriorityColor, roleLabelId } from '@/lib/format';
@@ -43,7 +43,7 @@ export default function AdminSupport() {
   }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    const ch = supabase.channel('admin-cs')
+    const ch = realtimeChannel('admin-cs')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, load)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sos_alerts' }, load)
       .subscribe();

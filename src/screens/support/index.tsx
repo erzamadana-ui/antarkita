@@ -44,7 +44,7 @@ export default function Support() {
               </View>
             </Row>
             <Row gap={8} style={{ marginTop: 14 }}>
-              <Button title="Chat CS online" icon="chatbubbles-outline" style={{ flex: 1 }} onPress={() => router.push({ pathname: '/support/new', params: { category: 'other', subject: 'Chat dengan CS' } } as never)} />
+              <Button title="Chat CS" icon="chatbubbles-outline" style={{ flex: 1 }} onPress={() => router.push({ pathname: '/support/new', params: { category: 'other', subject: 'Chat dengan CS' } } as never)} />
               <Button title="Buat tiket" icon="create-outline" variant="secondary" style={{ flex: 1 }} onPress={() => router.push('/support/new' as never)} />
             </Row>
           </View>

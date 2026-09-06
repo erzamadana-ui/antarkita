@@ -48,7 +48,12 @@ export function makeGlassTabBar(spec: TabSpec, accent = colors.primary, fab?: Ta
                   onPress={() => { if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {}); const e = navigation.emit({ type: 'tabPress', target: r.key, canPreventDefault: true }); if (!focused && !e.defaultPrevented) navigation.navigate(r.name); }}
                   style={[s.tab, { width: tabW }]}>
                   <Ionicons name={focused ? sp.iconActive : sp.icon} size={22} color={focused ? accent : colors.textMuted} />
-                  <Text style={[s.label, tabW < 76 && { fontSize: 11 }, { color: focused ? accent : colors.textMuted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{sp.tk ? translate(locale, sp.tk) : sp.label}</Text>
+                  {(() => {
+                    const text = sp.tk ? translate(locale, sp.tk) : sp.label;
+                    // Ukuran huruf mengikuti lebar tab & panjang label supaya label panjang ("Pendapatan") tidak terpotong
+                    const fs = Math.max(9, Math.min(12, Math.floor((tabW - 8) / (text.length * 0.56))));
+                    return <Text style={[s.label, { fontSize: fs, color: focused ? accent : colors.textMuted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{text}</Text>;
+                  })()}
                 </Pressable>
               );
             })}

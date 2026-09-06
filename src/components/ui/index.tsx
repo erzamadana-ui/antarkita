@@ -32,10 +32,11 @@ export function Button({ title, onPress, variant = 'primary', loading, disabled,
     if (!onPress || isLoading || disabled) return;
     try { setBusy(true); await onPress(); } finally { setBusy(false); }
   };
+  // Judul selalu satu baris (di layar sempit teks panjang dahulu membungkus & merusak bentuk tombol)
   const inner = isLoading ? <ActivityIndicator color={fg} /> : (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: '100%' }}>
       {icon && <Ionicons name={icon} size={size === 'sm' ? 16 : 20} color={fg} />}
-      <Text style={{ color: fg, fontWeight: '800', fontSize: size === 'sm' ? 14 : 16, letterSpacing: 0.1 }}>{title}</Text>
+      <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: fg, fontWeight: '800', fontSize: size === 'sm' ? 14 : 16, letterSpacing: 0.1, flexShrink: 1 }}>{title}</Text>
     </View>
   );
   const shape: ViewStyle = { height, borderRadius: size === 'sm' ? 12 : 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: size === 'sm' ? 14 : 20, overflow: 'hidden' };

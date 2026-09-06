@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { supabase, rpc } from '@/lib/supabase';
+import { supabase, rpc, realtimeChannel } from '@/lib/supabase';
 import { useAuth } from '@/store/auth';
 import { useWatchLocation } from './useLocation';
 import type { AvailableOrder, Driver, LatLng, Order } from '@/lib/types';
@@ -40,7 +40,7 @@ export function useDriverSession() {
   useEffect(() => { loadActive(); loadAvailable(); }, [loadActive, loadAvailable]);
   useEffect(() => {
     if (!uid) return;
-    const ch = supabase.channel(`driver-feed-${uid}-${Math.random().toString(36).slice(2)}`)
+    const ch = realtimeChannel(`driver-feed-${uid}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { loadAvailable(); loadActive(); })
       .subscribe();
     const t = setInterval(() => { loadAvailable(); loadActive(); }, 7000);

@@ -1,6 +1,6 @@
 // AntarTravel — hook pencarian rute/jadwal, booking saya, jadwal mitra
 import { useCallback, useEffect, useState } from 'react';
-import { supabase, rpc } from '@/lib/supabase';
+import { supabase, rpc, realtimeChannel } from '@/lib/supabase';
 import type { City, TravelBooking, TravelPartner, TravelSearch, TravelTrip, TravelRoute, TravelRequest } from '@/lib/types';
 
 export function useCities() {
@@ -31,7 +31,7 @@ export function useMyTravelBookings(uid?: string | null) {
   useEffect(() => { reload(); }, [reload]);
   useEffect(() => {
     if (!uid) return;
-    const ch = supabase.channel(`tb:${uid}`).on('postgres_changes', { event: '*', schema: 'public', table: 'travel_bookings', filter: `customer_id=eq.${uid}` }, reload).subscribe();
+    const ch = realtimeChannel(`tb:${uid}`).on('postgres_changes', { event: '*', schema: 'public', table: 'travel_bookings', filter: `customer_id=eq.${uid}` }, reload).subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [uid, reload]);
   return { bookings, loading, reload };
@@ -47,7 +47,7 @@ export function usePartnerTrips(partnerId?: string | null) {
   useEffect(() => { reload(); }, [reload]);
   useEffect(() => {
     if (!partnerId) return;
-    const ch = supabase.channel(`tt:${partnerId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'travel_bookings' }, reload).on('postgres_changes', { event: '*', schema: 'public', table: 'travel_trips', filter: `partner_id=eq.${partnerId}` }, reload).subscribe();
+    const ch = realtimeChannel(`tt:${partnerId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'travel_bookings' }, reload).on('postgres_changes', { event: '*', schema: 'public', table: 'travel_trips', filter: `partner_id=eq.${partnerId}` }, reload).subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [partnerId, reload]);
   return { trips, loading, reload };
@@ -66,7 +66,7 @@ export function useTravelRequests(uid?: string | null) {
   useEffect(() => { reload(); }, [reload]);
   useEffect(() => {
     if (!uid) return;
-    const ch = supabase.channel(`treq:${uid}`)
+    const ch = realtimeChannel(`treq:${uid}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'travel_requests', filter: `customer_id=eq.${uid}` }, reload)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'travel_offers' }, reload)
       .subscribe();
@@ -84,7 +84,7 @@ export function useTravelRequest(id?: string | null) {
   useEffect(() => { reload(); }, [reload]);
   useEffect(() => {
     if (!id) return;
-    const ch = supabase.channel(`treq-detail:${id}`)
+    const ch = realtimeChannel(`treq-detail:${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'travel_offers', filter: `request_id=eq.${id}` }, reload)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'travel_requests', filter: `id=eq.${id}` }, reload)
       .subscribe();

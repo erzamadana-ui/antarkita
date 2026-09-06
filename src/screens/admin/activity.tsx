@@ -6,7 +6,7 @@ import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated'
 import { AdminPage, FilterBar, StatCard } from '@/components/admin';
 import { Row, Badge, Input, Chip, Button, Empty } from '@/components/ui';
 import { LiveDot, PressableScale } from '@/components/motion';
-import { supabase } from '@/lib/supabase';
+import { supabase, realtimeChannel } from '@/lib/supabase';
 import { colors, font, radius, glass, motion } from '@/lib/theme';
 import { formatDate, timeAgo, roleLabelId } from '@/lib/format';
 import type { AuditLog } from '@/lib/types';
@@ -49,7 +49,7 @@ export default function AdminActivity() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     if (!live) return;
-    const ch = supabase.channel('admin-audit').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_logs' }, ({ new: row }) => {
+    const ch = realtimeChannel('admin-audit').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_logs' }, ({ new: row }) => {
       const r = row as AuditLog;
       setRows((p) => (p.some((x) => x.id === r.id) ? p : [r, ...p].slice(0, 600)));
     }).subscribe();

@@ -12,7 +12,7 @@ import { ServiceIllustration } from '@/components/ServiceArt';
 import { CallButton } from '@/components/call/IncomingCall';
 import { SosButton } from '@/components/Safety';
 import { useCities } from '@/hooks/useTravel';
-import { supabase, rpc } from '@/lib/supabase';
+import { supabase, rpc, realtimeChannel } from '@/lib/supabase';
 import { colors, font, radius, shadow, motion } from '@/lib/theme';
 import { rupiah, formatSchedule, paidViaLabel, travelStatusLabel, tripStatusLabel, cityName } from '@/lib/format';
 import type { TravelBooking, TravelTrip, TravelRoute, TravelPartner, Profile } from '@/lib/types';
@@ -31,7 +31,7 @@ export default function TravelBookingDetail() {
   const [tab, setTab] = useState<Tab>('ringkasan');
   const heroH = Math.round(height * 0.4);
   const load = async () => { const { data } = await supabase.from('travel_bookings').select('*, trip:travel_trips(*, route:travel_routes(*), partner:travel_partners(*, profile:profiles(*)))').eq('id', id).maybeSingle(); setB((data as Full) ?? null); };
-  useEffect(() => { load(); const ch = supabase.channel(`tbk:${id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'travel_bookings', filter: `id=eq.${id}` }, load).on('postgres_changes', { event: '*', schema: 'public', table: 'travel_trips' }, load).subscribe(); return () => { supabase.removeChannel(ch); }; }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); const ch = realtimeChannel(`tbk:${id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'travel_bookings', filter: `id=eq.${id}` }, load).on('postgres_changes', { event: '*', schema: 'public', table: 'travel_trips' }, load).subscribe(); return () => { supabase.removeChannel(ch); }; }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   if (b === undefined) return <Screen title="Booking travel" back><Loading /></Screen>;
   if (!b) return <Screen title="Booking travel" back><Text style={font.small}>Booking tidak ditemukan.</Text></Screen>;
   const t = b.trip; const p = t.partner;

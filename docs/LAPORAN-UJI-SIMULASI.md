@@ -68,3 +68,16 @@ Dashboard, Pesanan, Driver, Merchant, Pengguna (masking data pribadi, ekspor), K
 Jalankan `supabase/tests/simulasi_e2e.sql` di SQL Editor Supabase (sebagai postgres). Skrip berakhir dengan `RAISE EXCEPTION 'SIMULASI_SELESAI …'` yang berisi log 22 skenario dan otomatis membatalkan semua perubahan.
 
 *Keterbatasan data: angka tarif/komisi mengikuti pengaturan saat ini di `app_settings`/`pricing`; harga pasar adalah acuan perkiraan; uji UI memakai data mock, bukan akun nyata.*
+
+## 6. Perbaikan 6 September (sesi lanjutan)
+| Temuan | Akar masalah | Perbaikan | Bukti |
+|---|---|---|---|
+| Halaman **Notifikasi** force close: "cannot add `postgres_changes` callbacks for realtime:notif:… after `subscribe()`" | Dua tempat memakai topik realtime yang **sama** (`notif:<uid>` — lonceng di beranda & layar kotak masuk). supabase-js memakai ulang objek channel bertopik sama, sehingga `.on()` kedua dipanggil setelah channel ter-`subscribe()` → melempar error saat render | Helper `realtimeChannel()` membuat topik unik per pemanggil; dipakai di semua langganan `postgres_changes` (notifikasi, pesanan, chat, travel, tiket, admin). Broadcast panggilan (`lib/call.ts`) sengaja tetap memakai topik sama | Reproduksi & verifikasi dengan supabase-js v2.114: topik sama → error yang sama persis; topik unik → 2 channel, tanpa error |
+| Kartu "Anda dilindungi" (Pusat Keamanan) — judul & teks terjepit oleh tombol SOS di layar 360 px | Ikon + teks + tombol SOS dipaksa satu baris | Tombol SOS dipindah ke bawah selebar kartu | Tangkapan layar 360×760 |
+| Tombol "Chat CS online" membungkus 2 baris di dalam pil | Judul tombol boleh membungkus | Judul tombol selalu 1 baris (`numberOfLines`), label diringkas jadi "Chat CS" | idem |
+| Pil AntarTravel ("Kursi ber…", "Carter pr…", "Sopir har…") terpotong | Label terlalu panjang; `adjustsFontSizeToFit` tidak bekerja di web | Label diringkas: Kursi / Carter / Sopir | idem |
+| Label tab "Pendap…" di aplikasi Mitra terpotong | Ukuran huruf tetap | Ukuran huruf label tab mengikuti lebar tab & panjang teks | idem |
+| Sub-judul menu Akun terpotong ("…pemegang sa…") | `numberOfLines={1}` | Menjadi 2 baris | idem |
+| Sisa merek lama "Antar Aja" di data (nama aplikasi, rekening bank, gudang) | Data awal sebelum rebrand | Diperbarui ke "AntarKita" / "PT AntarKita Indonesia" di `app_settings` & `warehouses` | Query verifikasi 0 baris tersisa |
+
+Sweep ulang setelah perbaikan: Pelanggan 25 rute, Mitra 18 rute, Admin 21 rute — 0 error; uji alur lupa kata sandi 19/19 lolos.

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, realtimeChannel } from '@/lib/supabase';
 import type { Driver, Order, OrderEvent, OrderMessage, Profile } from '@/lib/types';
 
 const ORDER_SELECT = '*, order_items(*), merchant:merchants(id,name,address,image_url,lat,lng,rating_avg,prep_minutes,owner_id)';
@@ -40,7 +40,7 @@ export function useOrder(orderId: string | undefined) {
   // realtime order + lokasi driver
   useEffect(() => {
     if (!orderId) return;
-    const ch = supabase.channel(`order-${orderId}-${Math.random().toString(36).slice(2)}`)
+    const ch = realtimeChannel(`order-${orderId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` }, () => load())
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_events', filter: `order_id=eq.${orderId}` }, () => load())
       .subscribe();
@@ -51,7 +51,7 @@ export function useOrder(orderId: string | undefined) {
   const driverId = order?.driver_id;
   useEffect(() => {
     if (!driverId) return;
-    const ch = supabase.channel(`driver-${driverId}-${Math.random().toString(36).slice(2)}`)
+    const ch = realtimeChannel(`driver-${driverId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'drivers', filter: `id=eq.${driverId}` }, (payload) => {
         setDriver((d) => (d ? { ...d, ...(payload.new as Partial<Driver>) } : d));
       })
@@ -77,7 +77,7 @@ export function useOrderChat(orderId: string | undefined) {
   useEffect(() => {
     load();
     if (!orderId) return;
-    const ch = supabase.channel(`chat-${orderId}-${Math.random().toString(36).slice(2)}`)
+    const ch = realtimeChannel(`chat-${orderId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_messages', filter: `order_id=eq.${orderId}` }, (p) => {
         setMessages((m) => (m.some((x) => x.id === (p.new as OrderMessage).id) ? m : [...m, p.new as OrderMessage]));
       })
@@ -112,7 +112,7 @@ export function useMyOrders(kind: 'customer' | 'driver' | 'merchant', id: string
   useEffect(() => {
     load();
     if (!id) return;
-    const ch = supabase.channel(`orders-${kind}-${id}-${Math.random().toString(36).slice(2)}`)
+    const ch = realtimeChannel(`orders-${kind}-${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => loadRef.current())
       .subscribe();
     const t = setInterval(() => loadRef.current(), 10000);

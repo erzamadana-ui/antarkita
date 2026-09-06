@@ -80,3 +80,16 @@ function captureRecovery(): { access_token: string; refresh_token: string } | { 
     return null;
   } catch { return null; }
 }
+
+let chSeq = 0;
+/**
+ * Channel realtime dengan topik UNIK per pemanggil.
+ * supabase-js memakai ulang channel bertopik sama; bila satu layar sudah subscribe dan layar lain
+ * memanggil `.on('postgres_changes', …)` pada topik yang sama, realtime-js melempar
+ * "cannot add `postgres_changes` callbacks … after `subscribe()`" dan layar gagal dirender.
+ * Dipakai untuk semua langganan postgres_changes (broadcast di lib/call.ts sengaja memakai topik sama).
+ */
+export function realtimeChannel(name: string) {
+  chSeq = (chSeq + 1) % 1e6;
+  return supabase.channel(`${name}#${Date.now().toString(36)}${chSeq.toString(36)}`);
+}

@@ -39,14 +39,15 @@ export default function SafetyCenter() {
       <View style={{ gap: 16 }}>
         <Entrance index={0}>
           <View style={s.hero}>
-            <Row gap={12}>
+            {/* Ikon + teks satu baris; tombol SOS di bawah selebar kartu agar teks tidak terjepit di layar sempit */}
+            <Row gap={12} style={{ alignItems: 'flex-start' }}>
               <IconCircle name="shield-checkmark-outline" size={52} bg={colors.tint} />
-              <View style={{ flex: 1 }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={font.h2}>Anda dilindungi</Text>
                 <Text style={[font.small, { marginTop: 2 }]}>Panggilan tersamar, PIN penjemputan, bagikan perjalanan, SOS 24 jam, dan asuransi perjalanan mitra.</Text>
               </View>
-              <SosButton />
             </Row>
+            <SosButton style={{ marginTop: 14 }} />
           </View>
         </Entrance>
 
