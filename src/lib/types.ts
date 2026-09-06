@@ -15,7 +15,7 @@ export interface Place extends LatLng { address: string; name?: string }
 export interface Profile {
   id: string; full_name: string; phone: string | null; email: string | null; avatar_url: string | null;
   role: UserRole; is_active: boolean; created_at: string; locale?: Locale;
-  emergency_contact_name?: string | null; emergency_contact_phone?: string | null; status_reason?: string | null;
+  emergency_contact_name?: string | null; emergency_contact_phone?: string | null; status_reason?: string | null; deletion_requested_at?: string | null;
 }
 export interface Wallet { user_id: string; balance: number; updated_at: string }
 export interface WalletTx {

@@ -1,4 +1,5 @@
 import type { ExpoConfig } from 'expo/config';
+import pkg from './package.json';
 
 // Satu basis kode → 3 aplikasi berbeda. Pilih lewat env APP=pelanggan|mitra|admin (default: pelanggan).
 //   APP=mitra npx expo export --platform web   → web aplikasi Mitra
@@ -19,10 +20,19 @@ const META: Record<AppKind, { name: string; slug: string; scheme: string; id: st
 const m = META[APP];
 const assets = `./apps/${APP}/assets`;
 
+// Versi rilis Play Store.
+//   versionName  ← package.json "version" (satu sumber kebenaran)
+//   versionCode  ← env ANDROID_VERSION_CODE (CI: github.run_number + ANDROID_VERSION_CODE_OFFSET), default 1 saat dev lokal.
+// ANDROID_VERSION_CODE_OFFSET dibaca oleh .github/workflows/release-aab.yml (grep) — jangan ganti nama konstanta ini.
+const ANDROID_VERSION_CODE_OFFSET = 100;
+const envCode = Number.parseInt(process.env.ANDROID_VERSION_CODE ?? '', 10);
+const runNumber = Number.parseInt(process.env.GITHUB_RUN_NUMBER ?? '', 10);
+const versionCode = envCode > 0 ? envCode : runNumber > 0 ? runNumber + ANDROID_VERSION_CODE_OFFSET : 1;
+
 const config: ExpoConfig = {
   name: m.name,
   slug: m.slug,
-  version: '3.0.0',
+  version: pkg.version,
   scheme: m.scheme,
   orientation: 'portrait',
   icon: `${assets}/icon.png`,
@@ -41,8 +51,25 @@ const config: ExpoConfig = {
   },
   android: {
     package: m.id,
+    versionCode,
     adaptiveIcon: { foregroundImage: `${assets}/adaptive-icon.png`, backgroundColor: m.bg },
-    permissions: ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_LOCATION'],
+    // Izin minimal (Play Store). Lokasi hanya foreground (useLocation.ts memakai requestForegroundPermissionsAsync +
+    // watchPositionAsync saat aplikasi terbuka) — TIDAK ada background location / foreground service. Kamera & mikrofon:
+    // foto profil/dokumen/bukti kirim dan panggilan suara WebRTC. Bila kelak pelacakan latar untuk Mitra diaktifkan,
+    // tambahkan FOREGROUND_SERVICE + FOREGROUND_SERVICE_LOCATION (+ ACCESS_BACKGROUND_LOCATION) khusus APP === 'mitra'
+    // dan isi deklarasi + video di Play Console (lihat docs/rilis/PLAY-STORE-LISTING.md).
+    permissions: [
+      'android.permission.ACCESS_COARSE_LOCATION', 'android.permission.ACCESS_FINE_LOCATION',
+      'android.permission.CAMERA', 'android.permission.RECORD_AUDIO', 'android.permission.MODIFY_AUDIO_SETTINGS',
+      'android.permission.INTERNET', 'android.permission.ACCESS_NETWORK_STATE', 'android.permission.VIBRATE', 'android.permission.WAKE_LOCK',
+    ],
+    // Izin yang ditambahkan template/pustaka tetapi tidak dipakai — diblokir agar tidak muncul di manifest & review Play.
+    blockedPermissions: [
+      'android.permission.ACCESS_BACKGROUND_LOCATION',
+      'android.permission.FOREGROUND_SERVICE', 'android.permission.FOREGROUND_SERVICE_LOCATION',
+      'android.permission.SYSTEM_ALERT_WINDOW',
+      'android.permission.READ_MEDIA_IMAGES', 'android.permission.READ_MEDIA_VIDEO',
+    ],
   },
   web: {
     output: 'single',

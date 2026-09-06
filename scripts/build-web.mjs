@@ -22,4 +22,16 @@ if(p.indexOf(b+'/mitra')===0)app=b+'/mitra/';else if(p.indexOf(b+'/admin')===0)a
 var rel=p.slice(app.length-1)||'/';location.replace(app+'?r='+encodeURIComponent(rel+location.search+location.hash));})();
 </script>`);
 fs.writeFileSync('dist/.nojekyll', '');
-console.log('\n✔ dist/ siap: pelanggan, mitra, admin + 404.html');
+
+// Halaman statis hukum untuk Play Store / App Store (URL wajib publik):
+//   docs/rilis/privacy.html → dist/privacy/index.html → https://<pages>/antarkita/privacy/
+//   docs/rilis/terms.html   → dist/terms/index.html   → https://<pages>/antarkita/terms/
+// Berkas ini ada secara fisik di dist/, sehingga GitHub Pages melayaninya langsung; 404.html di atas hanya
+// dijalankan untuk path yang TIDAK ada (SPA fallback) dan tidak menyentuh /privacy/ maupun /terms/.
+for (const [src, dir] of [['docs/rilis/privacy.html', 'privacy'], ['docs/rilis/terms.html', 'terms']]) {
+  if (!fs.existsSync(src)) { console.warn(`⚠ ${src} tidak ditemukan — halaman /${dir}/ dilewati`); continue; }
+  fs.mkdirSync(`dist/${dir}`, { recursive: true });
+  fs.copyFileSync(src, `dist/${dir}/index.html`);
+  console.log(`• ${src} → dist/${dir}/index.html (${site}/${dir}/)`);
+}
+console.log('\n✔ dist/ siap: pelanggan, mitra, admin + 404.html + privacy/ + terms/');

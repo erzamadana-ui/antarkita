@@ -45,6 +45,7 @@ export default function Account() {
       { icon: 'shield-checkmark-outline', color: colors.danger, title: 'Pusat Keamanan', subtitle: 'Kontak darurat, bagikan perjalanan, SOS', onPress: () => router.push('/safety' as never) },
       { icon: 'chatbubbles-outline', color: colors.info, title: t('help'), subtitle: t('help_sub'), onPress: () => router.push('/support' as never) },
       { icon: 'log-out-outline', title: t('logout'), danger: true, onPress: confirmSignOut },
+      { icon: 'trash-outline', title: 'Hapus akun', subtitle: 'Hapus data pribadi secara permanen', danger: true, onPress: () => router.push('/account/delete' as never) },
     ] },
   ];
 

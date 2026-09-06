@@ -1,5 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Linking } from 'react-native';
+import { signedUrl } from '@/lib/upload';
+import { toast } from '@/components/ui';
 import { Ionicons } from '@expo/vector-icons';
 import { Row, Avatar, Stars, Badge, Divider } from '@/components/ui';
 import { PressableScale } from '@/components/motion';
@@ -124,6 +126,11 @@ export function ShoppingListBlock({ order }: { order: Order }) {
       </Row>
       {(order.service_fee ?? 0) > 0 && <Row between><Text style={font.small}>Jasa belanja</Text><Text style={{ fontWeight: '700' }}>{rupiah(order.service_fee ?? 0)}</Text></Row>}
       {actual && <Text style={font.tiny}>Sumber harga nota: driver{isMarket ? ' — dipakai sebagai acuan harga pasar untuk pesanan berikutnya' : ''}.</Text>}
+      {!!order.receipt_url && (
+        <PressableScale onPress={async () => { try { const u = /^https?:\/\//i.test(order.receipt_url!) ? order.receipt_url! : await signedUrl('proofs', order.receipt_url!); if (u) Linking.openURL(u); else toast.error('Foto nota tidak bisa dibuka'); } catch (e) { toast.error((e as Error).message); } }} style={[s.receiptBtn, { borderColor: color }]}>
+          <Ionicons name="receipt-outline" size={16} color={color} /><Text style={[font.small, { color, fontWeight: '700' }]}>Lihat foto nota dari driver</Text>
+        </PressableScale>
+      )}
     </View>
   );
 }
@@ -174,6 +181,7 @@ export function customerSubtitle(p: Profile | null) { return p ? `Nomor tersembu
 
 export { Divider };
 const s = StyleSheet.create({
+  receiptBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, marginTop: 4 },
   person: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radius.xl, padding: 12, borderWidth: 1, borderColor: glass.border, ...shadow.soft },
   circle: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   dot: { width: 10, height: 10, borderRadius: 5 },

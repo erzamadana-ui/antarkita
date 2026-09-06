@@ -16,6 +16,13 @@ begin
   select id into route1 from travel_routes where active and from_city = (select id from cities where name = 'Pekanbaru') and to_city = (select id from cities where name = 'Padang') limit 1;
   select id into wh_dest from warehouses where city_id = city_bkt and active limit 1;
 
+  -- ===== S0 Pembersihan sisa uji manual (ikut di-rollback): order aktif lama akun uji ditutup agar batas 3 order aktif & "selesaikan order aktif dulu" tidak mengganggu =====
+  begin
+    update orders set status = 'cancelled' where customer_id = cust and status in ('searching','accepted','arrived','in_progress'); get diagnostics n = row_count;
+    update orders set status = 'cancelled' where driver_id in (drv, drv2) and status in ('accepted','arrived','in_progress'); get diagnostics m0 = row_count;
+    if n + m0 > 0 then log := log || format('S0 bersih: %s order aktif lama pelanggan uji & %s order aktif lama driver uji ditutup (hanya dalam transaksi simulasi)', n, m0) || E'\n'; end if;
+  exception when others then log := log || 'S0 BUG bersih: ' || sqlerrm || E'\n'; end;
+
   -- ===== S0 Saldo uji pelanggan (top up manual disetujui admin) =====
   begin
     perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
@@ -171,9 +178,12 @@ begin
       o := cancel_order(o.id, 'uji batal');
       perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
       perform cancel_order(o.id, 'bersih');
+      m0 := n;
+      -- batas 3 pembatalan/24 jam dihitung termasuk pembatalan nyata driver uji hari ini → berhenti begitu ditangguhkan
+      exit when (select status from drivers where id = drv) = 'suspended';
     end loop;
     select * into f from fraud_flags where subject_id = drv and kind = 'cancel_spam' and severity = 'high' order by created_at desc limit 1;
-    log := log || format('S9a %s driver status=%s flag=%s auto=%s', case when (select status from drivers where id = drv) = 'suspended' then 'OK' else 'BUG' end, (select status from drivers where id = drv), f.kind, f.auto_action) || E'\n';
+    log := log || format('S9a %s driver status=%s flag=%s auto=%s setelah %s pembatalan dalam simulasi (total 24 jam=%s)', case when (select status from drivers where id = drv) = 'suspended' then 'OK' else 'BUG' end, (select status from drivers where id = drv), f.kind, f.auto_action, m0, f.detail->>'cancellations_24h') || E'\n';
     perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
     perform admin_review_fraud(f.id, 'dismissed', 'Uji sistem', true);
     log := log || format('S9b %s driver dipulihkan status=%s', case when (select status from drivers where id = drv) = 'approved' then 'OK' else 'BUG' end, (select status from drivers where id = drv)) || E'\n';
@@ -301,6 +311,116 @@ begin
     o := driver_accept_order(o.id);
     log := log || format('S17 %s fallback kelas: order %s (kelas %s) diambil driver Hemat setelah 4 menit', case when o.driver_id = drv then 'OK' else 'BUG' end, o.code, o.vehicle_class) || E'\n';
   exception when others then log := log || 'S16/17 BUG: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S18 Batas jarak per layanan (dalam kota vs antar kota) =====
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    -- motor dalam kota Pekanbaru (< 25 km) → boleh
+    j := estimate_fare('ride_motor', 0.4810, 101.4349, 0.50, 101.44, null);
+    log := log || format('S18a %s motor dalam kota %s km limit.ok=%s max=%s', case when (j->'limit'->>'ok')::boolean then 'OK' else 'BUG' end, j->>'distance_km', j->'limit'->>'ok', j->'limit'->>'max_km') || E'\n';
+    -- motor Pekanbaru → Padang (≈300 km, kota berbeda) → ditolak dengan pesan
+    j := estimate_fare('ride_motor', 0.507, 101.448, -0.947, 100.354, null);
+    log := log || format('S18b %s motor Pekanbaru→Padang %s km limit.ok=%s same_city=%s pesan=%s', case when not (j->'limit'->>'ok')::boolean and j->'limit'->>'message' is not null then 'OK' else 'BUG' end, j->>'distance_km', j->'limit'->>'ok', j->'limit'->>'same_city', left(j->'limit'->>'message', 70)) || E'\n';
+    -- motor masih satu kota tapi > 25 km (Pekanbaru utara) → ditolak karena jarak
+    j := estimate_fare('ride_motor', 0.507, 101.448, 0.70, 101.448, null);
+    log := log || format('S18c %s motor satu kota %s km limit.ok=%s same_city=%s pesan=%s', case when not (j->'limit'->>'ok')::boolean and (j->'limit'->>'same_city')::boolean then 'OK' else 'BUG' end, j->>'distance_km', j->'limit'->>'ok', j->'limit'->>'same_city', left(j->'limit'->>'message', 60)) || E'\n';
+    -- create_order motor antar kota harus DITOLAK
+    begin
+      o := create_order(jsonb_build_object('service', 'ride_motor', 'pickup', jsonb_build_object('lat', 0.507, 'lng', 101.448, 'address', 'Pekanbaru'), 'dropoff', jsonb_build_object('lat', -0.947, 'lng', 100.354, 'address', 'Padang'), 'paid_via', 'cash'));
+      log := log || format('S18d BUG: order motor antar kota diterima %s (%s km)', o.code, o.distance_km) || E'\n'; perform cancel_order(o.id, 'uji');
+    exception when others then log := log || 'S18d OK motor antar kota ditolak: ' || left(sqlerrm, 90) || E'\n'; end;
+    -- send dalam kota (< 35 km) → boleh
+    o := create_order(jsonb_build_object('service', 'send', 'pickup', jsonb_build_object('lat', 0.4810, 'lng', 101.4349, 'address', 'Toko A'), 'dropoff', jsonb_build_object('lat', 0.52, 'lng', 101.45, 'address', 'Rumah B'), 'recipient_name', 'Siti', 'recipient_phone', '0813', 'paid_via', 'cash'));
+    log := log || format('S18e OK send dalam kota %s %s km status=%s', o.code, o.distance_km, o.status) || E'\n';
+    perform cancel_order(o.id, 'uji');
+    -- send antar kota lewat jalur gudang (scope intercity) → check_service_distance selalu ok walau 300 km
+    j := check_service_distance('send', 300, 0.507, 101.448, -0.947, 100.354, 'intercity');
+    log := log || format('S18f %s send antar kota scope=intercity 300 km ok=%s same_city_required=%s', case when (j->>'ok')::boolean then 'OK' else 'BUG' end, j->>'ok', j->>'same_city_required') || E'\n';
+    -- food > 15 km (merchant Padang → Lubuk Buaya utara) → ditolak
+    begin
+      o := create_order(jsonb_build_object('service', 'food', 'merchant_id', merch, 'items', jsonb_build_array(jsonb_build_object('menu_item_id', menu1, 'qty', 1)), 'dropoff', jsonb_build_object('lat', -0.80, 'lng', 100.36, 'address', 'Jauh'), 'paid_via', 'cash'));
+      log := log || format('S18g BUG: food %s km diterima %s', o.distance_km, o.code) || E'\n'; perform cancel_order(o.id, 'uji');
+    exception when others then log := log || 'S18g OK food > 15 km ditolak: ' || left(sqlerrm, 80) || E'\n'; end;
+  exception when others then log := log || 'S18 BUG batas jarak: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S19 Toggle layanan oleh admin (shop off → order ditolak → on → order OK) =====
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    r := admin_set_service_enabled('shop', false);
+    j := app_public_settings();
+    log := log || format('S19a %s shop dinonaktifkan services_enabled.shop=%s (public=%s)', case when (j->'services_enabled'->>'shop')::boolean = false then 'OK' else 'BUG' end, r->>'shop', j->'services_enabled'->>'shop') || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    begin
+      o := create_order(jsonb_build_object('service', 'shop', 'shop_store_id', store1, 'shop_vehicle', 'motor', 'shopping_list', jsonb_build_array(jsonb_build_object('product_id', prod1, 'qty', 1)), 'dropoff', jsonb_build_object('lat', 0.52, 'lng', 101.45, 'address', 'Rumah'), 'paid_via', 'cash'));
+      log := log || format('S19b BUG: order shop diterima padahal layanan nonaktif %s', o.code) || E'\n'; perform cancel_order(o.id, 'uji');
+    exception when others then log := log || format('S19b %s order shop saat nonaktif ditolak: %s', case when sqlerrm ilike '%nonaktif%' then 'OK' else 'BUG' end, left(sqlerrm, 70)) || E'\n'; end;
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    r := admin_set_service_enabled('shop', true);
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    o := create_order(jsonb_build_object('service', 'shop', 'shop_store_id', store1, 'shop_vehicle', 'motor', 'shopping_list', jsonb_build_array(jsonb_build_object('product_id', prod1, 'qty', 1)), 'dropoff', jsonb_build_object('lat', 0.52, 'lng', 101.45, 'address', 'Rumah'), 'paid_via', 'cash'));
+    log := log || format('S19c %s shop diaktifkan lagi services_enabled.shop=%s → order %s status=%s', case when (r->>'shop')::boolean then 'OK' else 'BUG' end, r->>'shop', o.code, o.status) || E'\n';
+    perform cancel_order(o.id, 'uji');
+    -- layanan tak dikenal & non-admin harus ditolak
+    begin r := admin_set_service_enabled('shop', false); log := log || 'S19d BUG: pelanggan bisa mematikan layanan' || E'\n'; exception when others then log := log || 'S19d OK non-admin ditolak: ' || left(sqlerrm, 40) || E'\n'; end;
+  exception when others then log := log || 'S19 BUG toggle layanan: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S20 Impor tempat dari peta (OSM) oleh pelanggan → toko/pasar aktif, dedup osm_id & jarak+nama =====
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    j := jsonb_build_array(
+      jsonb_build_object('osm_id', 'uji/n/1001', 'name', 'Alfamart Arifin Ahmad', 'brand', 'alfamart', 'category', 'minimarket', 'lat', 0.4900, 'lng', 101.4450, 'address', 'Jl. Arifin Ahmad', 'open_hours', '06:00-23:00'),
+      jsonb_build_object('osm_id', 'uji/n/1002', 'name', 'Indomaret Tuanku Tambusai', 'brand', 'indomaret', 'category', 'minimarket', 'lat', 0.5050, 'lng', 101.4300, 'address', 'Jl. Tuanku Tambusai', 'open_hours', '24 jam'),
+      jsonb_build_object('osm_id', 'uji/n/1003', 'name', 'Apotek K-24 Sudirman', 'brand', 'apotek', 'category', 'apotek', 'lat', 0.5120, 'lng', 101.4480, 'address', 'Jl. Jend. Sudirman', 'open_hours', '24 jam'));
+    select count(*) into b0 from shop_stores;
+    r := import_places('store', j);
+    select count(*) into b1 from shop_stores;
+    log := log || format('S20a %s impor 3 toko inserted=%s skipped=%s (baris shop_stores %s→%s)', case when (r->>'inserted')::int = 3 and b1 - b0 = 3 then 'OK' else 'BUG' end, r->>'inserted', r->>'skipped', b0, b1) || E'\n';
+    r := import_places('store', j);
+    log := log || format('S20b %s impor ulang osm_id sama inserted=%s skipped=%s', case when (r->>'inserted')::int = 0 and (r->>'skipped')::int = 3 then 'OK' else 'BUG' end, r->>'inserted', r->>'skipped') || E'\n';
+    -- 30 m dari Indomaret Sudirman Pekanbaru dengan nama mirip → dianggap duplikat
+    r := import_places('store', jsonb_build_array(jsonb_build_object('osm_id', 'uji/n/1004', 'name', 'Indomaret Sudirman', 'lat', 0.51707, 'lng', 101.4463)));
+    log := log || format('S20c %s toko 30 m dari toko lama nama mirip inserted=%s skipped=%s', case when (r->>'inserted')::int = 0 and (r->>'skipped')::int = 1 then 'OK' else 'BUG' end, r->>'inserted', r->>'skipped') || E'\n';
+    select count(*) into n from shop_stores where osm_id like 'uji/n/%' and catalog_source = 'osm' and active and city_id = (select id from cities where name = 'Pekanbaru');
+    log := log || format('S20d %s baris osm aktif kota Pekanbaru=%s brand=%s', case when n = 3 then 'OK' else 'BUG' end, n, (select string_agg(brand || '/' || category, ',' order by osm_id) from shop_stores where osm_id like 'uji/n/%')) || E'\n';
+    select count(*) into m0 from markets;
+    r := import_places('market', jsonb_build_array(jsonb_build_object('osm_id', 'uji/m/2001', 'name', 'Pasar Sukaramai', 'lat', 0.495, 'lng', 101.435, 'address', 'Jl. Sukaramai', 'open_hours', '05:00-13:00')));
+    select count(*) into m1 from markets;
+    log := log || format('S20e %s impor 1 pasar inserted=%s skipped=%s aktif=%s catatan=%s', case when (r->>'inserted')::int = 1 and m1 - m0 = 1 then 'OK' else 'BUG' end, r->>'inserted', r->>'skipped', (select active from markets where osm_id = 'uji/m/2001'), (select notes from markets where osm_id = 'uji/m/2001')) || E'\n';
+    r := import_places('market', jsonb_build_array(jsonb_build_object('osm_id', 'uji/m/2001', 'name', 'Pasar Sukaramai', 'lat', 0.495, 'lng', 101.435)));
+    log := log || format('S20f %s impor ulang pasar skipped=%s', case when (r->>'skipped')::int = 1 then 'OK' else 'BUG' end, r->>'skipped') || E'\n';
+    begin r := import_places('warung', '[]'::jsonb); log := log || 'S20g BUG: jenis tidak valid diterima' || E'\n'; exception when others then log := log || 'S20g OK jenis tidak valid ditolak: ' || sqlerrm || E'\n'; end;
+  exception when others then log := log || 'S20 BUG impor tempat: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S21 register_driver v2: validasi bahan bakar/merek, simpan model & fuel_type, is_electric otomatis =====
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    if exists (select 1 from drivers where id = cust) then log := log || 'S21 note: pelanggan uji sudah punya baris driver' || E'\n'; end if;
+    begin
+      perform register_driver(jsonb_build_object('vehicle_type', 'motor', 'vehicle_brand', 'Honda', 'vehicle_model', 'BeAT', 'fuel_type', 'diesel', 'vehicle_plate', 'bm 1234 xx', 'vehicle_year', 2021));
+      log := log || 'S21a BUG: motor diesel diterima' || E'\n';
+    exception when others then log := log || 'S21a OK motor diesel ditolak: ' || sqlerrm || E'\n'; end;
+    begin
+      perform register_driver(jsonb_build_object('vehicle_type', 'motor', 'vehicle_brand', '', 'vehicle_model', 'BeAT', 'fuel_type', 'bensin', 'vehicle_plate', 'bm 1234 xx', 'vehicle_year', 2021));
+      log := log || 'S21b BUG: merek kosong diterima' || E'\n';
+    exception when others then log := log || 'S21b OK merek kosong ditolak: ' || sqlerrm || E'\n'; end;
+    begin
+      perform register_driver(jsonb_build_object('vehicle_type', 'motor', 'vehicle_brand', 'Honda', 'vehicle_model', 'BeAT', 'fuel_type', 'solar', 'vehicle_plate', 'bm 1234 xx'));
+      log := log || 'S21c BUG: bahan bakar "solar" diterima' || E'\n';
+    exception when others then log := log || 'S21c OK bahan bakar tak dikenal ditolak: ' || sqlerrm || E'\n'; end;
+    -- valid: Honda BeAT bensin 2021
+    r := to_jsonb(register_driver(jsonb_build_object('vehicle_type', 'motor', 'vehicle_brand', 'Honda', 'vehicle_model', 'BeAT', 'fuel_type', 'bensin', 'vehicle_plate', 'bm 1234 xx', 'vehicle_color', 'Hitam', 'vehicle_year', 2021, 'vehicle_condition', 'baik', 'license_number', 'SIM-C-001', 'id_card_number', '1471000000000001', 'photo_id_url', 'https://x/ktp.jpg', 'photo_vehicle_url', 'https://x/motor.jpg')));
+    log := log || format('S21d %s daftar motor Honda BeAT bensin: brand=%s model=%s fuel=%s listrik=%s plat=%s kelas=%s status=%s role=%s',
+      case when r->>'vehicle_model' = 'BeAT' and r->>'fuel_type' = 'bensin' and (r->>'is_electric')::boolean = false and r->>'vehicle_plate' = 'BM 1234 XX' and (select role::text from profiles where id = cust) = 'driver' then 'OK' else 'BUG' end,
+      r->>'vehicle_brand', r->>'vehicle_model', r->>'fuel_type', r->>'is_electric', r->>'vehicle_plate', r->>'vehicle_class', r->>'status', (select role from profiles where id = cust)) || E'\n';
+    -- ganti ke motor listrik Gesits G1 → is_electric harus true otomatis
+    r := to_jsonb(register_driver(jsonb_build_object('vehicle_type', 'motor', 'vehicle_brand', 'Gesits', 'vehicle_model', 'G1', 'fuel_type', 'listrik', 'vehicle_plate', 'bm 5678 ev', 'vehicle_year', 2024, 'license_number', 'SIM-C-001', 'id_card_number', '1471000000000001')));
+    log := log || format('S21e %s ganti Gesits G1 listrik: model=%s fuel=%s listrik=%s kelas=%s dokumen tersimpan=%s',
+      case when (r->>'is_electric')::boolean and r->>'fuel_type' = 'listrik' and (select vehicle_model from drivers where id = cust) = 'G1' then 'OK' else 'BUG' end,
+      r->>'vehicle_model', r->>'fuel_type', r->>'is_electric', r->>'vehicle_class', (select license_number from driver_documents where driver_id = cust)) || E'\n';
+    -- is_electric=true dikirim klien tapi fuel bensin → fuel menang (false)
+    r := to_jsonb(register_driver(jsonb_build_object('vehicle_type', 'motor', 'vehicle_brand', 'Yamaha', 'vehicle_model', 'NMAX', 'fuel_type', 'bensin', 'is_electric', true, 'vehicle_plate', 'bm 9999 zz', 'vehicle_year', 2022)));
+    log := log || format('S21f %s fuel bensin + is_electric=true dari klien → is_electric=%s', case when (r->>'is_electric')::boolean = false then 'OK' else 'BUG' end, r->>'is_electric') || E'\n';
+  exception when others then log := log || 'S21 BUG register_driver: ' || sqlerrm || E'\n'; end;
 
   raise exception using message = 'SIMULASI_SELESAI' || log;
 end $sim$;

@@ -1,0 +1,226 @@
+name: Play Store AAB (rilis bertanda tangan)
+
+# Membangun Android App Bundle (.aab) bertanda tangan upload-keystore untuk aplikasi Pelanggan dan/atau Mitra,
+# mengunggahnya sebagai artifact + GitHub Release `aab-<run_number>`, dan (opsional) mengirim ke Play Console track internal.
+#
+# Rahasia (Settings → Secrets and variables → Actions):
+#   ANDROID_KEYSTORE_BASE64     isi file upload keystore (.jks/.keystore) yang di-base64
+#   ANDROID_KEYSTORE_PASSWORD   kata sandi keystore
+#   ANDROID_KEY_ALIAS           alias key (mis. antarkita-upload)
+#   ANDROID_KEY_PASSWORD        kata sandi key (bisa sama dengan kata sandi keystore)
+#   PLAY_SERVICE_ACCOUNT_JSON   (opsional) JSON service account Google Play Developer API → unggah otomatis ke track internal
+#
+# versionCode = github.run_number + ANDROID_VERSION_CODE_OFFSET (dibaca dari app.config.ts, fallback 100) — selalu naik.
+# versionName = "version" di package.json.
+# Panduan lengkap: docs/rilis/CHECKLIST-GO-LIVE.md
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: Aplikasi yang dibangun
+        type: choice
+        options: [both, pelanggan, mitra]
+        default: both
+      note:
+        description: Catatan rilis / track (hanya untuk catatan di GitHub Release, mis. "internal testing batch 3")
+        type: string
+        default: ''
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-aab-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Rencana build
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.pick.outputs.apps }}
+    steps:
+      - id: pick
+        run: |
+          case "${{ github.event.inputs.app || 'both' }}" in
+            pelanggan) echo 'apps=["pelanggan"]' >> "$GITHUB_OUTPUT" ;;
+            mitra)     echo 'apps=["mitra"]' >> "$GITHUB_OUTPUT" ;;
+            *)         echo 'apps=["pelanggan","mitra"]' >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  aab:
+    name: AAB ${{ matrix.app }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.plan.outputs.apps) }}
+    env:
+      # Env aplikasi HARUS ada di setiap langkah yang menyentuh Expo/Gradle: prebuild memilih apps/<app>/app + package id,
+      # dan bundel JS dibuat di dalam Gradle (bundleRelease) sehingga APP/EXPO_PUBLIC_APP wajib di-set di sana juga.
+      APP: ${{ matrix.app }}
+      EXPO_PUBLIC_APP: ${{ matrix.app }}
+      EXPO_PUBLIC_SITE_ROOT: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+      EXPO_PUBLIC_APK_URL: https://github.com/${{ github.repository }}/releases/latest
+      EXPO_NO_TELEMETRY: 1
+      CI: 1
+      GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Pastikan rahasia keystore tersedia
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KSP: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KA: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KP: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=""
+          [ -z "$KS" ]  && missing="$missing ANDROID_KEYSTORE_BASE64"
+          [ -z "$KSP" ] && missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -z "$KA" ]  && missing="$missing ANDROID_KEY_ALIAS"
+          [ -z "$KP" ]  && missing="$missing ANDROID_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Secret belum di-set:$missing — lihat docs/rilis/CHECKLIST-GO-LIVE.md bagian 'Keystore'."
+            exit 1
+          fi
+
+      - run: npm ci
+
+      - name: Hitung versionCode & versionName
+        id: ver
+        run: |
+          OFFSET=$(grep -oE 'ANDROID_VERSION_CODE_OFFSET[[:space:]]*=[[:space:]]*[0-9]+' app.config.ts | grep -oE '[0-9]+$' | head -n1)
+          OFFSET=${OFFSET:-100}
+          CODE=$(( ${{ github.run_number }} + OFFSET ))
+          NAME=$(node -p "require('./package.json').version")
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "versionCode=$CODE (run ${{ github.run_number }} + offset $OFFSET), versionName=$NAME"
+
+      - name: Prebuild proyek Android (Expo) — ${{ matrix.app }}
+        env:
+          ANDROID_VERSION_CODE: ${{ steps.ver.outputs.code }}
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Verifikasi package id & versi hasil prebuild
+        run: |
+          EXPECTED=$([ "${{ matrix.app }}" = "mitra" ] && echo id.antarkita.mitra || echo id.antarkita.app)
+          APPID=$(grep -oE 'applicationId +"[^"]+"' android/app/build.gradle | grep -oE '"[^"]+"' | tr -d '"')
+          echo "applicationId=$APPID (diharapkan $EXPECTED)"
+          [ "$APPID" = "$EXPECTED" ] || { echo "::error::applicationId $APPID ≠ $EXPECTED — periksa META di app.config.ts"; exit 1; }
+          grep -E 'versionCode +${{ steps.ver.outputs.code }}\b' android/app/build.gradle || { echo "::error::versionCode tidak sesuai"; exit 1; }
+          grep -E 'versionName +"${{ steps.ver.outputs.name }}"' android/app/build.gradle || { echo "::error::versionName tidak sesuai"; exit 1; }
+          echo "Izin di manifest:"; grep -oE 'android:name="android.permission.[A-Z_]+"' android/app/src/main/AndroidManifest.xml | sort -u
+
+      - name: Pasang upload keystore & konfigurasi signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANTARKITA_UPLOAD_STORE_FILE: release.keystore
+          ANTARKITA_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANTARKITA_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANTARKITA_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\n\r ' | base64 -d > android/app/release.keystore
+          [ -s android/app/release.keystore ] || { echo "::error::Decode keystore gagal (ANDROID_KEYSTORE_BASE64 kosong/rusak)"; exit 1; }
+          keytool -list -keystore android/app/release.keystore -storepass "$ANTARKITA_UPLOAD_STORE_PASSWORD" -alias "$ANTARKITA_UPLOAD_KEY_ALIAS" >/dev/null \
+            || { echo "::error::Kata sandi/alias keystore tidak cocok"; exit 1; }
+          node scripts/android-signing.mjs --dir android
+
+      - name: Gradle bundleRelease — ${{ matrix.app }}
+        env:
+          ANDROID_VERSION_CODE: ${{ steps.ver.outputs.code }}
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew bundleRelease --no-daemon --stacktrace
+          OUT=app/build/outputs/bundle/release/app-release.aab
+          [ -f "$OUT" ] || { echo "::error::AAB tidak ditemukan"; exit 1; }
+          cp "$OUT" "../antarkita-${{ matrix.app }}-v${{ steps.ver.outputs.name }}-${{ steps.ver.outputs.code }}.aab"
+
+      - name: Verifikasi tanda tangan AAB (bukan debug key)
+        run: |
+          AAB=$(ls antarkita-${{ matrix.app }}-*.aab)
+          keytool -printcert -jarfile "$AAB" | tee cert.txt
+          if grep -qi 'CN=Android Debug' cert.txt; then echo "::error::AAB masih ditandatangani debug key!"; exit 1; fi
+          rm -f cert.txt
+
+      - name: Bersihkan keystore dari runner
+        if: always()
+        run: rm -f android/app/release.keystore; sed -i '/^ANTARKITA_UPLOAD_/d' android/gradle.properties 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: antarkita-${{ matrix.app }}-aab
+          path: antarkita-${{ matrix.app }}-*.aab
+          if-no-files-found: error
+          retention-days: 30
+
+      # Unggah otomatis ke Play Console (track internal) — hanya jika secret PLAY_SERVICE_ACCOUNT_JSON ada.
+      # Secret tidak bisa dipakai langsung di `if`, jadi dijembatani lewat env.
+      - name: Cek ketersediaan service account Play
+        id: play
+        env:
+          HAS_SA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+        run: echo "enabled=$HAS_SA" >> "$GITHUB_OUTPUT"
+
+      - name: Unggah ke Play Console (internal testing)
+        if: steps.play.outputs.enabled == 'true'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ matrix.app == 'mitra' && 'id.antarkita.mitra' || 'id.antarkita.app' }}
+          releaseFiles: antarkita-${{ matrix.app }}-*.aab
+          track: internal
+          status: completed
+          releaseName: v${{ steps.ver.outputs.name }} (${{ steps.ver.outputs.code }})
+          changesNotSentForReview: false
+
+  release:
+    name: GitHub Release aab-${{ github.run_number }}
+    needs: aab
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: antarkita-*-aab
+          merge-multiple: true
+      - name: Daftar berkas
+        run: ls -la *.aab && sha256sum *.aab > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: aab-${{ github.run_number }}
+          name: AntarKita AAB build ${{ github.run_number }}
+          prerelease: true
+          body: |
+            Android App Bundle bertanda tangan upload-keystore untuk Google Play.
+            ${{ github.event.inputs.note && format('Catatan: {0}', github.event.inputs.note) || '' }}
+            ${{ startsWith(github.ref, 'refs/tags/v') && format('Dipicu tag `{0}`.', github.ref_name) || 'Dipicu manual (workflow_dispatch).' }}
+
+            • `antarkita-pelanggan-*.aab` — aplikasi Pelanggan (`id.antarkita.app`)
+            • `antarkita-mitra-*.aab` — aplikasi Mitra (`id.antarkita.mitra`)
+
+            Unggah ke Play Console → Testing → Internal testing → Create new release (atau otomatis bila secret PLAY_SERVICE_ACCOUNT_JSON di-set).
+            AAB tidak bisa diinstal langsung ke HP; untuk uji langsung pakai APK dari workflow "Android APK".
+          files: |
+            *.aab
+            SHA256SUMS.txt
