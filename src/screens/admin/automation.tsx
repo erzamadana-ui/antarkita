@@ -3,11 +3,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Switch, Modal, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { AdminPage, StatCard, Table } from '@/components/admin';
-import { Card, Row, Button, Badge, Input, Chip, IconCircle, toast, type IconName } from '@/components/ui';
+import { AdminPage, StatCard, Table, adminFont as font, AdminCard as Card } from '@/components/admin';
+import { Row, Button, Badge, Input, Chip, IconCircle, toast, type IconName } from '@/components/ui';
 import { Entrance, Skeleton } from '@/components/motion';
 import { rpc } from '@/lib/supabase';
-import { colors, font, radius } from '@/lib/theme';
+import { colors, radius } from '@/lib/theme';
 import { formatDate, rupiah } from '@/lib/format';
 import type { AutomationRun, ScheduledReport } from '@/lib/types';
 

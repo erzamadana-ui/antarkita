@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Screen, Row, Avatar, Badge, Button, CircleButton, type IconName } from '@/components/ui';
 import { Entrance, PressableScale } from '@/components/motion';
 import { TAB_BAR_SPACE } from '@/components/GlassTabBar';
+import { VehicleServiceMatrix } from '@/components/driver';
 import { useAuth } from '@/store/auth';
 import { useMode } from '@/store/mode';
 import { colors, font, radius, shadow } from '@/lib/theme';
@@ -64,8 +65,13 @@ export default function DriverAccount() {
         </View>
       </Entrance>
 
+      {/* Penjelasan singkat: layanan apa saja yang bisa diambil kendaraan ini (matriks server `driver_can_take`) */}
+      <Entrance index={2} style={{ marginTop: 16 }}>
+        <VehicleServiceMatrix vehicle={driver?.vehicle_type} />
+      </Entrance>
+
       {groups.map((g, gi) => (
-        <Entrance key={g.title} index={gi + 2}>
+        <Entrance key={g.title} index={gi + 3}>
           <Text style={[font.label, { marginTop: 22, marginBottom: 8 }]}>{g.title}</Text>
           <View style={s.card}>
             {g.items.map((it, i) => (

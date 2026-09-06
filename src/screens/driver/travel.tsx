@@ -1,5 +1,6 @@
-// Dasbor Mitra AntarTravel — buat jadwal, lihat manifest penumpang & alamat jemput, berangkat/tiba, pendapatan
-import React, { useEffect, useMemo, useState } from 'react';
+// Dasbor Mitra AntarTravel — buat jadwal, lihat manifest penumpang & alamat jemput, berangkat/tiba, pendapatan,
+// serta titipan barang AntarSend antar kota (Tahap 9: travel_send_available / accept / pickup / complete)
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Linking, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,11 +10,12 @@ import { Entrance, PressableScale, ProgressBar } from '@/components/motion';
 import { ServiceIllustration } from '@/components/ServiceArt';
 import { CallButton } from '@/components/call/IncomingCall';
 import { useCities, usePartnerTrips } from '@/hooks/useTravel';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import { useAuth } from '@/store/auth';
 import { supabase, rpc, realtimeChannel } from '@/lib/supabase';
 import { colors, font, radius, shadow, motion } from '@/lib/theme';
 import { rupiah, formatSchedule, cityName, tripStatusLabel, travelStatusLabel, travelKindLabel, travelRequestStatusLabel, accommodationLabel } from '@/lib/format';
-import type { TravelPartner, TravelRoute, TravelManifestRow, TravelTrip, TravelOpenRequest } from '@/lib/types';
+import type { TravelPartner, TravelRoute, TravelManifestRow, TravelTrip, TravelOpenRequest, TravelSendOrder, Order } from '@/lib/types';
 
 const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 const TIMES = ['05:00', '06:00', '07:00', '08:00', '09:00', '10:00', '13:00', '15:00', '17:00', '19:00', '21:00', '23:00'];
@@ -22,7 +24,7 @@ export default function TravelPartnerHome() {
   const router = useRouter();
   const { session, wallet, travelPartner } = useAuth();
   const uid = session?.user.id;
-  const [tab, setTab] = useState<'shared' | 'requests'>('shared');
+  const [tab, setTab] = useState<'shared' | 'requests' | 'send'>('shared');
   const cities = useCities();
   const [me, setMe] = useState<TravelPartner | null | undefined>(undefined);
   const [routes, setRoutes] = useState<TravelRoute[]>([]);
@@ -64,7 +66,7 @@ export default function TravelPartnerHome() {
   const earnings = past.filter((t) => t.status === 'arrived').length;
 
   return (
-    <Screen title="Mitra AntarTravel" subtitle="Kursi bersama · carter · sopir harian" band={colors.travel} back maxWidth={720}>
+    <Screen title="Mitra AntarTravel" subtitle="Kursi bersama · carter · sopir · titipan" band={colors.travel} back maxWidth={720}>
       <View style={{ gap: 14 }}>
         {/* Kartu profil armada (putih) */}
         <Entrance index={0}><Card>
@@ -87,12 +89,13 @@ export default function TravelPartnerHome() {
         </Card></Entrance>
 
         {/* Chip pil mode */}
-        <Row gap={8}>
+        <Row gap={8} style={{ flexWrap: 'wrap' }}>
           <Chip label="Kursi bersama" active={tab === 'shared'} onPress={() => setTab('shared')} />
           <Chip label="Carter & sopir harian" active={tab === 'requests'} onPress={() => setTab('requests')} />
+          <Chip label="Titipan barang" active={tab === 'send'} onPress={() => setTab('send')} />
         </Row>
 
-        {tab === 'requests' ? <RequestsTab me={travelPartner ?? me} /> : (
+        {tab === 'send' ? <SendParcelTab uid={uid} /> : tab === 'requests' ? <RequestsTab me={travelPartner ?? me} /> : (
           <>
         <Entrance index={1}><Card style={{ gap: 10 }}>
           <Text style={font.label}>Buat jadwal keberangkatan</Text>
@@ -312,6 +315,115 @@ function RequestCard({ r, me, open, onToggle, onDone }: { r: TravelOpenRequest; 
     </Animated.View>
   );
 }
+// ---------- Titipan barang AntarSend antar kota (mitra travel membawa paket) ----------
+const numId = (v: number | null | undefined) => v == null ? '-' : (Math.round(Number(v) * 10) / 10).toString().replace('.', ',');
+const confirmThen = (msg: string, doIt: () => void) => {
+  if (Platform.OS === 'web') { if (confirm(msg)) doIt(); return; }
+  Alert.alert('Konfirmasi', msg, [{ text: 'Batal' }, { text: 'Ya', onPress: doIt }]);
+};
+const parcelSize = (o: Order) => { const v = o.package_details?.size_cm; const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null; };
+
+function SendParcelTab({ uid }: { uid?: string | null }) {
+  const cities = useCities();
+  const { sendLimits } = useAppSettings();
+  const [rows, setRows] = useState<TravelSendOrder[] | null>(null);
+  const [mine, setMine] = useState<Order[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const lim = sendLimits.travel;
+
+  const load = useCallback(async () => {
+    try { setRows(await rpc<TravelSendOrder[]>('travel_send_available')); } catch (e) { setRows([]); toast.error((e as Error).message); }
+    if (!uid) return;
+    const { data } = await supabase.from('orders').select('*').eq('travel_partner_id', uid).in('status', ['accepted', 'in_progress']).order('created_at', { ascending: false });
+    setMine((data as Order[]) ?? []);
+  }, [uid]);
+  useEffect(() => {
+    load();
+    const ch = realtimeChannel('tp-titipan').on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, load).subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [load]);
+
+  const act = async (id: string, fn: 'travel_accept_send' | 'travel_pickup_send' | 'travel_complete_send', ok: string) => {
+    setBusy(id);
+    try { await rpc(fn, { p_order: id }); toast.success(ok); await load(); }
+    catch (e) { toast.error((e as Error).message); } finally { setBusy(null); }
+  };
+
+  return (
+    <View style={{ gap: 14 }}>
+      <Card style={{ gap: 6 }}>
+        <Row gap={10}>
+          <View style={s.thumb}><Ionicons name="cube-outline" size={24} color={colors.send} /></View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[font.h3, { fontSize: 16 }]}>Titipan barang antar kota</Text>
+            <Text style={font.tiny}>Bawa paket pelanggan sekalian jalan. Batas mitra travel: maks. {numId(lim.max_kg)} kg · sisi terpanjang {numId(lim.max_cm)} cm.</Text>
+          </View>
+        </Row>
+        <Text style={font.tiny}>Ambil titipan → jemput ke alamat pengirim → antar ke alamat penerima di kota tujuan. Pendapatan masuk ke AntarPay setelah Anda menandai titipan sampai.</Text>
+      </Card>
+
+      <Text style={font.label}>Titipan aktif Anda ({mine.length})</Text>
+      {mine.length === 0 && <Text style={font.small}>Belum ada titipan yang Anda bawa.</Text>}
+      {mine.map((o) => (
+        <Animated.View key={o.id} layout={LinearTransition.springify().stiffness(300).damping(22)} style={[s.trip, { borderColor: colors.primary }]}>
+          <Row gap={12} style={{ alignItems: 'flex-start' }}>
+            <View style={s.thumb}><Ionicons name={o.status === 'in_progress' ? 'navigate-outline' : 'cube-outline'} size={24} color={colors.primary} /></View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[font.h3, { fontSize: 16 }]} numberOfLines={1}>{o.city ?? '—'} → {cityName(cities, o.dest_city_id ?? '')}</Text>
+              <Text style={font.tiny} numberOfLines={1}>{o.code} · {o.recipient_name ?? 'Penerima'}{o.recipient_phone ? ` · ${o.recipient_phone}` : ''}</Text>
+              <Row gap={6} style={{ marginTop: 6, flexWrap: 'wrap' }}>
+                <Badge text={o.status === 'in_progress' ? 'Dalam perjalanan' : 'Menunggu dijemput'} color={o.status === 'in_progress' ? colors.info : colors.warning} />
+                {o.weight_kg != null && <Badge text={`${numId(o.weight_kg)} kg`} color={colors.textSecondary} />}
+                {parcelSize(o) != null && <Badge text={`sisi ${numId(parcelSize(o))} cm`} color={colors.textSecondary} />}
+                <Badge text={o.payment_method === 'cash' ? `Tunai ${rupiah(o.total)}` : 'Dibayar AntarPay'} color={o.payment_method === 'cash' ? colors.accent : colors.success} />
+              </Row>
+            </View>
+          </Row>
+          <View style={{ gap: 6, marginTop: 10 }}>
+            <Row gap={8}><Ionicons name="location-outline" size={13} color={colors.primary} /><Text style={[font.small, { flex: 1 }]} numberOfLines={2}>Jemput: {o.pickup_address}</Text></Row>
+            <Row gap={8}><Ionicons name="flag-outline" size={13} color={colors.textMuted} /><Text style={[font.small, { flex: 1 }]} numberOfLines={2}>Antar: {o.dropoff_address}</Text></Row>
+          </View>
+          <Row gap={8} style={{ marginTop: 10, flexWrap: 'wrap' }}>
+            {!!o.pickup_lat && <Button size="sm" variant="outline" icon="navigate" title="Navigasi" onPress={() => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${o.status === 'in_progress' ? `${o.dropoff_lat},${o.dropoff_lng}` : `${o.pickup_lat},${o.pickup_lng}`}`)} />}
+            {o.status === 'accepted' && <Button size="sm" icon="checkmark" title="Sudah dijemput" loading={busy === o.id} onPress={() => confirmThen('Tandai titipan sudah dijemput dari pengirim?', () => act(o.id, 'travel_pickup_send', 'Titipan dalam perjalanan'))} />}
+            {o.status === 'in_progress' && <Button size="sm" icon="flag" title="Sudah sampai" loading={busy === o.id} onPress={() => confirmThen('Tandai titipan sudah sampai ke penerima? Pendapatan diteruskan ke AntarPay.', () => act(o.id, 'travel_complete_send', 'Titipan selesai'))} />}
+          </Row>
+        </Animated.View>
+      ))}
+
+      <Text style={font.label}>Titipan tersedia ({rows?.length ?? 0})</Text>
+      {rows === null && <Text style={font.small}>Memuat titipan…</Text>}
+      {rows?.length === 0 && <Text style={font.small}>Belum ada titipan antar kota yang menunggu. Titipan baru muncul otomatis di sini.</Text>}
+      {(rows ?? []).map((r) => (
+        <Animated.View key={r.id} entering={FadeInDown.duration(motion.base)} layout={LinearTransition.springify().stiffness(300).damping(22)} style={s.trip}>
+          <Row gap={12} style={{ alignItems: 'flex-start' }}>
+            <View style={s.thumb}><ServiceIllustration kind="send" size={30} /></View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[font.h3, { fontSize: 16 }]} numberOfLines={1}>{r.city ?? '—'} → {r.dest_city ?? '—'}</Text>
+              <Text style={font.tiny} numberOfLines={1}>{r.code} · penerima {r.recipient_name ?? '—'}</Text>
+              <Row gap={6} style={{ marginTop: 6, flexWrap: 'wrap' }}>
+                {r.weight_kg != null && <Badge text={`${numId(r.weight_kg)} kg`} color={colors.textSecondary} />}
+                {r.size_cm != null && <Badge text={`sisi ${numId(r.size_cm)} cm`} color={colors.textSecondary} />}
+                <Badge text={r.payment_method === 'cash' ? `Tunai ${rupiah(r.total)}` : 'Dibayar AntarPay'} color={r.payment_method === 'cash' ? colors.accent : colors.success} />
+              </Row>
+            </View>
+          </Row>
+          <View style={{ gap: 6, marginTop: 10 }}>
+            <Row gap={8}><Ionicons name="location-outline" size={13} color={colors.primary} /><Text style={[font.small, { flex: 1 }]} numberOfLines={2}>Jemput: {r.pickup_address}</Text></Row>
+            <Row gap={8}><Ionicons name="flag-outline" size={13} color={colors.textMuted} /><Text style={[font.small, { flex: 1 }]} numberOfLines={2}>Antar: {r.dropoff_address}</Text></Row>
+          </View>
+          <Row between style={s.calc}>
+            <Text style={font.tiny}>Pendapatan Anda</Text>
+            <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 17 }}>{rupiah(r.partner_earning)}</Text>
+          </Row>
+          <Button title="Ambil titipan" icon="download-outline" style={{ marginTop: 10 }} loading={busy === r.id}
+            onPress={() => confirmThen(`Ambil titipan ${r.code}? Anda bertanggung jawab mengantarnya sampai tujuan.`, () => act(r.id, 'travel_accept_send', 'Titipan diambil'))} />
+        </Animated.View>
+      ))}
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   heroArt: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
   balance: { marginTop: 12, padding: 12, borderRadius: radius.md, backgroundColor: colors.tint },

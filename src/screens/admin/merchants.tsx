@@ -3,12 +3,12 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Linking, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
-import { AdminPage, Table, FilterBar } from '@/components/admin';
+import { AdminPage, DataTable, Toolbar, StatusPill, ContactActions, DeleteButton, DeletePartnerDialog, Truncate, StatCard, Grid, adminFont as font, adminTone, adminSpace } from '@/components/admin';
 import { Row, Badge, Button, toast, Input, Chip } from '@/components/ui';
 import { HalalBadge } from '@/components/MerchantStatus';
 import { rpc, supabase } from '@/lib/supabase';
 import { signedUrl } from '@/lib/upload';
-import { colors, font, radius, glass, motion } from '@/lib/theme';
+import { colors, radius, motion } from '@/lib/theme';
 import { formatDate } from '@/lib/format';
 import type { ApprovalStatus, Merchant, MerchantDocuments, Profile } from '@/lib/types';
 
@@ -21,6 +21,7 @@ export default function AdminMerchants() {
   const [filter, setFilter] = useState('pending');
   const [q, setQ] = useState('');
   const [review, setReview] = useState<Row_ | null>(null);
+  const [del, setDel] = useState<{ kind: 'merchant'; id: string; name: string; meta?: string[] } | null>(null);
   const load = useCallback(async () => {
     const [{ data }, { data: docs }] = await Promise.all([
       supabase.from('merchants').select('*, menu_items(count)').order('created_at', { ascending: false }).limit(300),
@@ -41,22 +42,32 @@ export default function AdminMerchants() {
 
   return (
     <AdminPage title="Merchant AntarFood" subtitle={`${rows.length} terdaftar · ${pending} pengajuan menunggu · ${rows.filter((r) => r.halal_verified).length} halal terverifikasi`} onRefresh={load}>
-      {review && <ReviewPanel m={review} onClose={() => setReview(null)} onDone={load} />}
-      <Row gap={10} style={{ flexWrap: 'wrap' }}>
-        <FilterBar value={filter} onChange={setFilter} options={[{ key: 'pending', label: `Pengajuan (${pending})` }, { key: 'approved', label: 'Aktif' }, { key: 'rejected', label: 'Ditolak' }, { key: 'suspended', label: 'Ditangguhkan' }, { key: 'all', label: 'Semua' }]} />
-        <Input placeholder="Cari nama" value={q} onChangeText={setQ} icon="search" containerStyle={{ minWidth: 220 }} />
-      </Row>
-      <Table rows={shown as unknown as Record<string, unknown>[]} columns={[
-        { key: 'name', label: 'Merchant', width: 230, render: (r) => { const m = r as unknown as Row_; return <View><Text style={{ fontWeight: '700' }}>{m.name}</Text><Text style={font.tiny} numberOfLines={1}>{m.category} · {m.address}</Text></View>; } },
-        { key: 'owner', label: 'Pemilik', width: 170, render: (r) => { const m = r as unknown as Row_; return <Text style={font.small}>{m.owner ? `${m.owner.full_name}\n${m.owner.email ?? ''}` : '— (seed)'}</Text>; } },
+      {review && <ReviewPanel m={review} onClose={() => setReview(null)} onDone={load} onDelete={() => setDel({ kind: 'merchant', id: review.id, name: review.name, meta: [review.category, `${review.menu_count} menu`] })} />}
+      <DeletePartnerDialog target={del} onClose={() => setDel(null)} onDeleted={load} />
+      <Grid gap={adminSpace.lg}>
+        <StatCard index={0} icon="hourglass-outline" label="Pengajuan menunggu" value={pending} color={adminTone.amber} />
+        <StatCard index={1} icon="checkmark-circle-outline" label="Aktif" value={rows.filter((r) => r.status === 'approved').length} color={adminTone.green} />
+        <StatCard index={2} icon="ribbon-outline" label="Halal terverifikasi" value={rows.filter((r) => r.halal_verified).length} color={adminTone.teal} />
+        <StatCard index={3} icon="restaurant-outline" label="Total merchant" value={rows.length} color={adminTone.orange} />
+      </Grid>
+      <Toolbar q={q} onQ={setQ} placeholder="Cari nama merchant"
+        filters={[{ key: 'pending', label: `Pengajuan (${pending})` }, { key: 'approved', label: 'Aktif' }, { key: 'rejected', label: 'Ditolak' }, { key: 'suspended', label: 'Ditangguhkan' }, { key: 'all', label: `Semua (${rows.length})` }]}
+        filter={filter} onFilter={setFilter} />
+      <DataTable rows={shown as unknown as Record<string, unknown>[]} emptyText="Tidak ada merchant pada filter ini" emptyIcon="restaurant-outline" columns={[
+        { key: 'name', label: 'Merchant', width: 220, flex: 2, render: (r) => { const m = r as unknown as Row_; return <View style={{ minWidth: 0 }}><Truncate style={font.bodyStrong} title={m.name}>{m.name}</Truncate><Truncate style={font.tiny} title={`${m.category} · ${m.address}`}>{m.category} · {m.address}</Truncate></View>; } },
+        { key: 'owner', label: 'Pemilik', width: 170, render: (r) => { const m = r as unknown as Row_; return <View style={{ minWidth: 0 }}><Truncate style={font.body} title={m.owner?.full_name ?? ''}>{m.owner?.full_name ?? '— (seed)'}</Truncate><Truncate style={font.tiny} title={m.owner?.email ?? ''}>{m.owner?.email ?? ''}</Truncate></View>; } },
         { key: 'docs', label: 'Dokumen', width: 150, render: (r) => { const m = r as unknown as Row_; const d = m.docs; const n = [d?.npwp_no, d?.owner_id_card_url, d?.place_photo_url].filter(Boolean).length; return <Row gap={6}><DocDots docs={d} /><Text style={font.tiny}>{n}/3 wajib</Text></Row>; } },
         { key: 'halal', label: 'Halal', width: 100, render: (r) => <HalalBadge merchant={r as unknown as Row_} /> },
-        { key: 'menu', label: 'Menu', width: 60, render: (r) => <Text style={font.small}>{String((r as unknown as Row_).menu_count)}</Text> },
-        { key: 'rating', label: 'Rating', width: 100, render: (r) => { const m = r as unknown as Row_; return <Text style={font.small}>⭐ {Number(m.rating_avg).toFixed(1)} ({m.rating_count})</Text>; } },
-        { key: 'status', label: 'Status', width: 120, render: (r) => <Badge text={statusLabel[r.status as ApprovalStatus]} color={statusColor[r.status as ApprovalStatus]} /> },
+        { key: 'menu', label: 'Menu', width: 70, mono: true, render: (r) => <Text style={font.mono}>{String((r as unknown as Row_).menu_count)}</Text> },
+        { key: 'rating', label: 'Rating', width: 100, align: 'right', render: (r) => { const m = r as unknown as Row_; return <Text style={font.mono}>{Number(m.rating_avg).toFixed(1)} ({m.rating_count})</Text>; } },
+        { key: 'status', label: 'Status', width: 130, render: (r) => <StatusPill status={String(r.status)} label={statusLabel[r.status as ApprovalStatus]} /> },
         { key: 'created_at', label: 'Diajukan', width: 120, render: (r) => { const m = r as unknown as Row_; return <Text style={font.tiny}>{formatDate(m.docs?.submitted_at ?? m.created_at, false)}</Text>; } },
-        { key: 'actions', label: 'Aksi', width: 160, render: (r) => { const m = r as unknown as Row_; return (
-          <Button size="sm" title={m.status === 'pending' ? 'Tinjau pengajuan' : 'Tinjau / ubah'} color={m.status === 'pending' ? colors.warning : colors.primary} variant={m.status === 'pending' ? 'primary' : 'outline'} icon="document-text-outline" onPress={() => setReview(m)} />
+        { key: 'contact', label: 'Kontak', width: 180, render: (r) => { const m = r as unknown as Row_; return m.owner ? <ContactActions userId={m.owner.id} name={m.owner.full_name} role="merchant" subject={`Panel admin · merchant ${m.name}`} /> : <Text style={font.tiny}>Tanpa pemilik</Text>; } },
+        { key: 'actions', label: 'Aksi', width: 260, render: (r) => { const m = r as unknown as Row_; return (
+          <Row gap={6} style={{ flexWrap: 'wrap' }}>
+            <Button size="sm" title={m.status === 'pending' ? 'Tinjau' : 'Tinjau / ubah'} color={m.status === 'pending' ? colors.warning : colors.primary} variant={m.status === 'pending' ? 'primary' : 'outline'} icon="document-text-outline" onPress={() => setReview(m)} />
+            <DeleteButton onPress={() => setDel({ kind: 'merchant', id: m.id, name: m.name, meta: [m.category, `${m.menu_count} menu`] })} />
+          </Row>
         ); } },
       ]} />
     </AdminPage>
@@ -68,7 +79,7 @@ function DocDots({ docs }: { docs: MerchantDocuments | null }) {
   return <Row gap={3}>{items.map((v, i) => <View key={i} style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: v ? colors.success : i < 3 ? colors.danger + '66' : colors.border }} />)}</Row>;
 }
 
-function ReviewPanel({ m, onClose, onDone }: { m: Row_; onClose: () => void; onDone: () => void }) {
+function ReviewPanel({ m, onClose, onDone, onDelete }: { m: Row_; onClose: () => void; onDone: () => void; onDelete?: () => void }) {
   const d = m.docs;
   const [note, setNote] = useState(d?.review_note ?? '');
   const [halalOk, setHalalOk] = useState(m.halal_verified);
@@ -96,7 +107,11 @@ function ReviewPanel({ m, onClose, onDone }: { m: Row_; onClose: () => void; onD
           <Text style={font.small}>{m.category} · {m.address}</Text>
           <Text style={font.tiny}>Pemilik: {m.owner?.full_name ?? '—'} · {m.owner?.email ?? ''} · HP {d?.owner_phone ?? m.owner?.phone ?? '—'}</Text>
         </View>
-        <Pressable onPress={onClose} style={s.close}><Ionicons name="close" size={20} color={colors.textSecondary} /></Pressable>
+        <Row gap={8}>
+          {m.owner ? <ContactActions userId={m.owner.id} name={m.owner.full_name} role="merchant" subject={`Panel admin · merchant ${m.name}`} /> : null}
+          {onDelete ? <DeleteButton onPress={onDelete} /> : null}
+          <Pressable onPress={onClose} style={s.close}><Ionicons name="close" size={20} color={colors.textSecondary} /></Pressable>
+        </Row>
       </Row>
       <View style={s.cols}>
         <View style={s.col}>
@@ -136,9 +151,9 @@ function ReviewPanel({ m, onClose, onDone }: { m: Row_; onClose: () => void; onD
 }
 
 const s = StyleSheet.create({
-  panel: { backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: radius.xl, padding: 16, borderWidth: 1.5, borderColor: colors.warning + '66', gap: 12, marginBottom: 4 },
+  panel: { backgroundColor: adminTone.surface, borderRadius: radius.xl, padding: 16, borderWidth: 1.5, borderColor: colors.warning + '66', gap: 12, marginBottom: 4 },
   close: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(11,31,42,0.06)', alignItems: 'center', justifyContent: 'center' },
   cols: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
   col: { flexGrow: 1, flexBasis: 320, gap: 8 },
-  doc: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: radius.md, borderWidth: 1, borderColor: glass.border, backgroundColor: 'rgba(255,255,255,0.92)' },
+  doc: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: radius.md, borderWidth: 1, borderColor: adminTone.border, backgroundColor: adminTone.surface },
 });

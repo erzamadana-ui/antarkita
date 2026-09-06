@@ -1,12 +1,12 @@
 // Admin · Blast Promo — kirim promo merchant/promo kode ke kotak masuk pelanggan (satu arah admin → pelanggan)
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { AdminPage, Table, StatCard } from '@/components/admin';
-import { Card, Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
+import { AdminPage, Table, StatCard, adminFont as font, adminTone, AdminCard as Card } from '@/components/admin';
+import { Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
 import { PromoCard } from '@/components/PromoCard';
 import { DocUpload } from '@/components/DocUpload';
 import { rpc, supabase } from '@/lib/supabase';
-import { colors, font, radius, glass } from '@/lib/theme';
+import { colors, radius } from '@/lib/theme';
 import { formatDate } from '@/lib/format';
 import type { Blast, City, Merchant, Promo } from '@/lib/types';
 
@@ -92,4 +92,4 @@ export default function AdminBlast() {
     </AdminPage>
   );
 }
-const s = StyleSheet.create({ notif: { gap: 4, padding: 12, borderRadius: radius.lg, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: glass.border } });
+const s = StyleSheet.create({ notif: { gap: 4, padding: 12, borderRadius: radius.lg, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border } });

@@ -78,7 +78,8 @@ export function OrderExtras({ order }: { order: Order }) {
         <View style={{ gap: 4 }}>
           <Text style={font.h3}>Detail paket</Text>
           <Text style={font.body}>Penerima: <Text style={{ fontWeight: '700' }}>{order.recipient_name}</Text> · {phoneDisplay(order.recipient_phone)}</Text>
-          <Text style={font.small}>{order.package_details?.type} · {order.package_details?.weight}{order.package_details?.description ? ` · ${order.package_details.description}` : ''}</Text>
+          <Text style={font.small}>{[order.package_details?.type, order.package_details?.weight, order.package_details?.size_cm ? `sisi terpanjang ${order.package_details.size_cm} cm` : null, order.package_details?.description].filter(Boolean).join(' · ')}</Text>
+          {order.send_scope === 'intercity' ? <Text style={font.tiny}>{order.package_details?.via === 'travel' ? 'Antar kota · titipan mitra AntarTravel (door to door)' : 'Antar kota · lewat gudang AntarSend'}{order.package_details?.dest_address ? ` · ${order.package_details.dest_address}` : ''}</Text> : null}
         </View>
       )}
       {order.notes ? <View style={s.note}><Ionicons name="chatbox-ellipses-outline" size={16} color={colors.warning} /><Text style={[font.small, { flex: 1, color: colors.text }]}>{order.notes}</Text></View> : null}

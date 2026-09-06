@@ -147,7 +147,7 @@ export default function RideScreen() {
                       <PriceSummary rows={[{ label: `${chosen.label} (${km(opts?.distance_km ?? 0)})`, value: chosen.fare }, { label: 'Biaya layanan', value: opts?.platform_fee ?? 0 }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />
                     </Animated.View>
                   )}
-                  <LimitInfo limit={opts?.limit} style={{ marginTop: 8 }} />
+                  <LimitInfo limit={opts?.limit} service={service} style={{ marginTop: 8 }} />
                 </Animated.View>
               </PressableScale>
             )}

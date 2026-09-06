@@ -1,11 +1,14 @@
+// Admin · Pesanan — pantau, buka detail (kontak pelanggan/driver), dan intervensi pesanan.
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { CallButton } from '@/components/call/IncomingCall';
-import { AdminPage, Table, FilterBar } from '@/components/admin';
-import { Row, Badge, Button, toast, Input } from '@/components/ui';
+import {
+  AdminPage, DataTable, Toolbar, Panel, Pill, ContactActions, Truncate, Grid, Col,
+  adminFont as font, adminTone, adminSpace,
+} from '@/components/admin';
+import { Row, Button, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
-import { colors, font } from '@/lib/theme';
+import { colors } from '@/lib/theme';
 import { formatDate, rupiah, serviceLabel, statusLabel, statusColor } from '@/lib/format';
 import type { Order, Profile } from '@/lib/types';
 
@@ -16,6 +19,8 @@ export default function AdminOrders() {
   const [rows, setRows] = useState<Row_[]>([]);
   const [filter, setFilter] = useState('active');
   const [q, setQ] = useState('');
+  const [open, setOpen] = useState<Row_ | null>(null);
+
   const load = useCallback(async () => {
     let query = supabase.from('orders').select('*, merchant:merchants(name)').order('created_at', { ascending: false }).limit(300);
     if (filter === 'active') query = query.in('status', ['searching', 'accepted', 'arrived', 'in_progress']);
@@ -25,7 +30,9 @@ export default function AdminOrders() {
     const ids = Array.from(new Set(os.flatMap((o) => [o.customer_id, o.driver_id]).filter(Boolean))) as string[];
     const { data: profiles } = ids.length ? await supabase.from('profiles').select('id,full_name').in('id', ids) : { data: [] };
     const pm = new Map(((profiles as Pick<Profile, 'id' | 'full_name'>[]) ?? []).map((p) => [p.id, p.full_name]));
-    setRows(os.map((o) => ({ ...o, customer_name: pm.get(o.customer_id), driver_name: o.driver_id ? pm.get(o.driver_id) : undefined })));
+    const list = os.map((o) => ({ ...o, customer_name: pm.get(o.customer_id), driver_name: o.driver_id ? pm.get(o.driver_id) : undefined }));
+    setRows(list);
+    setOpen((cur) => (cur ? list.find((x) => x.id === cur.id) ?? null : null));
   }, [filter]);
   useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
 
@@ -37,28 +44,99 @@ export default function AdminOrders() {
   const shown = rows.filter((r) => !q || r.code.toLowerCase().includes(q.toLowerCase()) || (r.customer_name ?? '').toLowerCase().includes(q.toLowerCase()));
 
   return (
-    <AdminPage title="Pesanan" subtitle="Pantau & intervensi pesanan" onRefresh={load}>
-      <Row gap={10} style={{ flexWrap: 'wrap' }}>
-        <FilterBar value={filter} onChange={setFilter} options={[{ key: 'active', label: 'Berjalan' }, { key: 'searching', label: 'Mencari driver' }, { key: 'completed', label: 'Selesai' }, { key: 'cancelled', label: 'Batal' }, { key: 'all', label: 'Semua' }]} />
-        <Input placeholder="Cari kode / pelanggan" value={q} onChangeText={setQ} icon="search" containerStyle={{ minWidth: 220 }} />
-      </Row>
-      <Table rows={shown as unknown as Record<string, unknown>[]} columns={[
-        { key: 'code', label: 'Order', width: 170, render: (r) => { const o = r as unknown as Row_; return <View><Text style={{ fontWeight: '700' }}>{o.code}</Text><Text style={font.tiny}>{formatDate(o.created_at)}</Text></View>; } },
-        { key: 'service', label: 'Layanan', width: 110, render: (r) => <Text style={font.small}>{serviceLabel[(r as unknown as Row_).service]}</Text> },
-        { key: 'people', label: 'Pelanggan / Driver', width: 230, render: (r) => { const o = r as unknown as Row_; return (
-          <View style={{ gap: 4 }}>
-            <Row gap={6}><Text style={[font.small, { flex: 1 }]} numberOfLines={1}>{o.customer_name ?? '-'}</Text><CallButton peer={{ id: o.customer_id, name: o.customer_name ?? 'Pelanggan', role: 'customer' }} orderId={o.id} size={26} color={colors.info} /></Row>
-            <Row gap={6}><Text style={[font.tiny, { flex: 1 }]} numberOfLines={1}>🛵 {o.driver_name ?? 'belum ada'}</Text>{!!o.driver_id && <CallButton peer={{ id: o.driver_id, name: o.driver_name ?? 'Driver', role: 'driver' }} orderId={o.id} size={26} color={colors.ride} />}</Row>
-          </View>); } },
-        { key: 'route', label: 'Rute', width: 260, render: (r) => { const o = r as unknown as Row_; return <View><Text style={font.tiny} numberOfLines={1}>▲ {o.merchant?.name ?? o.pickup_address}</Text><Text style={font.tiny} numberOfLines={1}>▼ {o.dropoff_address}</Text></View>; } },
-        { key: 'total', label: 'Total', width: 110, render: (r) => { const o = r as unknown as Row_; return <View><Text style={{ fontWeight: '700' }}>{rupiah(o.total)}</Text><Text style={font.tiny}>{o.payment_method === 'wallet' ? 'AntarPay' : 'Tunai'} · {o.payment_status}</Text></View>; } },
-        { key: 'status', label: 'Status', width: 170, render: (r) => { const o = r as unknown as Row_; return <Badge text={statusLabel(o.status, o.service, o.merchant_status)} color={statusColor(o.status)} />; } },
-        { key: 'actions', label: 'Aksi', width: 190, render: (r) => { const o = r as unknown as Row_; return (
-          <Row gap={6}>
-            <Button size="sm" title="Detail" variant="secondary" onPress={() => router.push(`/order/${o.id}` as never)} />
-            {!['completed', 'cancelled'].includes(o.status) && <Button size="sm" title="Batalkan" variant="outline" color={colors.danger} onPress={() => cancel(o)} />}
-          </Row>); } },
-      ]} />
+    <AdminPage title="Pesanan" subtitle="Pantau, hubungi pihak terkait, dan intervensi pesanan berjalan" onRefresh={load}>
+      <Toolbar q={q} onQ={setQ} placeholder="Cari kode order / pelanggan"
+        filters={[{ key: 'active', label: 'Berjalan' }, { key: 'searching', label: 'Mencari driver' }, { key: 'completed', label: 'Selesai' }, { key: 'cancelled', label: 'Batal' }, { key: 'all', label: 'Semua' }]}
+        filter={filter} onFilter={setFilter} />
+
+      {open ? (
+        <Panel title={`Detail pesanan ${open.code}`} subtitle={`${serviceLabel[open.service]} · ${formatDate(open.created_at)}`} icon="receipt-outline"
+          right={<Row gap={6} style={{ flexWrap: 'wrap' }}>
+            <Button size="sm" variant="outline" title="Buka halaman order" icon="open-outline" onPress={() => router.push(`/order/${open.id}` as never)} />
+            <Button size="sm" variant="ghost" title="Tutup" onPress={() => setOpen(null)} />
+          </Row>}>
+          <Grid gap={adminSpace.lg}>
+            <Col span={4} min={240} style={{ gap: 6 }}>
+              <Text style={font.label}>Pelanggan</Text>
+              <Text style={font.bodyStrong} numberOfLines={1}>{open.customer_name ?? '—'}</Text>
+              <ContactActions userId={open.customer_id} name={open.customer_name ?? 'Pelanggan'} role="customer" orderId={open.id} subject={`Pesanan ${open.code}`} />
+              <Text style={[font.label, { marginTop: 10 }]}>Driver</Text>
+              <Text style={font.bodyStrong} numberOfLines={1}>{open.driver_name ?? 'Belum ada driver'}</Text>
+              {open.driver_id ? <ContactActions userId={open.driver_id} name={open.driver_name ?? 'Driver'} role="driver" orderId={open.id} subject={`Pesanan ${open.code}`} /> : null}
+            </Col>
+            <Col span={5} min={260} style={{ gap: 6 }}>
+              <Text style={font.label}>Rute</Text>
+              <Truncate style={font.body} title={open.merchant?.name ?? open.pickup_address} lines={2}>▲ {open.merchant?.name ?? open.pickup_address}</Truncate>
+              <Truncate style={font.body} title={open.dropoff_address} lines={2}>▼ {open.dropoff_address}</Truncate>
+              <Text style={[font.label, { marginTop: 10 }]}>Status</Text>
+              <Pill text={statusLabel(open.status, open.service, open.merchant_status)} color={statusColor(open.status)} />
+            </Col>
+            <Col span={3} min={200} style={{ gap: 6 }}>
+              <Text style={font.label}>Pembayaran</Text>
+              <Text style={[font.num, { fontSize: 20, lineHeight: 26 }]}>{rupiah(open.total)}</Text>
+              <Text style={font.small}>{open.payment_method === 'wallet' ? 'AntarPay' : 'Tunai'} · {open.payment_status}</Text>
+              {!['completed', 'cancelled'].includes(open.status)
+                ? <Button size="sm" variant="outline" color={colors.danger} title="Batalkan pesanan" icon="close-circle-outline" onPress={() => cancel(open)} style={{ marginTop: 8 }} />
+                : null}
+            </Col>
+          </Grid>
+        </Panel>
+      ) : null}
+
+      <DataTable rows={shown as unknown as Record<string, unknown>[]} emptyText="Tidak ada pesanan pada filter ini" emptyIcon="receipt-outline"
+        onRowPress={(r) => setOpen(r as unknown as Row_)}
+        columns={[
+          { key: 'code', label: 'Order', width: 160, render: (r) => { const o = r as unknown as Row_; return <View style={{ minWidth: 0 }}><Truncate style={font.bodyStrong} title={o.code}>{o.code}</Truncate><Truncate style={font.tiny}>{formatDate(o.created_at)}</Truncate></View>; } },
+          { key: 'service', label: 'Layanan', width: 110, render: (r) => <Text style={font.body} numberOfLines={1}>{serviceLabel[(r as unknown as Row_).service]}</Text> },
+          {
+            key: 'people', label: 'Pelanggan / Driver', width: 190, flex: 1, render: (r) => {
+              const o = r as unknown as Row_;
+              return (
+                <View style={{ gap: 2, minWidth: 0 }}>
+                  <Truncate style={font.body} title={o.customer_name ?? ''}>{o.customer_name ?? '—'}</Truncate>
+                  <Truncate style={font.tiny} title={o.driver_name ?? ''}>🛵 {o.driver_name ?? 'belum ada'}</Truncate>
+                </View>
+              );
+            },
+          },
+          {
+            key: 'route', label: 'Rute', width: 240, flex: 2, render: (r) => {
+              const o = r as unknown as Row_;
+              return (
+                <View style={{ minWidth: 0 }}>
+                  <Truncate style={font.tiny} title={o.merchant?.name ?? o.pickup_address}>▲ {o.merchant?.name ?? o.pickup_address}</Truncate>
+                  <Truncate style={font.tiny} title={o.dropoff_address}>▼ {o.dropoff_address}</Truncate>
+                </View>
+              );
+            },
+          },
+          {
+            key: 'total', label: 'Total', width: 120, align: 'right', render: (r) => {
+              const o = r as unknown as Row_;
+              return <View style={{ alignItems: 'flex-end' }}><Text style={font.mono}>{rupiah(o.total)}</Text><Text style={font.tiny}>{o.payment_method === 'wallet' ? 'AntarPay' : 'Tunai'}</Text></View>;
+            },
+          },
+          { key: 'status', label: 'Status', width: 160, render: (r) => { const o = r as unknown as Row_; return <Pill text={statusLabel(o.status, o.service, o.merchant_status)} color={statusColor(o.status)} />; } },
+          {
+            key: 'contact', label: 'Kontak', width: 180, render: (r) => {
+              const o = r as unknown as Row_;
+              return <ContactActions userId={o.customer_id} name={o.customer_name ?? 'Pelanggan'} role="customer" orderId={o.id} subject={`Pesanan ${o.code}`} showLabel={false} compact />;
+            },
+          },
+          {
+            key: 'actions', label: 'Aksi', width: 210, render: (r) => {
+              const o = r as unknown as Row_;
+              return (
+                <Row gap={6} style={{ flexWrap: 'wrap' }}>
+                  <Button size="sm" title="Detail" variant="outline" onPress={() => setOpen(o)} />
+                  {!['completed', 'cancelled'].includes(o.status) && <Button size="sm" title="Batalkan" variant="outline" color={colors.danger} onPress={() => cancel(o)} />}
+                </Row>
+              );
+            },
+          },
+        ]} />
+
+      <Text style={[font.tiny, { color: adminTone.faint }]}>Klik baris untuk membuka detail. Nomor telepon pribadi tidak pernah ditampilkan — panggilan berjalan lewat modul suara dalam aplikasi.</Text>
     </AdminPage>
   );
 }

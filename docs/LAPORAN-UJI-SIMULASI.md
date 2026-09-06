@@ -81,3 +81,26 @@ Jalankan `supabase/tests/simulasi_e2e.sql` di SQL Editor Supabase (sebagai postg
 | Sisa merek lama "Antar Aja" di data (nama aplikasi, rekening bank, gudang) | Data awal sebelum rebrand | Diperbarui ke "AntarKita" / "PT AntarKita Indonesia" di `app_settings` & `warehouses` | Query verifikasi 0 baris tersisa |
 
 Sweep ulang setelah perbaikan: Pelanggan 25 rute, Mitra 18 rute, Admin 21 rute — 0 error; uji alur lupa kata sandi 19/19 lolos.
+
+## 7. Tahap 9 (6–7 September 2026) — dispatch dinamis, panel admin baru, laporan keuangan
+Pembagian kerja: Backend #1 (dispatch, migrasi 0025), Backend #2 (analitik & admin, 0026), Front-End Pelanggan, Front-End Mitra, Designer (panel admin + eksekutif), QC (simulasi 0027 + sweep UI).
+
+| Permintaan komisaris | Hasil |
+|---|---|
+| 1. Batas jarak terima order dinamis dari panel admin | `app_settings.pickup_radius_km` per layanan (motor 5, mobil 8, food 5, send 6, shop/market 5, box 15 km) + fallback `default`; dipakai `driver_available_orders`; diubah dari Admin → Pengaturan tanpa rilis ulang |
+| 2. Layar hiburan & permohonan maaf bila menunggu > 5 menit | Komponen `WaitApology` (ambang `wait_apology_minutes`, timer mm:ss, "tahukah kamu" berotasi, tombol Tetap tunggu / Ubah layanan / Batalkan) |
+| 3. Tombol Tolak di aplikasi Mitra | `driver_reject_order` + tabel `order_rejections`; order yang ditolak hilang dari feed driver itu saja |
+| 4. Prioritas order menurut rating | `priority_tiers` (4,8 → 0 dtk; 4,5 → 20 dtk; 4,0 → 45 dtk; sisanya 75 dtk; mitra baru dianggap 4,6) + kartu "Prioritas Anda" di beranda driver |
+| 5. Matriks layanan per kendaraan + batas berat/dimensi | `driver_can_take` v4 & `send_required_vehicle`; motor: ride/food/send ≤ 20 kg & 60 cm; mobil: car/food/send ≤ 150 kg & 160 cm; box/pickup: AntarBox & paket besar |
+| 6. AntarSend mobil: driver mobil boleh angkut barang & penumpang dalam kota | Termasuk dalam matriks di atas (mobil mengambil `send` dalam kota dan `ride_car`) |
+| 7. AntarSend luar kota lewat mitra travel | Kolom `orders.travel_partner_id` + `travel_send_available/accept/pickup/complete`, batas travel 30 kg & 120 cm, bagi hasil `travel_send_partner_pct` 80% |
+| 8. Menu gudang jadi dropdown | Komponen `Dropdown` baru; gudang asal & tujuan memakai dropdown (nama, alamat, jam buka, jarak) |
+| Admin 1–2. Tampilan & pengelompokan menu | Sistem desain admin baru (`adminTone/adminFont/adminSpace`, StatCard, DataTable, Panel, Toolbar) + sidebar 6 kelompok |
+| Admin 3. Hapus mitra dengan PIN + alasan | `admin_delete_partner` (PIN wajib, alasan ≥ 10 huruf, tolak bila ada order aktif/saldo ≠ 0) + dialog di 5 halaman |
+| Admin 4. Telepon & chat ke pelanggan/mitra | `admin_contact_thread` (chat lewat tiket CS) + panggilan WebRTC lewat modul yang ada; bilah status panggilan di layout admin |
+| Admin 5. Laporan keuangan cascade | Halaman "Laporan Keuangan": `admin_finance_cascade` (per layanan/kota → drill-down → daftar order) + `admin_order_split` per order, ekspor CSV |
+| Eksekutif: font, Revenue/COGS/Margin | Portal Eksekutif ditata ulang + bagian Laba Rugi (P&L) per bulan & per layanan dari `exec_report().pnl` |
+
+**Uji**: simulasi transaksi diperluas jadi **31 skenario (S0–S30)**, semuanya LOLOS di dalam transaksi yang di-rollback (data live tidak berubah — dibuktikan dengan hitungan sesudah uji). Sweep UI: Pelanggan 25 rute, Mitra 18 rute, Admin 23 rute, 0 error; alur lupa kata sandi 19/19 lolos; sapuan lebar 360 px untuk proporsi teks/bentuk.
+
+**Bug nyata yang ditemukan uji & diperbaiki**: `admin_delete_partner` belum menghitung titipan AntarSend antar kota sebagai pekerjaan aktif → mitra travel yang sedang membawa paket bisa dihapus (migrasi `0027_perbaikan_uji_tahap9.sql`).

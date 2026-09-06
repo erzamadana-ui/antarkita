@@ -67,13 +67,15 @@ export interface Order {
   fare_delivery: number; items_subtotal: number; platform_fee: number; discount: number; promo_code: string | null; total: number;
   driver_earning: number; merchant_earning: number; payment_method: PaymentMethod; payment_status: 'unpaid' | 'paid' | 'refunded';
   notes: string | null; recipient_name: string | null; recipient_phone: string | null;
-  package_details: { type?: string; weight?: string; description?: string } | null;
+  package_details: { type?: string; weight?: string; description?: string; dest_address?: string; size_cm?: string | number; via?: string } | null;
   shopping_list?: ShoppingItem[] | null; est_budget?: number; shop_store?: string | null; receipt_url?: string | null;
   tip?: number; extras?: OrderExtra[]; extras_total?: number; share_token?: string | null;
   city?: string | null; send_scope?: 'in_city' | 'intercity'; dest_city_id?: string | null; warehouse_id?: string | null; origin_warehouse_id?: string | null;
   weight_kg?: number | null; intercity_fare?: number; scheduled_at?: string | null; vehicle_class?: string | null; helpers?: number; purpose?: string | null; paid_via?: string | null;
   // tahap 6: belanja katalog / pasar
   shop_store_id?: string | null; market_id?: string | null; shop_vehicle?: 'motor' | 'car'; service_fee?: number; driver_service_share?: number; actual_items?: ShoppingItem[] | null;
+  // tahap 9: titipan AntarSend antar kota yang dibawa mitra travel
+  travel_partner_id?: string | null;
   cancel_reason: string | null; created_at: string; accepted_at: string | null; arrived_at: string | null; started_at: string | null;
   completed_at: string | null; cancelled_at: string | null;
   // relasi opsional
@@ -100,6 +102,9 @@ export interface AvailableOrder {
   fare_delivery: number; items_subtotal: number; total: number; driver_earning: number; payment_method: PaymentMethod;
   merchant_status: MerchantOrderStatus | null; created_at: string; distance_to_pickup_km: number; merchant_name: string | null;
   vehicle_class?: string | null; helpers?: number; scheduled_at?: string | null; send_scope?: string | null;
+  /** Tahap 9 (0025): info muatan & antrean — dipakai kartu order aplikasi Mitra. */
+  shop_vehicle?: 'motor' | 'car' | null; driver_service_share?: number | null;
+  weight_kg?: number | null; parcel_size_cm?: number | null; waiting_minutes?: number | null; priority_note?: string | null;
 }
 
 export interface PricingSession { id: string; name: string; level: 'low' | 'middle' | 'high'; days: number[]; start_time: string; end_time: string; multiplier: number; driver_bonus_pct: number; services: ServiceType[] | null; active: boolean; note: string | null }
@@ -216,4 +221,30 @@ export interface ReportRun { id: number; name: string; period: string; created_a
 export interface Recommendation { priority: 'high' | 'med' | 'low'; area: string; title: string; detail: string; action: string }
 export interface AutomationRun { id: number; kind: string; started_at: string; finished_at: string | null; ok: boolean; count: number; detail: Record<string, unknown>; triggered_by: string | null }
 
-export interface AppPublicSettings { services_enabled: Record<string, boolean>; max_km: Record<string, number>; osm_import_enabled: boolean; osm_import_radius_km: number }
+/** Batas berat & sisi terpanjang AntarSend per kendaraan (app_settings.send_limits). */
+export interface SendLimit { max_kg: number; max_cm: number }
+export type SendVehicle = 'motor' | 'car' | 'box' | 'travel';
+export type SendLimits = Record<SendVehicle, SendLimit>;
+export interface PriorityTier { min_rating: number; delay_s: number }
+export interface AppPublicSettings {
+  services_enabled: Record<string, boolean>; max_km: Record<string, number>; osm_import_enabled: boolean; osm_import_radius_km: number;
+  /** Tahap 9 */
+  pickup_radius_km: Record<string, number>; send_limits: SendLimits; priority_tiers: PriorityTier[]; wait_apology_minutes: number;
+}
+
+// ---------- Tahap 9: dispatch driver (prioritas rating, tolak order, titipan travel) ----------
+/** Hasil `rpc('driver_priority_info')` — antrean prioritas driver berdasarkan rating. */
+export interface DriverPriorityInfo {
+  rating: number; rating_count: number; tier_delay_s: number; next_tier_rating: number | null;
+  is_new_driver: boolean; drivers_ahead: number; tiers: PriorityTier[];
+}
+/** Alasan singkat saat driver menolak order (chip di aplikasi Mitra). */
+export type DriverRejectReason = 'Terlalu jauh' | 'Muatan berat/besar' | 'Arah berlawanan' | 'Sedang istirahat' | 'Lainnya';
+/** Satu baris `rpc('travel_send_available')` — titipan AntarSend antar kota yang menunggu mitra travel. */
+export interface TravelSendOrder {
+  id: string; code: string; pickup_address: string; dropoff_address: string;
+  city: string | null; dest_city: string | null;
+  weight_kg: number | null; size_cm: number | null; package_details: Order['package_details'];
+  recipient_name: string | null; total: number; intercity_fare: number; partner_earning: number;
+  payment_method: PaymentMethod; payment_status: 'unpaid' | 'paid' | 'refunded'; created_at: string;
+}

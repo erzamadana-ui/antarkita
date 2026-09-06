@@ -3,13 +3,13 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, Linking, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { AdminPage, FilterBar, StatCard, ReasonPrompt } from '@/components/admin';
-import { Card, Row, Button, Badge, Input, Empty, IconCircle, Stars, toast } from '@/components/ui';
+import { AdminPage, FilterBar, StatCard, ReasonPrompt, ContactActions, DeleteButton, DeletePartnerDialog, adminFont as font, AdminCard as Card, EmptyState as Empty } from '@/components/admin';
+import { Row, Button, Badge, Input, IconCircle, Stars, toast } from '@/components/ui';
 import { Entrance, Skeleton } from '@/components/motion';
 import { rpc } from '@/lib/supabase';
 import { signedUrl } from '@/lib/upload';
 import { handleAdminError } from '@/store/adminSecurity';
-import { colors, font, radius } from '@/lib/theme';
+import { colors, radius } from '@/lib/theme';
 import { formatDate, phoneDisplay, phoneMasked, rupiah } from '@/lib/format';
 import type { ApprovalStatus, TravelPartner } from '@/lib/types';
 
@@ -29,6 +29,7 @@ export default function AdminTravelPartners() {
   const [ask, setAsk] = useState<{ id: string; status: ApprovalStatus; name: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const [del, setDel] = useState<{ kind: 'travel'; id: string; name: string; meta?: string[] } | null>(null);
 
   const load = useCallback(async () => {
     try { setRows((await rpc<PartnerRow[]>('admin_travel_partners', { p_status: 'all' })) ?? []); }
@@ -64,6 +65,7 @@ export default function AdminTravelPartners() {
     <AdminPage title="Mitra Travel" subtitle={`${all.length} mitra AntarTravel · ${count('pending')} menunggu verifikasi · data pribadi tersamar (tampilkan per mitra, tercatat di log)`} onRefresh={load}
       right={<Button size="sm" title="Rute & permintaan" variant="secondary" icon="map-outline" onPress={() => router.push('/(admin)/logistics' as never)} />}>
       <ReasonPrompt visible={!!ask} title={ask?.status === 'suspended' ? `Tangguhkan ${askName}?` : `Tolak ${askName}?`} subtitle="Alasan wajib — tersimpan di Log Aktivitas dan ditampilkan ke mitra." onCancel={() => setAsk(null)} onSubmit={(r) => { const p = all.find((x) => x.id === ask!.id); if (p) return setStatus(p, ask!.status, r); }} confirmLabel={ask?.status === 'suspended' ? 'Tangguhkan' : 'Tolak'} />
+      <DeletePartnerDialog target={del} onClose={() => setDel(null)} onDeleted={load} />
       <Row gap={12} style={{ flexWrap: 'wrap' }}>
         <StatCard index={0} label="Menunggu" value={count('pending')} color={colors.warning} />
         <StatCard index={1} label="Aktif" value={count('approved')} color={colors.success} />
@@ -150,6 +152,8 @@ export default function AdminTravelPartners() {
 
                 {/* Aksi */}
                 <Row gap={8} style={{ justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                  <ContactActions userId={p.id} name={displayName(p)} role="driver" subject={`Panel admin · mitra travel ${displayName(p)}`} />
+                  <DeleteButton onPress={() => setDel({ kind: 'travel', id: p.id, name: displayName(p), meta: [p.vehicle_plate ?? '', `${p.trips} trip`].filter(Boolean) })} />
                   {p.status === 'pending' ? <Button size="sm" title="Tolak" variant="outline" color={colors.danger} onPress={() => setStatus(p, 'rejected')} /> : null}
                   {p.status === 'approved' ? <Button size="sm" title="Tangguhkan" variant="outline" color={colors.danger} onPress={() => setStatus(p, 'suspended')} /> : null}
                   {p.status === 'suspended' ? <Button size="sm" title="Pulihkan" color={colors.success} icon="refresh" loading={busyId === p.id} onPress={() => setStatus(p, 'approved', 'Dipulihkan oleh admin')} /> : null}

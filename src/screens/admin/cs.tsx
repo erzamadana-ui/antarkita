@@ -3,14 +3,15 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, useWindowDimensions, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
-import { AdminPage, StatCard, FilterBar } from '@/components/admin';
-import { Row, Badge, Button, toast, Input, Chip, Avatar, Empty } from '@/components/ui';
+import { AdminPage, StatCard, FilterBar, adminFont as font, adminTone, EmptyState as Empty } from '@/components/admin';
+import { Row, Badge, Button, toast, Input, Chip, Avatar } from '@/components/ui';
 import { LiveDot, PressableScale } from '@/components/motion';
 import { TicketChat } from '@/components/TicketChat';
 import { useTicket } from '@/hooks/useTickets';
+import { useLocalSearchParams } from 'expo-router';
 import { rpc, supabase, realtimeChannel } from '@/lib/supabase';
 import { useAuth } from '@/store/auth';
-import { colors, font, radius, glass, motion, shadow } from '@/lib/theme';
+import { colors, radius, glass, motion, shadow } from '@/lib/theme';
 import { timeAgo, formatDate, ticketStatusLabel, ticketStatusColor, ticketCategoryLabel, ticketPriorityLabel, ticketPriorityColor, roleLabelId } from '@/lib/format';
 import type { Ticket, Profile, SosAlert, TicketStatus, TicketPriority } from '@/lib/types';
 
@@ -25,7 +26,10 @@ export default function AdminSupport() {
   const [sos, setSos] = useState<SosAlert[]>([]);
   const [filter, setFilter] = useState('active');
   const [q, setQ] = useState('');
-  const [selected, setSelected] = useState<string | null>(null);
+  const params = useLocalSearchParams<{ ticket?: string }>();
+  const [selected, setSelected] = useState<string | null>(typeof params.ticket === 'string' ? params.ticket : null);
+  // Deep link dari tombol "Chat" di halaman lain: /(admin)/cs?ticket=<id>
+  useEffect(() => { const t = typeof params.ticket === 'string' ? params.ticket : null; if (t) setSelected(t); }, [params.ticket]);
 
   const load = useCallback(async () => {
     const [{ data: t }, st, { data: so }] = await Promise.all([
@@ -173,8 +177,8 @@ function TicketPanel({ id, onClose, onChanged }: { id: string; onClose: () => vo
 const s = StyleSheet.create({
   sos: { backgroundColor: colors.danger, borderRadius: radius.xl, padding: 14, gap: 8 },
   sosRow: { backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: radius.md, padding: 10, flexWrap: 'wrap', gap: 8 },
-  row: { flexDirection: 'row', gap: 10, alignItems: 'center', padding: 10, borderRadius: radius.lg, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: glass.border },
-  panel: { backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: radius.xl, borderWidth: 1, borderColor: glass.border, overflow: 'hidden', minHeight: 520 },
-  panelHead: { padding: 14, borderBottomWidth: 1, borderBottomColor: glass.border, backgroundColor: 'rgba(255,255,255,0.92)' },
+  row: { flexDirection: 'row', gap: 10, alignItems: 'center', padding: 10, borderRadius: radius.lg, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border },
+  panel: { backgroundColor: adminTone.surface, borderRadius: radius.xl, borderWidth: 1, borderColor: adminTone.border, overflow: 'hidden', minHeight: 520 },
+  panelHead: { padding: 14, borderBottomWidth: 1, borderBottomColor: adminTone.border, backgroundColor: adminTone.surface },
   close: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(11,31,42,0.06)', alignItems: 'center', justifyContent: 'center' },
 });

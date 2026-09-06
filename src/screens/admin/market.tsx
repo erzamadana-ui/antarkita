@@ -1,11 +1,11 @@
 // Admin · AntarMarket: pasar tradisional, bahan/komoditas, harga acuan per pasar & statistik nota driver
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Switch } from 'react-native';
-import { AdminPage, Table, StatCard, FilterBar } from '@/components/admin';
-import { Card, Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
+import { AdminPage, Table, StatCard, FilterBar, adminFont as font, AdminCard as Card } from '@/components/admin';
+import { Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
 import { DocUpload } from '@/components/DocUpload';
 import { rpc, supabase } from '@/lib/supabase';
-import { colors, font } from '@/lib/theme';
+import { colors } from '@/lib/theme';
 import { rupiah, formatDate, cityName, marketCategoryLabel } from '@/lib/format';
 import type { Market, MarketItem, MarketPriceStat, City } from '@/lib/types';
 

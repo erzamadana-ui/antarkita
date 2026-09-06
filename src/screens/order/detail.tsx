@@ -14,7 +14,9 @@ import { PersonCard, RouteBlock, OrderExtras, PriceBlock, Timeline, driverSubtit
 import { TipCard, ExtrasApproval } from '@/components/TipExtras';
 import { PinCard, SafetyRow, DriverVerifyCard } from '@/components/Safety';
 import { MerchantAds } from '@/components/BookingExtras';
+import { WaitApology } from '@/components/WaitApology';
 import { useOrder } from '@/hooks/useOrder';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import { useAuth } from '@/store/auth';
 import { useBooking } from '@/store/booking';
 import { rpc, supabase } from '@/lib/supabase';
@@ -37,6 +39,7 @@ export default function OrderTracking() {
   const router = useRouter();
   const { order, driver, events, loading, reload } = useOrder(id);
   const refreshWallet = useAuth((s) => s.refreshWallet);
+  const { waitApologyMinutes } = useAppSettings();
   const [rated, setRated] = useState<{ driver?: number; merchant?: number }>({});
   const [comment, setComment] = useState('');
 
@@ -127,6 +130,7 @@ export default function OrderTracking() {
             <Text style={[font.small, { textAlign: 'center' }]}>Biasanya kurang dari 2 menit. Anda akan diberi tahu saat driver menerima.</Text>
           </Animated.View>
         )}
+        {searching && <WaitApology order={order} thresholdMinutes={waitApologyMinutes} onCancel={cancel} />}
 
         {driver && active && (
           <Animated.View entering={FadeInDown.springify().stiffness(280).damping(16)} exiting={FadeOut}>

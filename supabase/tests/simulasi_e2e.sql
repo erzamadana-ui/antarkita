@@ -6,6 +6,10 @@ declare
   mown uuid := 'a0000000-0000-4000-8000-000000000005'; adm uuid := 'a0000000-0000-4000-8000-000000000001';
   merch uuid := 'b0000000-0000-4000-8000-000000000001'; menu1 uuid; store1 uuid; prod1 uuid; mk uuid; item1 uuid; route1 uuid; wh_dest uuid; city_bkt uuid;
   o orders; o2 orders; r jsonb; j jsonb; v_pin text; b0 bigint; b1 bigint; d0 bigint; d1 bigint; m0 bigint; m1 bigint; n int; t tickets; tr travel_requests; tt travel_trips; tb travel_bookings; tofr travel_offers; v market_vendors; vi market_vendor_items; f fraud_flags; w withdrawal_requests; tp topup_requests; log text := E'\n';
+  -- Tahap 9 (S22-S30): dispatch dinamis, matriks kendaraan, titipan mitra travel, panel admin, portal eksekutif
+  dbox uuid; n2 int; n3 int; j1 jsonb; j2 jsonb; jr jsonb; k1 text; ordid uuid; d_from date; d_to date;
+  dm drivers; dc drivers; db drivers; bo boolean; bo2 boolean; bo3 boolean;
+  s_rad0 jsonb; s_tier0 jsonb; s_dr1 numeric; s_dc1 int; s_dr2 numeric; s_dc2 int; s_km numeric; s_wait numeric;
 begin
   select id into menu1 from menu_items where merchant_id = merch and is_available limit 1;
   select id into store1 from shop_stores where active and name ilike 'Indomaret%' limit 1;
@@ -15,12 +19,21 @@ begin
   select id into city_bkt from cities where name = 'Bukittinggi';
   select id into route1 from travel_routes where active and from_city = (select id from cities where name = 'Pekanbaru') and to_city = (select id from cities where name = 'Padang') limit 1;
   select id into wh_dest from warehouses where city_id = city_bkt and active limit 1;
+  select id into dbox from drivers where vehicle_type in ('box','pickup') and status = 'approved' order by created_at limit 1;
 
   -- ===== S0 Pembersihan sisa uji manual (ikut di-rollback): order aktif lama akun uji ditutup agar batas 3 order aktif & "selesaikan order aktif dulu" tidak mengganggu =====
   begin
     update orders set status = 'cancelled' where customer_id = cust and status in ('searching','accepted','arrived','in_progress'); get diagnostics n = row_count;
     update orders set status = 'cancelled' where driver_id in (drv, drv2) and status in ('accepted','arrived','in_progress'); get diagnostics m0 = row_count;
     if n + m0 > 0 then log := log || format('S0 bersih: %s order aktif lama pelanggan uji & %s order aktif lama driver uji ditutup (hanya dalam transaksi simulasi)', n, m0) || E'\n'; end if;
+    -- mitra uji bisa saja tertinggal berstatus suspended dari uji sebelumnya; kembalikan ke approved agar seluruh alur bisa dijalankan
+    k1 := (select string_agg(id::text || '=' || status, ', ') from drivers where id in (drv, drv2) and status <> 'approved');
+    if k1 is not null then
+      perform set_config('antaraja.bypass', 'on', true);
+      update drivers set status = 'approved', status_reason = null where id in (drv, drv2) and status <> 'approved';
+      perform set_config('antaraja.bypass', 'off', true);
+      log := log || format('S0 bersih: status mitra uji dipulihkan ke approved (sebelumnya %s)', k1) || E'\n';
+    end if;
   exception when others then log := log || 'S0 BUG bersih: ' || sqlerrm || E'\n'; end;
 
   -- ===== S0 Saldo uji pelanggan (top up manual disetujui admin) =====
@@ -421,6 +434,386 @@ begin
     r := to_jsonb(register_driver(jsonb_build_object('vehicle_type', 'motor', 'vehicle_brand', 'Yamaha', 'vehicle_model', 'NMAX', 'fuel_type', 'bensin', 'is_electric', true, 'vehicle_plate', 'bm 9999 zz', 'vehicle_year', 2022)));
     log := log || format('S21f %s fuel bensin + is_electric=true dari klien → is_electric=%s', case when (r->>'is_electric')::boolean = false then 'OK' else 'BUG' end, r->>'is_electric') || E'\n';
   exception when others then log := log || 'S21 BUG register_driver: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S22 Radius jemput dinamis per layanan (app_settings.pickup_radius_km) =====
+  begin
+    -- pastikan akun uji bersih & aktif (semua tetap di-rollback)
+    update orders set status = 'cancelled' where customer_id = cust and status in ('searching','accepted','arrived','in_progress');
+    update orders set status = 'cancelled' where driver_id in (drv, drv2) and status in ('accepted','arrived','in_progress');
+    perform set_config('antaraja.bypass', 'on', true);
+    update drivers set status = 'approved' where id in (drv, drv2);
+    perform set_config('antaraja.bypass', 'off', true);
+    select value into s_rad0 from app_settings where key = 'pickup_radius_km';
+    select value into s_tier0 from app_settings where key = 'priority_tiers';
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    -- selama uji dispatch semua driver melihat order seketika; antrean prioritas diuji khusus di S24
+    perform admin_set_settings(jsonb_build_object('priority_tiers', '[{"min_rating":0,"delay_s":0}]'::jsonb,
+                                                  'pickup_radius_km', s_rad0 || '{"ride_motor":1}'::jsonb));
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    perform driver_selfie_check('https://x/selfie.jpg'); perform driver_set_online(true, 0.4946, 101.4314);
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    -- titik jemput ~7 km di utara posisi driver uji
+    o := create_order(jsonb_build_object('service', 'ride_motor', 'vehicle_class', 'motor_economy',
+      'pickup', jsonb_build_object('lat', 0.5600, 'lng', 101.4314, 'address', 'Jl. Uji Radius'),
+      'dropoff', jsonb_build_object('lat', 0.5650, 'lng', 101.4400, 'address', 'Tujuan Uji'), 'paid_via', 'cash'));
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    select round((st_distance(o.pickup_location, d.location) / 1000.0)::numeric, 2) into s_km from drivers d where d.id = drv;
+    select count(*) into n from driver_available_orders() av where av.id = o.id;
+    log := log || format('S22a %s radius ride_motor=1 km, jarak driver→jemput=%s km → baris di feed driver=%s (harus 0)', case when n = 0 then 'OK' else 'BUG' end, s_km, n) || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_set_settings(jsonb_build_object('pickup_radius_km', s_rad0 || '{"ride_motor":20}'::jsonb));
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    select count(*) into n2 from driver_available_orders() av where av.id = o.id;
+    log := log || format('S22b %s radius dinaikkan jadi %s km → order muncul (%s baris)', case when n2 = 1 then 'OK' else 'BUG' end, pickup_radius_km('ride_motor'), n2) || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_set_settings(jsonb_build_object('pickup_radius_km', s_rad0));
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    select count(*) into n3 from driver_available_orders() av where av.id = o.id;
+    log := log || format('S22c %s radius dikembalikan ke setelan semula (%s km) → order di luar jangkauan lagi (%s baris)', case when n3 = 0 then 'OK' else 'BUG' end, s_rad0->>'ride_motor', n3) || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    perform cancel_order(o.id, 'uji radius selesai');
+  exception when others then log := log || 'S22 BUG radius dinamis: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S23 Tombol TOLAK di aplikasi Mitra (order_rejections) =====
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    perform driver_set_online(true, 0.4946, 101.4314);
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    perform driver_selfie_check('https://x/selfie.jpg'); perform driver_set_online(true, 0.4946, 101.4314);
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    o := create_order(jsonb_build_object('service', 'send', 'weight_kg', 5, 'size_cm', 40,
+      'pickup', jsonb_build_object('lat', 0.4950, 'lng', 101.4320, 'address', 'Toko Uji Tolak'),
+      'dropoff', jsonb_build_object('lat', 0.5000, 'lng', 101.4400, 'address', 'Rumah Uji'),
+      'recipient_name', 'Sari', 'recipient_phone', '0811', 'paid_via', 'cash'));
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    select count(*) into n from driver_available_orders() av where av.id = o.id;
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    select count(*) into n2 from driver_available_orders() av where av.id = o.id;
+    log := log || format('S23a %s sebelum ditolak order %s terlihat driver1=%s driver2=%s', case when n = 1 and n2 = 1 then 'OK' else 'BUG' end, o.code, n, n2) || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    r := driver_reject_order(o.id, 'terlalu jauh');
+    select count(*) into n from driver_available_orders() av where av.id = o.id;
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    select count(*) into n2 from driver_available_orders() av where av.id = o.id;
+    select count(*) into n3 from order_rejections where order_id = o.id and driver_id = drv and reason = 'terlalu jauh';
+    log := log || format('S23b %s setelah driver1 menolak: feed driver1=%s (harus 0) feed driver2=%s (harus 1) baris order_rejections=%s alasan="%s" tolakan 24 jam=%s',
+      case when n = 0 and n2 = 1 and n3 = 1 then 'OK' else 'BUG' end, n, n2, n3,
+      (select reason from order_rejections where order_id = o.id and driver_id = drv), r->>'rejections_today') || E'\n';
+    -- driver yang sudah memegang order tidak boleh memakai tombol tolak
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    o := driver_accept_order(o.id);
+    begin perform driver_reject_order(o.id, 'coba tolak order sendiri'); log := log || 'S23c BUG: driver pemegang order bisa menolak' || E'\n';
+    exception when others then log := log || 'S23c OK order yang sudah diterima tidak bisa ditolak: ' || left(sqlerrm, 60) || E'\n'; end;
+    o := cancel_order(o.id, 'uji selesai');
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    perform cancel_order(o.id, 'uji tombol tolak selesai');
+  exception when others then log := log || 'S23 BUG tombol tolak: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S24 Antrean prioritas driver berdasarkan rating (priority_tiers) =====
+  begin
+    select rating_avg, rating_count into s_dr1, s_dc1 from drivers where id = drv;
+    select rating_avg, rating_count into s_dr2, s_dc2 from drivers where id = drv2;
+    perform set_config('antaraja.bypass', 'on', true);
+    update drivers set rating_avg = 4.20, rating_count = 30 where id = drv;    -- driver rating rendah
+    update drivers set rating_avg = 4.90, rating_count = 64 where id = drv2;   -- driver rating tinggi
+    perform set_config('antaraja.bypass', 'off', true);
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_set_settings(jsonb_build_object('priority_tiers', '[{"min_rating":4.8,"delay_s":0},{"min_rating":0,"delay_s":60}]'::jsonb));
+    select driver_priority_delay_s(4.20, 30), driver_priority_delay_s(4.90, 64) into n, n2;
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    perform driver_set_online(true, 0.4946, 101.4314); j := driver_priority_info();
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    perform driver_set_online(true, 0.4946, 101.4314); j1 := driver_priority_info();
+    log := log || format('S24a %s driver_priority_delay_s rating 4.20=%s dtk & rating 4.90=%s dtk (driver_priority_info: %s dtk vs %s dtk, drivers_ahead driver rating rendah=%s, next_tier=%s)',
+      case when n = 60 and n2 = 0 and (j->>'tier_delay_s')::int = 60 and (j1->>'tier_delay_s')::int = 0 then 'OK' else 'BUG' end,
+      n, n2, j->>'tier_delay_s', j1->>'tier_delay_s', j->>'drivers_ahead', j->>'next_tier_rating') || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    o := create_order(jsonb_build_object('service', 'send', 'weight_kg', 3, 'size_cm', 30,
+      'pickup', jsonb_build_object('lat', 0.4950, 'lng', 101.4320, 'address', 'Toko Uji Prioritas'),
+      'dropoff', jsonb_build_object('lat', 0.5000, 'lng', 101.4400, 'address', 'Rumah Uji'),
+      'recipient_name', 'Sari', 'recipient_phone', '0811', 'paid_via', 'cash'));
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    select count(*) into n from driver_available_orders() av where av.id = o.id;
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    select count(*) into n2 from driver_available_orders() av where av.id = o.id;
+    log := log || format('S24b %s order %s baru dibuat: feed driver rating rendah=%s (harus 0) feed driver rating tinggi=%s (harus 1)', case when n = 0 and n2 = 1 then 'OK' else 'BUG' end, o.code, n, n2) || E'\n';
+    update orders set created_at = now() - interval '2 minutes' where id = o.id;   -- order "dituakan" 2 menit
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    select count(*) into n from driver_available_orders() av where av.id = o.id;
+    select f.priority_note, f.waiting_minutes into k1, s_wait from driver_available_orders() av where av.id = o.id;
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    select count(*) into n2 from driver_available_orders() av where av.id = o.id;
+    log := log || format('S24c %s setelah order berumur 2 menit: feed rating rendah=%s feed rating tinggi=%s waiting_minutes=%s priority_note="%s"',
+      case when n = 1 and n2 = 1 then 'OK' else 'BUG' end, n, n2, s_wait, coalesce(k1, '(null)')) || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    perform cancel_order(o.id, 'uji prioritas selesai');
+    -- pulihkan rating driver uji; tier tetap 0 detik untuk skenario dispatch berikutnya
+    perform set_config('antaraja.bypass', 'on', true);
+    update drivers set rating_avg = s_dr1, rating_count = s_dc1 where id = drv;
+    update drivers set rating_avg = s_dr2, rating_count = s_dc2 where id = drv2;
+    perform set_config('antaraja.bypass', 'off', true);
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_set_settings(jsonb_build_object('priority_tiers', '[{"min_rating":0,"delay_s":0}]'::jsonb));
+  exception when others then log := log || 'S24 BUG prioritas rating: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S25 Matriks layanan↔kendaraan & batas berat/dimensi AntarSend =====
+  begin
+    select * into dm from drivers where id = drv; select * into dc from drivers where id = drv2; select * into db from drivers where id = dbox;
+    log := log || format('S25 kendaraan uji: motor=%s mobil=%s box=%s | batas motor=%s car=%s box=%s travel=%s',
+      dm.vehicle_type, dc.vehicle_type, db.vehicle_type, send_limit('motor'), send_limit('car'), send_limit('box'), send_limit('travel')) || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    o := create_order(jsonb_build_object('service', 'send', 'weight_kg', 5, 'size_cm', 40,
+      'pickup', jsonb_build_object('lat', 0.4950, 'lng', 101.4320, 'address', 'Toko A'),
+      'dropoff', jsonb_build_object('lat', 0.5000, 'lng', 101.4400, 'address', 'Rumah B'), 'recipient_name', 'Sari', 'recipient_phone', '0811', 'paid_via', 'cash'));
+    select driver_can_take(dm, o), driver_can_take(dc, o), driver_can_take(db, o) into bo, bo2, bo3;
+    log := log || format('S25a %s send 5 kg/40 cm (kendaraan minimal: %s) → motor=%s mobil=%s box=%s', case when bo and bo2 and bo3 then 'OK' else 'BUG' end, send_required_vehicle(5, 40), bo, bo2, bo3) || E'\n';
+    perform cancel_order(o.id, 'uji matriks');
+    o := create_order(jsonb_build_object('service', 'send', 'weight_kg', 80, 'size_cm', 150,
+      'pickup', jsonb_build_object('lat', 0.4950, 'lng', 101.4320, 'address', 'Toko A'),
+      'dropoff', jsonb_build_object('lat', 0.5000, 'lng', 101.4400, 'address', 'Rumah B'), 'recipient_name', 'Sari', 'recipient_phone', '0811', 'paid_via', 'cash'));
+    select driver_can_take(dm, o), driver_can_take(dc, o), driver_can_take(db, o) into bo, bo2, bo3;
+    log := log || format('S25b %s send 80 kg/150 cm (kendaraan minimal: %s) → motor=%s (harus false) mobil=%s box=%s', case when not bo and bo2 and bo3 then 'OK' else 'BUG' end, send_required_vehicle(80, 150), bo, bo2, bo3) || E'\n';
+    perform cancel_order(o.id, 'uji matriks');
+    o := create_order(jsonb_build_object('service', 'send', 'weight_kg', 500, 'size_cm', 250,
+      'pickup', jsonb_build_object('lat', 0.4950, 'lng', 101.4320, 'address', 'Toko A'),
+      'dropoff', jsonb_build_object('lat', 0.5000, 'lng', 101.4400, 'address', 'Rumah B'), 'recipient_name', 'Sari', 'recipient_phone', '0811', 'paid_via', 'cash'));
+    select driver_can_take(dm, o), driver_can_take(dc, o), driver_can_take(db, o) into bo, bo2, bo3;
+    log := log || format('S25c %s send 500 kg/250 cm (kendaraan minimal: %s) → motor=%s mobil=%s (harus false) box=%s (harus true)', case when not bo and not bo2 and bo3 then 'OK' else 'BUG' end, send_required_vehicle(500, 250), bo, bo2, bo3) || E'\n';
+    perform cancel_order(o.id, 'uji matriks');
+    begin
+      o := create_order(jsonb_build_object('service', 'send', 'weight_kg', 5000, 'size_cm', 400,
+        'pickup', jsonb_build_object('lat', 0.4950, 'lng', 101.4320, 'address', 'Toko A'),
+        'dropoff', jsonb_build_object('lat', 0.5000, 'lng', 101.4400, 'address', 'Rumah B'), 'recipient_name', 'Sari', 'recipient_phone', '0811', 'paid_via', 'cash'));
+      log := log || 'S25d BUG: paket 5000 kg/400 cm diterima create_order' || E'\n';
+    exception when others then
+      log := log || format('S25d %s paket 5000 kg/400 cm ditolak create_order: %s', case when sqlerrm ilike '%AntarBox%' then 'OK' else 'BUG (pesan tidak menyarankan AntarBox)' end, sqlerrm) || E'\n';
+    end;
+    o := create_order(jsonb_build_object('service', 'ride_car', 'vehicle_class', 'car_economy',
+      'pickup', jsonb_build_object('lat', 0.4950, 'lng', 101.4320, 'address', 'Rumah'),
+      'dropoff', jsonb_build_object('lat', 0.5100, 'lng', 101.4450, 'address', 'Mall'), 'paid_via', 'cash'));
+    select driver_can_take(dm, o), driver_can_take(dc, o) into bo, bo2;
+    log := log || format('S25e %s ride_car → driver motor=%s (harus false) driver mobil=%s (harus true)', case when not bo and bo2 then 'OK' else 'BUG' end, bo, bo2) || E'\n';
+    perform cancel_order(o.id, 'uji matriks');
+    o := create_order(jsonb_build_object('service', 'ride_motor', 'vehicle_class', 'motor_economy',
+      'pickup', jsonb_build_object('lat', 0.4950, 'lng', 101.4320, 'address', 'Rumah'),
+      'dropoff', jsonb_build_object('lat', 0.5100, 'lng', 101.4450, 'address', 'Mall'), 'paid_via', 'cash'));
+    select driver_can_take(dm, o), driver_can_take(dc, o), driver_can_take(db, o) into bo, bo2, bo3;
+    log := log || format('S25f %s ride_motor → motor=%s (harus true) mobil=%s (harus false) box=%s (harus false)', case when bo and not bo2 and not bo3 then 'OK' else 'BUG' end, bo, bo2, bo3) || E'\n';
+    perform cancel_order(o.id, 'uji matriks');
+    o := create_order(jsonb_build_object('service', 'food', 'merchant_id', merch,
+      'items', jsonb_build_array(jsonb_build_object('menu_item_id', menu1, 'qty', 1)),
+      'dropoff', jsonb_build_object('lat', -0.945, 'lng', 100.36, 'address', 'Kos Andalas'), 'paid_via', 'cash'));
+    select driver_can_take(dm, o), driver_can_take(dc, o), driver_can_take(db, o) into bo, bo2, bo3;
+    log := log || format('S25g %s food → motor=%s mobil=%s (dua-duanya harus true) box=%s (harus false)', case when bo and bo2 and not bo3 then 'OK' else 'BUG' end, bo, bo2, bo3) || E'\n';
+    perform cancel_order(o.id, 'uji matriks');
+    o := create_order(jsonb_build_object('service', 'box', 'helpers', 1, 'purpose', 'pindahan',
+      'pickup', jsonb_build_object('lat', 0.4950, 'lng', 101.4320, 'address', 'Kos lama'),
+      'dropoff', jsonb_build_object('lat', 0.5100, 'lng', 101.4450, 'address', 'Kos baru'), 'paid_via', 'cash'));
+    select driver_can_take(dm, o), driver_can_take(dc, o), driver_can_take(db, o) into bo, bo2, bo3;
+    log := log || format('S25h %s box → motor=%s mobil=%s (harus false) box=%s (harus true)', case when not bo and not bo2 and bo3 then 'OK' else 'BUG' end, bo, bo2, bo3) || E'\n';
+    perform cancel_order(o.id, 'uji matriks');
+  exception when others then log := log || 'S25 BUG matriks layanan-kendaraan: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S26 Titipan AntarSend antar kota lewat mitra travel =====
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    perform driver_selfie_check('https://x/selfie.jpg'); perform driver_set_online(true, -0.9405, 100.3625);
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    -- kontrol: kiriman antar kota lewat gudang (tanpa via) tetap terlihat driver kota
+    o2 := create_order(jsonb_build_object('service', 'send', 'send_scope', 'intercity', 'dest_city_id', city_bkt, 'warehouse_id', wh_dest,
+      'weight_kg', 4, 'size_cm', 40, 'pickup', jsonb_build_object('lat', -0.9405, 'lng', 100.3625, 'address', 'Toko A'),
+      'dropoff', jsonb_build_object('lat', -0.3, 'lng', 100.37, 'address', 'Bukittinggi'), 'recipient_name', 'Andi', 'recipient_phone', '0812', 'paid_via', 'cash'));
+    o := create_order(jsonb_build_object('service', 'send', 'send_scope', 'intercity', 'via', 'travel', 'dest_city_id', city_bkt, 'warehouse_id', wh_dest,
+      'weight_kg', 5, 'size_cm', 40, 'pickup', jsonb_build_object('lat', -0.9405, 'lng', 100.3625, 'address', 'Toko A'),
+      'dropoff', jsonb_build_object('lat', -0.3, 'lng', 100.37, 'address', 'Bukittinggi'), 'recipient_name', 'Andi', 'recipient_phone', '0812', 'paid_via', 'cash'));
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    select count(*) into n from driver_available_orders() av where av.id = o.id;
+    select count(*) into n2 from driver_available_orders() av where av.id = o2.id;
+    log := log || format('S26a %s titipan via=%s di feed driver kota=%s (harus 0); kontrol kiriman gudang %s di feed=%s (harus 1)',
+      case when n = 0 and n2 = 1 then 'OK' else 'BUG' end, o.package_details->>'via', n, o2.code, n2) || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    j := travel_send_available();
+    select count(*) into n from jsonb_array_elements(j) x where (x->>'id')::uuid = o.id;
+    select (x->>'partner_earning')::bigint into b0 from jsonb_array_elements(j) x where (x->>'id')::uuid = o.id;
+    log := log || format('S26b %s titipan %s muncul di travel_send_available (%s baris): ongkir antar kota=%s bagian mitra=%s (travel_send_partner_pct=%s%%)',
+      case when n = 1 and b0 = round(o.intercity_fare * setting_num('travel_send_partner_pct', 80) / 100.0)::bigint then 'OK' else 'BUG' end,
+      o.code, n, o.intercity_fare, b0, setting_num('travel_send_partner_pct', 80)) || E'\n';
+    o := travel_accept_send(o.id);
+    log := log || format('S26c %s travel_accept_send → status=%s travel_partner_id=%s', case when o.status = 'accepted' and o.travel_partner_id = drv2 then 'OK' else 'BUG' end, o.status, o.travel_partner_id) || E'\n';
+    o := travel_pickup_send(o.id);
+    log := log || format('S26d %s travel_pickup_send → status=%s', case when o.status = 'in_progress' then 'OK' else 'BUG' end, o.status) || E'\n';
+    select balance into b0 from wallets where user_id = drv2;
+    o := travel_complete_send(o.id);
+    select balance into b1 from wallets where user_id = drv2;
+    select count(*) into n from notifications where user_id = cust and (data->>'order_id')::uuid = o.id;
+    log := log || format('S26e %s travel_complete_send → status=%s pembayaran=%s saldo mitra travel %s→%s (+%s, seharusnya %s) notifikasi pelanggan=%s',
+      case when o.status = 'completed' and b1 - b0 = round(o.intercity_fare * setting_num('travel_send_partner_pct', 80) / 100.0)::bigint and n >= 3 then 'OK' else 'BUG' end,
+      o.status, o.payment_status, b0, b1, b1 - b0, round(o.intercity_fare * setting_num('travel_send_partner_pct', 80) / 100.0)::bigint, n) || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    perform cancel_order(o2.id, 'uji kontrol selesai');
+    begin
+      o2 := create_order(jsonb_build_object('service', 'send', 'send_scope', 'intercity', 'via', 'travel', 'dest_city_id', city_bkt, 'warehouse_id', wh_dest,
+        'weight_kg', 50, 'size_cm', 40, 'pickup', jsonb_build_object('lat', -0.9405, 'lng', 100.3625, 'address', 'Toko A'),
+        'dropoff', jsonb_build_object('lat', -0.3, 'lng', 100.37, 'address', 'Bukittinggi'), 'recipient_name', 'Andi', 'recipient_phone', '0812', 'paid_via', 'cash'));
+      log := log || 'S26f BUG: titipan 50 kg lewat mitra travel diterima create_order' || E'\n';
+    exception when others then log := log || format('S26f %s titipan 50 kg ditolak create_order: %s', case when sqlerrm ilike '%travel%' then 'OK' else 'BUG' end, left(sqlerrm, 130)) || E'\n'; end;
+    -- berat dinaikkan setelah order dibuat → travel_accept_send harus tetap menolak
+    o2 := create_order(jsonb_build_object('service', 'send', 'send_scope', 'intercity', 'via', 'travel', 'dest_city_id', city_bkt, 'warehouse_id', wh_dest,
+      'weight_kg', 25, 'size_cm', 40, 'pickup', jsonb_build_object('lat', -0.9405, 'lng', 100.3625, 'address', 'Toko A'),
+      'dropoff', jsonb_build_object('lat', -0.3, 'lng', 100.37, 'address', 'Bukittinggi'), 'recipient_name', 'Andi', 'recipient_phone', '0812', 'paid_via', 'cash'));
+    update orders set weight_kg = 50 where id = o2.id;
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    begin perform travel_accept_send(o2.id); log := log || 'S26g BUG: travel_accept_send menerima titipan 50 kg' || E'\n';
+    exception when others then log := log || format('S26g %s travel_accept_send menolak titipan 50 kg: %s', case when sqlerrm ilike '%batas mitra travel%' then 'OK' else 'BUG' end, left(sqlerrm, 130)) || E'\n'; end;
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    perform cancel_order(o2.id, 'uji titipan selesai');
+  exception when others then log := log || 'S26 BUG titipan mitra travel: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S27 Hapus mitra: wajib PIN admin, alasan >= 10 huruf, bebas order aktif & saldo nol =====
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    perform driver_set_online(true, 0.4946, 101.4314);
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    insert into admin_security (user_id, pin_hash) select adm, extensions.crypt('123456', extensions.gen_salt('bf')) where not exists (select 1 from admin_security where user_id = adm);
+    update admin_security set pin_hash = extensions.crypt('123456', extensions.gen_salt('bf')), failed = 0, locked_until = null where user_id = adm;
+    perform admin_lock();
+    begin perform admin_delete_partner('driver', drv, 'Uji hapus mitra driver oleh QC');
+      log := log || 'S27a BUG: hapus mitra diterima tanpa buka kunci PIN' || E'\n';
+    exception when others then log := log || format('S27a %s tanpa PIN ditolak: %s', case when sqlerrm ilike '%ADMIN_LOCKED%' or sqlerrm ilike '%PIN%' then 'OK' else 'BUG' end, left(sqlerrm, 70)) || E'\n'; end;
+    r := admin_unlock('123456');
+    begin perform admin_delete_partner('driver', drv, 'nakal');
+      log := log || 'S27b BUG: alasan 5 huruf diterima' || E'\n';
+    exception when others then log := log || format('S27b %s alasan < 10 huruf ditolak: %s', case when sqlerrm ilike '%10 huruf%' then 'OK' else 'BUG' end, left(sqlerrm, 70)) || E'\n'; end;
+    begin perform admin_delete_partner('kurir', drv, 'Uji jenis mitra tidak dikenal');
+      log := log || 'S27c BUG: jenis mitra tidak dikenal diterima' || E'\n';
+    exception when others then log := log || format('S27c %s jenis mitra tak dikenal ditolak: %s', case when sqlerrm ilike '%tidak dikenal%' then 'OK' else 'BUG' end, left(sqlerrm, 70)) || E'\n'; end;
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    o2 := create_order(jsonb_build_object('service', 'ride_motor', 'vehicle_class', 'motor_economy',
+      'pickup', jsonb_build_object('lat', 0.4950, 'lng', 101.4320, 'address', 'A'),
+      'dropoff', jsonb_build_object('lat', 0.5100, 'lng', 101.4450, 'address', 'B'), 'paid_via', 'cash'));
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    o2 := driver_accept_order(o2.id);
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    begin perform admin_delete_partner('driver', drv, 'Uji hapus mitra driver oleh QC');
+      log := log || 'S27d BUG: mitra dengan pesanan aktif tetap dihapus' || E'\n';
+    exception when others then log := log || format('S27d %s pesanan aktif menahan penghapusan: %s', case when sqlerrm ilike '%aktif%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
+    perform cancel_order(o2.id, 'bersih untuk uji hapus mitra');
+    select balance into b0 from wallets where user_id = drv;
+    begin perform admin_delete_partner('driver', drv, 'Uji hapus mitra driver oleh QC');
+      log := log || 'S27e BUG: mitra dengan saldo tersisa tetap dihapus' || E'\n';
+    exception when others then log := log || format('S27e %s saldo Rp%s menahan penghapusan: %s', case when sqlerrm ilike '%saldo%' then 'OK' else 'BUG' end, b0, left(sqlerrm, 80)) || E'\n'; end;
+    perform set_config('antaraja.bypass', 'on', true);
+    update wallets set balance = 0 where user_id = drv;
+    perform set_config('antaraja.bypass', 'off', true);
+    select count(*) into n from security_events where kind = 'admin.partner_delete';
+    r := admin_delete_partner('driver', drv, 'Uji hapus mitra driver oleh QC');
+    select count(*) into n2 from security_events where kind = 'admin.partner_delete';
+    log := log || format('S27f %s penghapusan berhasil setelah kondisi bersih: ok=%s status driver=%s profil aktif=%s alasan tercatat="%s" security_events %s→%s',
+      case when (r->>'ok')::boolean and (select status from drivers where id = drv) = 'suspended' and (select is_active from profiles where id = drv) = false and n2 = n + 1 then 'OK' else 'BUG' end,
+      r->>'ok', (select status from drivers where id = drv), (select is_active from profiles where id = drv), (select status_reason from drivers where id = drv), n, n2) || E'\n';
+    -- mitra travel yang sedang membawa titipan pelanggan tidak boleh bisa dihapus (perbaikan migrasi 0027)
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    o2 := create_order(jsonb_build_object('service', 'send', 'send_scope', 'intercity', 'via', 'travel', 'dest_city_id', city_bkt, 'warehouse_id', wh_dest,
+      'weight_kg', 5, 'size_cm', 40, 'pickup', jsonb_build_object('lat', -0.9405, 'lng', 100.3625, 'address', 'Toko A'),
+      'dropoff', jsonb_build_object('lat', -0.3, 'lng', 100.37, 'address', 'Bukittinggi'), 'recipient_name', 'Andi', 'recipient_phone', '0812', 'paid_via', 'cash'));
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    o2 := travel_accept_send(o2.id);
+    perform set_config('antaraja.bypass', 'on', true);
+    update wallets set balance = 0 where user_id = drv2;   -- agar yang diuji murni pemeriksaan pekerjaan aktif
+    perform set_config('antaraja.bypass', 'off', true);
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    begin
+      perform admin_delete_partner('travel', drv2, 'Uji hapus mitra travel oleh QC');
+      log := log || format('S27g BUG: mitra travel dihapus padahal masih membawa titipan aktif %s (status %s)', o2.code, o2.status) || E'\n';
+    exception when others then log := log || format('S27g %s titipan aktif menahan penghapusan mitra travel: %s', case when sqlerrm ilike '%aktif%' then 'OK' else 'BUG' end, left(sqlerrm, 90)) || E'\n'; end;
+    perform cancel_order(o2.id, 'bersih untuk uji hapus mitra travel');
+  exception when others then log := log || 'S27 BUG hapus mitra: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S28 Chat admin ↔ pengguna (admin_contact_thread) =====
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    update tickets set status = 'closed' where user_id = cust and category = 'account' and status not in ('resolved','closed');
+    r := admin_contact_thread(cust, 'Uji chat admin QC');
+    select count(*) into n2 from ticket_messages where ticket_id = (r->>'ticket_id')::uuid;
+    select count(*) into n3 from notifications where user_id = cust and (data->>'ticket_id')::uuid = (r->>'ticket_id')::uuid;
+    log := log || format('S28a %s tiket dibuat kode=%s created=%s status=%s pesan pembuka=%s notifikasi=%s',
+      case when (r->>'created')::boolean and n2 >= 2 and n3 = 1 then 'OK' else 'BUG' end, r->>'code', r->>'created', r->>'status', n2, n3) || E'\n';
+    j := admin_contact_thread(cust, 'Uji chat admin QC (panggilan kedua)');
+    log := log || format('S28b %s panggilan kedua memakai tiket yang sama (%s) created=%s',
+      case when (j->>'ticket_id') = (r->>'ticket_id') and not (j->>'created')::boolean then 'OK' else 'BUG' end, j->>'code', j->>'created') || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    begin perform admin_contact_thread(adm, 'coba'); log := log || 'S28c BUG: non-admin bisa memulai chat admin' || E'\n';
+    exception when others then log := log || format('S28c OK non-admin ditolak: %s', left(sqlerrm, 40)) || E'\n'; end;
+  exception when others then log := log || 'S28 BUG chat admin: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S29 Laporan keuangan bertingkat (admin_finance_cascade) & bagi hasil satu order =====
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    d_from := (now() at time zone 'Asia/Jakarta')::date - 1; d_to := (now() at time zone 'Asia/Jakarta')::date + 1;
+    j1 := admin_finance_cascade(d_from, d_to, 'service', null);
+    select count(*) into n from jsonb_array_elements(j1->'rows') x where (x->>'net_margin')::bigint <> (x->>'revenue')::bigint - (x->>'promo')::bigint - (x->>'gateway_fee')::bigint;
+    select count(*) into n2 from jsonb_array_elements(j1->'rows') x where (x->>'cogs')::bigint <> (x->>'driver_payout')::bigint + (x->>'merchant_payout')::bigint + (x->>'gateway_fee')::bigint + (x->>'promo')::bigint;
+    log := log || format('S29a %s level 1 per layanan: %s baris (level=%s sub_group=%s); pelanggaran net_margin=revenue-promo-gateway=%s, pelanggaran cogs=driver+merchant+gateway+promo=%s; total order=%s selesai=%s gmv=%s revenue=%s cogs=%s net=%s',
+      case when n = 0 and n2 = 0 and (j1->>'level')::int = 1 then 'OK' else 'BUG' end,
+      jsonb_array_length(j1->'rows'), j1->>'level', j1->>'sub_group', n, n2,
+      j1->'totals'->>'orders', j1->'totals'->>'completed', j1->'totals'->>'gmv', j1->'totals'->>'revenue', j1->'totals'->>'cogs', j1->'totals'->>'net_margin') || E'\n';
+    select x->>'key' into k1 from jsonb_array_elements(j1->'rows') x where (x->>'completed')::int > 0 order by (x->>'gmv')::bigint desc limit 1;
+    j2 := admin_finance_cascade(d_from, d_to, 'service', k1);
+    select x into jr from jsonb_array_elements(j1->'rows') x where x->>'key' = k1;
+    log := log || format('S29b %s level 2 layanan "%s" (level=%s sub_group=%s, %s baris kota, %s order dirinci): total level 2 order=%s gmv=%s revenue=%s cogs=%s net=%s == baris level 1 order=%s gmv=%s revenue=%s cogs=%s net=%s',
+      case when j2->'totals'->>'orders' = jr->>'orders' and j2->'totals'->>'gmv' = jr->>'gmv' and j2->'totals'->>'revenue' = jr->>'revenue'
+             and j2->'totals'->>'net_margin' = jr->>'net_margin' and j2->'totals'->>'cogs' = jr->>'cogs' and (j2->>'level')::int = 2 then 'OK' else 'BUG' end,
+      k1, j2->>'level', j2->>'sub_group', jsonb_array_length(j2->'rows'), jsonb_array_length(j2->'orders'),
+      j2->'totals'->>'orders', j2->'totals'->>'gmv', j2->'totals'->>'revenue', j2->'totals'->>'cogs', j2->'totals'->>'net_margin',
+      jr->>'orders', jr->>'gmv', jr->>'revenue', jr->>'cogs', jr->>'net_margin') || E'\n';
+    j := admin_finance_cascade(d_from, d_to, 'city', null);
+    select count(*) into n from jsonb_array_elements(j->'rows') x where (x->>'net_margin')::bigint <> (x->>'revenue')::bigint - (x->>'promo')::bigint - (x->>'gateway_fee')::bigint;
+    select x->>'key' into k1 from jsonb_array_elements(j->'rows') x where (x->>'completed')::int > 0 order by (x->>'gmv')::bigint desc limit 1;
+    jr := admin_finance_cascade(d_from, d_to, 'city', k1);
+    select x into j2 from jsonb_array_elements(j->'rows') x where x->>'key' = k1;
+    log := log || format('S29c %s level 1 per kota: %s baris (pelanggaran identitas=%s); level 2 kota "%s" sub_group=%s gmv=%s == baris level 1 gmv=%s revenue=%s',
+      case when n = 0 and jr->'totals'->>'gmv' = j2->>'gmv' and jr->'totals'->>'revenue' = j2->>'revenue' and jr->>'sub_group' = 'service' then 'OK' else 'BUG' end,
+      jsonb_array_length(j->'rows'), n, k1, jr->>'sub_group', jr->'totals'->>'gmv', j2->>'gmv', j2->>'revenue') || E'\n';
+    select (x->>'id')::uuid into ordid from jsonb_array_elements(jr->'orders') x where x->>'status' = 'completed' limit 1;
+    j2 := admin_order_split(ordid);
+    select x into jr from jsonb_array_elements(jr->'orders') x where (x->>'id')::uuid = ordid;
+    log := log || format('S29d %s admin_order_split order %s: gross=%s revenue platform=%s (baris laporan %s) gateway=%s (laporan %s) promo=%s driver=%s merchant=%s cogs=%s net_margin=%s (revenue-promo-gateway=%s) margin=%s%%',
+      case when j2->'platform'->>'revenue' = jr->>'revenue' and j2->>'gateway_fee' = jr->>'gateway_fee'
+             and (j2->>'net_margin')::bigint = (j2->'platform'->>'revenue')::bigint - (j2->>'promo')::bigint - (j2->>'gateway_fee')::bigint
+             and (j2->>'cogs')::bigint = (j2->>'driver_payout')::bigint + (j2->>'merchant_payout')::bigint + (j2->>'gateway_fee')::bigint + (j2->>'promo')::bigint then 'OK' else 'BUG' end,
+      j2->>'code', j2->>'gross', j2->'platform'->>'revenue', jr->>'revenue', j2->>'gateway_fee', jr->>'gateway_fee', j2->>'promo',
+      j2->>'driver_payout', j2->>'merchant_payout', j2->>'cogs', j2->>'net_margin',
+      (j2->'platform'->>'revenue')::bigint - (j2->>'promo')::bigint - (j2->>'gateway_fee')::bigint, j2->>'margin_pct') || E'\n';
+    begin perform admin_finance_cascade(d_from, d_to, 'kecamatan', null); log := log || 'S29e BUG: pengelompokan tak dikenal diterima' || E'\n';
+    exception when others then log := log || format('S29e OK pengelompokan tak dikenal ditolak: %s', left(sqlerrm, 60)) || E'\n'; end;
+    begin perform admin_finance_cascade(d_to, d_from, 'service', null); log := log || 'S29f BUG: rentang tanggal terbalik diterima' || E'\n';
+    exception when others then log := log || format('S29f OK rentang tanggal terbalik ditolak: %s', left(sqlerrm, 60)) || E'\n'; end;
+  exception when others then log := log || 'S29 BUG laporan keuangan: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S30 Portal eksekutif: laporan laba rugi (exec_report.pnl) =====
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    insert into exec_access (user_id, level, pin_hash, active) select adm, 'vp', extensions.crypt('654321', extensions.gen_salt('bf')), true where not exists (select 1 from exec_access where user_id = adm);
+    update exec_access set pin_hash = extensions.crypt('654321', extensions.gen_salt('bf')), active = true where user_id = adm;
+    r := exec_login('654321');
+    j := exec_report(r->>'token', 6);
+    j1 := j->'pnl'->'totals';
+    select count(*) into n from (select unnest(array['summary','monthly','by_service','by_city','supply','quality','fraud','automation','finance','recommendations','level','top_merchants','gmv_growth_pct','prev_gmv','generated_at']) k) x where not (j ? x.k);
+    log := log || format('S30a %s exec_login level=%s → exec_report: field lama yang hilang=%s, bagian pnl ada=%s (by_month=%s bulan, by_service=%s layanan)',
+      case when n = 0 and (j ? 'pnl') then 'OK' else 'BUG' end, j->>'level', n, (j ? 'pnl'), jsonb_array_length(j->'pnl'->'by_month'), jsonb_array_length(j->'pnl'->'by_service')) || E'\n';
+    log := log || format('S30b %s pnl.totals: revenue=%s cogs=%s gross_margin=%s (revenue-cogs=%s) margin=%s%% | cogs = driver %s + merchant %s + gateway %s + promo %s | gmv=%s platform_take=%s',
+      case when (j1->>'gross_margin')::bigint = (j1->>'revenue')::bigint - (j1->>'cogs')::bigint
+             and (j1->>'cogs')::bigint = (j1->>'driver_payout')::bigint + (j1->>'merchant_payout')::bigint + (j1->>'gateway_fee')::bigint + (j1->>'promo')::bigint then 'OK' else 'BUG' end,
+      j1->>'revenue', j1->>'cogs', j1->>'gross_margin', (j1->>'revenue')::bigint - (j1->>'cogs')::bigint, j1->>'margin_pct',
+      j1->>'driver_payout', j1->>'merchant_payout', j1->>'gateway_fee', j1->>'promo', j1->>'gmv', j1->>'platform_take') || E'\n';
+    select count(*) into n from jsonb_array_elements(j->'pnl'->'by_service') x where (x->>'gross_margin')::bigint <> (x->>'revenue')::bigint - (x->>'cogs')::bigint;
+    select count(*) into n2 from jsonb_array_elements(j->'pnl'->'by_month') x where (x->>'gross_margin')::bigint <> (x->>'revenue')::bigint - (x->>'cogs')::bigint;
+    log := log || format('S30c %s identitas gross_margin = revenue - cogs: pelanggaran per layanan=%s, per bulan=%s', case when n = 0 and n2 = 0 then 'OK' else 'BUG' end, n, n2) || E'\n';
+    begin perform exec_report('token-palsu-123', 6); log := log || 'S30d BUG: token eksekutif palsu diterima' || E'\n';
+    exception when others then log := log || format('S30d OK token eksekutif palsu ditolak: %s', left(sqlerrm, 40)) || E'\n'; end;
+    -- kembalikan setelan dispatch ke nilai semula (tetap ikut rollback)
+    perform admin_set_settings(jsonb_build_object('priority_tiers', s_tier0, 'pickup_radius_km', s_rad0));
+  exception when others then log := log || 'S30 BUG portal eksekutif: ' || sqlerrm || E'\n'; end;
 
   raise exception using message = 'SIMULASI_SELESAI' || log;
 end $sim$;

@@ -135,7 +135,7 @@ export default function BoxScreen() {
               <Input placeholder="Daftar barang: mis. kasur 1, lemari 2, kardus 10" icon="list-outline" value={items} onChangeText={setItems} />
             </View>
             <SchedulePicker value={when} onChange={setWhen} accent={colors.box} />
-            {chosen && <View style={s.group}><PriceSummary rows={[{ label: `${chosen.label} (${km(opts?.distance_km ?? 0)})`, value: chosen.fare - (opts?.helpers_fee ?? 0) }, ...(opts?.helpers_fee ? [{ label: `Pembantu angkat ×${helpers}`, value: opts.helpers_fee }] : []), { label: 'Biaya layanan', value: opts?.platform_fee ?? 0 }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} /><LimitInfo limit={opts?.limit} /></View>}
+            {chosen && <View style={s.group}><PriceSummary rows={[{ label: `${chosen.label} (${km(opts?.distance_km ?? 0)})`, value: chosen.fare - (opts?.helpers_fee ?? 0) }, ...(opts?.helpers_fee ? [{ label: `Pembantu angkat ×${helpers}`, value: opts.helpers_fee }] : []), { label: 'Biaya layanan', value: opts?.platform_fee ?? 0 }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} /><LimitInfo limit={opts?.limit} service="box" /></View>}
             <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={chosen?.fare ?? 0} service="box" onDiscount={setDiscount} notesPlaceholder="Catatan: lantai berapa, ada lift, jam bongkar" />
             <Text style={font.tiny}>Driver membantu muat/bongkar ringan. Barang pecah belah harap dikemas. Pick up ±1 ton, mobil box ±2 ton.</Text>
           </Animated.View>

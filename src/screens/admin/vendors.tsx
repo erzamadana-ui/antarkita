@@ -2,12 +2,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Image, Linking, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { AdminPage, FilterBar, StatCard, ReasonPrompt } from '@/components/admin';
-import { Card, Row, Button, Badge, Empty, IconCircle, toast } from '@/components/ui';
+import { AdminPage, FilterBar, StatCard, ReasonPrompt, ContactActions, DeleteButton, DeletePartnerDialog, adminFont as font, AdminCard as Card, EmptyState as Empty } from '@/components/admin';
+import { Row, Button, Badge, IconCircle, toast } from '@/components/ui';
 import { Entrance, Skeleton, ProgressBar } from '@/components/motion';
 import { rpc, supabase } from '@/lib/supabase';
 import { signedUrl } from '@/lib/upload';
-import { colors, font, radius } from '@/lib/theme';
+import { colors, radius } from '@/lib/theme';
 import { formatDate, marketCategoryLabel, phoneDisplay } from '@/lib/format';
 import type { MarketVendor, ApprovalStatus } from '@/lib/types';
 
@@ -22,6 +22,7 @@ export default function AdminVendors() {
   const [qualityMin, setQualityMin] = useState(60);
   const [ask, setAsk] = useState<{ v: MarketVendor; status: ApprovalStatus } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [del, setDel] = useState<{ kind: 'vendor'; id: string; name: string; meta?: string[] } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -51,6 +52,7 @@ export default function AdminVendors() {
       <ReasonPrompt visible={!!ask} title={`${ask?.status === 'rejected' ? 'Tolak' : 'Tangguhkan'} lapak "${ask?.v.stall_name}"?`} subtitle="Alasan wajib (min. 5 huruf) — dikirim ke pedagang sebagai notifikasi & tersimpan di log." confirmLabel={ask?.status === 'rejected' ? 'Tolak' : 'Tangguhkan'}
         quick={['Foto lapak / KTP tidak jelas', 'Data rekening tidak sesuai KTP', 'Harga jauh di luar acuan pasar', 'Barang tidak sesuai foto / keluhan pelanggan', 'Lapak tidak ditemukan di pasar', 'Permintaan pedagang sendiri']}
         onCancel={() => setAsk(null)} onSubmit={(r) => review(ask!.v, ask!.status, r)} />
+      <DeletePartnerDialog target={del} onClose={() => setDel(null)} onDeleted={load} />
       <Row gap={12} style={{ flexWrap: 'wrap' }}>
         <StatCard index={0} label="Menunggu" value={n('pending')} color={colors.warning} />
         <StatCard index={1} label="Aktif" value={n('approved')} color={colors.success} />
@@ -102,6 +104,8 @@ export default function AdminVendors() {
                   </View>
                 </Row>
                 <Row gap={8} style={{ justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                  <ContactActions userId={v.id} name={v.owner_name ?? v.stall_name} role="merchant" subject={`Panel admin · lapak ${v.stall_name}`} />
+                  <DeleteButton onPress={() => setDel({ kind: 'vendor', id: v.id, name: v.stall_name, meta: [v.market_name ?? 'pasar', `${v.items ?? 0} barang`] })} />
                   {v.status === 'pending' ? <>
                     <Button size="sm" title="Tolak" variant="outline" color={colors.danger} onPress={() => review(v, 'rejected')} />
                     <Button size="sm" title="Setujui & aktifkan" color={colors.success} icon="checkmark" loading={busyId === v.id} onPress={() => review(v, 'approved')} />

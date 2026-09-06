@@ -11,7 +11,8 @@ import { MapScreen, FloatingButton } from '@/components/MapScreen';
 import { Entrance, LiveDot, PressableScale, Radar, AnimatedNumber } from '@/components/motion';
 import { ServiceIllustration } from '@/components/ServiceArt';
 import { TAB_BAR_SPACE } from '@/components/GlassTabBar';
-import { useDriverSession } from '@/hooks/useDriver';
+import { useDriverSession, useDriverPriority } from '@/hooks/useDriver';
+import { PriorityCard, RejectOrderSheet, OrderLoadInfo, usePickupRadiusText } from '@/components/driver';
 import { useCurrentLocation } from '@/hooks/useLocation';
 import { useAuth } from '@/store/auth';
 import { colors, font, radius, shadow, motion } from '@/lib/theme';
@@ -23,9 +24,12 @@ import { SelfieGate } from '@/components/Safety';
 export default function DriverHome() {
   const router = useRouter();
   const { profile } = useAuth();
-  const { driver, online, busy, setOnline, available, active, accept, myPos, setMyPos } = useDriverSession();
+  const { driver, online, busy, setOnline, available, active, accept, reject, myPos, setMyPos } = useDriverSession();
   const { location, refresh } = useCurrentLocation();
+  const { info: priority } = useDriverPriority(driver?.status === 'approved');
+  const radiusText = usePickupRadiusText();
   const [selected, setSelected] = useState<AvailableOrder | null>(null);
+  const [rejecting, setRejecting] = useState<AvailableOrder | null>(null);
   const [selfie, setSelfie] = useState<{ lat: number; lng: number } | null | false>(false);
   const pos = myPos ?? (driver?.lat && driver.lng ? { lat: driver.lat, lng: driver.lng } : location);
 
@@ -57,6 +61,17 @@ export default function DriverHome() {
   const doAccept = async (o: AvailableOrder) => {
     try { const ord = await accept(o.id); setSelected(null); toast.success('Order diterima!'); router.push(`/driver/order/${ord.id}` as never); }
     catch (e) { toast.error((e as Error).message); }
+  };
+  // Tolak: order hilang dari daftar (animasi keluar) & tidak muncul lagi — server menyaringnya untuk driver ini
+  const doReject = async (reason: string | null) => {
+    const o = rejecting;
+    if (!o) return;
+    try {
+      await reject(o.id, reason);
+      setRejecting(null);
+      setSelected((cur) => (cur?.id === o.id ? null : cur));
+      toast.show('Order dilewati');
+    } catch (e) { toast.error((e as Error).message); }
   };
 
   if (driver && driver.status !== 'approved') {
@@ -103,6 +118,7 @@ export default function DriverHome() {
   return (
     <>
     <SelfieGate visible={selfie !== false} onDone={afterSelfie} onCancel={() => setSelfie(false)} />
+    <RejectOrderSheet visible={!!rejecting} order={rejecting} onClose={() => setRejecting(null)} onConfirm={doReject} />
     <MapScreen
       map={<MapView center={pos} zoom={14} markers={markers} fitTo={fitTo} paddingBottom={20} />}
       back={false}
@@ -127,6 +143,7 @@ export default function DriverHome() {
             </PressableScale>
           </Entrance>
         )}
+        {online && !selected && <Entrance index={active ? 1 : 0}><PriorityCard info={priority} /></Entrance>}
         {!online ? (
           <Animated.View entering={FadeIn.duration(motion.base)} exiting={FadeOut.duration(motion.fast)}>
             <Empty icon="power-outline" title="Anda sedang offline" subtitle="Aktifkan saklar online di kiri atas untuk melihat order di sekitar Anda." />
@@ -159,29 +176,41 @@ export default function DriverHome() {
               {selected.service === 'shop' && <Row gap={10}><View style={s.dotIcon}><Ionicons name="basket-outline" size={16} color={colors.primary} /></View><Text style={[font.small, { flex: 1 }]}>Belanjakan ±{rupiah(selected.items_subtotal)}{selected.payment_method === 'cash' ? ' (talangi tunai, tagih ke pelanggan)' : ' (diganti ke saldo Anda saat selesai)'}</Text></Row>}
               {selected.service === 'food' && <Row gap={10}><View style={s.dotIcon}><Ionicons name="restaurant-outline" size={16} color={colors.primary} /></View><Text style={[font.small, { flex: 1 }]}>Beli makanan {rupiah(selected.items_subtotal)}{selected.payment_method === 'cash' ? ' (talangi tunai)' : ' (dibayar AntarPay)'}</Text></Row>}
             </View>
-            <Button title="Terima Order" size="lg" style={{ marginTop: 14 }} onPress={() => doAccept(selected)} />
+            <OrderLoadInfo order={selected} style={{ marginTop: 10 }} />
+            {!!selected.priority_note && <Row gap={6} style={{ marginTop: 8 }}><Ionicons name="information-circle-outline" size={13} color={colors.textMuted} /><Text style={[font.tiny, { flex: 1 }]}>{selected.priority_note}</Text></Row>}
+            <Row gap={8} style={{ marginTop: 14 }}>
+              <Button title="Tolak" size="lg" variant="outline" color={colors.danger} onPress={() => setRejecting(selected)} style={{ flex: 1 }} />
+              <Button title="Terima Order" size="lg" onPress={() => doAccept(selected)} style={{ flex: 1.6 }} />
+            </Row>
           </Animated.View>
         ) : available.length === 0 ? (
           <Animated.View entering={FadeIn.duration(motion.slow)} exiting={FadeOut.duration(motion.fast)} style={s.radarBox}>
             <Radar color={colors.primary} size={130}><Ionicons name="bicycle" size={24} color={colors.primary} /></Radar>
             <Text style={[font.h3, { marginTop: 4 }]}>Mencari order di sekitar…</Text>
-            <Text style={[font.small, { textAlign: 'center' }]}>Order baru dalam radius 5 km akan muncul otomatis di sini.</Text>
+            <Text style={[font.small, { textAlign: 'center' }]}>{radiusText ? `Order baru dalam ${radiusText} akan muncul otomatis di sini.` : 'Order baru di sekitar Anda akan muncul otomatis di sini.'}</Text>
           </Animated.View>
         ) : (
           available.map((o, i) => {
             const def = serviceDef(o.service);
             return (
               <Animated.View key={o.id} entering={FadeInDown.delay(i * motion.stagger).duration(motion.base)} exiting={FadeOut.duration(motion.fast)} layout={LinearTransition.springify().stiffness(280).damping(20)}>
-                <PressableScale onPress={() => setSelected(o)} scaleTo={0.98} haptic={false} style={s.orderRow}>
-                  <View style={[s.thumb, { backgroundColor: def.color + '14' }]}><ServiceIllustration kind={def.art} size={40} /></View>
-                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                    <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={1}>{serviceLabel[o.service]}{o.vehicle_class ? ` · ${vehicleClassLabel[o.vehicle_class] ?? ''}` : ''}</Text>
-                    <Row gap={4}><Ionicons name="location-outline" size={12} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>{o.merchant_name ?? o.pickup_address}</Text></Row>
-                    <Text style={font.tiny} numberOfLines={1}>{km(o.distance_to_pickup_km)} dari Anda · {km(o.distance_km)} · {o.scheduled_at ? `Jadwal ${formatSchedule(o.scheduled_at)}` : timeAgo(o.created_at)} · {o.payment_method === 'cash' ? 'Tunai' : 'AntarPay'}</Text>
-                    <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 15 }}>{rupiah(o.driver_earning)}</Text>
-                  </View>
-                  <View style={s.rowArrow}><Ionicons name="arrow-forward" size={16} color={colors.primary} /></View>
-                </PressableScale>
+                <View style={s.orderRow}>
+                  <PressableScale onPress={() => setSelected(o)} scaleTo={0.99} haptic={false} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <View style={[s.thumb, { backgroundColor: def.color + '14' }]}><ServiceIllustration kind={def.art} size={40} /></View>
+                    <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                      <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={1}>{serviceLabel[o.service]}{o.vehicle_class ? ` · ${vehicleClassLabel[o.vehicle_class] ?? ''}` : ''}</Text>
+                      <Row gap={4}><Ionicons name="location-outline" size={12} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>{o.merchant_name ?? o.pickup_address}</Text></Row>
+                      <Text style={font.tiny} numberOfLines={1}>{km(o.distance_to_pickup_km)} dari Anda · {km(o.distance_km)} · {o.scheduled_at ? `Jadwal ${formatSchedule(o.scheduled_at)}` : timeAgo(o.created_at)} · {o.payment_method === 'cash' ? 'Tunai' : 'AntarPay'}</Text>
+                      <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 15 }}>{rupiah(o.driver_earning)}</Text>
+                    </View>
+                    <View style={s.rowArrow}><Ionicons name="arrow-forward" size={16} color={colors.primary} /></View>
+                  </PressableScale>
+                  <OrderLoadInfo order={o} style={{ marginTop: 8 }} />
+                  <Row gap={8} style={{ marginTop: 10 }}>
+                    <Button title="Tolak" size="sm" variant="outline" color={colors.danger} icon="close" onPress={() => setRejecting(o)} style={{ flex: 1 }} />
+                    <Button title="Terima" size="sm" icon="checkmark" onPress={() => doAccept(o)} style={{ flex: 1 }} />
+                  </Row>
+                </View>
               </Animated.View>
             );
           })
@@ -201,7 +230,7 @@ const s = StyleSheet.create({
   closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   dotIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
   radarBox: { alignItems: 'center', gap: 4, padding: 14, backgroundColor: '#fff', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, ...shadow.soft },
-  orderRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
+  orderRow: { padding: 12, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   thumb: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
   rowArrow: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.tint },
 });

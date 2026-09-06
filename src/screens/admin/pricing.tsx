@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Switch } from 'react-native';
-import { AdminPage } from '@/components/admin';
-import { Card, Row, Input, Button, Badge, toast } from '@/components/ui';
+import { AdminPage, adminFont as font, AdminCard as Card } from '@/components/admin';
+import { Row, Input, Button, Badge, toast } from '@/components/ui';
 import { PromoCard } from '@/components/PromoCard';
 import { Image, Pressable, StyleSheet } from 'react-native';
 import { pickAndUpload } from '@/lib/upload';
@@ -9,7 +9,7 @@ import { useAuth } from '@/store/auth';
 import { ScrollView } from 'react-native';
 import { Entrance } from '@/components/motion';
 import { supabase } from '@/lib/supabase';
-import { colors, font } from '@/lib/theme';
+import { colors } from '@/lib/theme';
 import { serviceLabel } from '@/lib/format';
 import type { Pricing, Promo, ServiceType } from '@/lib/types';
 

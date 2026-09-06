@@ -2,13 +2,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { AdminPage, FilterBar, StatCard, Table, ReasonPrompt } from '@/components/admin';
-import { Card, Row, Button, Badge, Input, Empty, toast } from '@/components/ui';
+import { AdminPage, FilterBar, StatCard, Table, ReasonPrompt, adminFont as font, AdminCard as Card, EmptyState as Empty } from '@/components/admin';
+import { Row, Button, Badge, Input, toast } from '@/components/ui';
 import { Entrance, Skeleton } from '@/components/motion';
 import { rpc } from '@/lib/supabase';
 import { useAdminSecurity, handleAdminError } from '@/store/adminSecurity';
 import { useAuth } from '@/store/auth';
-import { colors, font, radius } from '@/lib/theme';
+import { colors, radius } from '@/lib/theme';
 import { formatDate, rupiah, roleLabelId } from '@/lib/format';
 import type { FraudFlag, SecurityEvent } from '@/lib/types';
 

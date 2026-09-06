@@ -3,11 +3,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
-import { AdminPage, FilterBar, StatCard } from '@/components/admin';
-import { Row, Badge, Input, Chip, Button, Empty } from '@/components/ui';
+import { AdminPage, FilterBar, StatCard, adminFont as font, adminTone, EmptyState as Empty } from '@/components/admin';
+import { Row, Badge, Input, Chip, Button } from '@/components/ui';
 import { LiveDot, PressableScale } from '@/components/motion';
 import { supabase, realtimeChannel } from '@/lib/supabase';
-import { colors, font, radius, glass, motion } from '@/lib/theme';
+import { colors, radius, motion } from '@/lib/theme';
 import { formatDate, timeAgo, roleLabelId } from '@/lib/format';
 import type { AuditLog } from '@/lib/types';
 
@@ -115,7 +115,7 @@ export default function AdminActivity() {
 }
 
 const s = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 10, alignItems: 'center', padding: 10, borderRadius: radius.md, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: glass.border },
+  row: { flexDirection: 'row', gap: 10, alignItems: 'center', padding: 10, borderRadius: radius.md, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border },
   icon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   detail: { fontFamily: 'monospace', fontSize: 12, color: colors.textSecondary, backgroundColor: 'rgba(11,31,42,0.05)', padding: 8, borderRadius: 8, marginTop: 6 },
 });

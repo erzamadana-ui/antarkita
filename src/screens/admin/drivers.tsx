@@ -1,24 +1,30 @@
+// Admin · Mitra Driver — verifikasi dokumen, status, kontak (chat/telepon), hapus permanen (PIN + alasan).
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AdminPage, Table, FilterBar, ReasonPrompt } from '@/components/admin';
-import { Row, Badge, Button, toast, Input } from '@/components/ui';
+import {
+  AdminPage, DataTable, Toolbar, ReasonPrompt, StatCard, Grid, Pill, StatusPill,
+  ContactActions, DeleteButton, DeletePartnerDialog, IconAction, Truncate,
+  adminFont as font, adminTone, adminSpace,
+} from '@/components/admin';
+import { Row, Button, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
 import { signedUrl } from '@/lib/upload';
-import { colors, font } from '@/lib/theme';
-import { formatDate, phoneDisplay, vehicleClassLabel, vehicleTypeLabel } from '@/lib/format';
+import { colors } from '@/lib/theme';
+import { formatDate, phoneMasked, vehicleClassLabel, vehicleTypeLabel } from '@/lib/format';
 import { FUEL_LABEL } from '@/lib/vehicles';
 import type { ApprovalStatus, Driver, DriverDocuments, Profile } from '@/lib/types';
 
 type Row_ = Driver & { profile: Profile | null; docs: DriverDocuments | null };
-const statusColor: Record<ApprovalStatus, string> = { pending: colors.warning, approved: colors.success, suspended: colors.danger, rejected: colors.textMuted };
 
 export default function AdminDrivers() {
   const router = useRouter();
   const [rows, setRows] = useState<Row_[]>([]);
   const [filter, setFilter] = useState('pending');
   const [q, setQ] = useState('');
+  const [del, setDel] = useState<{ kind: 'driver'; id: string; name: string; meta?: string[] } | null>(null);
+
   const load = useCallback(async () => {
     const { data } = await supabase.from('drivers').select('*').order('created_at', { ascending: false }).limit(300);
     const drivers = (data as Driver[]) ?? [];
@@ -35,37 +41,119 @@ export default function AdminDrivers() {
   const [ask, setAsk] = useState<{ id: string; status: ApprovalStatus; name: string } | null>(null);
   const setStatus = async (id: string, status: ApprovalStatus, reason?: string) => {
     if ((status === 'suspended' || status === 'rejected') && reason === undefined) { setAsk({ id, status, name: rows.find((r) => r.id === id)?.profile?.full_name ?? 'driver' }); return; }
-    try { await rpc('admin_set_driver_status', { p_driver: id, p_status: status, p_reason: reason ?? null }); toast.success('Status driver diperbarui & tercatat di log'); setAsk(null); load(); } catch (e) { toast.error((e as Error).message); }
+    try { await rpc('admin_set_driver_status', { p_driver: id, p_status: status, p_reason: reason ?? null }); toast.success('Status driver diperbarui & tercatat di log'); setAsk(null); load(); }
+    catch (e) { toast.error((e as Error).message); }
   };
   const openDoc = async (path: string | null | undefined) => { if (!path) return toast.error('Dokumen belum diunggah'); const u = await signedUrl('documents', path); if (u) Linking.openURL(u); };
-  const shown = rows.filter((r) => (filter === 'all' || r.status === filter) && (!q || (r.profile?.full_name ?? '').toLowerCase().includes(q.toLowerCase()) || r.vehicle_plate.toLowerCase().includes(q.toLowerCase())));
+
+  const count = (s: ApprovalStatus) => rows.filter((r) => r.status === s).length;
+  const shown = rows.filter((r) => (filter === 'all' || r.status === filter)
+    && (!q || (r.profile?.full_name ?? '').toLowerCase().includes(q.toLowerCase()) || r.vehicle_plate.toLowerCase().includes(q.toLowerCase())));
 
   return (
-    <AdminPage title="Mitra Driver" subtitle={`${rows.length} terdaftar · ${rows.filter((r) => r.status === 'pending').length} menunggu`} onRefresh={load}>
+    <AdminPage title="Mitra Driver" subtitle={`${rows.length} terdaftar · ${count('pending')} menunggu verifikasi · nomor pribadi tersamar`} onRefresh={load}>
       <ReasonPrompt visible={!!ask} title={ask?.status === 'suspended' ? `Tangguhkan ${ask?.name}?` : `Tolak ${ask?.name}?`} subtitle="Alasan wajib — tersimpan di Log Aktivitas dan ditampilkan ke driver." onCancel={() => setAsk(null)} onSubmit={(r) => setStatus(ask!.id, ask!.status, r)} confirmLabel={ask?.status === 'suspended' ? 'Tangguhkan' : 'Tolak'} />
-      <Row gap={10} style={{ flexWrap: 'wrap' }}>
-        <FilterBar value={filter} onChange={setFilter} options={[{ key: 'pending', label: 'Menunggu' }, { key: 'approved', label: 'Aktif' }, { key: 'suspended', label: 'Ditangguhkan' }, { key: 'rejected', label: 'Ditolak' }, { key: 'all', label: 'Semua' }]} />
-        <Input placeholder="Cari nama / plat" value={q} onChangeText={setQ} icon="search" containerStyle={{ minWidth: 220 }} />
-      </Row>
-      <Row gap={8} style={{ flexWrap: 'wrap' }}>
-        <Ionicons name="bus-outline" size={16} color={colors.travel} />
-        <Text style={font.small}>Driver travel antar kota (agen & sopir pribadi) dikelola di menu</Text>
-        <Pressable onPress={() => router.push('/(admin)/travel' as never)} hitSlop={6}><Text style={{ color: colors.travel, fontWeight: '800', fontSize: 13 }}>Mitra Travel →</Text></Pressable>
-      </Row>
-      <Table rows={shown as unknown as Record<string, unknown>[]} columns={[
-        { key: 'name', label: 'Driver', width: 200, render: (r) => { const d = r as unknown as Row_; return <View><Text style={{ fontWeight: '700' }}>{d.profile?.full_name}</Text><Text style={font.tiny}>{phoneDisplay(d.profile?.phone)} · {d.profile?.email}</Text></View>; } },
-        { key: 'vehicle', label: 'Kendaraan', width: 230, render: (r) => { const d = r as unknown as Row_; const fuel = d.fuel_type ? FUEL_LABEL[d.fuel_type] : d.is_electric ? 'Listrik (EV)' : null; return <View><Text style={{ fontWeight: '700' }} numberOfLines={1}>{[d.vehicle_brand, d.vehicle_model].filter(Boolean).join(' ') || '—'}{fuel ? ` · ${fuel}` : ''}</Text><Text style={font.small}>{vehicleTypeLabel[d.vehicle_type]} · {d.vehicle_plate}{d.vehicle_year ? ` · ${d.vehicle_year}` : ''}</Text><Text style={font.tiny}>{d.vehicle_class ? vehicleClassLabel[d.vehicle_class] ?? d.vehicle_class : '—'}{d.vehicle_condition ? ` · ${d.vehicle_condition}` : ''}</Text></View>; } },
-        { key: 'docs', label: 'Dokumen', width: 190, render: (r) => { const d = r as unknown as Row_; return <View><Text style={font.tiny}>SIM {d.docs?.license_number ?? '-'} · NIK {d.docs?.id_card_number ?? '-'}</Text><Row gap={8}><Pressable onPress={() => openDoc(d.docs?.photo_id_url)}><Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>KTP</Text></Pressable><Pressable onPress={() => openDoc(d.docs?.photo_vehicle_url)}><Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>Kendaraan</Text></Pressable></Row></View>; } },
-        { key: 'stats', label: 'Performa', width: 150, render: (r) => { const d = r as unknown as Row_; return <Row gap={4} style={{ flexWrap: 'wrap' }}><Ionicons name="star" size={12} color={colors.accent} /><Text style={font.small}>{Number(d.rating_avg).toFixed(1)} · {d.total_trips} trip</Text>{d.is_online ? <Badge text="online" color={colors.success} /> : null}</Row>; } },
-        { key: 'status', label: 'Status', width: 160, render: (r) => { const d = r as unknown as Row_; return <View><Badge text={d.status} color={statusColor[d.status]} />{d.status_reason && d.status !== 'approved' ? <Text style={font.tiny} numberOfLines={2}>{d.status_reason}</Text> : null}</View>; } },
-        { key: 'created_at', label: 'Daftar', width: 130, render: (r) => <Text style={font.tiny}>{formatDate(String(r.created_at), false)}</Text> },
-        { key: 'actions', label: 'Aksi', width: 220, render: (r) => { const d = r as unknown as Row_; return (
-          <Row gap={6}>
-            {d.status !== 'approved' && <Button size="sm" title={d.status === 'suspended' ? 'Aktifkan' : 'Setujui'} color={colors.success} onPress={() => setStatus(d.id, 'approved', d.status === 'suspended' ? 'Diaktifkan kembali oleh admin' : undefined)} />}
-            {d.status === 'pending' && <Button size="sm" title="Tolak" variant="outline" color={colors.danger} onPress={() => setStatus(d.id, 'rejected')} />}
-            {d.status === 'approved' && <Button size="sm" title="Tangguhkan" variant="outline" color={colors.danger} onPress={() => setStatus(d.id, 'suspended')} />}
-          </Row>); } },
+      <DeletePartnerDialog target={del} onClose={() => setDel(null)} onDeleted={load} />
+
+      <Grid gap={adminSpace.lg}>
+        <StatCard index={0} icon="hourglass-outline" label="Menunggu" value={count('pending')} color={adminTone.amber} />
+        <StatCard index={1} icon="checkmark-circle-outline" label="Aktif" value={count('approved')} color={adminTone.green} />
+        <StatCard index={2} icon="pause-circle-outline" label="Ditangguhkan" value={count('suspended')} color={adminTone.red} />
+        <StatCard index={3} icon="radio-outline" label="Sedang online" value={rows.filter((r) => r.is_online).length} hint={`dari ${rows.length} driver`} color={adminTone.blue} />
+      </Grid>
+
+      <Toolbar q={q} onQ={setQ} placeholder="Cari nama atau plat nomor"
+        filters={[{ key: 'pending', label: `Menunggu (${count('pending')})` }, { key: 'approved', label: 'Aktif' }, { key: 'suspended', label: 'Ditangguhkan' }, { key: 'rejected', label: 'Ditolak' }, { key: 'all', label: `Semua (${rows.length})` }]}
+        filter={filter} onFilter={setFilter}
+        right={<Button size="sm" variant="outline" title="Mitra Travel" icon="bus-outline" onPress={() => router.push('/(admin)/travel' as never)} />} />
+
+      <DataTable rows={shown as unknown as Record<string, unknown>[]} emptyText="Tidak ada driver pada filter ini" emptyIcon="bicycle-outline" columns={[
+        {
+          key: 'name', label: 'Driver', width: 210, flex: 2, render: (r) => {
+            const d = r as unknown as Row_;
+            return (
+              <View style={{ minWidth: 0 }}>
+                <Truncate style={font.bodyStrong} title={d.profile?.full_name ?? ''}>{d.profile?.full_name ?? '—'}</Truncate>
+                <Truncate style={font.tiny}>{phoneMasked(d.profile?.phone)} · bergabung {formatDate(d.created_at, false)}</Truncate>
+              </View>
+            );
+          },
+        },
+        {
+          key: 'vehicle', label: 'Kendaraan', width: 220, flex: 2, render: (r) => {
+            const d = r as unknown as Row_;
+            const fuel = d.fuel_type ? FUEL_LABEL[d.fuel_type] : d.is_electric ? 'Listrik (EV)' : null;
+            const head = [d.vehicle_brand, d.vehicle_model].filter(Boolean).join(' ') || '—';
+            return (
+              <View style={{ minWidth: 0 }}>
+                <Truncate style={font.bodyStrong} title={head}>{head}{fuel ? ` · ${fuel}` : ''}</Truncate>
+                <Truncate style={font.tiny}>{vehicleTypeLabel[d.vehicle_type]} · {d.vehicle_plate}{d.vehicle_year ? ` · ${d.vehicle_year}` : ''} · {d.vehicle_class ? vehicleClassLabel[d.vehicle_class] ?? d.vehicle_class : '—'}</Truncate>
+              </View>
+            );
+          },
+        },
+        {
+          key: 'docs', label: 'Dokumen', width: 170, render: (r) => {
+            const d = r as unknown as Row_;
+            return (
+              <View style={{ gap: 4, minWidth: 0 }}>
+                <Truncate style={font.tiny} title={`SIM ${d.docs?.license_number ?? '-'} · NIK ${d.docs?.id_card_number ?? '-'}`}>SIM {d.docs?.license_number ?? '-'}</Truncate>
+                <Row gap={6}>
+                  <IconAction icon="card-outline" label="KTP" color={adminTone.blue} compact onPress={() => openDoc(d.docs?.photo_id_url)} />
+                  <IconAction icon="image-outline" label="Unit" color={adminTone.blue} compact onPress={() => openDoc(d.docs?.photo_vehicle_url)} />
+                </Row>
+              </View>
+            );
+          },
+        },
+        {
+          key: 'rating_avg', label: 'Performa', width: 130, render: (r) => {
+            const d = r as unknown as Row_;
+            return (
+              <View style={{ alignItems: 'flex-start', gap: 3 }}>
+                <Row gap={4}><Ionicons name="star" size={12} color={colors.accent} /><Text style={font.mono}>{Number(d.rating_avg).toFixed(1)}</Text><Text style={font.tiny}>· {d.total_trips} trip</Text></Row>
+                {d.is_online ? <Pill text="Online" tone="ok" /> : null}
+              </View>
+            );
+          },
+        },
+        {
+          key: 'status', label: 'Status', width: 150, render: (r) => {
+            const d = r as unknown as Row_;
+            return (
+              <View style={{ gap: 3, minWidth: 0 }}>
+                <StatusPill status={d.status} />
+                {d.status_reason && d.status !== 'approved' ? <Truncate style={font.tiny} title={d.status_reason} lines={2}>{d.status_reason}</Truncate> : null}
+              </View>
+            );
+          },
+        },
+        {
+          key: 'contact', label: 'Kontak', width: 180, render: (r) => {
+            const d = r as unknown as Row_;
+            return <ContactActions userId={d.id} name={d.profile?.full_name ?? 'Driver'} role="driver" subject={`Panel admin · driver ${d.profile?.full_name ?? ''}`.trim()} />;
+          },
+        },
+        {
+          key: 'actions', label: 'Aksi', width: 260, render: (r) => {
+            const d = r as unknown as Row_;
+            return (
+              <Row gap={6} style={{ flexWrap: 'wrap' }}>
+                {d.status !== 'approved' && <Button size="sm" title={d.status === 'suspended' ? 'Aktifkan' : 'Setujui'} color={colors.success} onPress={() => setStatus(d.id, 'approved', d.status === 'suspended' ? 'Diaktifkan kembali oleh admin' : undefined)} />}
+                {d.status === 'pending' && <Button size="sm" title="Tolak" variant="outline" color={colors.danger} onPress={() => setStatus(d.id, 'rejected')} />}
+                {d.status === 'approved' && <Button size="sm" title="Tangguhkan" variant="outline" color={colors.warning} onPress={() => setStatus(d.id, 'suspended')} />}
+                <DeleteButton onPress={() => setDel({ kind: 'driver', id: d.id, name: d.profile?.full_name ?? 'Driver', meta: [d.vehicle_plate, `${d.total_trips} trip`] })} />
+              </Row>
+            );
+          },
+        },
       ]} />
+
+      <Row gap={8} style={{ flexWrap: 'wrap' }}>
+        <Ionicons name="information-circle-outline" size={15} color={adminTone.faint} />
+        <Text style={font.tiny}>Driver travel antar kota (agen & sopir pribadi) dikelola di menu</Text>
+        <Pressable onPress={() => router.push('/(admin)/travel' as never)} hitSlop={6}><Text style={{ color: colors.primary, fontSize: 11.5, fontWeight: '700' }}>Mitra Travel →</Text></Pressable>
+      </Row>
     </AdminPage>
   );
 }

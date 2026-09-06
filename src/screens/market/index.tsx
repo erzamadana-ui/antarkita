@@ -401,7 +401,7 @@ export default function MarketScreen() {
           <Card solid style={{ gap: 8 }}>
             {est ? <PriceSummary rows={[{ label: 'Belanja (acuan)', value: subtotal }, { label: 'Jasa belanja driver', value: est.service_fee }, { label: `Ongkir ${vehicle === 'car' ? 'mobil' : 'motor'} (${km(est.distance_km)})`, value: est.fare }, { label: 'Biaya layanan', value: est.platform_fee }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />
               : <View style={{ gap: 8 }}><Skeleton width="60%" height={14} /><Skeleton width="40%" height={14} /><Skeleton width="70%" height={14} /></View>}
-            {est ? <LimitInfo limit={est.limit} /> : null}
+            {est ? <LimitInfo limit={est.limit} service="market" /> : null}
             <Text style={font.tiny}>Dana yang ditahan = acuan + cadangan 10%. Setelah driver mengirim nota, total disesuaikan dengan harga riil dan sisanya dikembalikan ke AntarPay.</Text>
           </Card>
         )}

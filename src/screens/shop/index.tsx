@@ -360,7 +360,7 @@ export default function ShopScreen() {
           <Card solid>
             {est ? <PriceSummary rows={[{ label: free ? 'Anggaran belanja (perkiraan)' : 'Belanja', value: subtotal }, { label: 'Jasa belanja', value: est.service_fee }, { label: `Ongkir ${vehicle === 'car' ? 'mobil' : 'motor'} (${km(est.distance_km)})`, value: est.fare }, { label: 'Biaya layanan', value: est.platform_fee }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />
               : <View style={{ gap: 8 }}><Skeleton width="60%" height={14} /><Skeleton width="40%" height={14} /><Skeleton width="70%" height={14} /></View>}
-            {est ? <LimitInfo limit={est.limit} style={{ marginTop: 8 }} /> : null}
+            {est ? <LimitInfo limit={est.limit} service="shop" style={{ marginTop: 8 }} /> : null}
           </Card>
         )}
         <Card solid>

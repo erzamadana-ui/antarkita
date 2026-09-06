@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Switch, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { AdminPage } from '@/components/admin';
-import { Card, Input, Button, Row, Badge, toast } from '@/components/ui';
+import { AdminPage, adminFont as font, AdminCard as Card } from '@/components/admin';
+import { Input, Button, Row, Badge, toast } from '@/components/ui';
 import { Entrance } from '@/components/motion';
 import { rpc, supabase } from '@/lib/supabase';
 import { useAppSettingsStore } from '@/hooks/useAppSettings';
-import { colors, font, radius } from '@/lib/theme';
+import { colors, radius } from '@/lib/theme';
 import type { AppPublicSettings } from '@/lib/types';
 
 /** Layanan yang bisa dimatikan admin (kunci = nilai p_service di admin_set_service_enabled). */

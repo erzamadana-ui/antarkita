@@ -3,10 +3,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Switch, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { AdminPage, Table, FilterBar } from '@/components/admin';
-import { Card, Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
+import { AdminPage, Table, FilterBar, adminFont as font, AdminCard as Card } from '@/components/admin';
+import { Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
-import { colors, font } from '@/lib/theme';
+import { colors } from '@/lib/theme';
 import { rupiah, formatDate, formatSchedule, cityName, travelRequestStatusLabel, travelKindLabel } from '@/lib/format';
 import type { City, Warehouse, IntercityRate, TravelRoute, AdminTravelRequestRow, TravelRequestStatus } from '@/lib/types';
 

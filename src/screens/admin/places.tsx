@@ -2,11 +2,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Image, Linking, Pressable, StyleSheet, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { AdminPage, FilterBar, StatCard, ReasonPrompt, Table } from '@/components/admin';
-import { Card, Row, Button, Badge, Empty, IconCircle, Input, Chip, toast } from '@/components/ui';
+import { AdminPage, FilterBar, StatCard, ReasonPrompt, Table, adminFont as font, AdminCard as Card, EmptyState as Empty } from '@/components/admin';
+import { Row, Button, Badge, IconCircle, Input, Chip, toast } from '@/components/ui';
 import { Entrance, Skeleton } from '@/components/motion';
 import { rpc, supabase } from '@/lib/supabase';
-import { colors, font, radius } from '@/lib/theme';
+import { colors, radius } from '@/lib/theme';
 import { cityName, formatDate, storeBrandLabel, storeCategoryLabel } from '@/lib/format';
 import type { City, Market, PlaceSuggestion, ShopStore } from '@/lib/types';
 

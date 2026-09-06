@@ -1,11 +1,11 @@
 // Admin · AntarShop: toko katalog (minimarket/apotek/supermarket) & produk — impor CSV / pembaruan manual
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Switch, Platform } from 'react-native';
-import { AdminPage, Table, StatCard } from '@/components/admin';
-import { Card, Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
+import { AdminPage, Table, StatCard, adminFont as font, AdminCard as Card } from '@/components/admin';
+import { Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
 import { DocUpload } from '@/components/DocUpload';
 import { rpc, supabase } from '@/lib/supabase';
-import { colors, font } from '@/lib/theme';
+import { colors } from '@/lib/theme';
 import { rupiah, formatDate, cityName, storeBrandLabel, storeCategoryLabel, productCategoryLabel } from '@/lib/format';
 import type { ShopStore, ShopProduct, City } from '@/lib/types';
 

@@ -2,10 +2,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { AdminPage, Table, StatCard } from '@/components/admin';
-import { Card, Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
+import { AdminPage, Table, StatCard, adminFont as font, AdminCard as Card } from '@/components/admin';
+import { Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
-import { colors, font, radius } from '@/lib/theme';
+import { colors, radius } from '@/lib/theme';
 import { rupiah, formatDate } from '@/lib/format';
 import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import type { GatewayStatus } from '@/lib/types';

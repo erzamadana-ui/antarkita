@@ -119,7 +119,7 @@ export default function Checkout() {
         <Entrance index={2}><Card>
           <Text style={[font.label, { marginBottom: 10 }]}>Rincian pembayaran</Text>
           <PriceSummary rows={[{ label: 'Harga makanan', value: subtotal }, { label: `Ongkos kirim (${fare ? km(fare.distance_km) : '…'})`, value: fare?.fare ?? 0 }, { label: 'Biaya layanan', value: fare?.platform_fee ?? 0 }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />
-          <LimitInfo limit={fare?.limit} style={{ marginTop: 8 }} />
+          <LimitInfo limit={fare?.limit} service="food" style={{ marginTop: 8 }} />
         </Card></Entrance>
 
         <Entrance index={3}><Card>

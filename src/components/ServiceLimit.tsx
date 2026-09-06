@@ -4,6 +4,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Button, Empty, Row } from '@/components/ui';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import { colors, font, motion, radius } from '@/lib/theme';
 import type { ServiceLimit } from '@/lib/types';
 
@@ -26,13 +27,17 @@ export function LimitNotice({ limit, actionTitle, onAction, actionIcon }: { limi
   );
 }
 
-/** Baris kecil "Batas dalam kota: N km" untuk ditaruh di ringkasan tarif. */
-export function LimitInfo({ limit, style }: { limit?: ServiceLimit | null; style?: object }) {
-  if (!limit || limit.max_km == null) return null;
+/** Baris kecil "Batas dalam kota: N km" untuk ditaruh di ringkasan tarif.
+ *  Angka diambil dari estimasi server (`estimate.limit.max_km`); bila belum ada, dari
+ *  `app_public_settings().max_km[service]` — tidak pernah ditulis statis di kode. */
+export function LimitInfo({ limit, service, style }: { limit?: ServiceLimit | null; service?: string; style?: object }) {
+  const { maxKm } = useAppSettings();
+  const value = limit?.max_km != null ? Number(limit.max_km) : service ? maxKm(service) : null;
+  if (value == null || !(value > 0)) return null;
   return (
     <Row gap={4} style={style}>
       <Ionicons name="navigate-circle-outline" size={12} color={colors.textMuted} />
-      <Text style={font.tiny}>Batas dalam kota: {Math.round(Number(limit.max_km))} km</Text>
+      <Text style={font.tiny}>Batas dalam kota: {Math.round(value)} km</Text>
     </Row>
   );
 }

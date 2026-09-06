@@ -3,11 +3,11 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Switch, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { LinearTransition } from 'react-native-reanimated';
-import { AdminPage, StatCard, Table, FilterBar } from '@/components/admin';
-import { Card, Row, Input, Button, Badge, Chip, toast } from '@/components/ui';
+import { AdminPage, StatCard, Table, FilterBar, adminFont as font, adminTone, AdminCard as Card } from '@/components/admin';
+import { Row, Input, Button, Badge, Chip, toast } from '@/components/ui';
 import { Entrance, PressableScale, ProgressBar } from '@/components/motion';
 import { supabase, rpc } from '@/lib/supabase';
-import { colors, font, radius, glass } from '@/lib/theme';
+import { colors, radius } from '@/lib/theme';
 import { serviceLabel, rupiah } from '@/lib/format';
 import type { CompetitorPrice, PricingSession, ServiceType } from '@/lib/types';
 
@@ -175,8 +175,8 @@ export default function PricingIntel() {
 }
 
 const s = StyleSheet.create({
-  sugg: { flex: 1, minWidth: 240, borderWidth: 1.5, borderRadius: radius.lg, padding: 12, backgroundColor: 'rgba(255,255,255,0.92)' },
+  sugg: { flex: 1, minWidth: 240, borderWidth: 1.5, borderRadius: radius.lg, padding: 12, backgroundColor: adminTone.surface },
   suggBox: { marginTop: 8, padding: 10, borderRadius: radius.md, backgroundColor: 'rgba(11,31,42,0.04)' },
   sessRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: 'rgba(11,31,42,0.07)' },
-  form: { gap: 10, padding: 12, borderRadius: radius.lg, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: glass.border, marginTop: 6 },
+  form: { gap: 10, padding: 12, borderRadius: radius.lg, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border, marginTop: 6 },
 });
