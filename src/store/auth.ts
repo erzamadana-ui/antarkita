@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Session } from '@supabase/supabase-js';
-import { supabase, friendlyError } from '@/lib/supabase';
+import { supabase, peekBootRecovery, friendlyError } from '@/lib/supabase';
 import type { Profile, Driver, Merchant, Wallet, TravelPartner, MarketVendor } from '@/lib/types';
 
 interface AuthState {
@@ -19,6 +19,12 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (p: { email: string; password: string; full_name: string; phone: string }) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Sedang dalam alur pemulihan kata sandi (tautan email) — sesi ada tetapi pengguna harus membuat kata sandi baru dulu */
+  recovery: boolean;
+  setRecovery: (v: boolean) => void;
+  /** Rute tujuan sekali pakai saat boot tanpa sesi (mis. tautan pemulihan kedaluwarsa → /(auth)/forgot) */
+  pendingRoute: string | null;
+  setPendingRoute: (r: string | null) => void;
   updateProfile: (p: Partial<Pick<Profile, 'full_name' | 'phone' | 'avatar_url'>>) => Promise<void>;
 }
 
@@ -34,7 +40,8 @@ export const useAuth = create<AuthState>((set, get) => ({
     set({ loading: false, ready: true });
     if (!subscribed) {
       subscribed = true;
-      supabase.auth.onAuthStateChange((_event, session) => {
+      supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'PASSWORD_RECOVERY') set({ recovery: true });
         set({ session });
         if (session) get().loadProfile();
         else set({ profile: null, driver: null, merchant: null, travelPartner: null, marketVendor: null, wallet: null });
@@ -87,9 +94,14 @@ export const useAuth = create<AuthState>((set, get) => ({
     await get().loadProfile();
   },
 
+  recovery: peekBootRecovery() === 'tokens',
+  setRecovery: (v) => set({ recovery: v }),
+  pendingRoute: peekBootRecovery() === 'error' ? '/(auth)/forgot' : null,
+  setPendingRoute: (r) => set({ pendingRoute: r }),
+
   signOut: async () => {
     await supabase.auth.signOut();
-    set({ session: null, profile: null, driver: null, merchant: null, travelPartner: null, marketVendor: null, wallet: null });
+    set({ session: null, recovery: false, profile: null, driver: null, merchant: null, travelPartner: null, marketVendor: null, wallet: null });
   },
 
   updateProfile: async (p) => {

@@ -182,3 +182,9 @@ Setelah diterapkan, uji dengan akun dummy:
 - [ ] Perbarui **Data safety** setiap kali menambah jenis data/SDK baru.
 - [ ] Tinjau ulang Kebijakan Privasi & S&K setidaknya setahun sekali; ubah tanggal versi di `docs/rilis/privacy.html` & `terms.html`.
 - [ ] Simpan cadangan keystore dan rotasi kata sandi service account setahun sekali.
+
+
+## Lupa kata sandi (verifikasi email)
+- [ ] Authentication → URL Configuration: Site URL `https://erzamadana-ui.github.io/antarkita/`; Redirect URLs berisi `…/antarkita/`, `…/antarkita/mitra/`, `…/antarkita/admin/`, `…/antarkita/**`.
+- [ ] Email Templates → Reset Password: pakai template Bahasa Indonesia + `{{ .Token }}` (lihat `docs/LUPA-KATA-SANDI.md`).
+- [ ] Custom SMTP aktif sebelum produksi (SMTP bawaan Supabase hanya untuk uji, kuota beberapa email/jam).

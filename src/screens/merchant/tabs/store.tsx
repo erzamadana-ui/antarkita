@@ -37,6 +37,7 @@ export default function MerchantStore() {
     { icon: 'language-outline', title: 'Bahasa / Language', onPress: () => router.push('/account/language') },
     ...(driver ? [{ icon: 'bicycle-outline' as IconName, title: 'Beralih ke Mode Driver', onPress: async () => { await setMode('driver'); router.replace('/(driver)'); } }] : []),
     { icon: 'log-out-outline', title: 'Keluar', danger: true, onPress: async () => { await signOut(); router.replace('/(auth)/welcome'); } },
+    { icon: 'key-outline', title: 'Ganti kata sandi', subtitle: 'Perbarui kata sandi akun Anda', onPress: () => router.push('/account/password' as never) },
     { icon: 'trash-outline', title: 'Hapus akun', subtitle: 'Hapus data pribadi secara permanen', danger: true, onPress: () => router.push('/account/delete' as never) },
   ];
   const tabs = (

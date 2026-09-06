@@ -28,6 +28,7 @@ export default function DriverAccount() {
       { icon: 'shield-checkmark-outline', color: colors.danger, title: 'Pusat Keamanan', subtitle: 'SOS, verifikasi wajah, kontak darurat, laporan insiden', onPress: () => router.push('/safety' as never) },
       { icon: 'chatbubbles-outline', color: colors.info, title: 'Bantuan & tiket aduan', subtitle: 'CS online', onPress: () => router.push('/support' as never) },
       { icon: 'language-outline', title: 'Bahasa / Language', onPress: () => router.push('/account/language') },
+      { icon: 'key-outline', title: 'Ganti kata sandi', subtitle: 'Perbarui kata sandi akun Anda', onPress: () => router.push('/account/password' as never) },
       { icon: 'trash-outline', color: colors.danger, title: 'Hapus akun', subtitle: 'Hapus data pribadi secara permanen', onPress: () => router.push('/account/delete' as never) },
     ] },
   ];

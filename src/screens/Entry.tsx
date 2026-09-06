@@ -1,5 +1,5 @@
 // Layar awal tiap aplikasi: menentukan ke mana pengguna diarahkan setelah login.
-import React from 'react';
+import React, { useState } from 'react';
 import { Redirect } from 'expo-router';
 import { useAuth } from '@/store/auth';
 import { useMode, modeHome } from '@/store/mode';
@@ -7,11 +7,14 @@ import { Loading } from '@/components/ui';
 import { APP } from '@/lib/app';
 
 export default function Entry() {
-  const { session, profile, driver, merchant, travelPartner, marketVendor, ready } = useAuth();
+  const { session, profile, driver, merchant, travelPartner, marketVendor, ready, recovery, pendingRoute } = useAuth();
+  // Tujuan tanpa sesi dikunci saat mount agar tidak berubah (ke welcome) ketika pendingRoute dibersihkan oleh layar tujuan
+  const [noSessionTarget] = useState(() => pendingRoute ?? '/(auth)/welcome');
   const mode = useMode((s) => s.mode);
   const persisted = useMode((s) => s.persisted);
   if (!ready) return <Loading />;
-  if (!session) return <Redirect href="/(auth)/welcome" />;
+  if (!session) return <Redirect href={noSessionTarget as never} />;
+  if (recovery) return <Redirect href={'/(auth)/reset' as never} />;
   if (!profile) return <Loading text="Memuat profil…" />;
 
   if (APP === 'admin') {

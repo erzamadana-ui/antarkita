@@ -14,6 +14,7 @@ export const LOCALES: { code: Locale; label: string; native: string; flag: strin
 ];
 
 const id = {
+  forgot_password: 'Lupa kata sandi?', forgot_title: 'Lupa kata sandi', forgot_sub: 'Masukkan email akun Anda. Kami kirim tautan untuk membuat kata sandi baru.', send_link: 'Kirim tautan pemulihan', reset_title: 'Buat kata sandi baru', new_password: 'Kata sandi baru', confirm_password: 'Ulangi kata sandi baru', save_password: 'Simpan kata sandi', back_to_login: 'Kembali ke halaman masuk',
   // umum
   home: 'Beranda', orders: 'Pesanan', pay: 'Pembayaran', account: 'Akun', history: 'Riwayat', earnings: 'Pendapatan', menu: 'Menu', store: 'Toko',
   back: 'Kembali', save: 'Simpan', cancel: 'Batal', confirm: 'Konfirmasi', close: 'Tutup', yes: 'Ya', no: 'Tidak', ok: 'OK', done: 'Selesai', next: 'Lanjut', search: 'Cari', loading: 'Memuat…',
@@ -40,6 +41,7 @@ const id = {
 export type TKey = keyof typeof id;
 
 const en: Partial<Record<TKey, string>> = {
+  forgot_password: 'Forgot password?', forgot_title: 'Forgot password', forgot_sub: 'Enter your account email. We will send a link to create a new password.', send_link: 'Send recovery link', reset_title: 'Create a new password', new_password: 'New password', confirm_password: 'Repeat new password', save_password: 'Save password', back_to_login: 'Back to sign in',
   home: 'Home', orders: 'Orders', pay: 'Payment', account: 'Account', history: 'History', earnings: 'Earnings', menu: 'Menu', store: 'Store',
   back: 'Back', save: 'Save', cancel: 'Cancel', confirm: 'Confirm', close: 'Close', yes: 'Yes', no: 'No', done: 'Done', next: 'Next', search: 'Search', loading: 'Loading…',
   login: 'Sign in', register: 'Sign up', logout: 'Sign out', password: 'Password', full_name: 'Full name', phone: 'Phone number',
@@ -64,6 +66,7 @@ const en: Partial<Record<TKey, string>> = {
 };
 
 const zh: Partial<Record<TKey, string>> = {
+  forgot_password: '忘记密码？', forgot_title: '忘记密码', forgot_sub: '输入账户邮箱，我们将发送创建新密码的链接。', send_link: '发送恢复链接', reset_title: '创建新密码', new_password: '新密码', confirm_password: '再次输入新密码', save_password: '保存密码', back_to_login: '返回登录',
   home: '首页', orders: '订单', account: '账户', history: '历史', earnings: '收入', menu: '菜单', store: '店铺',
   back: '返回', save: '保存', cancel: '取消', confirm: '确认', close: '关闭', yes: '是', no: '否', done: '完成', next: '下一步', search: '搜索', loading: '加载中…',
   login: '登录', register: '注册', logout: '退出登录', email: '邮箱', password: '密码', full_name: '姓名', phone: '手机号',
@@ -88,6 +91,7 @@ const zh: Partial<Record<TKey, string>> = {
 };
 
 const ar: Partial<Record<TKey, string>> = {
+  forgot_password: 'نسيت كلمة المرور؟', forgot_title: 'نسيت كلمة المرور', forgot_sub: 'أدخل بريد حسابك. سنرسل رابطًا لإنشاء كلمة مرور جديدة.', send_link: 'إرسال رابط الاستعادة', reset_title: 'إنشاء كلمة مرور جديدة', new_password: 'كلمة المرور الجديدة', confirm_password: 'أعد إدخال كلمة المرور الجديدة', save_password: 'حفظ كلمة المرور', back_to_login: 'العودة لتسجيل الدخول',
   home: 'الرئيسية', orders: 'الطلبات', account: 'الحساب', history: 'السجل', earnings: 'الأرباح', menu: 'القائمة', store: 'المتجر',
   back: 'رجوع', save: 'حفظ', cancel: 'إلغاء', confirm: 'تأكيد', close: 'إغلاق', yes: 'نعم', no: 'لا', done: 'تم', next: 'التالي', search: 'بحث', loading: 'جارٍ التحميل…',
   login: 'تسجيل الدخول', register: 'إنشاء حساب', logout: 'تسجيل الخروج', email: 'البريد الإلكتروني', password: 'كلمة المرور', full_name: 'الاسم الكامل', phone: 'رقم الهاتف',

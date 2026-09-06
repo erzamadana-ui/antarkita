@@ -61,6 +61,7 @@ Dashboard, Pesanan, Driver, Merchant, Pengguna (masking data pribadi, ekspor), K
 | Email laporan terjadwal | Belum (hanya in-app; perlu Edge Function + SMTP/Resend) |
 | Midtrans Snap | Belum diuji nyata (belum ada kunci; mode simulasi berjalan) — dijadwalkan Senin, lihat `docs/RENCANA-LISTING-LIVE.md` |
 | Unggah berkas (5 bucket: avatars, documents, merchant-images, promo-images, proofs) | Diuji: batas 5–10 MB, hanya JPEG/PNG/WebP(/PDF), tulis hanya ke folder uid sendiri, baca privat pemilik/admin + akses bersama (0024) |
+| Lupa kata sandi / ganti kata sandi (verifikasi email) | Dibuat 6 Sep: 19 pemeriksaan UI lolos + uji email nyata — rincian `docs/LUPA-KATA-SANDI.md` |
 | Uji login nyata di browser oleh AI | Tidak dilakukan (kebijakan kredensial) — mohon uji dari HP |
 
 ## 5. Cara mengulang simulasi

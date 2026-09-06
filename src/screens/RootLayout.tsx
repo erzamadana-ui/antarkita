@@ -16,6 +16,8 @@ import { colors, FONT_ASSETS } from '@/lib/theme';
 import { useFonts } from 'expo-font';
 import { APP, APP_NAME } from '@/lib/app';
 import { useRouter, useSegments, useRootNavigationState } from 'expo-router';
+import { supabase, recoveryFromUrl } from '@/lib/supabase';
+import { toast } from '@/components/ui';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -30,15 +32,33 @@ export default function RootLayout() {
   const locale = useI18n((s) => s.locale);
 
   const session = useAuth((s) => s.session);
+  const recovery = useAuth((s) => s.recovery);
+  const setRecovery = useAuth((s) => s.setRecovery);
+  const setPendingRoute = useAuth((s) => s.setPendingRoute);
   const segments = useSegments();
   const navKey = useRootNavigationState()?.key;
   useEffect(() => { init(); loadMode(); loadLocale(); }, [init, loadMode, loadLocale]);
-  // Penjaga global: tanpa sesi, semua rute di luar grup (auth) diarahkan ke layar sambutan (mis. tautan langsung /food, /admin/users)
+  // Tautan pemulihan kata sandi dari email (web): ambil token dari URL → buat sesi → paksa ke layar buat kata sandi baru
+  useEffect(() => {
+    if (!ready || !navKey || Platform.OS !== 'web') return;
+    const rec = recoveryFromUrl();
+    if (!rec) return;
+    try { window.history.replaceState(null, '', window.location.pathname); } catch { /* noop */ }
+    if ('error' in rec) { setPendingRoute('/(auth)/forgot'); toast.error('Tautan pemulihan kedaluwarsa atau sudah dipakai. Minta tautan baru.'); router.replace('/(auth)/forgot' as never); return; }
+    setRecovery(true);
+    supabase.auth.setSession({ access_token: rec.access_token, refresh_token: rec.refresh_token })
+      .then(({ error }) => { if (error) { setRecovery(false); toast.error('Tautan pemulihan tidak valid. Minta tautan baru.'); router.replace('/(auth)/forgot' as never); } else router.replace('/(auth)/reset' as never); })
+      .catch(() => { setRecovery(false); router.replace('/(auth)/forgot' as never); });
+  }, [ready, navKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Penjaga global: tanpa sesi, semua rute di luar grup (auth) diarahkan ke layar sambutan (mis. tautan langsung /food, /admin/users);
+  // saat alur pemulihan kata sandi, semua rute diarahkan ke layar buat kata sandi baru sampai selesai
   const top = segments[0] as string | undefined;
+  const second = (segments as string[])[1] as string | undefined;
   useEffect(() => {
     if (!ready || !navKey) return;
-    if (!session && top !== '(auth)') router.replace('/(auth)/welcome' as never);
-  }, [ready, navKey, session, top]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (recovery && session && !(top === '(auth)' && second === 'reset')) { router.replace('/(auth)/reset' as never); return; }
+    if (!session && top !== '(auth)') router.replace((useAuth.getState().pendingRoute ?? '/(auth)/welcome') as never);
+  }, [ready, navKey, session, top, second, recovery]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { applyDirection(locale); }, [locale]);
   useEffect(() => { if (ready && modeLoaded && fontsLoaded) SplashScreen.hideAsync().catch(() => {}); }, [ready, modeLoaded, fontsLoaded]);
   useEffect(() => {
@@ -48,7 +68,7 @@ export default function RootLayout() {
       document.documentElement.style.colorScheme = 'light';
       const meta = document.createElement('meta'); meta.name = 'color-scheme'; meta.content = 'light only'; document.head.appendChild(meta);
       // Deep link dari 404.html GitHub Pages (?r=/rute/asli)
-      try { const r = new URLSearchParams(window.location.search).get('r'); if (r && r.startsWith('/')) { window.history.replaceState(null, '', window.location.pathname); setTimeout(() => router.replace(r as never), 0); } } catch { /* noop */ }
+      try { const r = new URLSearchParams(window.location.search).get('r'); if (r && r.startsWith('/') && !/type=recovery|error_code=/.test(r)) { window.history.replaceState(null, '', window.location.pathname); setTimeout(() => router.replace(r as never), 0); } } catch { /* noop */ }
       const style = document.createElement('style');
       style.textContent = [
         'html,body,#root{height:100%;background:#FFFFFF;color-scheme:light only}',

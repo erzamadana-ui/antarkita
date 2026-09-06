@@ -10,6 +10,8 @@ import { useAuth } from '@/store/auth';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { APP, APP_NAME, APP_URL } from '@/lib/app';
 
+// Blok akun demo hanya untuk build uji (EXPO_PUBLIC_DEMO_LOGIN=1 di workflow web/APK uji) — tidak tampil di build rilis Play Store
+const SHOW_DEMO = process.env.EXPO_PUBLIC_DEMO_LOGIN === '1';
 const DEMO: Record<string, string[]> = {
   pelanggan: ['customer@antaraja.id — pelanggan'],
   mitra: ['driver@antaraja.id — mitra driver (motor)', 'driver2@antaraja.id — mitra travel (Hi-Ace)', 'merchant@antaraja.id — merchant'],
@@ -60,6 +62,9 @@ export default function Login() {
         <Input label={t('password')} icon="lock-closed-outline" value={password} onChangeText={setPassword} secureTextEntry={!show} placeholder="Kata sandi" onSubmitEditing={submit}
           right={<Pressable onPress={() => setShow(!show)} hitSlop={8}><Icon name={show ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} /></Pressable>} />
         {err ? <Text style={{ color: colors.danger, fontSize: 13 }}>{err}</Text> : null}
+        <Pressable onPress={() => router.push({ pathname: '/(auth)/forgot', params: email ? { email } : {} } as never)} style={{ alignSelf: 'flex-end', marginTop: -6 }} accessibilityRole="button" hitSlop={8}>
+          <Text style={[font.small, { color: colors.primary, fontWeight: '800' }]}>{t('forgot_password')}</Text>
+        </Pressable>
         <Button title={t('login')} size="lg" onPress={submit} />
         {APP !== 'admin' ? (
           <Pressable onPress={() => router.push('/(auth)/register')} style={{ alignItems: 'center', padding: 6 }}>
@@ -67,7 +72,7 @@ export default function Login() {
           </Pressable>
         ) : <Text style={[font.tiny, { textAlign: 'center', padding: 6 }]}>Akun admin dibuat oleh admin lain lewat menu Pengguna.</Text>}
       </View></Entrance>
-      <Entrance index={3}>
+      {SHOW_DEMO ? <Entrance index={3}>
         <View style={s.demo}>
           <Row gap={10} style={{ marginBottom: 6 }}>
             <IconCircle name="key-outline" size={36} bg={colors.accentLight} color={colors.warning} />
@@ -81,7 +86,7 @@ export default function Login() {
             </PressableScale>
           ))}
         </View>
-      </Entrance>
+      </Entrance> : null}
     </Screen>
   );
 }

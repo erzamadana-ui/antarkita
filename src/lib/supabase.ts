@@ -10,6 +10,9 @@ if (!url || !anonKey) {
   console.warn('EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY belum diisi di .env');
 }
 
+// Ditangkap SEBELUM klien dibuat, karena supabase-js (detectSessionInUrl) bisa mengonsumsi hash URL saat inisialisasi
+let BOOT_RECOVERY = captureRecovery();
+
 export const supabase = createClient(url ?? 'https://invalid.supabase.co', anonKey ?? 'anon', {
   auth: {
     storage: Platform.OS === 'web' ? undefined : AsyncStorage,
@@ -43,5 +46,37 @@ export function friendlyError(msg: string): string {
   if (msg.includes('Email not confirmed')) return 'Email belum dikonfirmasi';
   if (msg.includes('Failed to fetch') || msg.includes('Network request failed')) return 'Tidak bisa terhubung ke server. Periksa koneksi internet.';
   if (msg.includes('JWT expired')) return 'Sesi berakhir, silakan masuk kembali';
+  if (/rate limit|only request this after|over_email_send_rate_limit/i.test(msg)) return 'Terlalu sering meminta email. Tunggu beberapa menit lalu coba lagi.';
+  if (/same password|different from the old/i.test(msg)) return 'Kata sandi baru harus berbeda dari kata sandi lama';
+  if (/Token has expired|otp_expired|is invalid or has expired/i.test(msg)) return 'Kode/tautan sudah kedaluwarsa atau tidak valid. Minta tautan baru.';
+  if (/Auth session missing/i.test(msg)) return 'Sesi pemulihan tidak ditemukan. Buka tautan dari email sekali lagi.';
+  if (/Unable to validate email|invalid format/i.test(msg)) return 'Format email tidak valid';
   return msg.replace(/^.*?:\s*/, (m) => (m.length > 40 ? '' : m));
+}
+
+/**
+ * Token pemulihan kata sandi dari URL (web). Supabase mengarahkan ke situs dengan
+ * `#access_token=…&refresh_token=…&type=recovery` (atau `#error=…&error_code=otp_expired`).
+ * Di GitHub Pages tautan bisa lewat 404.html → `?r=/…#…`, jadi hash juga dicari di parameter `r`.
+ */
+export function recoveryFromUrl(): { access_token: string; refresh_token: string } | { error: string } | null {
+  const v = BOOT_RECOVERY; BOOT_RECOVERY = null; return v;
+}
+/** Intip (tanpa mengonsumsi) apakah URL boot membawa alur pemulihan: 'tokens' | 'error' | null. */
+export function peekBootRecovery(): 'tokens' | 'error' | null {
+  return BOOT_RECOVERY == null ? null : 'error' in BOOT_RECOVERY ? 'error' : 'tokens';
+}
+function captureRecovery(): { access_token: string; refresh_token: string } | { error: string } | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = [window.location.hash, new URLSearchParams(window.location.search).get('r') ?? '']
+      .map((x) => (x.includes('#') ? x.slice(x.indexOf('#') + 1) : x.replace(/^#/, '')))
+      .find((x) => /type=recovery|error_code=/.test(x));
+    if (!raw) return null;
+    const q = new URLSearchParams(raw);
+    if (q.get('error') || q.get('error_code')) return { error: q.get('error_description') || q.get('error_code') || q.get('error') || 'error' };
+    const access_token = q.get('access_token'); const refresh_token = q.get('refresh_token');
+    if (q.get('type') === 'recovery' && access_token && refresh_token) return { access_token, refresh_token };
+    return null;
+  } catch { return null; }
 }
