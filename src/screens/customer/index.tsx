@@ -14,7 +14,8 @@ import { useBooking } from '@/store/booking';
 import { serviceDef } from '@/lib/services';
 import { HalalBadge } from '@/components/MerchantStatus';
 import { DestinationCard, PromoCard } from '@/components/PromoCard';
-import { Row, Avatar, CircleButton } from '@/components/ui';
+import { Row, Avatar, CircleButton, toast } from '@/components/ui';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import { AmbientBackground } from '@/components/glass';
 import { Entrance, PressableScale, Skeleton } from '@/components/motion';
 import { ServiceIllustration } from '@/components/ServiceArt';
@@ -34,6 +35,8 @@ export default function CustomerHome() {
   const [refreshing, setRefreshing] = useState(false);
   const t = useT();
   const { unread } = useNotifications(session?.user.id);
+  // Layanan yang dinonaktifkan admin (kunci services_enabled = id layanan: ride_motor, ride_car, food, send, shop, market, box, travel)
+  const { isEnabled } = useAppSettings();
 
   const loadExtras = async () => {
     const [{ data: m }, { data: p }, { data: f }] = await Promise.all([
@@ -119,19 +122,23 @@ export default function CustomerHome() {
 
             {/* Layanan — ikon bulat (kit: Beach / Park / Plane / Train) */}
             <View style={s.grid}>
-              {HOME_SERVICES.map((sv, i) => (
-                <Entrance key={sv.id} index={3 + i} from="zoom" style={{ width: '25%', alignItems: 'stretch' }}>
-                  <PressableScale onPress={() => router.push(sv.route as never)} scaleTo={0.9} style={s.serviceTile}>
-                    <View style={[s.serviceCircle, i === 0 && { backgroundColor: colors.primary, borderColor: colors.primary }]}><ServiceIllustration kind={sv.art} size={40} /></View>
-                    <Text style={s.serviceLabel} numberOfLines={1}>{sv.label.replace('Antar', '')}</Text>
-                  </PressableScale>
-                </Entrance>
-              ))}
+              {HOME_SERVICES.map((sv, i) => {
+                const off = sv.id !== 'pay' && !isEnabled(sv.id);
+                return (
+                  <Entrance key={sv.id} index={3 + i} from="zoom" style={{ width: '25%', alignItems: 'stretch' }}>
+                    <PressableScale onPress={() => (off ? toast.show('Layanan ini sedang dinonaktifkan sementara') : router.push(sv.route as never))} scaleTo={off ? 0.98 : 0.9} haptic={!off} style={[s.serviceTile, off && { opacity: 0.45 }]} accessibilityState={{ disabled: off }}>
+                      <View style={[s.serviceCircle, i === 0 && !off && { backgroundColor: colors.primary, borderColor: colors.primary }]}><ServiceIllustration kind={sv.art} size={40} /></View>
+                      <Text style={s.serviceLabel} numberOfLines={1}>{sv.label.replace('Antar', '')}</Text>
+                      {off && <View style={s.offPill}><Text style={s.offText}>Nonaktif</Text></View>}
+                    </PressableScale>
+                  </Entrance>
+                );
+              })}
             </View>
 
             {/* Banner teal berilustrasi (kit: "Let's Make Our Life so a Life · Find Trip") */}
             <Entrance index={11}>
-              <PressableScale onPress={() => router.push('/travel' as never)} scaleTo={0.985} style={s.banner}>
+              <PressableScale onPress={() => (isEnabled('travel') ? router.push('/travel' as never) : toast.show('Layanan ini sedang dinonaktifkan sementara'))} scaleTo={0.985} style={[s.banner, !isEnabled('travel') && { opacity: 0.45 }]}>
                 <View style={{ flex: 1, gap: 6 }}>
                   <View style={s.bannerTag}><Ionicons name="bus-outline" size={11} color="#fff" /><Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>AntarTravel</Text></View>
                   <Text style={s.bannerTitle}>{t('banner_title')}</Text>
@@ -231,6 +238,8 @@ const s = StyleSheet.create({
   serviceTile: { alignItems: 'center', gap: 8, width: '100%', paddingHorizontal: 2 },
   serviceCircle: { width: 66, height: 66, borderRadius: 33, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   serviceLabel: { fontSize: 12.5, fontWeight: '700', color: colors.text },
+  offPill: { position: 'absolute', top: -4, right: 2, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: 6, paddingVertical: 2 },
+  offText: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
   banner: { marginTop: 22, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primary, borderRadius: 24, padding: 16, overflow: 'hidden', ...shadow.glow(colors.primary) },
   bannerTag: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: radius.full, paddingHorizontal: 9, paddingVertical: 4 },
   bannerTitle: { color: '#fff', fontSize: 18, fontWeight: '800', lineHeight: 23, letterSpacing: -0.3 },

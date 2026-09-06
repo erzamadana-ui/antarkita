@@ -1,6 +1,6 @@
 // AntarMarket — belanja ke pasar tradisional: harga acuan hari ini, driver kirim foto nota & harga riil; pelanggan bayar harga riil + jasa belanja.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, Card, Row, Button, Badge, Input, Chip, Empty, Stepper, toast } from '@/components/ui';
@@ -10,7 +10,10 @@ import { usePayPrefs } from '@/store/payprefs';
 import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
+import { useAppSettings } from '@/hooks/useAppSettings';
+import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
 import { getRoute, reverseGeocode, type RouteResult } from '@/lib/geo';
+import { importOsmPlaces } from '@/lib/osm';
 import { rpc } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { ServiceIllustration } from '@/components/ServiceArt';
@@ -31,6 +34,10 @@ const qualityColor = (n: number) => (n >= 85 ? colors.success : n >= 70 ? colors
 const priceSourceLabel = (source: string, samples?: number) =>
   source === 'pasar' ? 'survei pasar' : source === 'nota_driver' ? `nota driver (${samples ?? 0})` : 'acuan admin';
 const fmtQty = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
+const isFromMap = (m: Market) => (m.notes ?? '').startsWith('Sumber: OpenStreetMap');
+// Impor otomatis dari peta: satu kali per sesi untuk tiap lokasi (dibulatkan ~100 m)
+const autoImported = new Set<string>();
+const locKey = (lat: number, lng: number) => `${lat.toFixed(3)},${lng.toFixed(3)}`;
 
 export default function MarketScreen() {
   const router = useRouter();
@@ -38,9 +45,12 @@ export default function MarketScreen() {
   const { location, hasFix } = useCurrentLocation();
   const refreshWallet = useAuth((s) => s.refreshWallet);
   const payPrefs = usePayPrefs((st) => st.prefs);
+  const { settings, isEnabled } = useAppSettings();
 
   const [markets, setMarkets] = useState<Market[]>([]);
   const [loadingMarkets, setLoadingMarkets] = useState(true);
+  const [marketsTick, setMarketsTick] = useState(0);
+  const [importing, setImporting] = useState(false);
   const [market, setMarket] = useState<Market | null>(null);
   const [items, setItems] = useState<MarketItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -65,16 +75,31 @@ export default function MarketScreen() {
     if (!dropoff && hasFix) reverseGeocode(location).then((address) => { if (!useBooking.getState().dropoff) setDropoff({ ...location, address, name: 'Lokasi saya' }); });
   }, [hasFix]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Impor pasar dari OpenStreetMap (manual lewat tombol, atau otomatis saat daftar sepi)
+  const importFromMap = async (silent = false) => {
+    if (importing) return;
+    setImporting(true);
+    const r = await importOsmPlaces('market', location.lat, location.lng, settings?.osm_import_radius_km ?? 5);
+    setImporting(false);
+    if (r.inserted > 0) { toast.success(`${r.inserted} pasar baru ditemukan dari peta`); setMarketsTick((n) => n + 1); }
+    else if (!silent) toast.show(r.fetched > 0 ? 'Semua pasar di peta sekitar Anda sudah ada di daftar' : 'Tidak ada pasar baru di peta sekitar Anda');
+  };
+
   // pasar terdekat
   useEffect(() => {
     let cancelled = false;
     setLoadingMarkets(true);
     rpc<Market[]>('nearby_markets', { p_lat: location.lat, p_lng: location.lng, p_radius_km: 25 })
-      .then((r) => { if (cancelled) return; const list = r ?? []; setMarkets(list); setMarket((m) => m ?? list[0] ?? null); })
+      .then((r) => {
+        if (cancelled) return;
+        const list = r ?? []; setMarkets(list); setMarket((m) => m ?? list[0] ?? null);
+        const key = locKey(location.lat, location.lng);
+        if (list.length < 5 && settings?.osm_import_enabled !== false && !autoImported.has(key)) { autoImported.add(key); importFromMap(true); }
+      })
       .catch(() => { if (!cancelled) setMarkets([]); })
       .finally(() => { if (!cancelled) setLoadingMarkets(false); });
     return () => { cancelled = true; };
-  }, [location.lat, location.lng]);
+  }, [location.lat, location.lng, marketsTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // katalog bahan pasar terpilih
   useEffect(() => {
@@ -136,11 +161,13 @@ export default function MarketScreen() {
   }, [market?.lat, market?.lng, dropoff?.lat, dropoff?.lng, subtotal, vehicle, route?.distance_km]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const total = est ? Math.max(0, est.fare + est.platform_fee + est.service_fee - discount) + subtotal : 0;
-  const ready = !!market && !!dropoff && !!est && chosenCount > 0;
+  const blocked = limitBlocked(est?.limit);
+  const serviceOff = est?.service_enabled === false || !isEnabled('market');
+  const ready = !!market && !!dropoff && !!est && chosenCount > 0 && !blocked;
   const pickVehicle = (v: Vehicle) => { vehicleManual.current = true; setVehicle(v); };
 
   const order = async () => {
-    if (!market || !dropoff || !est || chosenCount === 0) return;
+    if (!market || !dropoff || !est || chosenCount === 0 || blocked) return;
     setOrdering(true);
     try {
       const o = await rpc<Order>('create_order', { p: {
@@ -159,8 +186,9 @@ export default function MarketScreen() {
   };
 
   const colW = gridW ? Math.floor((gridW - 12) / 2) : 160;
-  const footer = (
+  const footer = serviceOff ? undefined : (
     <View style={{ gap: 8 }}>
+      <LimitNotice limit={est?.limit} />
       <Row between>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={font.tiny}>Perkiraan total · disesuaikan nota</Text>
@@ -168,18 +196,30 @@ export default function MarketScreen() {
         </View>
         <Badge text="Dana ditahan · sisa dikembalikan" color={colors.primary} />
       </Row>
-      <Button title={chosenCount === 0 ? 'Pilih bahan belanja dulu' : 'Pesan ke pasar'} size="lg" disabled={!ready || ordering} loading={ordering} onPress={order} />
+      <Button title={blocked ? 'Pasar di luar jangkauan' : chosenCount === 0 ? 'Pilih bahan belanja dulu' : 'Pesan ke pasar'} size="lg" disabled={!ready || ordering} loading={ordering} onPress={order} />
     </View>
   );
 
   return (
     <Screen title="AntarMarket" subtitle="Pasar tradisional · harga riil saat dibeli" band={colors.market} back ambient={false} bottomSpace={24} footer={footer}>
+      {serviceOff ? <ServiceDisabledEmpty onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))} /> : (
       <View style={{ gap: 14 }}>
         <Entrance index={0}>
           <View style={{ gap: 8 }}>
-            <Row between><Text style={font.h3}>{market ? 'Pasar dipilih' : 'Pasar terdekat'}</Text>{!loadingMarkets && !market && <Text style={font.tiny}>{markets.length} pasar</Text>}</Row>
+            <Row between>
+              <Text style={font.h3}>{market ? 'Pasar dipilih' : 'Pasar terdekat'}</Text>
+              {!market && (
+                <Row gap={8}>
+                  {!loadingMarkets && <Text style={font.tiny}>{markets.length} pasar</Text>}
+                  <PressableScale haptic={false} hitSlop={6} disabled={importing} accessibilityRole="button" accessibilityLabel="Cari pasar dari peta" onPress={() => importFromMap(false)} style={s.mapBtn}>
+                    {importing ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="refresh" size={13} color={colors.primary} />}
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>{importing ? 'Mencari di peta…' : 'Cari dari peta'}</Text>
+                  </PressableScale>
+                </Row>
+              )}
+            </Row>
             {loadingMarkets ? [0, 1].map((i) => <View key={i} style={s.marketRow}><Skeleton width={64} height={64} radius={16} /><View style={{ flex: 1, gap: 6 }}><Skeleton width="60%" height={14} /><Skeleton width="40%" height={12} /></View></View>)
-              : markets.length === 0 ? <Text style={font.small}>Belum ada pasar mitra di sekitar lokasi Anda.</Text>
+              : markets.length === 0 ? <Text style={font.small}>{importing ? 'Mencari pasar dari peta di sekitar Anda…' : 'Belum ada pasar mitra di sekitar lokasi Anda.'}</Text>
               : (market ? [market] : markets).map((m, i) => {
                 const active = market?.id === m.id;
                 return (
@@ -190,27 +230,14 @@ export default function MarketScreen() {
                         <Row gap={6}><Text style={[font.body, { fontWeight: '700', flexShrink: 1 }]} numberOfLines={1}>{m.name}</Text><Badge text={m.is_open_now === false ? 'Tutup' : 'Buka'} color={m.is_open_now === false ? colors.danger : colors.success} /></Row>
                         <Row gap={4}><Ionicons name="location-outline" size={12} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>{km(m.distance_km)}{m.address ? ` · ${m.address}` : ''}</Text></Row>
                         {active ? <Text style={font.tiny} numberOfLines={1}>{m.open_hours ? `${m.open_hours}` : 'Jam buka menyesuaikan pasar'}{route ? ` · ${minutes(route.duration_min)} ke alamat` : ''}</Text> : null}
+                        {isFromMap(m) && <Badge text="Dari peta" color={colors.primary} />}
                       </View>
-                      <View style={{ alignItems: 'center', gap: 6 }}>
-                        {active ? <Button title="Ganti" size="sm" variant="secondary" onPress={() => { setMarket(null); setLines({}); setCat('all'); }} /> : <View style={s.rowArrow}><Ionicons name="arrow-forward" size={16} color={colors.primary} /></View>}
-                        <PressableScale haptic={false} hitSlop={6} accessibilityRole="button" accessibilityLabel="Perbarui data pasar" onPress={() => router.push({ pathname: '/places/suggest', params: { kind: 'market', target: m.id, name: m.name } } as never)} style={s.updateBtn}>
-                          <Ionicons name="create-outline" size={12} color={colors.textSecondary} /><Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary }}>Perbarui</Text>
-                        </PressableScale>
-                      </View>
+                      {active ? <Button title="Ganti" size="sm" variant="secondary" onPress={() => { setMarket(null); setLines({}); setCat('all'); }} /> : <View style={s.rowArrow}><Ionicons name="arrow-forward" size={16} color={colors.primary} /></View>}
                     </PressableScale>
                   </Entrance>
                 );
               })}
-            {!loadingMarkets && !market && (
-              <PressableScale onPress={() => router.push({ pathname: '/places/suggest', params: { kind: 'market' } } as never)} scaleTo={0.985} haptic={false} style={s.suggestCard}>
-                <View style={s.infoIcon}><Ionicons name="add-circle-outline" size={22} color={colors.primary} /></View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={[font.body, { fontWeight: '700' }]}>Pasar belum ada di daftar?</Text>
-                  <Text style={font.tiny}>Tambahkan dari lokasi Anda. Aktif otomatis setelah 3 pengguna mengonfirmasi.</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-              </PressableScale>
-            )}
+            {!loadingMarkets && !market && importing && markets.length > 0 && <Row gap={8} style={{ paddingHorizontal: 4 }}><ActivityIndicator size="small" color={colors.primary} /><Text style={font.tiny}>Mencari pasar lain dari peta di sekitar Anda…</Text></Row>}
           </View>
         </Entrance>
 
@@ -374,6 +401,7 @@ export default function MarketScreen() {
           <Card solid style={{ gap: 8 }}>
             {est ? <PriceSummary rows={[{ label: 'Belanja (acuan)', value: subtotal }, { label: 'Jasa belanja driver', value: est.service_fee }, { label: `Ongkir ${vehicle === 'car' ? 'mobil' : 'motor'} (${km(est.distance_km)})`, value: est.fare }, { label: 'Biaya layanan', value: est.platform_fee }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />
               : <View style={{ gap: 8 }}><Skeleton width="60%" height={14} /><Skeleton width="40%" height={14} /><Skeleton width="70%" height={14} /></View>}
+            {est ? <LimitInfo limit={est.limit} /> : null}
             <Text style={font.tiny}>Dana yang ditahan = acuan + cadangan 10%. Setelah driver mengirim nota, total disesuaikan dengan harga riil dan sisanya dikembalikan ke AntarPay.</Text>
           </Card>
         )}
@@ -381,6 +409,7 @@ export default function MarketScreen() {
           <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={est?.fare ?? 0} service="market" onDiscount={setDiscount} notesPlaceholder="Catatan untuk driver (mis. pilih yang segar, lapak langganan)" />
         </Card>
       </View>
+      )}
     </Screen>
   );
 }
@@ -399,8 +428,7 @@ const s = StyleSheet.create({
   miniBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   halfBtn: { height: 28, paddingHorizontal: 8, borderRadius: 14, borderWidth: 1.5, borderColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   noteInput: { height: 40, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgSoft, paddingHorizontal: 12, color: colors.text, fontSize: 13, marginTop: 6 },
-  updateBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, height: 24, borderRadius: 12, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border },
-  suggestCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 20, backgroundColor: colors.tint, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.primaryLight },
+  mapBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 28, borderRadius: 14, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.primaryLight },
   vendorCard: { padding: 12, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   vendorImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.tint },
   vendorItem: { padding: 10, borderRadius: 16, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border },

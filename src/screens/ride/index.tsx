@@ -12,6 +12,8 @@ import { LocationFields } from '@/components/LocationField';
 import { DestinationSuggestions, VehicleClassPicker, SchedulePicker, MerchantAds, RoutePreview } from '@/components/BookingExtras';
 import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
 import { ServiceArt } from '@/components/ServiceArt';
+import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import { usePayPrefs } from '@/store/payprefs';
 import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
@@ -32,6 +34,7 @@ export default function RideScreen() {
   const { pickup, dropoff, setPickup, setDropoff } = useBooking();
   const { location, hasFix, refresh } = useCurrentLocation();
   const refreshWallet = useAuth((s) => s.refreshWallet);
+  const { isEnabled } = useAppSettings();
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [opts, setOpts] = useState<FareOptions | null>(null);
   const [loading, setLoading] = useState(false);
@@ -73,9 +76,12 @@ export default function RideScreen() {
 
   const chosen = useMemo(() => opts?.classes.find((c) => c.code === cls) ?? null, [opts, cls]);
   const total = chosen ? Math.max(0, chosen.total - discount) : 0;
+  // Batas jarak dalam kota & status layanan dari server (create_order juga menolak, ini agar pelanggan tahu lebih awal)
+  const blocked = limitBlocked(opts?.limit);
+  const serviceOff = opts?.service_enabled === false || !isEnabled(service);
 
   const order = async () => {
-    if (!pickup || !dropoff || !chosen) return;
+    if (!pickup || !dropoff || !chosen || blocked || serviceOff) return;
     setOrdering(true);
     try {
       const o = await rpc<Order>('create_order', { p: {
@@ -94,10 +100,15 @@ export default function RideScreen() {
 
   const ready = !!(pickup && dropoff);
   return (
-    <Screen title={def.label} subtitle={def.id === 'ride_car' ? 'Mobil · 1–4 penumpang · Hemat, Standar, Premium, Listrik' : 'Ojek motor · cepat & hemat'} band={def.color} back maxWidth={640} footer={ready && chosen ? (
-      <Button title={`${when ? 'Booking' : 'Pesan'} ${chosen.label} · ${rupiah(total)}`} size="lg" color={accent} loading={ordering} disabled={loading} onPress={order} />
+    <Screen title={def.label} subtitle={def.id === 'ride_car' ? 'Mobil · 1–4 penumpang · Hemat, Standar, Premium, Listrik' : 'Ojek motor · cepat & hemat'} band={def.color} back maxWidth={640} footer={ready && chosen && !serviceOff ? (
+      <View style={{ gap: 10 }}>
+        <LimitNotice limit={opts?.limit} actionTitle="Buka AntarTravel" actionIcon="bus-outline" onAction={() => router.push('/travel' as never)} />
+        <Button title={blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label} · ${rupiah(total)}`} size="lg" color={accent} loading={ordering} disabled={loading || blocked} onPress={order} />
+      </View>
     ) : undefined}>
       <View style={{ gap: 14 }}>
+        {serviceOff && <ServiceDisabledEmpty onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))} />}
+        {!serviceOff && <>
         <Row gap={12} style={s.hero}>
           <ServiceArt kind={def.art} color={accent} size={54} glow={false} />
           <View style={{ flex: 1 }}>
@@ -113,8 +124,9 @@ export default function RideScreen() {
         </Row>
 
         {!dropoff && <DestinationSuggestions onPick={(p) => setDropoff(p)} service={service} />}
+        </>}
 
-        {ready && (
+        {ready && !serviceOff && (
           <Animated.View entering={FadeInDown.duration(motion.base)} layout={LinearTransition.springify().stiffness(300).damping(22)} style={{ gap: 14 }}>
             <Row gap={8} style={{ flexWrap: 'wrap' }}>
               <Badge text={loading || !route ? 'Menghitung rute…' : `${km(route.distance_km)} · ${minutes(route.duration_min)}${route.estimated ? ' (perkiraan)' : ''}`} color={colors.info} />
@@ -135,6 +147,7 @@ export default function RideScreen() {
                       <PriceSummary rows={[{ label: `${chosen.label} (${km(opts?.distance_km ?? 0)})`, value: chosen.fare }, { label: 'Biaya layanan', value: opts?.platform_fee ?? 0 }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />
                     </Animated.View>
                   )}
+                  <LimitInfo limit={opts?.limit} style={{ marginTop: 8 }} />
                 </Animated.View>
               </PressableScale>
             )}

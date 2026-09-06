@@ -76,7 +76,8 @@ export function Input({ label, error, icon, right, containerStyle, style, ...res
       {label ? <Text style={s.label}>{label}</Text> : null}
       <Animated.View style={[s.inputWrap, a, error ? { borderColor: colors.danger } : null]}>
         {icon && <Ionicons name={icon} size={18} color={focus ? colors.primary : colors.textMuted} style={{ marginRight: 8 }} />}
-        <TextInput placeholderTextColor={colors.textMuted} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} style={[s.input, style]} {...rest} />
+        <TextInput placeholderTextColor={colors.textMuted} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} style={[s.input, rest.multiline && { minHeight: 64, textAlignVertical: 'top' }, style]} {...rest}
+          value={rest.value == null ? rest.value : String(rest.value)} />
         {right}
       </Animated.View>
       {error ? <Text style={{ color: colors.danger, fontSize: 12 }}>{error}</Text> : null}
@@ -307,7 +308,7 @@ export { useReducedMotion };
 const s = StyleSheet.create({
   label: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
   inputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(11,31,42,0.10)', borderRadius: radius.md, backgroundColor: '#FFFFFF', paddingHorizontal: 12, minHeight: 50, shadowColor: colors.primary, shadowRadius: 10, shadowOffset: { width: 0, height: 0 } },
-  input: { flex: 1, fontSize: 15, color: colors.text, paddingVertical: 10, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
+  input: { flex: 1, minWidth: 0, fontSize: 15, color: colors.text, paddingVertical: 10, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none', WebkitTextFillColor: colors.text, caretColor: colors.primary } as object) : {}) },
   card: { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, ...shadow.card },
   header: { overflow: 'hidden', backgroundColor: colors.bg },
   headerInner: { flexDirection: 'row', alignItems: 'center', height: 60, paddingHorizontal: 16, gap: 8 },

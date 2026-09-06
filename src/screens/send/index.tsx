@@ -10,6 +10,8 @@ import { LocationFields } from '@/components/LocationField';
 import { DestinationSuggestions, SchedulePicker, RoutePreview } from '@/components/BookingExtras';
 import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
 import { ServiceArt } from '@/components/ServiceArt';
+import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import { usePayPrefs } from '@/store/payprefs';
 import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
@@ -28,6 +30,7 @@ export default function SendScreen() {
   const { pickup, dropoff, setPickup, setDropoff } = useBooking();
   const { location, hasFix } = useCurrentLocation();
   const refreshWallet = useAuth((s) => s.refreshWallet);
+  const { isEnabled } = useAppSettings();
   const [scope, setScope] = useState<'in_city' | 'intercity'>('in_city');
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [fare, setFare] = useState<FareEstimate | null>(null);
@@ -92,7 +95,10 @@ export default function SendScreen() {
   const icFare = ic?.fare ?? 0;
   const total = fare ? Math.max(0, fare.fare + fare.platform_fee + icFare - discount) : 0;
   const phoneOk = /^(\+62|0)8\d{7,12}$/.test(recipient.phone.replace(/\s|-/g, ''));
-  const valid = !!(pickup && fare && recipient.name.trim().length >= 2 && phoneOk && (scope === 'in_city' ? dropoff : destCity && destWh && ic));
+  // Batas jarak hanya berlaku untuk pengiriman dalam kota; antar kota lewat gudang tidak dibatasi
+  const blocked = scope === 'in_city' && limitBlocked(fare?.limit);
+  const serviceOff = fare?.service_enabled === false || !isEnabled('send');
+  const valid = !!(pickup && fare && recipient.name.trim().length >= 2 && phoneOk && (scope === 'in_city' ? dropoff : destCity && destWh && ic)) && !blocked && !serviceOff;
   const destWhs = warehouses.filter((w) => w.city_id === destCity?.id);
 
   const order = async () => {
@@ -114,8 +120,15 @@ export default function SendScreen() {
   };
 
   return (
-    <Screen title="AntarSend" subtitle="Kirim paket dalam kota & antar kota" band={colors.send} back maxWidth={640} footer={valid ? <Button title={`${when ? 'Booking' : 'Kirim'} ${scope === 'intercity' ? 'antar kota' : 'sekarang'} · ${rupiah(total)}`} size="lg" color={colors.send} loading={ordering} onPress={order} /> : undefined}>
+    <Screen title="AntarSend" subtitle="Kirim paket dalam kota & antar kota" band={colors.send} back maxWidth={640} footer={(valid || blocked) && !serviceOff ? (
+      <View style={{ gap: 10 }}>
+        <LimitNotice limit={fare?.limit} actionTitle="Pakai AntarSend Antar Kota" actionIcon="airplane-outline" onAction={() => setScope('intercity')} />
+        <Button title={blocked ? 'Di luar jangkauan dalam kota' : `${when ? 'Booking' : 'Kirim'} ${scope === 'intercity' ? 'antar kota' : 'sekarang'} · ${rupiah(total)}`} size="lg" color={colors.send} loading={ordering} disabled={blocked} onPress={order} />
+      </View>
+    ) : undefined}>
       <View style={{ gap: 14 }}>
+        {serviceOff && <ServiceDisabledEmpty onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))} />}
+        {!serviceOff && <>
         <Row gap={12} style={s.hero}>
           <ServiceArt kind="send" color={colors.send} size={54} glow={false} />
           <View style={{ flex: 1 }}><Text style={font.h3}>Kirim paket</Text><Text style={font.tiny}>Dalam kota sampai hari ini · antar kota lewat gudang mitra</Text></View>
@@ -176,11 +189,12 @@ export default function SendScreen() {
               <Input placeholder="Deskripsi isi paket (opsional)" icon="document-text-outline" value={desc} onChangeText={setDesc} />
             </View>
             <SchedulePicker value={when} onChange={setWhen} accent={colors.send} />
-            {fare && <View style={s.group}><PriceSummary rows={[{ label: `Ongkos kurir (${km(fare.distance_km)})`, value: fare.fare }, ...(icFare ? [{ label: `Antar kota ${originCity?.name} → ${destCity?.name}`, value: icFare }] : []), { label: 'Biaya layanan', value: fare.platform_fee }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} /></View>}
+            {fare && <View style={s.group}><PriceSummary rows={[{ label: `Ongkos kurir (${km(fare.distance_km)})`, value: fare.fare }, ...(icFare ? [{ label: `Antar kota ${originCity?.name} → ${destCity?.name}`, value: icFare }] : []), { label: 'Biaya layanan', value: fare.platform_fee }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />{scope === 'in_city' && <LimitInfo limit={fare.limit} />}</View>}
             <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={fare?.fare ?? 0} service="send" onDiscount={setDiscount} notesPlaceholder="Catatan (mis. titip di satpam)" />
             <Text style={font.tiny}>Barang terlarang: narkoba, senjata, hewan hidup, barang mudah terbakar. Maks. nilai barang Rp2.000.000.{scope === 'intercity' ? ' Paket antar kota diasuransikan s.d. Rp1.000.000.' : ''}</Text>
           </Animated.View>
         )}
+        </>}
       </View>
     </Screen>
   );

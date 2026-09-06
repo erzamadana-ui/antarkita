@@ -158,7 +158,7 @@ export default function AdminAutomation() {
                   </Row>
                   {sec.run ? <Row gap={6}><Ionicons name="time-outline" size={13} color={colors.textMuted} /><Text style={font.tiny}>Terakhir: {fmtRun(last)}. {sec.run.hint}</Text></Row> : null}
                   {sec.id === 'fraud' ? <Pressable onPress={() => router.push('/(admin)/security' as never)}><Text style={s.link}>Tinjau flag di Pusat Keamanan</Text></Pressable> : null}
-                  {sec.id === 'places' ? <Row gap={12}><Pressable onPress={() => router.push('/(admin)/places' as never)}><Text style={s.link}>Usulan Data</Text></Pressable><Pressable onPress={() => router.push('/(admin)/vendors' as never)}><Text style={s.link}>Mitra Pasar</Text></Pressable></Row> : null}
+                  {sec.id === 'places' ? <Row gap={12}><Pressable onPress={() => router.push('/(admin)/places' as never)}><Text style={s.link}>Data Tempat</Text></Pressable><Pressable onPress={() => router.push('/(admin)/vendors' as never)}><Text style={s.link}>Mitra Pasar</Text></Pressable></Row> : null}
                 </Card>
               </Entrance>
             );

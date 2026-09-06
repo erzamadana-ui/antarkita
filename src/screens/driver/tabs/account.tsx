@@ -8,6 +8,7 @@ import { TAB_BAR_SPACE } from '@/components/GlassTabBar';
 import { useAuth } from '@/store/auth';
 import { useMode } from '@/store/mode';
 import { colors, font, radius, shadow } from '@/lib/theme';
+import { FUEL_LABEL } from '@/lib/vehicles';
 
 type Item = { icon: IconName; color?: string; title: string; subtitle?: string; onPress: () => void; danger?: boolean };
 
@@ -20,7 +21,7 @@ export default function DriverAccount() {
   const groups: { title: string; items: Item[] }[] = [
     { title: 'Akun & kendaraan', items: [
       { icon: 'person-outline', title: 'Edit profil', subtitle: 'Nama, nomor HP, foto', onPress: () => router.push('/account/edit') },
-      { icon: 'car-outline', title: 'Data kendaraan & dokumen', subtitle: driver?.vehicle_class ? `Kelas: ${driver.vehicle_class}` : 'SIM, STNK, foto kendaraan', onPress: () => router.push('/account/become-driver') },
+      { icon: 'car-outline', title: 'Data kendaraan & dokumen', subtitle: [driver?.vehicle_class ? `Kelas: ${driver.vehicle_class}` : null, [driver?.vehicle_brand, driver?.vehicle_model].filter(Boolean).join(' ') || null, driver?.vehicle_year ? String(driver.vehicle_year) : null].filter(Boolean).join(' · ') || 'SIM, STNK, foto kendaraan', onPress: () => router.push('/account/become-driver') },
       { icon: 'bus-outline', color: colors.travel, title: 'Mitra AntarTravel', subtitle: 'Jadwal travel antar kota, manifest penumpang', onPress: () => router.push('/driver/travel' as never) },
     ] },
     { title: 'Lainnya', items: [
@@ -37,7 +38,7 @@ export default function DriverAccount() {
         <View style={{ alignItems: 'center', marginTop: 8 }}>
           <View style={s.avatarRing}><Avatar name={profile?.full_name} url={profile?.avatar_url} size={96} /></View>
           <Text style={[font.h1, { marginTop: 12, textAlign: 'center' }]}>{profile?.full_name}</Text>
-          <Text style={[font.small, { textAlign: 'center' }]}>{[driver?.vehicle_brand, driver?.vehicle_plate].filter(Boolean).join(' · ')}</Text>
+          <Text style={[font.small, { textAlign: 'center' }]}>{[[driver?.vehicle_brand, driver?.vehicle_model].filter(Boolean).join(' '), driver?.fuel_type ? FUEL_LABEL[driver.fuel_type] : null, driver?.vehicle_plate].filter(Boolean).join(' · ')}</Text>
           <Badge text={approved ? 'Mitra aktif' : `Status: ${driver?.status ?? '-'}`} color={approved ? colors.success : colors.warning} style={{ marginTop: 8 }} />
         </View>
       </Entrance>

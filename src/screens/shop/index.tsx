@@ -1,6 +1,6 @@
 // AntarShop — belanja dari katalog toko terdekat (Indomaret/Alfamart/apotek/supermarket) atau barang bebas dari toko lain; driver belanjakan.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, Card, Row, Button, Badge, Input, Chip, Stepper, Empty, toast } from '@/components/ui';
@@ -10,7 +10,10 @@ import { usePayPrefs } from '@/store/payprefs';
 import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
+import { useAppSettings } from '@/hooks/useAppSettings';
+import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
 import { getRoute, reverseGeocode, type RouteResult } from '@/lib/geo';
+import { importOsmPlaces } from '@/lib/osm';
 import { rpc } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { ServiceIllustration } from '@/components/ServiceArt';
@@ -28,6 +31,9 @@ const FILTERS: { key: string; label: string; category: string | null }[] = [
 const BUDGETS = [50000, 100000, 200000, 300000, 500000];
 type FreeItem = { name: string; qty: number; price: number };
 type Vehicle = 'motor' | 'car';
+// Impor otomatis dari peta: satu kali per sesi untuk tiap lokasi (dibulatkan ~100 m)
+const autoImported = new Set<string>();
+const locKey = (lat: number, lng: number) => `${lat.toFixed(3)},${lng.toFixed(3)}`;
 
 export default function ShopScreen() {
   const router = useRouter();
@@ -35,11 +41,14 @@ export default function ShopScreen() {
   const { location, hasFix } = useCurrentLocation();
   const refreshWallet = useAuth((s) => s.refreshWallet);
   const payPrefs = usePayPrefs((st) => st.prefs);
+  const { settings, isEnabled } = useAppSettings();
 
   const [filter, setFilter] = useState('all');
   const [q, setQ] = useState('');
   const [stores, setStores] = useState<ShopStore[]>([]);
   const [loadingStores, setLoadingStores] = useState(true);
+  const [storesTick, setStoresTick] = useState(0);
+  const [importing, setImporting] = useState(false);
   const [store, setStore] = useState<ShopStore | null>(null);
   const [products, setProducts] = useState<ShopProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
@@ -65,6 +74,16 @@ export default function ShopScreen() {
     if (!dropoff && hasFix) reverseGeocode(location).then((address) => { if (!useBooking.getState().dropoff) setDropoff({ ...location, address, name: 'Lokasi saya' }); });
   }, [hasFix]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Impor toko dari OpenStreetMap (manual lewat tombol, atau otomatis saat daftar sepi)
+  const importFromMap = async (silent = false) => {
+    if (importing) return;
+    setImporting(true);
+    const r = await importOsmPlaces('store', location.lat, location.lng, settings?.osm_import_radius_km ?? 5);
+    setImporting(false);
+    if (r.inserted > 0) { toast.success(`${r.inserted} toko baru ditemukan dari peta`); setStoresTick((n) => n + 1); }
+    else if (!silent) toast.show(r.fetched > 0 ? 'Semua toko di peta sekitar Anda sudah ada di daftar' : 'Tidak ada toko baru di peta sekitar Anda');
+  };
+
   // toko terdekat sesuai filter
   useEffect(() => {
     if (free) return;
@@ -72,11 +91,16 @@ export default function ShopScreen() {
     setLoadingStores(true);
     const f = FILTERS.find((x) => x.key === filter);
     rpc<ShopStore[]>('nearby_stores', { p_lat: location.lat, p_lng: location.lng, p_radius_km: 15, p_category: f?.category ?? null })
-      .then((r) => { if (!cancelled) setStores(r ?? []); })
+      .then((r) => {
+        if (cancelled) return;
+        const list = r ?? []; setStores(list);
+        const key = locKey(location.lat, location.lng);
+        if (list.length < 5 && settings?.osm_import_enabled !== false && !autoImported.has(key)) { autoImported.add(key); importFromMap(true); }
+      })
       .catch(() => { if (!cancelled) setStores([]); })
       .finally(() => { if (!cancelled) setLoadingStores(false); });
     return () => { cancelled = true; };
-  }, [filter, free, location.lat, location.lng]);
+  }, [filter, free, location.lat, location.lng, storesTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // katalog toko terpilih
   useEffect(() => {
@@ -131,7 +155,9 @@ export default function ShopScreen() {
   }, [origin?.lat, origin?.lng, dropoff?.lat, dropoff?.lng, subtotal, vehicle, route?.distance_km]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const total = est ? Math.max(0, est.fare + est.platform_fee + est.service_fee - discount) + subtotal : 0;
-  const ready = !!dropoff && !!est && (free ? !!pickup && validFree.length > 0 : !!store && cart.length > 0);
+  const blocked = limitBlocked(est?.limit);
+  const serviceOff = est?.service_enabled === false || !isEnabled('shop');
+  const ready = !!dropoff && !!est && !blocked && (free ? !!pickup && validFree.length > 0 : !!store && cart.length > 0);
   const pickVehicle = (v: Vehicle) => { vehicleManual.current = true; setVehicle(v); };
 
   const order = async () => {
@@ -159,12 +185,18 @@ export default function ShopScreen() {
     setOrdering(false);
   };
 
-  const footerTitle = !ready ? (free ? 'Lengkapi toko & daftar belanja' : store ? (cart.length ? 'Menghitung…' : 'Pilih barang dulu') : 'Pilih toko dulu') : estimating ? 'Menghitung…' : `Pesan AntarShop · ${rupiah(total)}`;
+  const footerTitle = blocked ? 'Toko di luar jangkauan' : !ready ? (free ? 'Lengkapi toko & daftar belanja' : store ? (cart.length ? 'Menghitung…' : 'Pilih barang dulu') : 'Pilih toko dulu') : estimating ? 'Menghitung…' : `Pesan AntarShop · ${rupiah(total)}`;
   const colW = gridW ? Math.floor((gridW - 12) / 2) : 160;
 
   return (
     <Screen title="AntarShop" subtitle="Belanja dari toko terdekat · dibelikan driver" band={colors.shop} back ambient={false} bottomSpace={24}
-      footer={<Button title={footerTitle} size="lg" disabled={!ready || ordering} loading={ordering} onPress={order} />}>
+      footer={serviceOff ? undefined : (
+        <View style={{ gap: 10 }}>
+          <LimitNotice limit={est?.limit} />
+          <Button title={footerTitle} size="lg" disabled={!ready || ordering} loading={ordering} onPress={order} />
+        </View>
+      )}>
+      {serviceOff ? <ServiceDisabledEmpty onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))} /> : (
       <View style={{ gap: 14 }}>
         <Entrance index={0}><Input icon="search" placeholder={store ? `Cari barang di ${store.name}` : 'Cari toko atau alamat'} value={q} onChangeText={setQ} /></Entrance>
         <Entrance index={1}>
@@ -177,7 +209,16 @@ export default function ShopScreen() {
         {!free && !store && (
           <Entrance index={2}>
             <View style={{ gap: 8 }}>
-              <Row between><Text style={font.label}>Toko terdekat</Text><Text style={font.tiny}>{loadingStores ? 'Mencari…' : `${shownStores.length} toko`}</Text></Row>
+              <Row between>
+                <Text style={font.label}>Toko terdekat</Text>
+                <Row gap={8}>
+                  <Text style={font.tiny}>{loadingStores ? 'Mencari…' : `${shownStores.length} toko`}</Text>
+                  <PressableScale haptic={false} hitSlop={6} disabled={importing} accessibilityRole="button" accessibilityLabel="Cari toko dari peta" onPress={() => importFromMap(false)} style={s.mapBtn}>
+                    {importing ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="refresh" size={13} color={colors.primary} />}
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>{importing ? 'Mencari di peta…' : 'Cari dari peta'}</Text>
+                  </PressableScale>
+                </Row>
+              </Row>
               {loadingStores ? [0, 1, 2].map((i) => <View key={i} style={s.storeCard}><Skeleton width={64} height={64} radius={16} /><View style={{ flex: 1, gap: 6 }}><Skeleton width="60%" height={14} /><Skeleton width="40%" height={12} /></View></View>)
                 : shownStores.length === 0 ? <Empty icon="storefront-outline" title="Belum ada toko di sekitar" subtitle="Coba filter lain, atau pesan barang bebas lewat Toko lain." action={<Button title="Toko lain" size="sm" variant="secondary" onPress={() => setFilter('free')} />} />
                 : shownStores.map((st, i) => (
@@ -189,30 +230,15 @@ export default function ShopScreen() {
                         <Row gap={4}><Ionicons name="location-outline" size={12} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>{storeCategoryLabel[st.category] ?? st.category} · {km(st.distance_km)}{st.open_hours ? ` · ${st.open_hours}` : ''}</Text></Row>
                         <Row gap={6} style={{ flexWrap: 'wrap' }}>
                           {st.product_count != null && <Text style={font.tiny}>{st.product_count} produk</Text>}
-                          {st.catalog_source === 'crowd' && <Badge text="Data dari pengguna" color={colors.info} />}
+                          {st.catalog_source === 'crowd' && <Badge text="Data pengguna" color={colors.info} />}
+                          {st.catalog_source === 'osm' && <Badge text="Dari peta" color={colors.primary} />}
                         </Row>
                       </View>
-                      <View style={{ alignItems: 'center', gap: 6 }}>
-                        <View style={s.rowArrow}><Ionicons name="arrow-forward" size={16} color={colors.primary} /></View>
-                        <PressableScale haptic={false} hitSlop={6} accessibilityRole="button" accessibilityLabel="Perbarui data toko" onPress={() => router.push({ pathname: '/places/suggest', params: { kind: 'store', target: st.id, name: st.name } } as never)} style={s.updateBtn}>
-                          <Ionicons name="create-outline" size={12} color={colors.textSecondary} /><Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary }}>Perbarui</Text>
-                        </PressableScale>
-                      </View>
+                      <View style={s.rowArrow}><Ionicons name="arrow-forward" size={16} color={colors.primary} /></View>
                     </PressableScale>
                   </Entrance>
                 ))}
-              {!loadingStores && (
-                <Entrance index={shownStores.length + 1}>
-                  <PressableScale onPress={() => router.push({ pathname: '/places/suggest', params: { kind: 'store' } } as never)} scaleTo={0.985} haptic={false} style={s.suggestCard}>
-                    <View style={s.iconTint}><Ionicons name="add-circle-outline" size={22} color={colors.primary} /></View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={[font.body, { fontWeight: '700' }]}>Toko belum ada di daftar?</Text>
-                      <Text style={font.tiny}>Tambahkan dari lokasi Anda. Aktif otomatis setelah 3 pengguna mengonfirmasi.</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-                  </PressableScale>
-                </Entrance>
-              )}
+              {!loadingStores && importing && <Row gap={8} style={{ paddingHorizontal: 4 }}><ActivityIndicator size="small" color={colors.primary} /><Text style={font.tiny}>Mencari toko lain dari peta di sekitar Anda…</Text></Row>}
             </View>
           </Entrance>
         )}
@@ -334,6 +360,7 @@ export default function ShopScreen() {
           <Card solid>
             {est ? <PriceSummary rows={[{ label: free ? 'Anggaran belanja (perkiraan)' : 'Belanja', value: subtotal }, { label: 'Jasa belanja', value: est.service_fee }, { label: `Ongkir ${vehicle === 'car' ? 'mobil' : 'motor'} (${km(est.distance_km)})`, value: est.fare }, { label: 'Biaya layanan', value: est.platform_fee }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />
               : <View style={{ gap: 8 }}><Skeleton width="60%" height={14} /><Skeleton width="40%" height={14} /><Skeleton width="70%" height={14} /></View>}
+            {est ? <LimitInfo limit={est.limit} style={{ marginTop: 8 }} /> : null}
           </Card>
         )}
         <Card solid>
@@ -341,6 +368,7 @@ export default function ShopScreen() {
         </Card>
         <Text style={font.tiny}>Driver mengirim foto nota. Barang yang tidak tersedia dikonfirmasi lewat chat/telepon dan tidak ditagihkan.</Text>
       </View>
+      )}
     </Screen>
   );
 }
@@ -379,8 +407,7 @@ const s = StyleSheet.create({
   iconTint: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
   rowArrow: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.tint },
   addrRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: radius.md, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border },
-  updateBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 8, height: 24, borderRadius: 12, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border },
-  suggestCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 20, backgroundColor: colors.tint, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.primaryLight },
+  mapBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 28, borderRadius: 14, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.primaryLight },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   tile: { gap: 8, padding: 8, borderRadius: 22, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   tileArt: { height: 110, borderRadius: 18, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },

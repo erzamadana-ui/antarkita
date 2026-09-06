@@ -1,41 +1,40 @@
-// Admin · Kota, Gudang Mitra (AntarSend antar kota), Rute & Mitra AntarTravel
+// Admin · Kota, Gudang Mitra (AntarSend antar kota), Rute & Permintaan AntarTravel (mitra travel: halaman Mitra Travel)
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, Switch } from 'react-native';
-import { AdminPage, Table, FilterBar, ReasonPrompt } from '@/components/admin';
+import { View, Text, Switch, Pressable } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { AdminPage, Table, FilterBar } from '@/components/admin';
 import { Card, Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors, font } from '@/lib/theme';
 import { rupiah, formatDate, formatSchedule, cityName, travelRequestStatusLabel, travelKindLabel } from '@/lib/format';
-import type { City, Warehouse, IntercityRate, TravelRoute, TravelPartner, Profile, ApprovalStatus, AdminTravelRequestRow, TravelRequestStatus } from '@/lib/types';
+import type { City, Warehouse, IntercityRate, TravelRoute, AdminTravelRequestRow, TravelRequestStatus } from '@/lib/types';
 
 const REQ_STATUSES: TravelRequestStatus[] = ['open', 'offered', 'accepted', 'paid', 'ongoing', 'completed', 'cancelled', 'expired'];
 const REQ_COLOR: Record<string, string> = { open: colors.warning, offered: colors.info, accepted: colors.travel, paid: colors.travel, ongoing: colors.primary, completed: colors.success, cancelled: colors.danger, expired: colors.textMuted };
-const partnerServices = (p: TravelPartner) => [p.offers_shared !== false && 'Kursi', p.offers_charter && 'Carter', p.offers_daily && 'Harian'].filter(Boolean).join(' · ') || '—';
 
 const emptyWh = { name: '', type: 'small', partner_name: '', address: '', lat: '', lng: '', phone: '', open_hours: '08:00-20:00', city_id: '' };
 const emptyRoute = { from_city: '', to_city: '', distance_km: '', duration_h: '', seat_price: '', private_price: '', private_price_large: '', min_pax: '4' };
 
 export default function AdminLogistics() {
+  const router = useRouter();
   const [tab, setTab] = useState<'warehouse' | 'rates' | 'travel'>('warehouse');
   const [cities, setCities] = useState<City[]>([]);
   const [whs, setWhs] = useState<Warehouse[]>([]);
   const [rates, setRates] = useState<IntercityRate[]>([]);
   const [routes, setRoutes] = useState<TravelRoute[]>([]);
-  const [partners, setPartners] = useState<(TravelPartner & { profile: Profile | null })[]>([]);
   const [wh, setWh] = useState({ ...emptyWh });
   const [rt, setRt] = useState({ ...emptyRoute });
   const [newCity, setNewCity] = useState({ name: '', province: '', lat: '', lng: '' });
-  const [ask, setAsk] = useState<{ id: string; status: ApprovalStatus; name: string } | null>(null);
   const [reqs, setReqs] = useState<AdminTravelRequestRow[]>([]);
   const [reqStatus, setReqStatus] = useState<string>('all');
   const load = useCallback(async () => {
-    const [{ data: c }, { data: w }, { data: r }, { data: tr }, { data: tp }, rq] = await Promise.all([
+    const [{ data: c }, { data: w }, { data: r }, { data: tr }, rq] = await Promise.all([
       supabase.from('cities').select('*').order('name'), supabase.from('warehouses').select('*').order('name'),
       supabase.from('intercity_rates').select('*'), supabase.from('travel_routes').select('*'),
-      supabase.from('travel_partners').select('*, profile:profiles(*)').order('created_at', { ascending: false }),
       rpc<AdminTravelRequestRow[]>('admin_travel_requests', { p_status: null }).catch(() => [] as AdminTravelRequestRow[]),
     ]);
-    setCities((c as City[]) ?? []); setWhs((w as Warehouse[]) ?? []); setRates((r as IntercityRate[]) ?? []); setRoutes((tr as TravelRoute[]) ?? []); setPartners((tp as never) ?? []); setReqs(rq ?? []);
+    setCities((c as City[]) ?? []); setWhs((w as Warehouse[]) ?? []); setRates((r as IntercityRate[]) ?? []); setRoutes((tr as TravelRoute[]) ?? []); setReqs(rq ?? []);
   }, []);
   const filteredReqs = reqStatus === 'all' ? reqs : reqs.filter((q) => q.status === reqStatus);
   useEffect(() => { load(); }, [load]);
@@ -64,15 +63,10 @@ export default function AdminLogistics() {
     toast.success('Rute travel disimpan'); setRt({ ...emptyRoute }); load();
   };
   const toggleRoute = async (r: TravelRoute) => { await supabase.from('travel_routes').update({ active: !r.active }).eq('id', r.id); load(); };
-  const setPartner = async (id: string, status: ApprovalStatus, reason?: string) => {
-    if ((status === 'suspended' || status === 'rejected') && reason === undefined) { setAsk({ id, status, name: partners.find((p) => p.id === id)?.company_name ?? 'mitra' }); return; }
-    try { await rpc('admin_set_travel_partner', { p_id: id, p_status: status, p_reason: reason ?? null }); toast.success('Status mitra travel diperbarui'); setAsk(null); load(); } catch (e) { toast.error((e as Error).message); }
-  };
 
   return (
-    <AdminPage title="Logistik & Travel" subtitle="Kota layanan, gudang mitra AntarSend antar kota, tarif antar kota, rute & mitra AntarTravel" onRefresh={load}>
-      <ReasonPrompt visible={!!ask} title={`${ask?.status === 'suspended' ? 'Tangguhkan' : 'Tolak'} ${ask?.name}?`} onCancel={() => setAsk(null)} onSubmit={(r) => setPartner(ask!.id, ask!.status, r)} confirmLabel={ask?.status === 'suspended' ? 'Tangguhkan' : 'Tolak'} />
-      <FilterBar value={tab} onChange={(v) => setTab(v as never)} options={[{ key: 'warehouse', label: `Kota & Gudang (${whs.length})` }, { key: 'rates', label: 'Tarif antar kota' }, { key: 'travel', label: `AntarTravel (${routes.length} rute · ${partners.filter((p) => p.status === 'pending').length} pengajuan)` }]} />
+    <AdminPage title="Logistik & Travel" subtitle="Kota layanan, gudang mitra AntarSend antar kota, tarif antar kota, rute & permintaan AntarTravel" onRefresh={load}>
+      <FilterBar value={tab} onChange={(v) => setTab(v as never)} options={[{ key: 'warehouse', label: `Kota & Gudang (${whs.length})` }, { key: 'rates', label: 'Tarif antar kota' }, { key: 'travel', label: `AntarTravel (${routes.length} rute · ${reqs.length} permintaan)` }]} />
 
       {tab === 'warehouse' && (<>
         <Row gap={16} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -143,24 +137,14 @@ export default function AdminLogistics() {
           { key: 'min_pax', label: 'Min pax', width: 80, render: (r) => <Badge text={String(r.min_pax)} /> },
           { key: 'active', label: 'Aktif', width: 80, render: (r) => <Switch value={!!r.active} onValueChange={() => toggleRoute(r as unknown as TravelRoute)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" /> },
         ]} />
-        <Card padded={false}>
-          <View style={{ padding: 14 }}><Text style={font.label}>Mitra travel ({partners.length})</Text></View>
-          <Table rows={partners as unknown as Record<string, unknown>[]} columns={[
-            { key: 'name', label: 'Mitra', width: 220, render: (r) => { const p = r as unknown as TravelPartner & { profile: Profile | null }; return <View><Text style={{ fontWeight: '700' }}>{p.company_name ?? p.profile?.full_name}</Text><Text style={font.tiny}>{p.profile?.full_name} · {p.profile?.email}</Text></View>; } },
-            { key: 'partner_type', label: 'Tipe', width: 100, render: (r) => { const p = r as unknown as TravelPartner; return <Badge text={p.partner_type === 'private' ? 'Sopir pribadi' : 'Agen travel'} color={p.partner_type === 'private' ? colors.info : colors.travel} />; } },
-            { key: 'services', label: 'Layanan', width: 150, render: (r) => <Text style={font.small}>{partnerServices(r as unknown as TravelPartner)}</Text> },
-            { key: 'daily_rate', label: 'Harga harian', width: 130, render: (r) => { const p = r as unknown as TravelPartner; return <Text style={font.small}>{p.daily_rate ? rupiah(p.daily_rate) : '—'}{p.overtime_rate ? `\n+${rupiah(p.overtime_rate)}/jam lembur` : ''}</Text>; } },
-            { key: 'vehicle', label: 'Armada', width: 220, render: (r) => { const p = r as unknown as TravelPartner; return <Text style={font.small}>{p.vehicle_model} ({p.vehicle_year ?? '—'}) · {p.vehicle_plate} · {p.seats} kursi{p.is_electric ? ' (listrik)' : ''}</Text>; } },
-            { key: 'stats', label: 'Performa', width: 120, render: (r) => { const p = r as unknown as TravelPartner; return <Text style={font.small}>⭐ {Number(p.rating_avg).toFixed(1)} · {p.total_trips} trip</Text>; } },
-            { key: 'status', label: 'Status', width: 150, render: (r) => { const p = r as unknown as TravelPartner; return <View><Badge text={p.status} color={p.status === 'approved' ? colors.success : p.status === 'pending' ? colors.warning : colors.danger} />{p.status_reason && p.status !== 'approved' ? <Text style={font.tiny} numberOfLines={2}>{p.status_reason}</Text> : null}</View>; } },
-            { key: 'created_at', label: 'Daftar', width: 110, render: (r) => <Text style={font.tiny}>{formatDate(String(r.created_at), false)}</Text> },
-            { key: 'actions', label: 'Aksi', width: 220, render: (r) => { const p = r as unknown as TravelPartner; return (
-              <Row gap={6}>
-                {p.status !== 'approved' && <Button size="sm" title={p.status === 'suspended' ? 'Aktifkan' : 'Setujui'} color={colors.success} onPress={() => setPartner(p.id, 'approved', 'Diaktifkan oleh admin')} />}
-                {p.status === 'pending' && <Button size="sm" title="Tolak" variant="outline" color={colors.danger} onPress={() => setPartner(p.id, 'rejected')} />}
-                {p.status === 'approved' && <Button size="sm" title="Tangguhkan" variant="outline" color={colors.danger} onPress={() => setPartner(p.id, 'suspended')} />}
-              </Row>); } },
-          ]} emptyText="Belum ada mitra travel" />
+        <Card style={{ gap: 6 }}>
+          <Row between style={{ flexWrap: 'wrap', gap: 8 }}>
+            <Row gap={10} style={{ flex: 1, minWidth: 240 }}>
+              <Ionicons name="bus-outline" size={20} color={colors.travel} />
+              <Text style={[font.small, { flex: 1, color: colors.text }]}>Verifikasi, penangguhan, dokumen & statistik mitra travel (agen dan sopir pribadi) kini dikelola di halaman terpisah.</Text>
+            </Row>
+            <Pressable onPress={() => router.push('/(admin)/travel' as never)} hitSlop={6}><Text style={{ color: colors.travel, fontWeight: '800', fontSize: 13 }}>Kelola mitra travel →</Text></Pressable>
+          </Row>
         </Card>
         <Card padded={false}>
           <View style={{ padding: 14, gap: 8 }}>

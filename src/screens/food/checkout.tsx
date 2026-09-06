@@ -6,6 +6,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, Card, Row, Stepper, Button, Badge, Empty, toast } from '@/components/ui';
 import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
+import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import { usePayPrefs } from '@/store/payprefs';
 import { useCart } from '@/store/cart';
 import { useBooking } from '@/store/booking';
@@ -23,6 +25,7 @@ export default function Checkout() {
   const { dropoff, setDropoff } = useBooking();
   const { location, hasFix } = useCurrentLocation();
   const refreshWallet = useAuth((s) => s.refreshWallet);
+  const { isEnabled } = useAppSettings();
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [fare, setFare] = useState<FareEstimate | null>(null);
   const [method, setMethod] = useState<PayChoice>('cash');
@@ -54,9 +57,14 @@ export default function Checkout() {
     return <Screen title="Keranjang" back><Empty icon="cart-outline" title="Keranjang kosong" subtitle="Pilih menu dari merchant AntarFood." action={<Button title="Cari makanan" onPress={() => router.replace('/food')} />} /></Screen>;
   }
   const total = fare ? Math.max(0, subtotal + fare.fare + fare.platform_fee - discount) : subtotal;
+  const blocked = limitBlocked(fare?.limit);
+  const serviceOff = fare?.service_enabled === false || !isEnabled('food');
+  if (serviceOff) {
+    return <Screen title="Checkout" back ambient="amber"><ServiceDisabledEmpty onBack={() => router.replace('/food')} /></Screen>;
+  }
 
   const order = async () => {
-    if (!dropoff || !fare) return;
+    if (!dropoff || !fare || blocked) return;
     try {
       const o = await rpc<Order>('create_order', { p: {
         service: 'food', merchant_id: m.id, dropoff: { lat: dropoff.lat, lng: dropoff.lng, address: dropoff.address },
@@ -69,7 +77,12 @@ export default function Checkout() {
   };
 
   return (
-    <Screen title="Checkout" back ambient="amber" footer={<Button title={fare ? `Pesan Sekarang · ${rupiah(total)}` : 'Menghitung ongkir…'} size="lg" color={colors.food} disabled={!fare || !dropoff} onPress={order} />}>
+    <Screen title="Checkout" back ambient="amber" footer={(
+      <View style={{ gap: 10 }}>
+        <LimitNotice limit={fare?.limit} />
+        <Button title={blocked ? 'Merchant di luar jangkauan' : fare ? `Pesan Sekarang · ${rupiah(total)}` : 'Menghitung ongkir…'} size="lg" color={colors.food} disabled={!fare || !dropoff || blocked} onPress={order} />
+      </View>
+    )}>
       <View style={{ gap: 16 }}>
         <Entrance index={0}><Card>
           <Text style={font.label}>Antar ke</Text>
@@ -106,6 +119,7 @@ export default function Checkout() {
         <Entrance index={2}><Card>
           <Text style={[font.label, { marginBottom: 10 }]}>Rincian pembayaran</Text>
           <PriceSummary rows={[{ label: 'Harga makanan', value: subtotal }, { label: `Ongkos kirim (${fare ? km(fare.distance_km) : '…'})`, value: fare?.fare ?? 0 }, { label: 'Biaya layanan', value: fare?.platform_fee ?? 0 }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />
+          <LimitInfo limit={fare?.limit} style={{ marginTop: 8 }} />
         </Card></Entrance>
 
         <Entrance index={3}><Card>

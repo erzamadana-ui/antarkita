@@ -10,6 +10,8 @@ import { LocationFields } from '@/components/LocationField';
 import { DestinationSuggestions, VehicleClassPicker, SchedulePicker, RoutePreview } from '@/components/BookingExtras';
 import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
 import { ServiceArt } from '@/components/ServiceArt';
+import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
+import { useAppSettings } from '@/hooks/useAppSettings';
 import { usePayPrefs } from '@/store/payprefs';
 import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
@@ -32,6 +34,7 @@ export default function BoxScreen() {
   const { pickup, dropoff, setPickup, setDropoff } = useBooking();
   const { location, hasFix } = useCurrentLocation();
   const refreshWallet = useAuth((s) => s.refreshWallet);
+  const { isEnabled } = useAppSettings();
   const [purpose, setPurpose] = useState(PURPOSES[0].key);
   const [helpers, setHelpers] = useState(0);
   const [route, setRoute] = useState<RouteResult | null>(null);
@@ -72,9 +75,11 @@ export default function BoxScreen() {
   const chosen = useMemo(() => opts?.classes.find((c) => c.code === cls) ?? null, [opts, cls]);
   const total = chosen ? Math.max(0, chosen.total - discount) : 0;
   const ready = !!(pickup && dropoff);
+  const blocked = limitBlocked(opts?.limit);
+  const serviceOff = opts?.service_enabled === false || !isEnabled('box');
 
   const order = async () => {
-    if (!pickup || !dropoff || !chosen) return;
+    if (!pickup || !dropoff || !chosen || blocked || serviceOff) return;
     setOrdering(true);
     try {
       const o = await rpc<Order>('create_order', { p: {
@@ -90,8 +95,15 @@ export default function BoxScreen() {
   };
 
   return (
-    <Screen title="AntarBox" subtitle="Mobil box / pick up · pindahan rumah & kost" band={colors.box} back maxWidth={640} footer={ready && chosen ? <Button title={`${when ? 'Booking' : 'Pesan'} ${chosen.label}${helpers ? ` + ${helpers} pembantu` : ''} · ${rupiah(total)}`} size="lg" color={colors.box} loading={ordering} disabled={loading} onPress={order} /> : undefined}>
+    <Screen title="AntarBox" subtitle="Mobil box / pick up · pindahan rumah & kost" band={colors.box} back maxWidth={640} footer={ready && chosen && !serviceOff ? (
+      <View style={{ gap: 10 }}>
+        <LimitNotice limit={opts?.limit} />
+        <Button title={blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label}${helpers ? ` + ${helpers} pembantu` : ''} · ${rupiah(total)}`} size="lg" color={colors.box} loading={ordering} disabled={loading || blocked} onPress={order} />
+      </View>
+    ) : undefined}>
       <View style={{ gap: 14 }}>
+        {serviceOff && <ServiceDisabledEmpty onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))} />}
+        {!serviceOff && <>
         <Row gap={12} style={s.hero}>
           <ServiceArt kind="box" color={colors.box} size={54} glow={false} />
           <View style={{ flex: 1 }}><Text style={font.h3}>Mobil box & pick up</Text><Text style={font.tiny}>Kirim barang besar, jemput dari rumah, pindahan rumah/kost · pembantu angkat opsional</Text></View>
@@ -123,11 +135,12 @@ export default function BoxScreen() {
               <Input placeholder="Daftar barang: mis. kasur 1, lemari 2, kardus 10" icon="list-outline" value={items} onChangeText={setItems} />
             </View>
             <SchedulePicker value={when} onChange={setWhen} accent={colors.box} />
-            {chosen && <View style={s.group}><PriceSummary rows={[{ label: `${chosen.label} (${km(opts?.distance_km ?? 0)})`, value: chosen.fare - (opts?.helpers_fee ?? 0) }, ...(opts?.helpers_fee ? [{ label: `Pembantu angkat ×${helpers}`, value: opts.helpers_fee }] : []), { label: 'Biaya layanan', value: opts?.platform_fee ?? 0 }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} /></View>}
+            {chosen && <View style={s.group}><PriceSummary rows={[{ label: `${chosen.label} (${km(opts?.distance_km ?? 0)})`, value: chosen.fare - (opts?.helpers_fee ?? 0) }, ...(opts?.helpers_fee ? [{ label: `Pembantu angkat ×${helpers}`, value: opts.helpers_fee }] : []), { label: 'Biaya layanan', value: opts?.platform_fee ?? 0 }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} /><LimitInfo limit={opts?.limit} /></View>}
             <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={chosen?.fare ?? 0} service="box" onDiscount={setDiscount} notesPlaceholder="Catatan: lantai berapa, ada lift, jam bongkar" />
             <Text style={font.tiny}>Driver membantu muat/bongkar ringan. Barang pecah belah harap dikemas. Pick up ±1 ton, mobil box ±2 ton.</Text>
           </Animated.View>
         )}
+        </>}
       </View>
     </Screen>
   );

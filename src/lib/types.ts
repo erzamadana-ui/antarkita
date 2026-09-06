@@ -30,7 +30,7 @@ export interface WithdrawalRequest {
   id: string; user_id: string; amount: number; bank_name: string; bank_account: string; account_name: string;
   status: 'pending' | 'approved' | 'rejected'; review_note: string | null; created_at: string;
 }
-export interface Driver {
+export interface Driver { vehicle_model?: string | null; fuel_type?: 'bensin' | 'diesel' | 'listrik' | 'hybrid' | null;
   id: string; vehicle_type: VehicleType; vehicle_brand: string | null; vehicle_plate: string; vehicle_color: string | null;
   status: ApprovalStatus; is_online: boolean; lat: number | null; lng: number | null;
   heading: number | null; last_seen_at: string | null; rating_avg: number; rating_count: number; total_trips: number;
@@ -80,7 +80,8 @@ export interface Order {
   driver?: Driver | null; customer?: Profile | null; merchant?: Merchant | null; order_items?: OrderItem[];
 }
 
-export interface FareEstimate { distance_km: number; straight_km: number; fare: number; platform_fee: number; total: number; duration_min: number; session?: { name: string; level: 'low' | 'middle' | 'high'; multiplier: number } | null }
+export interface ServiceLimit { ok: boolean; max_km: number | null; same_city_required: boolean; same_city: boolean; message?: string | null }
+export interface FareEstimate { distance_km: number; straight_km: number; fare: number; platform_fee: number; total: number; duration_min: number; limit?: ServiceLimit | null; service_enabled?: boolean; demand?: { multiplier: number; demand: number; supply: number } | null; session?: { name: string; level: 'low' | 'middle' | 'high'; multiplier: number } | null }
 
 export interface Pricing {
   service: ServiceType; base_fare: number; per_km: number; per_min: number; min_fare: number; platform_fee: number;
@@ -178,9 +179,9 @@ export interface TravelBooking { id: string; code: string; trip_id: string; cust
 export interface TravelManifestRow { id: string; code: string; pax: number; is_private: boolean; pickup_address: string; pickup_lat: number | null; pickup_lng: number | null; dropoff_address: string | null; passengers: { name: string }[]; price: number; payment_method: PaymentMethod; payment_status: string; status: TravelBookingStatus; notes: string | null; customer: { id: string; name: string; avatar_url: string | null } }
 
 // ---------- Tahap 6: AntarShop katalog & AntarMarket ----------
-export interface ShopStore { id: string; name: string; brand: 'indomaret' | 'alfamart' | 'alfamidi' | 'apotek' | 'supermarket' | 'lainnya' | string; category: 'minimarket' | 'apotek' | 'supermarket' | string; address: string | null; lat: number; lng: number; city_id?: string | null; open_hours: string | null; phone?: string | null; image_url: string | null; catalog_source?: string; active?: boolean; distance_km?: number; product_count?: number; is_open_now?: boolean; created_at?: string }
+export interface ShopStore { osm_id?: string | null; id: string; name: string; brand: 'indomaret' | 'alfamart' | 'alfamidi' | 'apotek' | 'supermarket' | 'lainnya' | string; category: 'minimarket' | 'apotek' | 'supermarket' | string; address: string | null; lat: number; lng: number; city_id?: string | null; open_hours: string | null; phone?: string | null; image_url: string | null; catalog_source?: string; active?: boolean; distance_km?: number; product_count?: number; is_open_now?: boolean; created_at?: string }
 export interface ShopProduct { id: string; store_id: string; sku: string | null; name: string; category: string; unit: string; price: number; image_url: string | null; in_stock: boolean; stock: number | null; active: boolean; updated_at: string }
-export interface Market { id: string; name: string; address: string | null; lat: number; lng: number; city_id?: string | null; open_hours: string | null; image_url: string | null; notes: string | null; active?: boolean; distance_km?: number; is_open_now?: boolean; created_at?: string }
+export interface Market { osm_id?: string | null; id: string; name: string; address: string | null; lat: number; lng: number; city_id?: string | null; open_hours: string | null; image_url: string | null; notes: string | null; active?: boolean; distance_km?: number; is_open_now?: boolean; created_at?: string }
 export type MarketCategory = 'sayur' | 'bumbu' | 'daging_ikan' | 'buah' | 'sembako' | 'lainnya';
 export interface MarketItem { id: string; name: string; category: MarketCategory | string; unit: string; image_url: string | null; sort: number; ref_price: number; price: number; price_source: string; price_updated_at: string; samples: number; active?: boolean }
 export interface MarketPriceStat { item_id: string; name: string; unit: string; ref_price: number; driver_median: number | null; driver_samples: number; last_seen: string | null }
@@ -214,3 +215,5 @@ export interface ScheduledReport { id: string; name: string; cadence: 'daily' | 
 export interface ReportRun { id: number; name: string; period: string; created_at: string; summary: Record<string, number>; finance: Record<string, number>; recommendations: Recommendation[] }
 export interface Recommendation { priority: 'high' | 'med' | 'low'; area: string; title: string; detail: string; action: string }
 export interface AutomationRun { id: number; kind: string; started_at: string; finished_at: string | null; ok: boolean; count: number; detail: Record<string, unknown>; triggered_by: string | null }
+
+export interface AppPublicSettings { services_enabled: Record<string, boolean>; max_km: Record<string, number>; osm_import_enabled: boolean; osm_import_radius_km: number }
