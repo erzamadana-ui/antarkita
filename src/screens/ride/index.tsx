@@ -12,6 +12,7 @@ import { LocationFields } from '@/components/LocationField';
 import { DestinationSuggestions, VehicleClassPicker, SchedulePicker, MerchantAds, RoutePreview } from '@/components/BookingExtras';
 import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
 import { ServiceArt } from '@/components/ServiceArt';
+import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { usePayPrefs } from '@/store/payprefs';
@@ -47,6 +48,8 @@ export default function RideScreen() {
   const [notes, setNotes] = useState('');
   const [showDetails, setShowDetails] = useState(false);
   const [ordering, setOrdering] = useState(false);
+  // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
+  const driverCode = useAntarNowCode(service);
 
   useEffect(() => {
     if (!pickup && hasFix) reverseGeocode(location).then((address) => { if (!useBooking.getState().pickup) setPickup({ ...location, address, name: 'Lokasi saya' }); });
@@ -88,7 +91,7 @@ export default function RideScreen() {
         service, pickup: { lat: pickup.lat, lng: pickup.lng, address: pickup.address }, dropoff: { lat: dropoff.lat, lng: dropoff.lng, address: dropoff.address },
         route_km: route?.distance_km, duration_min: route?.duration_min, route_geometry: route?.coords,
         payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null, notes: notes || null,
-        vehicle_class: chosen.code, scheduled_at: when ? when.toISOString() : null,
+        vehicle_class: chosen.code, scheduled_at: when ? when.toISOString() : null, driver_code: driverCode,
       } });
       await refreshWallet();
       useBooking.getState().reset();
@@ -151,6 +154,7 @@ export default function RideScreen() {
                 </Animated.View>
               </PressableScale>
             )}
+            <AntarNowSection service={service} accent={accent} />
             <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={chosen?.fare ?? 0} service={service} onDiscount={setDiscount} />
             <MerchantAds near={dropoff} title="Lapar sesampainya? Merchant dekat tujuan" />
           </Animated.View>

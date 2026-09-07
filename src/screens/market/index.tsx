@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Card, Row, Button, Badge, Input, Chip, Empty, Stepper, toast } from '@/components/ui';
 import { Entrance, PressableScale, Skeleton } from '@/components/motion';
 import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
+import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { usePayPrefs } from '@/store/payprefs';
 import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
@@ -166,6 +167,8 @@ export default function MarketScreen() {
   const ready = !!market && !!dropoff && !!est && chosenCount > 0 && !blocked;
   const pickVehicle = (v: Vehicle) => { vehicleManual.current = true; setVehicle(v); };
 
+  // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
+  const driverCode = useAntarNowCode('market');
   const order = async () => {
     if (!market || !dropoff || !est || chosenCount === 0 || blocked) return;
     setOrdering(true);
@@ -178,6 +181,7 @@ export default function MarketScreen() {
           ...chosen.map((i) => ({ item_id: i.id, name: i.name, qty: lines[i.id]?.qty ?? 1, note: lines[i.id]?.note?.trim() || null })),
           ...chosenVendor.map((i) => ({ item_id: i.item_id ?? null, vendor_item_id: i.id, vendor_id: i.vendor_id, vendor_name: i.vendor_name, grade: i.grade, name: i.name, unit: i.unit, price: i.price, qty: lines[i.id]?.qty ?? 1, note: [`Lapak ${i.vendor_name}${i.stall_no ? ` no. ${i.stall_no}` : ''} · grade ${i.grade}`, lines[i.id]?.note?.trim()].filter(Boolean).join(' · ') })),
         ],
+        driver_code: driverCode,
       } });
       await refreshWallet(); useBooking.getState().reset();
       router.replace(`/order/${o.id}` as never);
@@ -406,6 +410,7 @@ export default function MarketScreen() {
           </Card>
         )}
         <Card solid>
+          <AntarNowSection service="market" accent={colors.market} />
           <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={est?.fare ?? 0} service="market" onDiscount={setDiscount} notesPlaceholder="Catatan untuk driver (mis. pilih yang segar, lapak langganan)" />
         </Card>
       </View>

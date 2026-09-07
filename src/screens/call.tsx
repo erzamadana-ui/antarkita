@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
-import { Avatar, Button, toast } from '@/components/ui';
+import { Avatar, Button } from '@/components/ui';
 import { AmbientBackground } from '@/components/glass';
 import { PressableScale, Radar, LiveDot } from '@/components/motion';
 import { roleLabel } from '@/components/call/IncomingCall';
@@ -31,11 +31,14 @@ export default function CallScreen() {
   const close = () => { reset(); };
   void tick;
 
-  const onSpeaker = () => {
+  // Tombol speaker: bila platform tidak mendukung, tombol NONAKTIF (bukan toast error merah).
+  // Bila didukung, statusnya selalu mengikuti rute yang benar-benar berlaku (lihat src/lib/audioRoute.*).
+  const [speakerBusy, setSpeakerBusy] = useState(false);
+  const onSpeaker = async () => {
+    if (!speakerRoutingSupported || speakerBusy) return;
     tap();
-    const applied = toggleSpeaker();
-    // Jujur: kalau platform tidak bisa memindah rute audio, jangan pura-pura tombolnya menyala.
-    if (!applied) toast.show('Rute speaker mengikuti setelan perangkat. Atur lewat tombol volume atau pengeras suara ponsel.');
+    setSpeakerBusy(true);
+    try { await toggleSpeaker(); } finally { setSpeakerBusy(false); }
   };
 
   return (
@@ -67,11 +70,18 @@ export default function CallScreen() {
               <>
                 <View style={{ flexDirection: 'row', gap: 22 }}>
                   <Ctrl icon={muted ? 'mic-off' : 'mic'} label={muted ? 'Bisu' : t('mute')} active={muted} onPress={() => { tap(); toggleMute(); }} />
-                  <Ctrl icon={speaker ? 'volume-high' : 'volume-medium'} label={t('speaker')} active={speakerRoutingSupported && speaker} dimmed={!speakerRoutingSupported} onPress={onSpeaker} />
+                  <Ctrl
+                    icon={speakerRoutingSupported && speaker ? 'volume-high' : 'volume-low'}
+                    label={t('speaker')}
+                    active={speakerRoutingSupported && speaker}
+                    disabled={!speakerRoutingSupported || speakerBusy}
+                    onPress={onSpeaker}
+                  />
                 </View>
                 {!speakerRoutingSupported && (
+                  // Keterangan netral (abu-abu kecil), bukan pesan kesalahan.
                   <Text style={[font.tiny, { textAlign: 'center', maxWidth: 320 }]}>
-                    Pemindahan earpiece ↔ loudspeaker belum bisa diatur dari aplikasi (butuh modul audio native). Suara panggilan mengikuti rute bawaan perangkat.
+                    Rute pengeras suara tidak bisa diatur dari sini di perangkat/browser ini. Suara panggilan memakai keluaran bawaan perangkat.
                   </Text>
                 )}
                 <PressableScale onPress={() => { tap(); hangup(); }} scaleTo={0.88} accessibilityLabel="Akhiri panggilan" style={[s.end, shadow.glow(colors.danger)]}>
@@ -89,13 +99,24 @@ export default function CallScreen() {
   );
 }
 
-function Ctrl({ icon, label, active, dimmed, onPress }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; active?: boolean; dimmed?: boolean; onPress: () => void }) {
+function Ctrl({ icon, label, active, disabled, onPress }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; active?: boolean; disabled?: boolean; onPress: () => void }) {
   return (
     <View style={{ alignItems: 'center', gap: 6 }}>
-      <PressableScale onPress={onPress} scaleTo={0.9} style={[s.ctrl, active && { backgroundColor: colors.primary, borderColor: colors.primary }, dimmed && { opacity: 0.55 }]}>
-        <Ionicons name={icon} size={24} color={active ? '#fff' : colors.text} />
+      <PressableScale
+        onPress={disabled ? () => {} : onPress}
+        // `disabled` diteruskan ke Pressable: hanya dari situ react-native-web menghasilkan
+        // aria-disabled di DOM. accessibilityState saja tidak cukup, sehingga sebelumnya pembaca
+        // layar mengira tombol speaker masih bisa ditekan padahal tampilannya sudah redup.
+        disabled={disabled}
+        scaleTo={disabled ? 1 : 0.9}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !!disabled, selected: !!active }}
+        accessibilityLabel={label}
+        style={[s.ctrl, active && { backgroundColor: colors.primary, borderColor: colors.primary }, disabled && s.ctrlOff]}
+      >
+        <Ionicons name={icon} size={24} color={active ? '#fff' : disabled ? colors.textMuted : colors.text} />
       </PressableScale>
-      <Text style={font.tiny}>{label}</Text>
+      <Text style={[font.tiny, disabled && { color: colors.textMuted }]}>{label}</Text>
     </View>
   );
 }
@@ -104,6 +125,10 @@ const s = StyleSheet.create({
   wrap: { flex: 1, alignItems: 'center', justifyContent: 'space-evenly', padding: 24 },
   live: { position: 'absolute', bottom: 22, right: 22, backgroundColor: '#fff', borderRadius: 12, padding: 3 },
   ctrl: { width: 62, height: 62, borderRadius: 31, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.8)', alignItems: 'center', justifyContent: 'center', ...shadow.soft },
+  // Nonaktif = redup & datar (tanpa warna bahaya) — ini keterbatasan, bukan kesalahan pengguna.
+  // Peredupan (opacity) datang dari PressableScale saat `disabled`; di sini cukup latar yang lebih datar
+  // supaya keduanya tidak bertumpuk dan tombol jadi nyaris tak terlihat.
+  ctrlOff: { backgroundColor: 'rgba(255,255,255,0.6)' },
   end: { width: 76, height: 76, borderRadius: 38, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' },
   micWarn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.dangerLight, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 10, maxWidth: 340 },
 });

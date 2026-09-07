@@ -13,6 +13,7 @@ import { ServiceIllustration } from '@/components/ServiceArt';
 import { TAB_BAR_SPACE } from '@/components/GlassTabBar';
 import { useDriverSession, useDriverPriority } from '@/hooks/useDriver';
 import { PriorityCard, RejectOrderSheet, OrderLoadInfo, usePickupRadiusText } from '@/components/driver';
+import { DirectOrderBadge, DriverCodeCard, useDriverMyCode, sortDirectFirst } from '@/components/antarnow';
 import { useCurrentLocation } from '@/hooks/useLocation';
 import { useAuth } from '@/store/auth';
 import { colors, font, radius, shadow, motion } from '@/lib/theme';
@@ -28,6 +29,10 @@ export default function DriverHome() {
   const { location, refresh } = useCurrentLocation();
   const { info: priority } = useDriverPriority(driver?.status === 'approved');
   const radiusText = usePickupRadiusText();
+  // AntarNow (Tahap 11): kode driver untuk dibacakan ke pelanggan + order langsung diurut paling atas
+  const { data: myCode } = useDriverMyCode(driver?.status === 'approved');
+  const feed = useMemo(() => sortDirectFirst(available), [available]);
+  const directCount = useMemo(() => feed.filter((o) => o.direct_for_me && (o.direct_hold_left_s ?? 0) > 0).length, [feed]);
   const [selected, setSelected] = useState<AvailableOrder | null>(null);
   const [rejecting, setRejecting] = useState<AvailableOrder | null>(null);
   const [selfie, setSelfie] = useState<{ lat: number; lng: number } | null | false>(false);
@@ -111,6 +116,7 @@ export default function DriverHome() {
           <Text style={font.tiny}>{Number(driver?.rating_avg ?? 5).toFixed(1)} · {driver?.total_trips} trip</Text>
         </Row>
       </View>
+      {online && !selected && directCount > 0 && <Badge text={`${directCount} langsung`} color={colors.primary} />}
       {online && !selected && available.length > 0 && <Badge text="Baru" color={colors.success} />}
     </Row>
   );
@@ -144,6 +150,7 @@ export default function DriverHome() {
           </Entrance>
         )}
         {online && !selected && <Entrance index={active ? 1 : 0}><PriorityCard info={priority} /></Entrance>}
+        {!selected && <Entrance index={active ? 2 : 1}><DriverCodeCard code={myCode?.code} todayCount={myCode?.orders_direct_today} onPress={() => router.push('/driver/code' as never)} /></Entrance>}
         {!online ? (
           <Animated.View entering={FadeIn.duration(motion.base)} exiting={FadeOut.duration(motion.fast)}>
             <Empty icon="power-outline" title="Anda sedang offline" subtitle="Aktifkan saklar online di kiri atas untuk melihat order di sekitar Anda." />
@@ -160,6 +167,7 @@ export default function DriverHome() {
               </Row>
               <PressableScale onPress={() => setSelected(null)} scaleTo={0.9} style={s.closeBtn}><Ionicons name="close" size={18} color={colors.textSecondary} /></PressableScale>
             </Row>
+            {!!selected.direct_for_me && <View style={{ marginTop: 10 }}><DirectOrderBadge holdLeftSeconds={selected.direct_hold_left_s} /></View>}
             <Row gap={6} style={{ flexWrap: 'wrap', marginTop: 10 }}>
               {!!selected.vehicle_class && <Badge text={vehicleClassLabel[selected.vehicle_class] ?? selected.vehicle_class} color={colors.info} />}
               {!!selected.scheduled_at && <Badge text={`Jadwal ${formatSchedule(selected.scheduled_at)}`} color={colors.send} />}
@@ -183,24 +191,30 @@ export default function DriverHome() {
               <Button title="Terima Order" size="lg" onPress={() => doAccept(selected)} style={{ flex: 1.6 }} />
             </Row>
           </Animated.View>
-        ) : available.length === 0 ? (
+        ) : feed.length === 0 ? (
           <Animated.View entering={FadeIn.duration(motion.slow)} exiting={FadeOut.duration(motion.fast)} style={s.radarBox}>
             <Radar color={colors.primary} size={130}><Ionicons name="bicycle" size={24} color={colors.primary} /></Radar>
             <Text style={[font.h3, { marginTop: 4 }]}>Mencari order di sekitar…</Text>
             <Text style={[font.small, { textAlign: 'center' }]}>{radiusText ? `Order baru dalam ${radiusText} akan muncul otomatis di sini.` : 'Order baru di sekitar Anda akan muncul otomatis di sini.'}</Text>
           </Animated.View>
         ) : (
-          available.map((o, i) => {
+          feed.map((o, i) => {
             const def = serviceDef(o.service);
+            // AntarNow: order yang dipesan lewat kode saya diberi bingkai teal + badge hitung mundur
+            const direct = !!o.direct_for_me && (o.direct_hold_left_s ?? 0) > 0;
             return (
               <Animated.View key={o.id} entering={FadeInDown.delay(i * motion.stagger).duration(motion.base)} exiting={FadeOut.duration(motion.fast)} layout={LinearTransition.springify().stiffness(280).damping(20)}>
-                <View style={s.orderRow}>
+                <View style={[s.orderRow, direct && s.orderRowDirect]}>
+                  {direct && <View style={{ marginBottom: 10 }}><DirectOrderBadge holdLeftSeconds={o.direct_hold_left_s} compact /></View>}
                   <PressableScale onPress={() => setSelected(o)} scaleTo={0.99} haptic={false} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                     <View style={[s.thumb, { backgroundColor: def.color + '14' }]}><ServiceIllustration kind={def.art} size={40} /></View>
                     <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                       <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={1}>{serviceLabel[o.service]}{o.vehicle_class ? ` · ${vehicleClassLabel[o.vehicle_class] ?? ''}` : ''}</Text>
                       <Row gap={4}><Ionicons name="location-outline" size={12} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>{o.merchant_name ?? o.pickup_address}</Text></Row>
-                      <Text style={font.tiny} numberOfLines={1}>{km(o.distance_to_pickup_km)} dari Anda · {km(o.distance_km)} · {o.scheduled_at ? `Jadwal ${formatSchedule(o.scheduled_at)}` : timeAgo(o.created_at)} · {o.payment_method === 'cash' ? 'Tunai' : 'AntarPay'}</Text>
+                      {/* Dua baris: pada layar 390px satu baris membuat metode pembayaran terpotong hilang,
+                          padahal itu yang dipakai driver untuk memutuskan menerima order. */}
+                      <Text style={font.tiny} numberOfLines={1}>{km(o.distance_to_pickup_km)} dari Anda · {km(o.distance_km)} · {o.scheduled_at ? `Jadwal ${formatSchedule(o.scheduled_at)}` : timeAgo(o.created_at)}</Text>
+                      <Row gap={4}><Ionicons name={o.payment_method === 'cash' ? 'cash-outline' : 'wallet-outline'} size={12} color={o.payment_method === 'cash' ? colors.warning : colors.primary} /><Text style={[font.tiny, { fontWeight: '700', color: o.payment_method === 'cash' ? colors.warning : colors.primary }]} numberOfLines={1}>{o.payment_method === 'cash' ? 'Tunai' : 'AntarPay'}</Text></Row>
                       <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 15 }}>{rupiah(o.driver_earning)}</Text>
                     </View>
                     <View style={s.rowArrow}><Ionicons name="arrow-forward" size={16} color={colors.primary} /></View>
@@ -231,6 +245,8 @@ const s = StyleSheet.create({
   dotIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
   radarBox: { alignItems: 'center', gap: 4, padding: 14, backgroundColor: '#fff', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   orderRow: { padding: 12, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
+  // AntarNow: order langsung untuk driver ini — bingkai teal tebal agar langsung terlihat
+  orderRowDirect: { borderColor: colors.primary, borderWidth: 1.5, backgroundColor: colors.primaryLight, ...shadow.glow(colors.primary) },
   thumb: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
   rowArrow: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.tint },
 });

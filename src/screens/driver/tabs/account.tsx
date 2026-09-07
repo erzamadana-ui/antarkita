@@ -23,6 +23,7 @@ export default function DriverAccount() {
     { title: 'Akun & kendaraan', items: [
       { icon: 'person-outline', title: 'Edit profil', subtitle: 'Nama, nomor HP, foto', onPress: () => router.push('/account/edit') },
       { icon: 'car-outline', title: 'Data kendaraan & dokumen', subtitle: [driver?.vehicle_class ? `Kelas: ${driver.vehicle_class}` : null, [driver?.vehicle_brand, driver?.vehicle_model].filter(Boolean).join(' ') || null, driver?.vehicle_year ? String(driver.vehicle_year) : null].filter(Boolean).join(' · ') || 'SIM, STNK, foto kendaraan', onPress: () => router.push('/account/become-driver') },
+      { icon: 'flash-outline', title: 'Kode AntarNow saya', subtitle: 'Kode 6 karakter agar pelanggan memesan Anda langsung', onPress: () => router.push('/driver/code' as never) },
       { icon: 'bus-outline', color: colors.travel, title: 'Mitra AntarTravel', subtitle: 'Jadwal travel antar kota, manifest penumpang', onPress: () => router.push('/driver/travel' as never) },
     ] },
     { title: 'Lainnya', items: [

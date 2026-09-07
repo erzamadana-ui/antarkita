@@ -1,4 +1,5 @@
 // WebRTC untuk web — API bawaan browser.
+import { registerRemoteAudio } from './audioRoute.web';
 export const RTCPeerConnection = globalThis.RTCPeerConnection;
 export const RTCSessionDescription = globalThis.RTCSessionDescription;
 export const RTCIceCandidate = globalThis.RTCIceCandidate;
@@ -25,22 +26,16 @@ export function attachRemote(stream: MediaStream) {
   // Safari/Chrome kadang butuh play() eksplisit walau autoplay diset.
   el.play?.().catch(() => { /* akan berbunyi setelah interaksi pengguna */ });
   remoteEl = el;
-  return () => { try { el.pause(); } catch { /* noop */ } el.srcObject = null; el.remove(); if (remoteEl === el) remoteEl = null; };
+  registerRemoteAudio(el);      // audioRoute.web.ts butuh elemen ini untuk setSinkId
+  return () => {
+    try { el.pause(); } catch { /* noop */ }
+    el.srcObject = null; el.remove();
+    if (remoteEl === el) { remoteEl = null; registerRemoteAudio(null); }
+  };
 }
 
-/**
- * Di browser, pemilihan output hanya mungkin lewat `HTMLMediaElement.setSinkId`, dan itu pun
- * praktis tidak ada di browser seluler. Kita coba semaksimalnya; kalau tidak ada, jujur false.
- */
-type SinkEl = HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
-export const speakerSupported =
-  typeof HTMLMediaElement !== 'undefined' && typeof (HTMLMediaElement.prototype as SinkEl).setSinkId === 'function';
-
-export function setSpeaker(on: boolean): boolean {
-  const el = remoteEl as SinkEl | null;
-  if (!el || typeof el.setSinkId !== 'function') return false;
-  try { el.setSinkId(on ? 'default' : 'default').catch(() => { /* noop */ }); return speakerSupported; } catch { return false; }
-}
+// Rute audio (setSinkId) pindah ke src/lib/audioRoute.web.ts supaya satu abstraksi dipakai
+// semua platform. Elemen <audio> di atas didaftarkan ke sana lewat registerRemoteAudio().
 
 export async function ensureMicPermission(): Promise<{ ok: boolean; message?: string; blocked?: boolean }> {
   // Browser meminta izin di dalam getUserMedia; kalau Permissions API ada, kita bisa mendeteksi blokir lebih awal.

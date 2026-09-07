@@ -82,10 +82,10 @@ function PayOption({ active, onPress, icon, title, subtitle, color = colors.prim
   return (
     <PressableScale onPress={onPress} scaleTo={0.97} style={[s.pay, active && { borderColor: color, backgroundColor: color + '14', ...shadow.glow(color) }]}>
       <View style={[s.payIcon, active && { backgroundColor: color }]}><Ionicons name={icon} size={18} color={active ? '#fff' : colors.textSecondary} /></View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={{ fontWeight: '700', color: colors.text, fontSize: 13 }} numberOfLines={1}>{title}</Text>
-        <Text style={font.tiny} numberOfLines={1}>{subtitle}</Text>
-      </View>
+      {/* Tata letak menurun (ikon di atas teks): pada layar 390px, tata letak mendatar hanya menyisakan ~45px
+          untuk teks sehingga "AntarPay" terpotong jadi "Anta…" dan nominal saldo tidak terbaca. */}
+      <Text style={s.payTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{title}</Text>
+      <Text style={s.paySub} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{subtitle}</Text>
     </PressableScale>
   );
 }
@@ -108,7 +108,9 @@ export function PriceSummary({ rows, total }: { rows: { label: string; value: nu
 }
 
 const s = StyleSheet.create({
-  pay: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1.5, borderColor: 'rgba(11,31,42,0.08)', borderRadius: radius.lg, padding: 10, backgroundColor: 'rgba(255,255,255,0.92)' },
+  pay: { flex: 1, minWidth: 0, alignItems: 'center', gap: 4, borderWidth: 1.5, borderColor: 'rgba(11,31,42,0.08)', borderRadius: radius.lg, paddingVertical: 10, paddingHorizontal: 6, backgroundColor: 'rgba(255,255,255,0.92)' },
+  payTitle: { fontWeight: '700', color: colors.text, fontSize: 13, textAlign: 'center', alignSelf: 'stretch' },
+  paySub: { ...font.tiny, textAlign: 'center', alignSelf: 'stretch' },
   payIcon: { width: 30, height: 30, borderRadius: 10, backgroundColor: 'rgba(11,31,42,0.06)', alignItems: 'center', justifyContent: 'center' },
   gwRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: radius.lg, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: glass.border },
   gwIcons: { flexDirection: 'row', flexWrap: 'wrap', width: 34, gap: 3 },

@@ -1,7 +1,9 @@
 // Pembungkus TUNGGAL untuk suara & getar aplikasi.
 //
-// Kenapa dibuat sendiri: package.json TIDAK memuat expo-av / expo-audio / expo-notifications,
-// jadi tidak ada API pemutar suara bawaan. Agar tidak menambah dependensi berat, modul ini:
+// Kenapa pemutar sendiri: suara di sini adalah data URI kecil (assets/sounds/data.ts) yang harus
+// bisa dibunyikan tanpa berkas aset terpisah dan tanpa izin apa pun. expo-audio MEMANG terpasang,
+// tetapi dipakai khusus untuk RUTE audio panggilan (src/lib/audioRoute.native.ts), bukan pemutar
+// notifikasi. Jadi modul ini tetap:
 //   • Web            → elemen <audio> dengan data URI (assets/sounds/data.ts).
 //   • Android / iOS  → WebView tersembunyi (react-native-webview SUDAH menjadi dependensi)
 //                      yang dipasang oleh <SoundHost/> di src/components/call/SoundHost.tsx.
@@ -9,8 +11,8 @@
 //
 // Aturan main:
 //   • Bunyi notifikasi pendek (order baru / pesan chat) HANYA saat aplikasi di depan —
-//     kalau aplikasi tertutup itu wilayah push notification.
-//   • Nada dering panggilan masuk dikecualikan (lihat startRing) karena push belum ada.
+//     kalau aplikasi tertutup itu wilayah push notification (src/lib/push.ts).
+//   • Nada dering panggilan masuk dikecualikan (lihat startRing).
 //   • Bisa dimatikan pengguna (setSoundEnabled) dan pilihannya disimpan.
 //   • Semua pemanggilan aman dipanggil dari mana saja; kegagalan ditelan (best-effort).
 import { AppState, Platform, Vibration } from 'react-native';
@@ -113,11 +115,12 @@ export function play(kind: Exclude<SoundKind, 'ring'>) {
 /**
  * Nada dering panggilan masuk: berulang + getar berulang sampai stopRing().
  *
- * SENGAJA tidak memeriksa foreground(). Bunyi notifikasi pendek (play()) memang dibungkam saat
- * aplikasi di latar belakang karena itu wilayah push, tetapi push BELUM ada di aplikasi ini
- * (lihat src/lib/push.ts). Kalau dering ikut dibungkam, panggilan masuk saat pengguna sedang
- * membuka aplikasi lain menjadi benar-benar senyap dan mustahil dijawab. Dering tetap berhenti
- * sendiri lewat batas waktu panggilan di src/lib/call.ts.
+ * SENGAJA tidak memeriksa foreground(). Bunyi notifikasi pendek (play()) dibungkam saat aplikasi
+ * di latar belakang karena itu wilayah push notification, tetapi dering panggilan tidak boleh
+ * ikut dibungkam: push panggilan bisa telat (antrean push_outbox dikirim pg_cron tiap menit),
+ * sedangkan sinyal realtime tiba seketika. Kalau dering ikut dibungkam, panggilan masuk saat
+ * pengguna sedang membuka aplikasi lain menjadi senyap dan mustahil dijawab. Dering tetap berhenti
+ * sendiri lewat batas waktu panggilan di src/lib/call.ts (dan penjaga 12 detik di push.ts).
  */
 export function startRing() {
   if (ringing) return;

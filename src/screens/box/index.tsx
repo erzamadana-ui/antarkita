@@ -9,6 +9,7 @@ import { PressableScale } from '@/components/motion';
 import { LocationFields } from '@/components/LocationField';
 import { DestinationSuggestions, VehicleClassPicker, SchedulePicker, RoutePreview } from '@/components/BookingExtras';
 import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
+import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { ServiceArt } from '@/components/ServiceArt';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
 import { useAppSettings } from '@/hooks/useAppSettings';
@@ -78,6 +79,8 @@ export default function BoxScreen() {
   const blocked = limitBlocked(opts?.limit);
   const serviceOff = opts?.service_enabled === false || !isEnabled('box');
 
+  // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
+  const driverCode = useAntarNowCode('box');
   const order = async () => {
     if (!pickup || !dropoff || !chosen || blocked || serviceOff) return;
     setOrdering(true);
@@ -87,6 +90,7 @@ export default function BoxScreen() {
         route_km: route?.distance_km, duration_min: route?.duration_min, route_geometry: route?.coords, payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null,
         notes: [items ? `Barang: ${items}` : '', notes].filter(Boolean).join(' · ') || null, vehicle_class: chosen.code, helpers, purpose, scheduled_at: when ? when.toISOString() : null,
         package_details: { type: PURPOSES.find((p) => p.key === purpose)?.label, description: items },
+        driver_code: driverCode,
       } });
       await refreshWallet(); useBooking.getState().reset();
       router.replace(`/order/${o.id}` as never);
@@ -136,6 +140,7 @@ export default function BoxScreen() {
             </View>
             <SchedulePicker value={when} onChange={setWhen} accent={colors.box} />
             {chosen && <View style={s.group}><PriceSummary rows={[{ label: `${chosen.label} (${km(opts?.distance_km ?? 0)})`, value: chosen.fare - (opts?.helpers_fee ?? 0) }, ...(opts?.helpers_fee ? [{ label: `Pembantu angkat ×${helpers}`, value: opts.helpers_fee }] : []), { label: 'Biaya layanan', value: opts?.platform_fee ?? 0 }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} /><LimitInfo limit={opts?.limit} service="box" /></View>}
+            <AntarNowSection service="box" accent={colors.box} />
             <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={chosen?.fare ?? 0} service="box" onDiscount={setDiscount} notesPlaceholder="Catatan: lantai berapa, ada lift, jam bongkar" />
             <Text style={font.tiny}>Driver membantu muat/bongkar ringan. Barang pecah belah harap dikemas. Pick up ±1 ton, mobil box ±2 ton.</Text>
           </Animated.View>

@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Card, Row, Button, Badge, Input, Chip, Stepper, Empty, toast } from '@/components/ui';
 import { Entrance, PressableScale, Skeleton } from '@/components/motion';
 import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
+import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { usePayPrefs } from '@/store/payprefs';
 import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
@@ -160,12 +161,14 @@ export default function ShopScreen() {
   const ready = !!dropoff && !!est && !blocked && (free ? !!pickup && validFree.length > 0 : !!store && cart.length > 0);
   const pickVehicle = (v: Vehicle) => { vehicleManual.current = true; setVehicle(v); };
 
+  // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
+  const driverCode = useAntarNowCode('shop');
   const order = async () => {
     if (!dropoff || !est) return;
     const base = {
       service: 'shop', dropoff: { lat: dropoff.lat, lng: dropoff.lng, address: dropoff.address },
       route_km: route?.distance_km, duration_min: route?.duration_min, route_geometry: route?.coords,
-      payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null, notes: notes || null, shop_vehicle: vehicle,
+      payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null, notes: notes || null, shop_vehicle: vehicle, driver_code: driverCode,
     };
     let p: Record<string, unknown>;
     if (free) {
@@ -364,6 +367,7 @@ export default function ShopScreen() {
           </Card>
         )}
         <Card solid>
+          <AntarNowSection service="shop" accent={colors.shop} />
           <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={est?.fare ?? 0} service="shop" onDiscount={setDiscount} notesPlaceholder="Catatan (mis. merek pengganti jika kosong)" />
         </Card>
         <Text style={font.tiny}>Driver mengirim foto nota. Barang yang tidak tersedia dikonfirmasi lewat chat/telepon dan tidak ditagihkan.</Text>

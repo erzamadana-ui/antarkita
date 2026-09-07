@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Card, Row, Stepper, Button, Badge, Empty, toast } from '@/components/ui';
 import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
+import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { usePayPrefs } from '@/store/payprefs';
@@ -53,6 +54,8 @@ export default function Checkout() {
     return () => { cancelled = true; };
   }, [m?.id, dropoff?.lat, dropoff?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
+  const driverCode = useAntarNowCode('food');
   if (!m || cart.lines.length === 0) {
     return <Screen title="Keranjang" back><Empty icon="cart-outline" title="Keranjang kosong" subtitle="Pilih menu dari merchant AntarFood." action={<Button title="Cari makanan" onPress={() => router.replace('/food')} />} /></Screen>;
   }
@@ -70,6 +73,7 @@ export default function Checkout() {
         service: 'food', merchant_id: m.id, dropoff: { lat: dropoff.lat, lng: dropoff.lng, address: dropoff.address },
         route_km: route?.distance_km, duration_min: route?.duration_min, route_geometry: route?.coords, payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null, notes: notes || null,
         items: cart.lines.map((l) => ({ menu_item_id: l.item.id, qty: l.qty, notes: l.notes || null })),
+        driver_code: driverCode,
       } });
       cart.clear(); await refreshWallet(); useBooking.getState().reset();
       router.replace(`/order/${o.id}` as never);
@@ -123,6 +127,7 @@ export default function Checkout() {
         </Card></Entrance>
 
         <Entrance index={3}><Card>
+          <AntarNowSection service="food" accent={colors.food} />
           <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={subtotal + (fare?.fare ?? 0)} service="food" onDiscount={setDiscount} notesPlaceholder="Catatan untuk driver (mis. patokan rumah)" />
         </Card></Entrance>
       </View>

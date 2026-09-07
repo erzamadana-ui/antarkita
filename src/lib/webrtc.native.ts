@@ -11,19 +11,9 @@ export const RTCIceCandidate: any = mod?.RTCIceCandidate;
 export const getUserMedia = (c: any) => mod.mediaDevices.getUserMedia(c);
 export function attachRemote(_stream: any) { return () => {}; }   // audio remote diputar otomatis oleh react-native-webrtc
 
-/**
- * BATASAN NYATA — jangan diklaim bisa.
- * react-native-webrtc v124 tidak mengekspor API pemindah rute audio apa pun
- * (tidak ada InCallManager, tidak ada setSpeakerphoneOn; RTCAudioSession-nya khusus CallKit iOS).
- * Memindah earpiece ↔ loudspeaker butuh AudioManager Android / AVAudioSession iOS, artinya modul
- * native tambahan (react-native-incall-manager) atau expo-audio `setAudioModeAsync` — keduanya
- * TIDAK ada di package.json. Jadi fungsi ini jujur mengembalikan false dan UI menyesuaikan diri.
- *
- * Catatan lapangan: karena modul ini tidak menyetel AudioManager ke MODE_IN_COMMUNICATION,
- * Android umumnya sudah mengeluarkan suara panggilan lewat loudspeaker (stream musik), bukan earpiece.
- */
-export const speakerSupported = false;
-export function setSpeaker(_on: boolean): boolean { return false; }
+// Rute audio (earpiece ↔ loudspeaker) TIDAK diurus di sini: react-native-webrtc v124 memang tidak
+// mengekspor API apa pun untuk itu. Yang mengurusnya sekarang adalah src/lib/audioRoute.native.ts
+// dengan expo-audio `setAudioModeAsync({ shouldRouteThroughEarpiece })`.
 
 /**
  * Izin mikrofon Android. react-native-webrtc memang meminta izin sendiri di dalam getUserMedia,

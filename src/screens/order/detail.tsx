@@ -15,6 +15,7 @@ import { TipCard, ExtrasApproval } from '@/components/TipExtras';
 import { PinCard, SafetyRow, DriverVerifyCard } from '@/components/Safety';
 import { MerchantAds } from '@/components/BookingExtras';
 import { WaitApology } from '@/components/WaitApology';
+import { DirectHoldNotice, useAntarNow, useDirectSettings, useHoldCountdownFrom } from '@/components/antarnow';
 import { useOrder } from '@/hooks/useOrder';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { useAuth } from '@/store/auth';
@@ -42,6 +43,20 @@ export default function OrderTracking() {
   const { waitApologyMinutes } = useAppSettings();
   const [rated, setRated] = useState<{ driver?: number; merchant?: number }>({});
   const [comment, setComment] = useState('');
+  // AntarNow (Tahap 11): pratinjau driver tujuan disimpan saat memesan — RLS profiles belum
+  // mengizinkan pelanggan membaca profil driver itu sebelum ordernya diterima.
+  const antarNowDriver = useAntarNow((st) => st.driver);
+  const clearAntarNow = useAntarNow((st) => st.clear);
+  const { holdSeconds } = useDirectSettings();
+  const directHoldLeft = useHoldCountdownFrom(order?.preferred_driver_id ? order.created_at : null, holdSeconds);
+
+  useEffect(() => {
+    // Kode AntarNow dilepas begitu ORDER INI selesai dicarikan driver (diterima/dibatalkan),
+    // supaya tidak terbawa ke pesanan berikutnya. Membuka order lain tidak menghapus kode yang
+    // sedang disiapkan pelanggan di layar pemesanan.
+    const mine = order?.preferred_driver_id && order.preferred_driver_id === useAntarNow.getState().driver?.id;
+    if (mine && order.status !== 'searching' && order.status !== 'scheduled') clearAntarNow();
+  }, [order?.status, order?.preferred_driver_id, clearAntarNow]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (order?.status === 'completed' || order?.status === 'cancelled') refreshWallet();
@@ -88,6 +103,9 @@ export default function OrderTracking() {
   const scheduled = order.status === 'scheduled';
   const sc = statusColor(order.status);
   const searching = order.status === 'searching';
+  // AntarNow: order masih ditahan khusus untuk driver berkode (masa tahan belum habis)
+  const directOnHold = !!order.preferred_driver_id && directHoldLeft > 0;
+  const directDriver = antarNowDriver && antarNowDriver.id === order.preferred_driver_id ? antarNowDriver : null;
 
   const header = (
     <View style={{ gap: 12 }}>
@@ -123,14 +141,24 @@ export default function OrderTracking() {
             <Text style={[font.small, { textAlign: 'center' }]}>{order.scheduled_at ? new Date(order.scheduled_at).toLocaleString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) + ' WIB' : ''}{'\n'}Driver dicarikan otomatis ±20 menit sebelum jadwal. Anda akan diberi tahu saat driver ditugaskan.</Text>
           </Animated.View>
         )}
+        {searching && directOnHold && (
+          <DirectHoldNotice createdAt={order.created_at} driverName={directDriver?.name} avatarUrl={directDriver?.avatar_url} />
+        )}
         {searching && (
           <Animated.View entering={FadeIn.duration(motion.slow)} exiting={FadeOut.duration(motion.fast)} style={s.radarBox}>
             <Radar color={colors.primary} size={140}><Ionicons name={def.icon as never} size={26} color={colors.primary} /></Radar>
-            <Text style={[font.h3, { marginTop: 6 }]}>Mencari driver terdekat…</Text>
-            <Text style={[font.small, { textAlign: 'center' }]}>Biasanya kurang dari 2 menit. Anda akan diberi tahu saat driver menerima.</Text>
+            <Text style={[font.h3, { marginTop: 6 }]}>{directOnHold ? 'Menunggu driver pilihan Anda…' : 'Mencari driver terdekat…'}</Text>
+            <Text style={[font.small, { textAlign: 'center' }]}>
+              {directOnHold
+                ? 'Order AntarNow — hanya driver berkode itu yang melihat pesanan ini selama masa tahan.'
+                : 'Biasanya kurang dari 2 menit. Anda akan diberi tahu saat driver menerima.'}
+            </Text>
           </Animated.View>
         )}
-        {searching && <WaitApology order={order} thresholdMinutes={waitApologyMinutes} onCancel={cancel} />}
+        {searching && !directOnHold && order.preferred_driver_id && (
+          <DirectHoldNotice createdAt={order.created_at} driverName={directDriver?.name} avatarUrl={directDriver?.avatar_url} />
+        )}
+        {searching && !directOnHold && <WaitApology order={order} thresholdMinutes={waitApologyMinutes} onCancel={cancel} />}
 
         {driver && active && (
           <Animated.View entering={FadeInDown.springify().stiffness(280).damping(16)} exiting={FadeOut}>

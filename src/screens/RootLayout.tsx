@@ -9,6 +9,7 @@ import { useAuth } from '@/store/auth';
 import { useMode } from '@/store/mode';
 import { useI18n, applyDirection } from '@/lib/i18n';
 import { IncomingCallOverlay } from '@/components/call/IncomingCall';
+import { initPush, attachSignOutHook, markNavigationReady } from '@/lib/push';
 import { ToastHost, Loading } from '@/components/ui';
 import { AmbientBackground } from '@/components/glass';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -59,6 +60,20 @@ export default function RootLayout() {
     if (recovery && session && !(top === '(auth)' && second === 'reset')) { router.replace('/(auth)/reset' as never); return; }
     if (!session && top !== '(auth)') router.replace((useAuth.getState().pendingRoute ?? '/(auth)/welcome') as never);
   }, [ready, navKey, session, top, second, recovery]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ------------------------------------------------------------------ push notification
+  // Token perangkat didaftarkan SETELAH sesi ada (RPC register_push_token butuh auth.uid()).
+  // attachSignOutHook() membungkus aksi signOut di store auth supaya token dilepas SELAGI sesi
+  // masih sah — jadi titik logout di layar mana pun tidak perlu diubah.
+  // initPush() tidak pernah melempar: izin ditolak / token gagal hanya dicatat diam-diam.
+  useEffect(() => {
+    if (!ready || !session) return;
+    attachSignOutHook();
+    initPush().catch(() => { /* fallback aman: aplikasi tetap jalan tanpa push */ });
+  }, [ready, session]);
+  // Navigator siap → ketukan notifikasi yang tertunda (aplikasi dibuka dari keadaan TERTUTUP)
+  // baru boleh berpindah halaman.
+  useEffect(() => { if (ready && navKey && session) markNavigationReady(); }, [ready, navKey, session]);
+
   useEffect(() => { applyDirection(locale); }, [locale]);
   useEffect(() => { if (ready && modeLoaded && fontsLoaded) SplashScreen.hideAsync().catch(() => {}); }, [ready, modeLoaded, fontsLoaded]);
   useEffect(() => {

@@ -9,7 +9,9 @@ declare
   -- Tahap 9 (S22-S30): dispatch dinamis, matriks kendaraan, titipan mitra travel, panel admin, portal eksekutif
   dbox uuid; n2 int; n3 int; j1 jsonb; j2 jsonb; jr jsonb; k1 text; ordid uuid; d_from date; d_to date;
   dm drivers; dc drivers; db drivers; bo boolean; bo2 boolean; bo3 boolean;
-  s_rad0 jsonb; s_tier0 jsonb; s_dr1 numeric; s_dc1 int; s_dr2 numeric; s_dc2 int; s_km numeric; s_wait numeric;
+  s_rad0 jsonb; s_tier0 jsonb; s_dr1 numeric; s_dc1 int; s_dr2 numeric; s_dc2 int; s_km numeric; s_wait numeric; num1 numeric;
+  -- Tahap 11 (S34-S37): AntarNow (kode driver), hapus akun → daftar ulang, token push, batas komisi Perpres 27/2026
+  c_drv text; c_drv2 text; u_a uuid; u_b uuid; mail11 text; hold11 int; seen boolean; seen2 boolean; left1 int;
 begin
   select id into menu1 from menu_items where merchant_id = merch and is_available limit 1;
   select id into store1 from shop_stores where active and name ilike 'Indomaret%' limit 1;
@@ -711,6 +713,9 @@ begin
     log := log || format('S27f %s penghapusan berhasil setelah kondisi bersih: ok=%s status driver=%s profil aktif=%s alasan tercatat="%s" security_events %s→%s',
       case when (r->>'ok')::boolean and (select status from drivers where id = drv) = 'suspended' and (select is_active from profiles where id = drv) = false and n2 = n + 1 then 'OK' else 'BUG' end,
       r->>'ok', (select status from drivers where id = drv), (select is_active from profiles where id = drv), (select status_reason from drivers where id = drv), n, n2) || E'\n';
+    -- Tahap 11: hapus mitra yang menonaktifkan akun ikut melepas e-mail auth.users jadi tombstone
+    select email into k1 from auth.users where id = drv;
+    log := log || format('S27h %s hapus mitra ''driver'' ikut melepas e-mail auth.users jadi tombstone (%s) sehingga e-mail asli bebas dipakai mendaftar lagi', case when k1 = drv::text || '@deleted.antarkita.invalid' then 'OK' else 'BUG' end, k1) || E'\n';
     -- mitra travel yang sedang membawa titipan pelanggan tidak boleh bisa dihapus (perbaikan migrasi 0027)
     perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
     o2 := create_order(jsonb_build_object('service', 'send', 'send_scope', 'intercity', 'via', 'travel', 'dest_city_id', city_bkt, 'warehouse_id', wh_dest,
@@ -949,6 +954,236 @@ begin
                     array['order_id','ticket_id','travel_request_id','booking_id','trip_id','payment_id','withdrawal_id','merchant_id','blast_id','suggestion_id','flag_id','report_run_id','target_id'])) x;
     log := log || format('S33g %s jenis notifikasi tanpa kunci tujuan (informatif/tanpa halaman tujuan): %s', case when n = 0 then 'OK' else 'CATATAN' end, k1) || E'\n';
   exception when others then log := log || 'S33 BUG notifikasi tujuan: ' || sqlerrm || E'\n'; end;
+
+
+  -- ===== S34 AntarNow — pesan driver tertentu lewat kode =====
+  begin
+    -- pulihkan mitra uji (S28 sengaja menghapus lunak driver) & kosongkan order aktif pelanggan
+    perform set_config('antaraja.bypass', 'on', true);
+    update drivers set status = 'approved', status_reason = null where id in (drv, drv2);
+    update profiles set is_active = true, deletion_requested_at = null, status_reason = null where id in (drv, drv2, cust);
+    perform set_config('antaraja.bypass', 'off', true);
+    update orders set status = 'cancelled' where customer_id = cust and status in ('scheduled','searching','accepted','arrived','in_progress');
+    delete from order_rejections where driver_id in (drv, drv2);
+    hold11 := setting_num('direct_order_hold_seconds', 120)::int;
+
+    -- (a) kode driver: format 6 karakter tanpa 0 O 1 I, unik untuk semua driver
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    j := driver_my_code(); c_drv := j->>'code';
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    j1 := driver_my_code(); c_drv2 := j1->>'code';
+    select count(*) into n from drivers where code is null;
+    select count(*) into n2 from (select code from drivers where code is not null group by code having count(*) > 1) x;
+    log := log || format('S34a %s driver_my_code(): kode drv=%s drv2=%s (pola 6 karakter tanpa 0 O 1 I); driver tanpa kode=%s (harus 0); kode kembar=%s (harus 0)',
+      case when c_drv ~ '^[2-9A-HJ-NP-Z]{6}$' and c_drv2 ~ '^[2-9A-HJ-NP-Z]{6}$' and c_drv <> c_drv2 and n = 0 and n2 = 0 then 'OK' else 'BUG' end,
+      c_drv, c_drv2, n, n2) || E'\n';
+
+    -- (b) pratinjau driver dari kode untuk aplikasi Pelanggan
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    j := driver_by_code(lower(c_drv));
+    log := log || format('S34b %s driver_by_code(%s) → nama=%s kendaraan=%s plat=%s layanan=%s (kode huruf kecil ikut diterima)',
+      case when (j->>'id') = drv::text and j ? 'services' and j ? 'rating_avg' and j ? 'last_seen_minutes' then 'OK' else 'BUG' end,
+      lower(c_drv), j->>'name', j->>'vehicle_type', j->>'vehicle_plate', j->>'services') || E'\n';
+
+    -- (c) order AntarSend memakai kode → preferred_driver_id terisi
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    perform driver_selfie_check('https://x/selfie.jpg'); perform driver_set_online(true, 0.4810, 101.4349);
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    perform driver_selfie_check('https://x/selfie.jpg'); perform driver_set_online(true, 0.4815, 101.4352);
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    o2 := create_order(jsonb_build_object('service', 'send',
+      'pickup', jsonb_build_object('lat', 0.4810, 'lng', 101.4349, 'address', 'Jl. Sudirman 45'),
+      'dropoff', jsonb_build_object('lat', 0.50, 'lng', 101.44, 'address', 'Plaza Andalas'),
+      'paid_via', 'cash', 'weight_kg', 2, 'size_cm', 30,
+      'recipient_name', 'Uji AntarNow', 'recipient_phone', '081200000000',
+      'driver_code', c_drv));
+    log := log || format('S34c %s create_order(driver_code=%s) → order %s, preferred_driver_id=%s (harus driver pemilik kode)',
+      case when o2.preferred_driver_id = drv then 'OK' else 'BUG' end, c_drv, o2.code, o2.preferred_driver_id) || E'\n';
+
+    -- (d) selama masa tahan: HANYA driver tujuan yang melihat
+    --     (created_at dimundurkan 30 detik agar jeda prioritas rating terlewati, masa tahan %s detik belum habis)
+    update orders set created_at = now() - interval '30 seconds' where id = o2.id;
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    select av.direct_for_me, av.direct_hold_left_s into seen, left1 from driver_available_orders() av where av.id = o2.id;
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    select count(*) into n2 from driver_available_orders() av where av.id = o2.id;
+    log := log || format('S34d %s masa tahan (%s detik): driver tujuan melihat order dengan direct_for_me=%s & sisa tahan=%s detik; driver lain melihat %s baris (harus 0)',
+      case when coalesce(seen, false) and coalesce(left1, 0) > 0 and n2 = 0 then 'OK' else 'BUG' end,
+      hold11, seen, left1, n2) || E'\n';
+
+    -- (e) setelah masa tahan lewat & direct_order_fallback=true → driver lain ikut melihat, direct_for_me=false
+    bo := setting_flag('direct_order_fallback', true);
+    update orders set created_at = now() - make_interval(secs => hold11 + 30) where id = o2.id;
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    select av.direct_for_me, av.direct_hold_left_s into seen2, left1 from driver_available_orders() av where av.id = o2.id;
+    select count(*) into n3 from driver_available_orders() av where av.id = o2.id;
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    select count(*) into n from driver_available_orders() av where av.id = o2.id;
+    log := log || format('S34e %s setelah masa tahan (fallback=%s): driver lain melihat %s baris dengan direct_for_me=%s & sisa tahan=%s; driver tujuan tetap melihat %s baris',
+      case when bo and n3 = 1 and seen2 = false and coalesce(left1, -1) = 0 and n = 1 then 'OK' else 'BUG' end,
+      bo, n3, seen2, left1, n) || E'\n';
+
+    -- (f) fallback dimatikan → order tetap milik driver tujuan saja
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_set_settings(jsonb_build_object('direct_order_fallback', false));
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    select count(*) into n2 from driver_available_orders() av where av.id = o2.id;
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_set_settings(jsonb_build_object('direct_order_fallback', true));
+    log := log || format('S34f %s direct_order_fallback=false: driver lain melihat %s baris walau masa tahan lewat (harus 0)',
+      case when n2 = 0 then 'OK' else 'BUG' end, n2) || E'\n';
+
+    -- (g) kode salah ditolak dengan pesan jelas
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    update orders set status = 'cancelled' where customer_id = cust and status in ('searching','accepted','arrived','in_progress');
+    begin
+      o2 := create_order(jsonb_build_object('service', 'send',
+        'pickup', jsonb_build_object('lat', 0.4810, 'lng', 101.4349, 'address', 'Jl. Sudirman 45'),
+        'dropoff', jsonb_build_object('lat', 0.50, 'lng', 101.44, 'address', 'Plaza Andalas'),
+        'paid_via', 'cash', 'weight_kg', 2, 'size_cm', 30, 'driver_code', 'ZZZZZZ'));
+      log := log || 'S34g BUG: kode driver yang tidak ada tetap diterima' || E'\n';
+    exception when others then
+      log := log || format('S34g %s kode tidak dikenal ditolak: %s',
+        case when sqlerrm ilike '%tidak ditemukan%' then 'OK' else 'BUG' end, left(sqlerrm, 90)) || E'\n';
+    end;
+
+    -- (h) driver tidak melayani layanan yang dipesan → ditolak dengan pesan jelas
+    begin
+      o2 := create_order(jsonb_build_object('service', 'ride_motor', 'vehicle_class', 'motor_economy',
+        'pickup', jsonb_build_object('lat', 0.4810, 'lng', 101.4349, 'address', 'Jl. Sudirman 45'),
+        'dropoff', jsonb_build_object('lat', 0.50, 'lng', 101.44, 'address', 'Plaza Andalas'),
+        'paid_via', 'cash', 'driver_code', c_drv2));
+      log := log || 'S34h BUG: driver bermobil tetap bisa dipesan untuk AntarRide (motor)' || E'\n';
+    exception when others then
+      log := log || format('S34h %s driver mobil ditolak untuk AntarRide: %s',
+        case when sqlerrm ilike '%tidak melayani%' then 'OK' else 'BUG' end, left(sqlerrm, 90)) || E'\n';
+    end;
+
+    -- (i) statistik order langsung untuk kartu aplikasi Mitra
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    j := driver_direct_stats();
+    log := log || format('S34i %s driver_direct_stats() → hari ini=%s minggu ini=%s total=%s (masa tahan %s detik, fallback %s)',
+      case when (j->>'today')::int >= 1 and (j->>'total')::int >= 1 and (j->>'code') = c_drv then 'OK' else 'BUG' end,
+      j->>'today', j->>'this_week', j->>'total', j->>'hold_seconds', j->>'fallback') || E'\n';
+  exception when others then log := log || 'S34 BUG AntarNow: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S35 Hapus akun lewat panel admin → e-mail bebas dipakai mendaftar ulang =====
+  -- Akar masalah lama: banned_until = 'infinity' membuat GoTrue gagal memindai baris auth.users
+  -- ("Database error finding user") dan e-mail tidak pernah dilepas sehingga tidak bisa daftar ulang.
+  begin
+    u_a := gen_random_uuid(); u_b := gen_random_uuid(); mail11 := 'uji.s35.' || left(u_a::text, 8) || '@antaraja.id';
+    insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+                            created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+    values ('00000000-0000-0000-0000-000000000000', u_a, 'authenticated', 'authenticated', mail11,
+            extensions.crypt('rahasia123', extensions.gen_salt('bf')), now(), now(), now(),
+            '{"provider":"email","providers":["email"]}'::jsonb,
+            jsonb_build_object('full_name', 'Uji Daftar Ulang', 'phone', '+628100000001', 'email', mail11));
+    insert into auth.identities (id, user_id, provider_id, provider, identity_data, created_at, updated_at)
+    values (gen_random_uuid(), u_a, u_a::text, 'email', jsonb_build_object('sub', u_a::text, 'email', mail11), now(), now());
+    select count(*) into n from profiles where id = u_a;
+    log := log || format('S35a %s pendaftaran pertama: trigger handle_new_user membuat profil (%s baris)', case when n = 1 then 'OK' else 'BUG' end, n) || E'\n';
+
+    insert into admin_security (user_id, pin_hash) select adm, extensions.crypt('123456', extensions.gen_salt('bf')) where not exists (select 1 from admin_security where user_id = adm);
+    update admin_security set pin_hash = extensions.crypt('123456', extensions.gen_salt('bf')), failed = 0, locked_until = null where user_id = adm;
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_unlock('123456');
+    r := admin_delete_partner('user', u_a, 'Uji hapus akun lalu daftar ulang');
+
+    select email into k1 from auth.users where id = u_a;
+    select count(*) into n from auth.users where email = mail11;
+    log := log || format('S35b %s setelah admin_delete_partner(''user''): e-mail auth.users jadi tombstone %s; baris memakai e-mail asli=%s (harus 0)',
+      case when k1 = u_a::text || '@deleted.antarkita.invalid' and n = 0 then 'OK' else 'BUG' end, k1, n) || E'\n';
+    select identity_data->>'email' into k1 from auth.identities where user_id = u_a;
+    select count(*) into n2 from auth.identities where identity_data->>'email' = mail11;
+    log := log || format('S35c %s auth.identities ikut ditombstone (%s); identitas memakai e-mail asli=%s (harus 0, GoTrue memeriksa duplikat lewat identitas)',
+      case when k1 = u_a::text || '@deleted.antarkita.invalid' and n2 = 0 then 'OK' else 'BUG' end, k1, n2) || E'\n';
+    select banned_until::text into k1 from auth.users where id = u_a;
+    select count(*) into n3 from auth.users where banned_until = 'infinity'::timestamptz;
+    log := log || format('S35d %s blokir login memakai batas berhingga (%s) dan tidak ada lagi baris ''infinity'' (%s baris) — inilah penyebab "Database error finding user"',
+      case when k1 = '2999-12-31 23:59:59+00' and n3 = 0 then 'OK' else 'BUG' end, k1, n3) || E'\n';
+
+    insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+                            created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+    values ('00000000-0000-0000-0000-000000000000', u_b, 'authenticated', 'authenticated', mail11,
+            extensions.crypt('rahasia456', extensions.gen_salt('bf')), now(), now(), now(),
+            '{"provider":"email","providers":["email"]}'::jsonb,
+            jsonb_build_object('full_name', 'Uji Daftar Ulang 2', 'phone', '+628100000002', 'email', mail11));
+    select count(*) into n from auth.users where email = mail11;
+    select count(*) into n2 from profiles where id = u_b and is_active;
+    select count(*) into n3 from wallets where user_id = u_b;
+    log := log || format('S35e %s daftar ulang dengan e-mail asli berhasil: auth.users=%s baris, profil aktif=%s, dompet=%s',
+      case when n = 1 and n2 = 1 and n3 = 1 then 'OK' else 'BUG' end, n, n2, n3) || E'\n';
+  exception when others then log := log || 'S35 BUG hapus akun → daftar ulang: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S36 Token push: idempotent, bisa dicabut, dan tertutup untuk pengguna lain (RLS) =====
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    r := register_push_token('tok-uji-s36-pelanggan', 'android', 'pelanggan');
+    j := register_push_token('tok-uji-s36-pelanggan', 'android', 'pelanggan');
+    select count(*) into n from push_tokens where token = 'tok-uji-s36-pelanggan';
+    log := log || format('S36a %s register_push_token idempotent: dipanggil 2x → %s baris (harus 1), milik pelanggan uji',
+      case when n = 1 and (j->>'ok')::boolean then 'OK' else 'BUG' end, n) || E'\n';
+
+    perform set_config('role', 'authenticated', true);
+    select count(*) into n from push_tokens where token = 'tok-uji-s36-pelanggan';
+    perform set_config('role', 'none', true);
+    perform set_config('request.jwt.claims', json_build_object('sub', mown, 'role', 'authenticated')::text, true);
+    perform set_config('role', 'authenticated', true);
+    select count(*) into n2 from push_tokens where token = 'tok-uji-s36-pelanggan';
+    perform set_config('role', 'none', true);
+    log := log || format('S36b %s RLS push_tokens: pemilik membaca %s baris (harus 1), pengguna lain membaca %s baris (harus 0)',
+      case when n = 1 and n2 = 0 then 'OK' else 'BUG' end, n, n2) || E'\n';
+
+    perform set_config('request.jwt.claims', json_build_object('sub', mown, 'role', 'authenticated')::text, true);
+    r := unregister_push_token('tok-uji-s36-pelanggan');
+    select count(*) into n from push_tokens where token = 'tok-uji-s36-pelanggan';
+    log := log || format('S36c %s pengguna lain tidak bisa mencabut token orang lain: removed=%s (harus 0), baris tersisa=%s (harus 1)',
+      case when (r->>'removed')::int = 0 and n = 1 then 'OK' else 'BUG' end, r->>'removed', n) || E'\n';
+
+    -- pemicu server: notifikasi baru untuk pemilik token harus masuk antrean push_outbox
+    select count(*) into n2 from push_outbox where user_id = cust;
+    insert into notifications (user_id, kind, title, body, data)
+    values (cust, 'system', 'Uji pemicu push', 'Notifikasi uji S36', jsonb_build_object('order_id', o.id));
+    select count(*) into n3 from push_outbox where user_id = cust;
+    log := log || format('S36d %s pemicu notifications → push_outbox bertambah %s baris (antrean dikirim push_dispatch() lewat pg_net ke Edge Function push-send)',
+      case when n3 = n2 + 1 then 'OK' else 'BUG' end, n3 - n2) || E'\n';
+
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    r := unregister_push_token('tok-uji-s36-pelanggan');
+    select count(*) into n from push_tokens where token = 'tok-uji-s36-pelanggan';
+    log := log || format('S36e %s unregister_push_token oleh pemilik: removed=%s, baris tersisa=%s (harus 0)',
+      case when (r->>'removed')::int = 1 and n = 0 then 'OK' else 'BUG' end, r->>'removed', n) || E'\n';
+
+    j := push_dispatch(10);
+    log := log || format('S36f %s push_dispatch() aman saat push_config belum diisi (tanpa error): %s',
+      case when j ? 'skipped' or j ? 'ok' then 'OK' else 'BUG' end, j::text) || E'\n';
+  exception when others then perform set_config('role', 'none', true); log := log || 'S36 BUG token push: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S37 Batas komisi roda dua (Perpres 27/2026) =====
+  begin
+    select commission_pct into num1 from pricing where service = 'ride_motor';
+    log := log || format('S37a %s komisi ride_motor = %s%% (harus <= %s%% sesuai Perpres 27/2026)',
+      case when num1 <= commission_cap_two_wheel() then 'OK' else 'BUG' end, num1, commission_cap_two_wheel()) || E'\n';
+
+    begin
+      update pricing set commission_pct = 20 where service = 'ride_motor';
+      log := log || 'S37b BUG pengawal tidak menolak komisi 20% untuk ride_motor' || E'\n';
+    exception when others then
+      log := log || format('S37b OK pengawal menolak komisi di atas batas: %s', left(sqlerrm, 90)) || E'\n';
+    end;
+
+    begin
+      update pricing set commission_pct = 7 where service = 'ride_motor';
+      select commission_pct into num1 from pricing where service = 'ride_motor';
+      log := log || format('S37c %s nilai di bawah batas tetap diterima (7%%): sekarang %s%%',
+        case when num1 = 7 then 'OK' else 'BUG' end, num1) || E'\n';
+      update pricing set commission_pct = commission_cap_two_wheel() where service = 'ride_motor';
+    exception when others then log := log || 'S37c BUG nilai sah ikut ditolak: ' || sqlerrm || E'\n'; end;
+
+    select commission_pct into num1 from pricing where service = 'ride_car';
+    log := log || format('S37d %s layanan non-roda-dua tidak terpengaruh: ride_car = %s%% (keputusan food/send menunggu opini hukum)',
+      case when num1 = 20 then 'OK' else 'BUG' end, num1) || E'\n';
+  exception when others then log := log || 'S37 BUG batas komisi: ' || sqlerrm || E'\n'; end;
 
   raise exception using message = 'SIMULASI_SELESAI' || log;
 end $sim$;

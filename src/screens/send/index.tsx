@@ -13,6 +13,7 @@ import { Dropdown, type DropdownOption } from '@/components/Dropdown';
 import { LocationFields } from '@/components/LocationField';
 import { DestinationSuggestions, SchedulePicker, RoutePreview } from '@/components/BookingExtras';
 import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
+import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { ServiceArt } from '@/components/ServiceArt';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
 import { useAppSettings, requiredSendVehicle, fitsTravel } from '@/hooks/useAppSettings';
@@ -143,6 +144,8 @@ export default function SendScreen() {
     : !fare ? 'Menghitung ongkir…'
     : null;
 
+  // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
+  const driverCode = useAntarNowCode('send');
   const order = async () => {
     if (!valid || !pickup) return;
     setOrdering(true);
@@ -155,7 +158,7 @@ export default function SendScreen() {
         package_details: { type, weight: `${fmtNum(wKg)} kg`, description: desc, dest_address: scope === 'intercity' ? (travelPicked ? destAddress.trim() : `${destWh?.name} · ${destCity?.name}`) : undefined },
         send_scope: scope, dest_city_id: destCity?.id ?? null, warehouse_id: destWh?.id ?? null,
         weight_kg: wKg, size_cm: sCm, via: travelPicked ? 'travel' : null,
-        scheduled_at: when ? when.toISOString() : null,
+        scheduled_at: when ? when.toISOString() : null, driver_code: driverCode,
       } });
       await refreshWallet();
       useBooking.getState().reset();
@@ -317,6 +320,7 @@ export default function SendScreen() {
             </View>
             <SchedulePicker value={when} onChange={setWhen} accent={colors.send} />
             {fare && <View style={s.group}><PriceSummary rows={[{ label: travelPicked ? `Penjemputan paket (${km(fare.distance_km)})` : `Ongkos kurir (${km(fare.distance_km)})`, value: fare.fare }, ...(icFare ? [{ label: `Antar kota ${originCity?.name} → ${destCity?.name}`, value: icFare }] : []), { label: 'Biaya layanan', value: fare.platform_fee }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />{scope === 'in_city' && <LimitInfo limit={fare.limit} service="send" />}</View>}
+            <AntarNowSection service="send" accent={colors.send} />
             <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={fare?.fare ?? 0} service="send" onDiscount={setDiscount} notesPlaceholder="Catatan (mis. titip di satpam)" />
             <Text style={font.tiny}>Barang terlarang: narkoba, senjata, hewan hidup, barang mudah terbakar. Maks. nilai barang Rp2.000.000.{scope === 'intercity' ? (travelPicked ? ' Titipan mitra travel: paket wajib bisa dibuka saat serah terima, tanpa barang bernilai tinggi.' : ' Paket antar kota diasuransikan s.d. Rp1.000.000.') : ''}</Text>
           </Animated.View>

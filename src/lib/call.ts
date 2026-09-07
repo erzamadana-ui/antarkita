@@ -15,6 +15,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { useAuth } from '@/store/auth';
 import * as rtc from './webrtc';
+import * as audioRoute from './audioRoute';
 import { startRing, stopRing } from './sound';
 import { isNetworkError, reportNetworkError, OFFLINE_MESSAGE } from '@/hooks/useOnline';
 
@@ -34,7 +35,9 @@ interface CallState {
   accept: () => Promise<void>;
   decline: () => void;
   hangup: (reason?: string) => void;
-  toggleMute: () => void; toggleSpeaker: () => boolean;
+  toggleMute: () => void;
+  /** Pindah earpiece ↔ loudspeaker. Mengembalikan true bila rute BENAR-BENAR berpindah. */
+  toggleSpeaker: () => Promise<boolean>;
   reset: () => void;
 }
 
@@ -177,12 +180,15 @@ async function setupPeer(set: (p: Partial<CallState>) => void, get: () => CallSt
   pc.onconnectionstatechange = () => onState(pc?.connectionState);
   // Sebagian build react-native-webrtc lebih andal melaporkan iceConnectionState.
   pc.oniceconnectionstatechange = () => onState(pc?.iceConnectionState);
-  // Terapkan pilihan speaker segera setelah stream ada (kalau platform mendukung).
-  rtc.setSpeaker(get().speaker);
+  // Sesi audio panggilan: mode komunikasi + rute (earpiece/loudspeaker) sesuai pilihan pengguna.
+  // Sengaja tidak menghentikan panggilan bila gagal — suara tetap keluar lewat rute bawaan.
+  await audioRoute.startCallAudio();
+  set({ speaker: audioRoute.getSpeaker() });
 }
 
 function teardown() {
   stopRing();
+  audioRoute.stopCallAudio().catch(() => { /* noop */ });
   try { pc?.close(); } catch { /* noop */ }
   try { local?.getTracks?.().forEach((t: any) => t.stop()); } catch { /* noop */ }
   try { detachRemote?.(); } catch { /* noop */ }
@@ -225,7 +231,7 @@ export const useCall = create<CallState>((set, get) => {
 
   return {
     phase: 'idle', callId: null, orderId: null, peer: null, incomingFrom: null, muted: false,
-    speaker: Platform.OS !== 'web', startedAt: null, error: null, endReason: null, remoteRinging: false, micBlocked: false,
+    speaker: audioRoute.getSpeaker(), startedAt: null, error: null, endReason: null, remoteRinging: false, micBlocked: false,
 
     // ------------------------------------------------------------ panggilan masuk
     listen: () => {
@@ -431,11 +437,13 @@ export const useCall = create<CallState>((set, get) => {
       try { local?.getAudioTracks?.().forEach((t: any) => { t.enabled = !m; }); } catch { /* noop */ }
       set({ muted: m });
     },
-    /** Mengembalikan true bila rute audio benar-benar berpindah (lihat webrtc.native.ts). */
-    toggleSpeaker: () => {
+    /** Mengembalikan true bila rute audio benar-benar berpindah (lihat src/lib/audioRoute.*). */
+    toggleSpeaker: async () => {
+      if (!audioRoute.speakerSupported) return false;
       const sp = !get().speaker;
-      const applied = rtc.setSpeaker(sp);
-      if (applied) set({ speaker: sp });
+      const applied = await audioRoute.setSpeaker(sp);
+      // Status UI selalu diambil dari rute yang BENAR-BENAR berlaku, bukan dari niat pengguna.
+      set({ speaker: audioRoute.getSpeaker() });
       return applied;
     },
 
@@ -463,5 +471,7 @@ AppState.addEventListener('change', (st) => {
 
 export const callSupported = rtc.supported;
 /** Apakah tombol speaker benar-benar bisa memindah rute audio di platform ini? */
-export const speakerRoutingSupported = rtc.speakerSupported;
+export const speakerRoutingSupported = audioRoute.speakerSupported;
+/** Nama mekanisme rute audio yang dipakai (untuk laporan QC / log). */
+export const speakerRoutingBackend = audioRoute.routeBackend;
 export const openMicSettings = rtc.openAppSettings;

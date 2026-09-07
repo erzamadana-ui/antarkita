@@ -11,6 +11,10 @@ expo-env.d.ts
 
 # Native
 .kotlin/
+# Kunci Firebase (push notification) — JANGAN pernah di-commit
+google-services.json
+GoogleService-Info.plist
+apps/*/google-services.json
 *.orig.*
 *.jks
 *.p8

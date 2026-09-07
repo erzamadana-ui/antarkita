@@ -76,6 +76,8 @@ export interface Order {
   shop_store_id?: string | null; market_id?: string | null; shop_vehicle?: 'motor' | 'car'; service_fee?: number; driver_service_share?: number; actual_items?: ShoppingItem[] | null;
   // tahap 9: titipan AntarSend antar kota yang dibawa mitra travel
   travel_partner_id?: string | null;
+  // tahap 11 (0030): AntarNow — driver tujuan langsung dari kode driver (null = pencarian normal)
+  preferred_driver_id?: string | null;
   cancel_reason: string | null; created_at: string; accepted_at: string | null; arrived_at: string | null; started_at: string | null;
   completed_at: string | null; cancelled_at: string | null;
   // relasi opsional
@@ -105,6 +107,12 @@ export interface AvailableOrder {
   /** Tahap 9 (0025): info muatan & antrean — dipakai kartu order aplikasi Mitra. */
   shop_vehicle?: 'motor' | 'car' | null; driver_service_share?: number | null;
   weight_kg?: number | null; parcel_size_cm?: number | null; waiting_minutes?: number | null; priority_note?: string | null;
+  /**
+   * Tahap 11 (0030) — AntarNow.
+   * `direct_for_me` true bila order dipesan lewat kode driver SAYA dan masih dalam masa tahan;
+   * `direct_hold_left_s` sisa masa tahan dalam detik (null bila order bukan order langsung).
+   */
+  direct_for_me?: boolean | null; direct_hold_left_s?: number | null;
 }
 
 export interface PricingSession { id: string; name: string; level: 'low' | 'middle' | 'high'; days: number[]; start_time: string; end_time: string; multiplier: number; driver_bonus_pct: number; services: ServiceType[] | null; active: boolean; note: string | null }
@@ -247,4 +255,26 @@ export interface TravelSendOrder {
   weight_kg: number | null; size_cm: number | null; package_details: Order['package_details'];
   recipient_name: string | null; total: number; intercity_fare: number; partner_earning: number;
   payment_method: PaymentMethod; payment_status: 'unpaid' | 'paid' | 'refunded'; created_at: string;
+}
+
+// ---------- Tahap 11 (0030): AntarNow — pesan driver tertentu lewat kode 6 karakter ----------
+/** Hasil `rpc('driver_my_code')` — kartu "Kode AntarNow saya" di aplikasi Mitra. */
+export interface DriverMyCode { code: string; orders_direct_today: number; share_text: string }
+/** Hasil `rpc('driver_by_code', { p_code })` — pratinjau driver di aplikasi Pelanggan sebelum memesan. */
+export interface DriverByCode {
+  id: string; code: string; name: string | null; avatar_url: string | null;
+  vehicle_type: VehicleType; vehicle_class: string | null;
+  vehicle_brand: string | null; vehicle_model: string | null; vehicle_plate: string | null;
+  rating_avg: number; rating_count: number; total_trips: number;
+  is_online: boolean; last_seen_minutes: number | null;
+  /** Kode layanan yang bisa diambil kendaraan driver ini (ride_motor, food, send, …). */
+  services: ServiceType[];
+}
+/** Hasil `rpc('driver_direct_stats')` — statistik order langsung + setelan masa tahan. */
+export interface DriverDirectStats {
+  code: string | null; today: number; this_week: number; total: number; completed: number;
+  /** Lama order hanya ditawarkan ke driver tujuan (detik). */
+  hold_seconds: number;
+  /** true = order dilempar ke driver lain setelah masa tahan habis. */
+  fallback: boolean;
 }

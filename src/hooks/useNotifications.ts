@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase, rpc, realtimeChannel } from '@/lib/supabase';
+import { APP } from '@/lib/app';
 import type { AppNotification } from '@/lib/types';
 
 /**
@@ -45,6 +46,40 @@ export function notificationData(n: Pick<AppNotification, 'data' | 'merchant_id'
     kind: str(d.kind),
     amount: typeof d.amount === 'number' ? d.amount : undefined,
   };
+}
+
+/** Tujuan sebuah notifikasi bila diketuk. `label` dipakai untuk badge "Ketuk untuk membuka …". */
+export interface NotifTarget { route: string; label: string }
+
+/**
+ * PETA TUJUAN NOTIFIKASI — satu-satunya sumber kebenaran.
+ *
+ * Dipakai dua tempat sekaligus supaya perilakunya persis sama:
+ *   • Kotak masuk (src/screens/inbox) saat kartu notifikasi diketuk.
+ *   • Push notification (src/lib/push.ts) saat notifikasi sistem diketuk — payload push memuat
+ *     kolom `data` yang sama persis (lihat trigger trg_push_notification di migrasi 0030).
+ *
+ * Mengembalikan null bila notifikasi tidak punya halaman tujuan (mis. pengumuman umum).
+ */
+export function notifTargetFor(d: NotificationData, promoCode?: string | null): NotifTarget | null {
+  const customer = APP === 'pelanggan';
+  // 1. Tiket / percakapan dengan Admin & CS (mis. notifikasi "Pesan dari Admin AntarKita")
+  if (d.ticket_id) return { route: `/support/${d.ticket_id}`, label: 'tiket bantuan' };
+  // 2. Pesanan
+  if (d.order_id) return { route: `/order/${d.order_id}`, label: 'detail pesanan' };
+  // 3. AntarTravel — permintaan carter/sopir harian & booking kursi
+  if (d.travel_request_id) return customer
+    ? { route: `/travel/request/${d.travel_request_id}`, label: 'permintaan travel' }
+    : { route: '/driver/travel', label: 'permintaan travel' };
+  if (d.booking_id && customer) return { route: `/travel/${d.booking_id}`, label: 'booking travel' };
+  // 4. AntarPay (top up, pembayaran gateway, penarikan saldo)
+  if (d.payment_id || d.withdrawal_id) return customer
+    ? { route: '/(customer)/pay', label: 'AntarPay' }
+    : { route: '/(driver)/earnings', label: 'saldo & penghasilan' };
+  // 5. Merchant / promo (hanya ada di aplikasi pelanggan)
+  if (d.merchant_id && customer) return { route: `/food/${d.merchant_id}`, label: 'merchant' };
+  if (promoCode && customer) return { route: '/food', label: 'promo AntarFood' };
+  return null;
 }
 
 export function useNotifications(uid?: string | null) {

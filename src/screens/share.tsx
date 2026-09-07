@@ -26,7 +26,21 @@ export default function SharedTrip() {
   const [at, setAt] = useState<Date>(new Date());
   useEffect(() => {
     let alive = true;
-    const load = async () => { const { data: d } = await supabase.rpc('shared_order', { p_token: token }); if (alive) { setData((d as SharedOrder) ?? null); setAt(new Date()); } };
+    // Tahan bentuk balasan yang tak terduga: RPC bisa mengembalikan [] atau objek tanpa koordinat.
+    // Tanpa penjaga ini, peta menerima lat/lng undefined dan seluruh halaman jatuh ke ErrorBoundary
+    // (pengguna melihat layar galat, bukan pesan "Tautan tidak valid").
+    const valid = (d: unknown): d is SharedOrder => {
+      const o = Array.isArray(d) ? d[0] : d;
+      return !!o && typeof o === 'object'
+        && Number.isFinite((o as SharedOrder).pickup_lat) && Number.isFinite((o as SharedOrder).pickup_lng)
+        && Number.isFinite((o as SharedOrder).dropoff_lat) && Number.isFinite((o as SharedOrder).dropoff_lng);
+    };
+    const load = async () => {
+      const { data: d } = await supabase.rpc('shared_order', { p_token: token });
+      if (!alive) return;
+      setData(valid(d) ? (Array.isArray(d) ? d[0] : d) as SharedOrder : null);
+      setAt(new Date());
+    };
     load();
     const t = setInterval(load, 10000);
     return () => { alive = false; clearInterval(t); };
