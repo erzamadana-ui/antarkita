@@ -1,0 +1,1377 @@
+<title>Anatomi AntarKita</title>
+<style>
+  /* ===========================================================
+     AntarKita — halaman interaktif (promosi + investor)
+     Palet diturunkan dari src/lib/theme.ts: teal #187A85, amber #F5A524
+     =========================================================== */
+  :root {
+    color-scheme: light;
+    --ground: #F1F5F4;
+    --ground-2: #E6EEED;
+    --surface: #FFFFFF;
+    --surface-2: #F7FAFA;
+    --line: #DBE5E4;
+    --line-strong: #BFD1CF;
+    --ink: #0E1F21;
+    --ink-2: #4B5D5F;
+    --ink-3: #77898A;
+    --teal: #187A85;
+    --teal-deep: #12616B;
+    --teal-wash: #E3F0F1;
+    --on-accent: #FFFFFF;
+    --amber: #A96A08;
+    --amber-wash: #FBF0DB;
+    --red: #C0333A;
+    --red-wash: #FAE9EA;
+    --green: #14764A;
+    --green-wash: #E2F2E9;
+    --c-ride: #187A85;
+    --c-food: #C0333A;
+    --c-send: #5B44D6;
+    --c-box: #9E5E06;
+    --c-shop: #0A7CA4;
+    --c-market: #14764A;
+    --c-travel: #1D4ED8;
+    --c-pay: #12616B;
+    --r-s: 8px;
+    --r-m: 14px;
+    --r-l: 22px;
+    --shadow: 0 1px 2px rgba(14,31,33,.05), 0 14px 30px -20px rgba(14,31,33,.4);
+    --shadow-lift: 0 2px 6px rgba(14,31,33,.08), 0 26px 48px -24px rgba(14,31,33,.45);
+    --f-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --f-mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground: #0A1517;
+      --ground-2: #0E1D1F;
+      --surface: #132628;
+      --surface-2: #172E30;
+      --line: #24403F;
+      --line-strong: #345754;
+      --ink: #E7F1EF;
+      --ink-2: #A8BCBA;
+      --ink-3: #7E9291;
+      --teal: #4FC7D1;
+      --teal-deep: #8AE2E8;
+      --teal-wash: #10393D;
+      --on-accent: #062023;
+      --amber: #EDB454;
+      --amber-wash: #38290E;
+      --red: #F0787C;
+      --red-wash: #3A1B1D;
+      --green: #4FC489;
+      --green-wash: #123425;
+      --c-ride: #4FC7D1;
+      --c-food: #F0787C;
+      --c-send: #A493FF;
+      --c-box: #E6A34A;
+      --c-shop: #4FBEE4;
+      --c-market: #4FC489;
+      --c-travel: #7FA5FF;
+      --c-pay: #8AE2E8;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 14px 30px -20px rgba(0,0,0,.8);
+      --shadow-lift: 0 2px 8px rgba(0,0,0,.45), 0 26px 48px -24px rgba(0,0,0,.9);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #0A1517;
+    --ground-2: #0E1D1F;
+    --surface: #132628;
+    --surface-2: #172E30;
+    --line: #24403F;
+    --line-strong: #345754;
+    --ink: #E7F1EF;
+    --ink-2: #A8BCBA;
+    --ink-3: #7E9291;
+    --teal: #4FC7D1;
+    --teal-deep: #8AE2E8;
+    --teal-wash: #10393D;
+    --on-accent: #062023;
+    --amber: #EDB454;
+    --amber-wash: #38290E;
+    --red: #F0787C;
+    --red-wash: #3A1B1D;
+    --green: #4FC489;
+    --green-wash: #123425;
+    --c-ride: #4FC7D1;
+    --c-food: #F0787C;
+    --c-send: #A493FF;
+    --c-box: #E6A34A;
+    --c-shop: #4FBEE4;
+    --c-market: #4FC489;
+    --c-travel: #7FA5FF;
+    --c-pay: #8AE2E8;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 14px 30px -20px rgba(0,0,0,.8);
+    --shadow-lift: 0 2px 8px rgba(0,0,0,.45), 0 26px 48px -24px rgba(0,0,0,.9);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--f-sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  img, svg { max-width: 100%; }
+  a { color: var(--teal); }
+  ::selection { background: var(--teal-wash); color: var(--ink); }
+  :focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; border-radius: 4px; }
+
+  .wrap { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+  .band { padding: 60px 0; border-top: 1px solid var(--line); }
+  .band--alt { background: var(--ground-2); }
+  .band--plain { background: var(--surface); }
+
+  h1, h2, h3, h4 { text-wrap: balance; margin: 0; letter-spacing: -0.02em; }
+  h2 { font-size: clamp(24px, 4.4vw, 34px); font-weight: 800; line-height: 1.18; }
+  h3 { font-size: clamp(17px, 2.6vw, 20px); font-weight: 700; line-height: 1.3; }
+  p { margin: 0; }
+  .lede { color: var(--ink-2); font-size: clamp(15px, 2.2vw, 17.5px); max-width: 62ch; }
+
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--teal);
+    font-weight: 600;
+  }
+  .sec-head { display: flex; flex-direction: column; gap: 10px; margin-bottom: 30px; }
+
+  /* ---------- penanda sumber (notasi deck) ---------- */
+  .tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--f-mono); font-size: 10.5px; font-weight: 600;
+    letter-spacing: .06em; padding: 2px 7px; border-radius: 999px;
+    border: 1px solid var(--line-strong); color: var(--ink-3);
+    white-space: nowrap; vertical-align: middle;
+  }
+  .tag--int { color: var(--teal); border-color: color-mix(in srgb, var(--teal) 40%, transparent); background: var(--teal-wash); }
+  .tag--src { color: var(--ink-2); background: var(--surface-2); }
+  .tag--asumsi { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, transparent); background: var(--amber-wash); }
+  .prov { font-family: var(--f-mono); font-size: 11.5px; color: var(--ink-3); line-height: 1.55; overflow-wrap: anywhere; }
+
+  /* ---------- navigasi lengket ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 60;
+    background: color-mix(in srgb, var(--ground) 92%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar__inner { display: flex; align-items: center; gap: 14px; height: 56px; }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 800; letter-spacing: -0.03em; font-size: 17px; flex: 0 0 auto; }
+  .brand__mark { width: 26px; height: 26px; flex: 0 0 auto; }
+  .nav { flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav__list { display: flex; gap: 2px; list-style: none; margin: 0; padding: 0; }
+  .nav__link {
+    display: block; white-space: nowrap; text-decoration: none; color: var(--ink-2);
+    font-size: 13.5px; font-weight: 600; padding: 6px 10px; border-radius: 999px;
+  }
+  .nav__link:hover { color: var(--ink); background: var(--surface-2); }
+  .nav__link[aria-current="true"] { color: var(--on-accent); background: var(--teal); }
+  .iconbtn {
+    flex: 0 0 auto; width: 36px; height: 36px; display: grid; place-items: center;
+    border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-2);
+    border-radius: 999px; cursor: pointer;
+  }
+  .iconbtn:hover { color: var(--ink); border-color: var(--teal); }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 54px 0 56px; background:
+      radial-gradient(90ch 40ch at 12% -12%, var(--teal-wash), transparent 62%),
+      var(--ground); }
+  .hero__status {
+    display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 8px;
+    border-radius: 999px; background: var(--surface); border: 1px solid var(--line-strong);
+    font-size: 12.5px; font-weight: 600; color: var(--ink-2); box-shadow: var(--shadow);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--amber); flex: 0 0 auto; }
+  .hero h1 {
+    font-size: clamp(38px, 8.4vw, 74px); font-weight: 800; line-height: .98;
+    letter-spacing: -0.045em; margin: 20px 0 0;
+  }
+  .hero__sub { margin-top: 8px; font-size: clamp(15px, 2.5vw, 19px); color: var(--ink-2); max-width: 60ch; }
+  .hero__kicker { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink-3); }
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; margin-top: 34px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-m); overflow: hidden; }
+  .stat { background: var(--surface); padding: 16px 18px; }
+  .stat__n { font-size: clamp(30px, 6vw, 44px); font-weight: 800; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; color: var(--teal); }
+  .stat__l { margin-top: 6px; font-size: 12.5px; color: var(--ink-2); line-height: 1.35; }
+  @media (min-width: 720px) { .stats { grid-template-columns: repeat(4, 1fr); } }
+
+  .notice {
+    margin-top: 28px; border-left: 3px solid var(--amber); background: var(--amber-wash);
+    border-radius: 0 var(--r-s) var(--r-s) 0; padding: 14px 16px; font-size: 14px; color: var(--ink);
+  }
+  .notice b { font-weight: 700; }
+
+  /* ---------- kartu umum ---------- */
+  .grid { display: grid; gap: 14px; }
+  .grid > *, .calc > *, .sim > *, .phases > *, .svc-grid > *, .svc-detail__cols > *, .anat-detail__cols > * { min-width: 0; }
+  .g2 { grid-template-columns: 1fr; }
+  .g3 { grid-template-columns: 1fr; }
+  .g4 { grid-template-columns: 1fr 1fr; }
+  @media (min-width: 640px) { .g2 { grid-template-columns: 1fr 1fr; } .g3 { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 900px) { .g3 { grid-template-columns: repeat(3, 1fr); } .g4 { grid-template-columns: repeat(4, 1fr); } }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 18px; }
+  .card h3 { margin-bottom: 6px; }
+  .card p { color: var(--ink-2); font-size: 14.5px; overflow-wrap: break-word; }
+
+  .problem { display: flex; gap: 14px; align-items: flex-start; }
+  .problem__no { font-family: var(--f-mono); font-size: 12px; color: var(--teal); font-weight: 700; padding-top: 3px; }
+
+  /* ---------- layanan ---------- */
+  .svc-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  @media (min-width: 700px) { .svc-grid { grid-template-columns: repeat(4, 1fr); } }
+  .svc {
+    position: relative; text-align: left; cursor: pointer; font: inherit;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m);
+    padding: 14px 13px 15px; display: flex; flex-direction: column; gap: 9px;
+    transition: transform .13s ease, border-color .13s ease, box-shadow .13s ease;
+  }
+  .svc:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: var(--line-strong); }
+  .svc[aria-pressed="true"] { border-color: var(--sc); box-shadow: 0 0 0 1px var(--sc), var(--shadow-lift); }
+  .svc__icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: color-mix(in srgb, var(--sc) 13%, transparent); color: var(--sc); }
+  .svc__name { font-weight: 700; font-size: 14.5px; letter-spacing: -0.01em; color: var(--ink); }
+  .svc__tag { font-size: 11.5px; color: var(--ink-3); line-height: 1.3; }
+  .svc-detail {
+    margin-top: 12px; background: var(--surface); border: 1px solid var(--line);
+    border-left: 4px solid var(--sc, var(--teal)); border-radius: var(--r-m); padding: 20px;
+  }
+  .svc-detail__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+  .svc-detail__head h3 { color: var(--sc); }
+  .svc-detail__cols { display: grid; gap: 16px; margin-top: 16px; }
+  @media (min-width: 760px) { .svc-detail__cols { grid-template-columns: 1.15fr 1fr 1.15fr; } }
+  .minihead { font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; }
+  .svc-detail p { font-size: 14.5px; color: var(--ink-2); }
+  .flow { display: flex; flex-direction: column; gap: 6px; }
+  .flow__row { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; padding: 5px 0; border-bottom: 1px dashed var(--line); }
+  .flow__row:last-child { border-bottom: 0; }
+  .flow__row b { font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
+
+  /* ---------- simulasi ---------- */
+  .sim-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+  .btn {
+    font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;
+    border-radius: 999px; padding: 8px 15px; border: 1px solid var(--line-strong);
+    background: var(--surface); color: var(--ink);
+  }
+  .btn:hover { border-color: var(--teal); color: var(--teal); }
+  .btn--primary { background: var(--teal); border-color: var(--teal); color: var(--on-accent); }
+  .btn--primary:hover { background: var(--teal-deep); border-color: var(--teal-deep); color: var(--on-accent); }
+  .btn[disabled] { opacity: .42; cursor: not-allowed; }
+
+  .steps { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; }
+  .step {
+    font: inherit; font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink-3);
+    border-radius: 999px; padding: 6px 13px; display: flex; align-items: center; gap: 7px;
+  }
+  .step__n { font-family: var(--f-mono); font-size: 10.5px; opacity: .8; }
+  .step[aria-current="true"] { background: var(--teal); border-color: var(--teal); color: var(--on-accent); }
+  .step--done { color: var(--ink); border-color: var(--line-strong); }
+
+  .sim { display: grid; gap: 14px; grid-template-columns: 1fr; }
+  @media (min-width: 900px) { .sim { grid-template-columns: 1fr 1fr 1.15fr; align-items: start; } }
+  .pane { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); overflow: hidden; }
+  .pane__head {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2);
+  }
+  .pane__title { font-family: var(--f-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+  .pane__body { padding: 16px; min-height: 268px; display: flex; flex-direction: column; gap: 12px; }
+  .pane__body--log { max-height: 420px; overflow-y: auto; }
+  .pill { font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--teal-wash); color: var(--teal); white-space: nowrap; }
+  .pill--live { background: var(--green-wash); color: var(--green); }
+  .pill--wait { background: var(--amber-wash); color: var(--amber); }
+  .pill--done { background: var(--teal-wash); color: var(--teal); }
+
+  .screen-title { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+  .screen-line { font-size: 14px; color: var(--ink-2); }
+  .screen-box { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-s); padding: 11px 13px; font-size: 13.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+  .screen-box b { color: var(--ink); font-weight: 700; }
+  .money { font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
+  .track { height: 6px; border-radius: 999px; background: var(--ground-2); overflow: hidden; }
+  .track__fill { height: 100%; background: var(--teal); border-radius: 999px; transition: width .45s ease; }
+  .avatarrow { display: flex; align-items: center; gap: 11px; }
+  .avatar { width: 38px; height: 38px; border-radius: 999px; background: var(--teal-wash); color: var(--teal); display: grid; place-items: center; font-weight: 800; font-size: 14px; flex: 0 0 auto; }
+
+  .log { font-family: var(--f-mono); font-size: 12px; line-height: 1.6; display: flex; flex-direction: column; gap: 7px; overflow-wrap: anywhere; }
+  .log__row { display: flex; gap: 9px; padding-bottom: 7px; border-bottom: 1px dashed var(--line); }
+  .log__row:last-child { border-bottom: 0; padding-bottom: 0; }
+  .log__t { color: var(--ink-3); flex: 0 0 auto; }
+  .log__x { color: var(--ink-2); }
+  .log__x b { color: var(--teal); font-weight: 600; }
+  .log__row--new { animation: slidein .28s ease both; }
+  @keyframes slidein { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .log__row--new { animation: none; }
+    .track__fill { transition: none; }
+    .svc { transition: none; }
+  }
+
+  /* ---------- anatomi ---------- */
+  .layer { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 14px; }
+  .layer__label { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .blocks { display: grid; gap: 9px; grid-template-columns: repeat(2, 1fr); }
+  @media (min-width: 720px) { .blocks { grid-template-columns: repeat(4, 1fr); } .blocks--3 { grid-template-columns: repeat(3, 1fr); } }
+  .block {
+    font: inherit; text-align: left; cursor: pointer; padding: 11px 12px;
+    border: 1px solid var(--line); border-radius: var(--r-s); background: var(--surface-2);
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .block:hover { border-color: var(--teal); }
+  .block[aria-pressed="true"] { background: var(--teal-wash); border-color: var(--teal); box-shadow: inset 0 0 0 1px var(--teal); }
+  .block__n { font-weight: 700; font-size: 13.5px; }
+  .block__s { font-family: var(--f-mono); font-size: 11px; color: var(--ink-3); }
+  .rail { display: grid; place-items: center; padding: 7px 0; color: var(--ink-3); font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; }
+  .rail::before { content: ""; display: block; width: 1px; height: 14px; background: var(--line-strong); margin-bottom: 5px; }
+  .anat-detail { margin-top: 14px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--teal); border-radius: var(--r-m); padding: 18px; }
+  .anat-detail__cols { display: grid; gap: 14px; margin-top: 12px; }
+  @media (min-width: 760px) { .anat-detail__cols { grid-template-columns: 1fr 1fr; } }
+  .tech { font-family: var(--f-mono); font-size: 12.5px; color: var(--ink-2); line-height: 1.65; overflow-wrap: anywhere; }
+  .tech code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--ink); }
+
+  /* ---------- kalkulator ---------- */
+  .calc { display: grid; gap: 18px; grid-template-columns: 1fr; }
+  @media (min-width: 900px) { .calc { grid-template-columns: 0.95fr 1.05fr; align-items: start; } }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 20px; }
+  .segmented { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+  .seg { font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; border-radius: 999px; padding: 6px 12px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2); }
+  .seg[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+  .field { margin-bottom: 18px; }
+  .field__top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 7px; }
+  .field__lab { font-size: 13.5px; font-weight: 600; }
+  .field__val { font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-weight: 700; font-size: 15px; color: var(--teal); }
+  .field__hint { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; background: transparent; cursor: pointer; margin: 0; }
+  input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; background: var(--ground-2); border: 1px solid var(--line); }
+  input[type="range"]::-moz-range-track { height: 6px; border-radius: 999px; background: var(--ground-2); border: 1px solid var(--line); }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 999px; background: var(--teal); border: 3px solid var(--surface); box-shadow: var(--shadow); margin-top: -8px; }
+  input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; border-radius: 999px; background: var(--teal); border: 3px solid var(--surface); box-shadow: var(--shadow); }
+  .cap-note { display: flex; gap: 9px; align-items: flex-start; background: var(--amber-wash); border-radius: var(--r-s); padding: 11px 13px; font-size: 12.5px; color: var(--ink); margin-top: 4px; }
+  .out { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-m); overflow: hidden; grid-template-columns: 1fr 1fr; }
+  .out__cell { background: var(--surface); padding: 14px 15px; }
+  .out__cell--wide { grid-column: 1 / -1; }
+  .out__lab { font-size: 11.5px; color: var(--ink-3); font-family: var(--f-mono); letter-spacing: .08em; text-transform: uppercase; }
+  .out__num { font-size: clamp(20px, 4vw, 27px); font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .out__sub { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+  .splitbar { display: flex; height: 30px; border-radius: var(--r-s); overflow: hidden; border: 1px solid var(--line); margin-top: 8px; }
+  .splitbar__seg { display: grid; place-items: center; font-size: 11px; font-weight: 700; color: var(--on-accent); font-variant-numeric: tabular-nums; overflow: hidden; white-space: nowrap; transition: width .3s ease; }
+  .splitbar__seg:nth-child(2) { color: #3A2500; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; }
+
+  /* ---------- peta jalan ---------- */
+  .phases { display: grid; gap: 10px; grid-template-columns: 1fr; }
+  @media (min-width: 760px) { .phases { grid-template-columns: repeat(4, 1fr); } }
+  .phase {
+    font: inherit; text-align: left; cursor: pointer; background: var(--surface);
+    border: 1px solid var(--line); border-radius: var(--r-m); padding: 14px;
+    display: flex; flex-direction: column; gap: 5px; border-top: 3px solid var(--line-strong);
+  }
+  .phase[aria-pressed="true"] { border-top-color: var(--teal); box-shadow: var(--shadow-lift); border-color: var(--line-strong); }
+  .phase__k { font-family: var(--f-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+  .phase__t { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+  .phase__hc { font-family: var(--f-mono); font-size: 12.5px; color: var(--teal); font-weight: 600; }
+  .phase-detail { margin-top: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-m); padding: 20px; }
+  ul.ticks { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  ul.ticks li { display: flex; gap: 10px; font-size: 14.5px; color: var(--ink-2); }
+  ul.ticks li::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: var(--teal); flex: 0 0 auto; margin-top: 9px; }
+
+  /* ---------- tabel ---------- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-m); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  thead th { font-family: var(--f-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; background: var(--surface-2); }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ---------- pendanaan bar ---------- */
+  .fund { display: flex; flex-direction: column; gap: 12px; }
+  .fund__row { display: grid; grid-template-columns: 1fr; gap: 5px; }
+  .fund__top { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; align-items: baseline; }
+  .fund__amt { font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+  .fund__bar { height: 12px; border-radius: 999px; background: var(--ground-2); overflow: hidden; }
+  .fund__fill { height: 100%; border-radius: 999px; }
+
+  .risk { display: flex; gap: 13px; align-items: flex-start; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .risk:last-child { border-bottom: 0; }
+  .risk__id { font-family: var(--f-mono); font-size: 12px; font-weight: 700; color: var(--ground); background: var(--ink); border-radius: 6px; padding: 3px 7px; flex: 0 0 auto; }
+  .risk__b { font-size: 14.5px; }
+  .risk__b b { display: block; color: var(--ink); font-size: 15px; }
+  .risk__b span { color: var(--ink-2); }
+  .risk__m { display: block; margin-top: 4px; color: var(--ink-2); }
+  .risk__m em { font-style: normal; font-family: var(--f-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--green); }
+
+  .foot { padding: 44px 0 60px; background: var(--ground-2); border-top: 1px solid var(--line); }
+  .foot__cta { display: grid; gap: 14px; grid-template-columns: 1fr; margin: 22px 0 26px; }
+  @media (min-width: 760px) { .foot__cta { grid-template-columns: repeat(3, 1fr); } }
+  .foot__small { font-size: 12.5px; color: var(--ink-3); max-width: 76ch; }
+
+  .kv { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13.5px; color: var(--ink-2); }
+  .kv b { color: var(--ink); font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+  .hr { height: 1px; background: var(--line); margin: 26px 0; }
+</style>
+
+<header class="topbar">
+  <div class="wrap topbar__inner">
+    <div class="brand">
+      <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="1" y="1" width="30" height="30" rx="9" fill="var(--teal)"></rect>
+        <path d="M9 21.5 16 9l7 12.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path>
+        <circle cx="16" cy="19.2" r="2.1" fill="#F5A524"></circle>
+      </svg>
+      <span>AntarKita</span>
+    </div>
+    <nav class="nav" aria-label="Bagian halaman">
+      <ul class="nav__list">
+        <li><a class="nav__link" href="#masalah">Masalah</a></li>
+        <li><a class="nav__link" href="#layanan">Layanan</a></li>
+        <li><a class="nav__link" href="#simulasi">Simulasi</a></li>
+        <li><a class="nav__link" href="#anatomi">Anatomi</a></li>
+        <li><a class="nav__link" href="#ekonomi">Unit economics</a></li>
+        <li><a class="nav__link" href="#petajalan">Peta jalan</a></li>
+        <li><a class="nav__link" href="#kepatuhan">Kepatuhan</a></li>
+        <li><a class="nav__link" href="#investor">Investor</a></li>
+      </ul>
+    </nav>
+    <button class="iconbtn" id="themeBtn" type="button" aria-label="Ganti mode terang/gelap" title="Ganti mode terang/gelap">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="4.2"></circle>
+        <path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"></path>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <!-- ============ HERO ============ -->
+  <section class="hero">
+    <div class="wrap">
+      <span class="hero__status"><span class="dot"></span> Produk siap &amp; teruji — menunggu payment gateway dan listing Play Store</span>
+      <h1>Antar apa saja,<br>ke mana saja.</h1>
+      <p class="hero__sub">Satu aplikasi untuk seluruh kebutuhan antar dan mobilitas warga <b>Pekanbaru</b> dan <b>Padang</b> — ojek, mobil, makanan, belanja pasar tradisional, kirim barang, dan perjalanan antar kota, dibayar dengan satu dompet AntarPay.</p>
+
+      <div class="stats" id="stats">
+        <div class="stat"><div class="stat__n" data-count="8">8</div><div class="stat__l">layanan dalam satu ekosistem</div></div>
+        <div class="stat"><div class="stat__n" data-count="3">3</div><div class="stat__l">aplikasi dari satu basis kode</div></div>
+        <div class="stat"><div class="stat__n" data-count="34">34</div><div class="stat__l">skenario uji transaksi LOLOS</div></div>
+        <div class="stat"><div class="stat__n" data-count="2">2</div><div class="stat__l">kota operasi tahap awal</div></div>
+      </div>
+
+      <div class="notice">
+        <b>Yang belum kami punya, kami sebut lebih dulu.</b> AntarKita <b>belum beroperasi komersial</b> — nol order berbayar, nol pengguna aktif, nol pendapatan. Yang sudah ada adalah produk lengkap, 34 skenario transaksi yang lolos uji, dan struktur kepatuhan yang sudah dipetakan.
+        <div class="prov" style="margin-top:8px;">Sumber: <span class="tag tag--int">INT</span> docs/LAPORAN-UJI-SIMULASI.md §8 · docs/RENCANA-LISTING-LIVE.md</div>
+      </div>
+
+      <div class="kv" style="margin-top:22px;">
+        <span>Pemilik &amp; Komisaris Utama <b>Erza Pradipta Madana</b></span>
+        <span>PT AntarKita Indonesia</span>
+        <span>Tahap pra-pendanaan · 7 September 2026</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MASALAH ============ -->
+  <section class="band band--plain" id="masalah">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">01 · Masalah</span>
+        <h2>Aplikasi nasional melayani perjalanan. Tidak melayani pasar.</h2>
+        <p class="lede">Empat masalah ini dipilih karena spesifik untuk dua kota ini, bukan keluhan generik tentang ride-hailing.</p>
+      </div>
+
+      <div class="grid g4" style="margin-bottom:18px;">
+        <div class="card"><div class="minihead">Pekanbaru</div><div class="stat__n" style="font-size:30px;">1,14 jt</div><div class="stat__l">jiwa (BPS, data 2024)</div></div>
+        <div class="card"><div class="minihead">Padang</div><div class="stat__n" style="font-size:30px;">939,8 rb</div><div class="stat__l">jiwa (BPS, data 2024)</div></div>
+        <div class="card"><div class="minihead">Pasar dua kota</div><div class="stat__n" style="font-size:30px;">≈2,08 jt</div><div class="stat__l">jiwa — ukuran pasar dasar, bukan proyeksi permintaan</div></div>
+        <div class="card"><div class="minihead">Mitra aktif nasional</div><div class="stat__n" style="font-size:30px;">±20%</div><div class="stat__l">700–800 rb aktif dari 3,7 jt terdaftar <span class="tag tag--src">S-58</span></div></div>
+      </div>
+
+      <div class="grid g2">
+        <div class="card problem"><div class="problem__no">01</div><div><h3>Pasar tradisional tidak terhubung</h3><p>Pedagang sayur, daging, dan ikan di pasar kota belum punya kanal pesanan digital. Pelanggan yang ingin belanja pasar harus datang sendiri. <span class="tag tag--asumsi">ASUMSI</span> hipotesis kerja, belum ada survei pelanggan.</p></div></div>
+        <div class="card problem"><div class="problem__no">02</div><div><h3>Titipan antar kota berjalan tanpa jejak</h3><p>Pengiriman Pekanbaru–Padang dititipkan ke sopir travel lewat percakapan pribadi: tanpa tarif baku, tanpa bukti, tanpa perlindungan. <span class="tag tag--asumsi">ASUMSI</span> hipotesis kerja.</p></div></div>
+        <div class="card problem"><div class="problem__no">03</div><div><h3>Likuiditas mitra tipis di kota tier-2</h3><p>Hanya sekitar 20% mitra terdaftar yang benar-benar aktif secara nasional. Di kota tier-2, waktu tunggu pelanggan adalah masalah pasokan, bukan masalah aplikasi. <span class="tag tag--src">S-58</span></p></div></div>
+        <div class="card problem"><div class="problem__no">04</div><div><h3>Aturan datang dari pusat, tanpa penyesuaian lokal</h3><p>Tarif Zona I Rp1.850–Rp2.300/km dan biaya jasa minimal Rp9.250–Rp11.500 ditetapkan nasional. <span class="tag tag--src">S-24</span> Kepmenhub KP 564/2022.</p></div></div>
+      </div>
+      <div class="prov" style="margin-top:14px;">Sumber: BPS via Databoks (Pekanbaru 1,14 juta jiwa; Padang 939,85 ribu jiwa, keduanya data 2024) · Kepmenhub KP 564/2022 <span class="tag tag--src">S-24</span> · Grab Indonesia via Akurat.co, Des 2025 <span class="tag tag--src">S-58</span>. Diakses 7 September 2026.</div>
+    </div>
+  </section>
+
+  <!-- ============ LAYANAN ============ -->
+  <section class="band" id="layanan">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">02 · Solusi</span>
+        <h2>Delapan layanan, satu akun, satu dompet</h2>
+        <p class="lede">Klik salah satu layanan untuk melihat isinya, untuk siapa, dan bagaimana uangnya mengalir. Seluruh layanan sudah terbangun di dalam kode dan lolos simulasi transaksi.</p>
+      </div>
+
+      <div class="svc-grid" id="svcGrid" role="group" aria-label="Delapan layanan AntarKita"></div>
+      <div class="svc-detail" id="svcDetail" aria-live="polite"></div>
+
+      <div class="prov" style="margin-top:14px;">Sumber: <span class="tag tag--int">INT</span> docs/rilis/PLAY-STORE-LISTING.md · src/screens/{ride,food,send,box,shop,market,travel,pay} — 86 layar, 1 basis kode, 3 aplikasi.</div>
+    </div>
+  </section>
+
+  <!-- ============ SIMULASI ============ -->
+  <section class="band band--plain" id="simulasi">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">03 · Cara kerjanya</span>
+        <h2>Satu order, tiga sisi, tujuh langkah</h2>
+        <p class="lede">Jalankan satu pesanan AntarRide dari awal sampai uangnya terbagi. Setiap langkah menggerakkan tiga hal sekaligus: layar pelanggan, layar mitra driver, dan catatan di basis data.</p>
+      </div>
+
+      <div class="sim-bar">
+        <button class="btn btn--primary" id="simNext" type="button">Langkah berikutnya</button>
+        <button class="btn" id="simPrev" type="button">Mundur</button>
+        <button class="btn" id="simPlay" type="button">Putar otomatis</button>
+        <button class="btn" id="simReset" type="button">Ulangi</button>
+      </div>
+      <div class="steps" id="simSteps" role="tablist" aria-label="Langkah perjalanan pesanan"></div>
+
+      <div class="sim" style="margin-top:16px;">
+        <div class="pane">
+          <div class="pane__head"><span class="pane__title">Layar pelanggan</span><span class="pill" id="custPill">—</span></div>
+          <div class="pane__body" id="custBody"></div>
+        </div>
+        <div class="pane">
+          <div class="pane__head"><span class="pane__title">Layar mitra driver</span><span class="pill" id="drvPill">—</span></div>
+          <div class="pane__body" id="drvBody"></div>
+        </div>
+        <div class="pane">
+          <div class="pane__head"><span class="pane__title">Catatan sistem</span><span class="pill" id="sysPill">Supabase</span></div>
+          <div class="pane__body pane__body--log"><div class="log" id="sysLog"></div></div>
+        </div>
+      </div>
+
+      <div class="notice" style="margin-top:18px;">
+        Angka Rp9.000 dan pembagiannya bukan ilustrasi: total order dan pendapatan driver berasal dari skenario uji <b>S1</b> pada simulasi transaksi yang di-rollback penuh. Simulasi di halaman ini memakai <b>komisi 8%</b> — konfigurasi yang patuh Perpres 27/2026. <span class="tag tag--asumsi">ASUMSI</span> perlakuan biaya jasa aplikasi Rp1.000 terhadap batas 8% belum ditegaskan secara hukum.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ANATOMI ============ -->
+  <section class="band" id="anatomi">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">04 · Anatomi</span>
+        <h2>Tiga aplikasi di atas satu backend</h2>
+        <p class="lede">Klik blok mana pun untuk penjelasan awam sekaligus detail teknisnya. Poin komersialnya: tarif, radius jemput, sakelar layanan, dan prioritas dispatch adalah <b>data</b>, bukan kode — perubahan regulasi dapat dipenuhi dalam hitungan menit, bukan rilis aplikasi.</p>
+      </div>
+
+      <div class="layer">
+        <div class="layer__label"><span class="minihead" style="margin:0;">Lapis 1 · Aplikasi</span><span class="prov">86 layar · 68 rute UI dirender tanpa error</span></div>
+        <div class="blocks blocks--3" data-layer="apps"></div>
+      </div>
+      <div class="rail">Supabase client · realtime · RLS</div>
+      <div class="layer">
+        <div class="layer__label"><span class="minihead" style="margin:0;">Lapis 2 · Backend Supabase</span><span class="prov">66 tabel · 207 fungsi SQL · 98 kebijakan RLS · 30 migrasi</span></div>
+        <div class="blocks" data-layer="backend"></div>
+      </div>
+      <div class="rail">HTTPS · webhook · protokol pihak ketiga</div>
+      <div class="layer">
+        <div class="layer__label"><span class="minihead" style="margin:0;">Lapis 3 · Integrasi luar</span><span class="prov">empat integrasi produksi</span></div>
+        <div class="blocks" data-layer="integrasi"></div>
+      </div>
+
+      <div class="anat-detail" id="anatDetail" aria-live="polite"></div>
+      <div class="prov" style="margin-top:14px;">Sumber: <span class="tag tag--int">INT</span> hitungan pada supabase/migrations/0001–0030 · supabase/functions/ · docs/INTEGRASI.md · docs/TAHAP11-KONTRAK-API.md</div>
+    </div>
+  </section>
+
+  <!-- ============ UNIT ECONOMICS ============ -->
+  <section class="band band--plain" id="ekonomi">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">05 · Unit economics</span>
+        <h2>Hitung sendiri, dengan batas komisi yang berlaku</h2>
+        <p class="lede">Geser angkanya. Untuk layanan roda dua, slider komisi berhenti di 8% — bukan pilihan desain, melainkan batas hukum sejak 1 Juli 2026.</p>
+      </div>
+
+      <div class="calc">
+        <div class="panel">
+          <div class="minihead">Layanan</div>
+          <div class="segmented" id="calcSeg" role="group" aria-label="Pilih layanan"></div>
+
+          <div class="field">
+            <div class="field__top"><label class="field__lab" for="rOrders">Order per hari</label><span class="field__val" id="vOrders">600</span></div>
+            <input type="range" id="rOrders" min="50" max="3000" step="50" value="600">
+            <div class="field__hint">Volume puncak yang dipakai analisis otomasi Fase 2 adalah 2.400 order/hari untuk seluruh layanan. <span class="tag tag--asumsi">ASUMSI</span></div>
+          </div>
+
+          <div class="field">
+            <div class="field__top"><label class="field__lab" for="rFare">Rata-rata dibayar pelanggan</label><span class="field__val" id="vFare">Rp9.000</span></div>
+            <input type="range" id="rFare" min="6000" max="150000" step="500" value="9000">
+            <div class="field__hint">Termasuk biaya jasa aplikasi <span id="hintFee">Rp1.000</span> yang tidak dibagi ke driver.</div>
+          </div>
+
+          <div class="field" style="margin-bottom:8px;">
+            <div class="field__top"><label class="field__lab" for="rPct">Komisi platform</label><span class="field__val" id="vPct">8,0%</span></div>
+            <input type="range" id="rPct" min="0" max="25" step="0.5" value="8">
+            <div class="cap-note" id="capNote">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="flex:0 0 auto;margin-top:2px;color:var(--amber);" aria-hidden="true"><path d="M12 8.4v5"></path><path d="M12 16.4h.01"></path><circle cx="12" cy="12" r="9"></circle></svg>
+              <span id="capText"></span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="out">
+            <div class="out__cell out__cell--wide">
+              <div class="out__lab">Pembagian satu order</div>
+              <div class="splitbar" id="splitbar">
+                <div class="splitbar__seg" id="segDriver" style="background:var(--teal);"></div>
+                <div class="splitbar__seg" id="segKomisi" style="background:#F5A524;"></div>
+                <div class="splitbar__seg" id="segFee" style="background:var(--ink-3);"></div>
+              </div>
+              <div class="legend">
+                <span><i class="swatch" style="background:var(--teal);"></i> Bagian driver <b class="money" id="lgDriver"></b></span>
+                <span><i class="swatch" style="background:#F5A524;"></i> Komisi <b class="money" id="lgKomisi"></b></span>
+                <span><i class="swatch" style="background:var(--ink-3);"></i> Biaya jasa aplikasi <b class="money" id="lgFee"></b></span>
+              </div>
+            </div>
+            <div class="out__cell"><div class="out__lab">Pendapatan platform / bulan</div><div class="out__num" id="oPlat" style="color:var(--teal);">—</div><div class="out__sub" id="oPlatSub">—</div></div>
+            <div class="out__cell"><div class="out__lab">Nilai transaksi (GMV) / bulan</div><div class="out__num" id="oGmv">—</div><div class="out__sub">order × 30 hari × tarif rata-rata</div></div>
+            <div class="out__cell"><div class="out__lab">Diterima mitra driver / bulan</div><div class="out__num" id="oDrv">—</div><div class="out__sub" id="oDrvSub">—</div></div>
+            <div class="out__cell"><div class="out__lab">Take rate efektif</div><div class="out__num" id="oTake">—</div><div class="out__sub">pendapatan platform ÷ GMV — termasuk biaya jasa aplikasi, yang perlakuannya terhadap batas 8% masih [ASUMSI]</div></div>
+            <div class="out__cell out__cell--wide" style="background:var(--surface-2);">
+              <div class="out__lab">Terhadap biaya SDM bulanan</div>
+              <div class="out__sub" id="oCover" style="font-size:14px;color:var(--ink-2);margin-top:6px;">—</div>
+            </div>
+          </div>
+
+          <div class="notice" style="margin-top:14px;">
+            <b>Temuan yang kami ungkap sendiri.</b> Nilai seed <code>pricing.commission_pct</code> untuk <code>ride_motor</code> semula <b>20</b> — melanggar batas Perpres 27/2026. Sudah <b>diturunkan ke 8%</b> (migrasi <code>0031</code>), dan dipasang pengawal di basis data sehingga Panel Admin <b>tidak bisa</b> menyetelnya di atas batas. Penerapan batas ini pada AntarFood dan AntarSend yang diantar sepeda motor masih menunggu opini hukum.
+            <div class="prov" style="margin-top:8px;"><span class="tag tag--int">INT</span> supabase/migrations/0001_schema.sql · <span class="tag tag--src">S-25</span> Perpres 27/2026 via Hukumonline</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+      <h3>Dampak Perpres 27/2026 pada satu order roda dua</h3>
+      <p class="lede" style="margin-top:8px;">Kami sajikan apa adanya: batas potongan turun dari 20% ke 8% sejak 1 Juli 2026, dan itu memotong pendapatan komisi kami 60%.</p>
+      <div class="tablewrap" style="margin-top:14px;">
+        <table>
+          <thead><tr><th>Pos</th><th>Konfigurasi terpasang (20%)</th><th>Konfigurasi patuh (8%)</th><th>Selisih</th></tr></thead>
+          <tbody>
+            <tr><td>Dibayar pelanggan</td><td class="num">Rp9.000</td><td class="num">Rp9.000</td><td class="num">—</td></tr>
+            <tr><td>Biaya jasa (basis komisi)</td><td class="num">Rp8.000</td><td class="num">Rp8.000</td><td class="num">—</td></tr>
+            <tr><td>Komisi platform</td><td class="num">Rp1.600</td><td class="num">Rp640</td><td class="num" style="color:var(--red);">−60%</td></tr>
+            <tr><td>Biaya jasa aplikasi</td><td class="num">Rp1.000</td><td class="num">Rp1.000</td><td class="num">—</td></tr>
+            <tr><td><b>Pendapatan platform</b></td><td class="num"><b>Rp2.600</b></td><td class="num"><b>Rp1.640</b></td><td class="num" style="color:var(--red);"><b>−37%</b></td></tr>
+            <tr><td><b>Diterima driver</b></td><td class="num"><b>Rp6.400</b></td><td class="num"><b>Rp7.360</b></td><td class="num" style="color:var(--green);"><b>+15%</b></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prov" style="margin-top:12px;">Sumber: <span class="tag tag--int">INT</span> skenario uji S1 · <span class="tag tag--src">S-25</span> Perpres No. 27 Tahun 2026 (ditandatangani 1 Mei, diundangkan 4 Mei 2026) · <span class="tag tag--src">S-27</span> cakupan roda dua saja menurut Kompas.id · rencana aturan tarif tiga layanan <span class="tag tag--src">S-28</span><span class="tag tag--src">S-29</span> berstatus <b>RENCANA, bukan hukum positif</b>.</div>
+    </div>
+  </section>
+
+  <!-- ============ PETA JALAN ============ -->
+  <section class="band" id="petajalan">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">06 · Peta jalan</span>
+        <h2>36 bulan, empat fase, satu playbook</h2>
+        <p class="lede">Dari kunci pembayaran dan listing Play Store, ke satu kota, lalu dua kota, baru ekspansi. Klik satu fase untuk isinya.</p>
+      </div>
+      <div class="phases" id="phaseTabs" role="group" aria-label="Fase peta jalan"></div>
+      <div class="phase-detail" id="phaseDetail" aria-live="polite"></div>
+      <div class="prov" style="margin-top:14px;">Sumber: <span class="tag tag--int">INT</span> docs/organisasi/DESAIN-ORGANISASI.md §3 (keputusan mengikat) · docs/RENCANA-LISTING-LIVE.md §B · lembar <i>Ringkasan</i> pada AntarKita-Model-Biaya-SDM.xlsx.</div>
+    </div>
+  </section>
+
+  <!-- ============ KEPATUHAN ============ -->
+  <section class="band band--plain" id="kepatuhan">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">07 · Kepatuhan</span>
+        <h2>Empat kewajiban yang menentukan boleh atau tidaknya beroperasi</h2>
+        <p class="lede">Perusahaan yang menganggarkan modal KBLI Rp500 juta dan menunjuk DPO sebelum order pertama adalah perusahaan yang bisa diaudit — dan itu menurunkan risiko investor.</p>
+      </div>
+
+      <div class="grid g2">
+        <div class="card">
+          <div class="minihead">Komdigi</div>
+          <h3>Pendaftaran PSE Lingkup Privat</h3>
+          <p>Wajib terdaftar <b>sebelum</b> sistem dipakai pengguna. Sanksi: pemutusan akses. Statusnya masuk daftar langkah pra-peluncuran, bukan pekerjaan menyusul.</p>
+          <div class="prov" style="margin-top:10px;"><span class="tag tag--src">S-34</span> Permenkominfo 5/2020 jo. 10/2021 Pasal 2 &amp; 7</div>
+        </div>
+        <div class="card">
+          <div class="minihead">UU PDP</div>
+          <h3>Penunjukan DPO sejak Fase 1</h3>
+          <p>Pasca Putusan MK No. 151/PUU-XXII/2024 ("dan" menjadi "dan/atau"), kewajiban menunjuk Pejabat Pelindungan Data Pribadi meluas. Denda administratif hingga <b>2% pendapatan tahunan</b>. Risikonya asimetris: biaya menunjuk DPO jauh lebih kecil daripada dendanya.</p>
+          <div class="prov" style="margin-top:10px;"><span class="tag tag--src">S-37</span> UU 27/2022 Pasal 53 · <span class="tag tag--src">S-39</span> Putusan MK · <span class="tag tag--asumsi">ASUMSI</span> penerapan pasal pada kasus konkret menunggu opini hukum</div>
+        </div>
+        <div class="card">
+          <div class="minihead">OSS · Perizinan berusaha</div>
+          <h3>KBLI 53200 Aktivitas Kurir</h3>
+          <p>Kategori risiko <b>tinggi</b>: modal minimum <b>Rp500.000.000</b>, proposal usaha 5 tahun, dan izin sektor pos. Batas konversi KBLI 2020→2025 di OSS: 18 Juni 2026. Modal ini sudah masuk kebutuhan pendanaan sebagai baris tersendiri.</p>
+          <div class="prov" style="margin-top:10px;"><span class="tag tag--src">S-41</span><span class="tag tag--src">S-42</span> Klinik Hukumonline 20 Apr 2026 &amp; Hukumonline Pro 26 Jun 2026</div>
+        </div>
+        <div class="card">
+          <div class="minihead">Bank Indonesia</div>
+          <h3>Ambang dana float Rp1 miliar</h3>
+          <p>Dompet AntarPay bersifat tertutup dan setiap mutasi tercatat. Bila dana mengendap mencapai <b>Rp1 miliar</b>, izin BI menjadi wajib — baik closed loop maupun open loop. Kami menyatakan ambang ini di muka, bukan menunggu ditanya.</p>
+          <div class="prov" style="margin-top:10px;"><span class="tag tag--src">S-31</span> PBI No. 20/6/PBI/2018 · <span class="tag tag--asumsi">ASUMSI</span> posisi bebas izin PJP selama hanya menjadi merchant PJP berizin — menunggu opini konsultan sistem pembayaran</div>
+        </div>
+      </div>
+
+      <div class="notice" style="margin-top:18px;">
+        <b>Peringatan yang kami wariskan dari riset.</b> Teks lengkap Perpres 27/2026, PM 12/2019, PM 118/2018, dan Permenkominfo 5/2020 <b>tidak berhasil dibaca langsung</b>. Seluruh kutipan pasal di halaman ini berasal dari sumber sekunder dan wajib dicek silang ke JDIH resmi sebelum dipakai dalam dokumen yang mengikat atau diajukan kepada regulator.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ INVESTOR ============ -->
+  <section class="band" id="investor">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">08 · Untuk investor</span>
+        <h2>Rp26,12 miliar untuk 24 bulan — separuh terhitung, separuh masih terbuka</h2>
+        <p class="lede">Kami memisahkan angka yang dihitung baris per baris dari angka yang masih menunggu keputusan pemilik. Yang kedua ditandai, bukan disamarkan.</p>
+      </div>
+
+      <div class="grid g2" style="align-items:start;">
+        <div class="panel">
+          <div class="minihead">Kebutuhan pendanaan 24 bulan</div>
+          <div class="fund" id="fundBars" style="margin-top:12px;"></div>
+          <div class="hr" style="margin:18px 0;"></div>
+          <div class="fund__top" style="font-size:15px;"><b>Total kebutuhan</b><span class="fund__amt" style="font-size:17px;">Rp26,116 miliar</span></div>
+          <div class="prov" style="margin-top:8px;">Porsi biaya terkait SDM: 52% — turunan, dan sensitif terhadap pos placeholder di atasnya.</div>
+        </div>
+
+        <div class="panel">
+          <div class="minihead">Rencana SDM dan biayanya</div>
+          <div class="tablewrap" style="margin-top:12px;border:0;">
+            <table style="min-width:420px;">
+              <thead><tr><th>Fase</th><th>Orang</th><th>Biaya SDM / bulan</th></tr></thead>
+              <tbody>
+                <tr><td>Fase 0 · bulan 1–3</td><td class="num">9</td><td class="num">Rp230,3 juta</td></tr>
+                <tr><td>Fase 1 · bulan 4–12</td><td class="num">24</td><td class="num">Rp435,6 juta</td></tr>
+                <tr><td>Fase 2 · bulan 13–24</td><td class="num">42</td><td class="num">Rp636,3 juta</td></tr>
+                <tr><td>Fase 3 · bulan 25–36 <span class="tag tag--asumsi">ASUMSI</span></td><td class="num">60</td><td class="num">belum dimodelkan</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p style="font-size:14px;color:var(--ink-2);margin-top:12px;">Kumulatif biaya SDM bulan 1–24: <b class="money">Rp11,689 miliar</b>. Skenario Hemat / Dasar / Agresif: <b class="money">Rp8,02 M</b> / <b class="money">Rp11,69 M</b> / <b class="money">Rp16,00 M</b> untuk 36 / 42 / 48 orang.</p>
+          <p style="font-size:14px;color:var(--ink-2);margin-top:10px;">Seluruh pita gaji per posisi berstatus <span class="tag tag--asumsi">ASUMSI</span> — tidak ada satu pun benchmark gaji terbuka untuk Pekanbaru dan Padang. UMK 2026 yang menjadi lantai: Pekanbaru <b class="money">Rp3.998.179</b>, Padang <b class="money">Rp3.182.955</b>. <span class="tag tag--src">S-01</span><span class="tag tag--src">S-03</span></p>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <h3>Risiko utama, apa adanya</h3>
+      <div style="margin-top:12px;">
+        <div class="risk"><span class="risk__id">R1</span><div class="risk__b"><b>Status hukum kemitraan mitra pengemudi</b><span>Bila status kemitraan berubah menjadi hubungan kerja, seluruh struktur biaya berubah fundamental. Ini risiko nomor satu, bukan catatan kaki.</span><span class="risk__m"><em>Mitigasi</em> — bauran pendapatan non-komisi disiapkan sejak awal (iklan merchant, biaya layanan, langganan mitra). <span class="tag tag--src">S-21</span><span class="tag tag--src">S-48</span><span class="tag tag--src">S-49</span></span></div></div>
+        <div class="risk"><span class="risk__id">R2</span><div class="risk__b"><b>Batas 8% meluas ke layanan lain</b><span>Aturan tarif tiga layanan (orang, barang, makanan) ditargetkan terbit September 2026 dan berstatus rencana, bukan hukum positif.</span><span class="risk__m"><em>Mitigasi</em> — komisi adalah data di tabel <code>pricing</code>, bukan kode; perubahannya satu setelan Panel Admin. <span class="tag tag--src">S-28</span><span class="tag tag--src">S-29</span><span class="tag tag--src">S-30</span></span></div></div>
+        <div class="risk"><span class="risk__id">R3</span><div class="risk__b"><b>Konsolidasi Grab–GoTo</b><span>Entitas gabungan diperkirakan menguasai hingga 91% pasar ride-hailing Indonesia; per 15 Januari 2026 masih dinegosiasikan.</span><span class="risk__m"><em>Mitigasi</em> — ruang yang kami ambil adalah yang tidak mereka layani: pasar tradisional dan titipan antar kota. <span class="tag tag--src">E-04</span></span></div></div>
+        <div class="risk"><span class="risk__id">R4</span><div class="risk__b"><b>Ambang dana float Rp1 miliar</b><span>Pertumbuhan saldo dompet memicu kewajiban izin Bank Indonesia.</span><span class="risk__m"><em>Mitigasi</em> — pemantauan saldo float sebagai KPI Keuangan sejak Fase 1; ambang dinyatakan di muka. <span class="tag tag--src">S-31</span></span></div></div>
+        <div class="risk"><span class="risk__id">R5</span><div class="risk__b"><b>Insiden data pribadi</b><span>Denda administratif hingga 2% pendapatan tahunan. Data identitas resmi (KTP, SIM, STNK, swafoto) tidak boleh keluar wilayah Indonesia.</span><span class="risk__m"><em>Mitigasi</em> — DPO sejak Fase 1, RLS 98 kebijakan, log audit, penyamaran data sebelum dikirim ke penyedia luar negeri. <span class="tag tag--src">S-37</span><span class="tag tag--src">S-39</span></span></div></div>
+        <div class="risk"><span class="risk__id">R6</span><div class="risk__b"><b>Kegagalan rekrutmen engineer senior</b><span>Tidak ada benchmark gaji terbuka untuk Pekanbaru dan Padang; pita gaji seluruhnya asumsi.</span><span class="risk__m"><em>Mitigasi</em> — ekuitas menggantikan tunai di level direksi pra-pendanaan; kolam ESOP 10% <span class="tag tag--asumsi">ASUMSI</span>, vesting 4 tahun, cliff 1 tahun.</span></div></div>
+      </div>
+
+      <div class="hr"></div>
+
+      <h3>Daftar terbuka: apa yang masih berstatus asumsi</h3>
+      <p class="lede" style="margin-top:8px;">Sembilan belas angka pada halaman ini bersumber; yang berikut ini tidak. Kami menampilkannya sebagai daftar, bukan menyebarnya ke catatan kaki.</p>
+      <div class="tablewrap" style="margin-top:14px;">
+        <table>
+          <thead><tr><th>Asumsi</th><th>Muncul di</th><th>Yang dibutuhkan untuk menutupnya</th></tr></thead>
+          <tbody>
+            <tr><td><b>Pos non-SDM lainnya Rp12 miliar</b> — insentif mitra, pemasaran, infrastruktur, perizinan</td><td>Pendanaan</td><td><b>Keputusan pemilik.</b> Ini placeholder input pada model, bukan hasil perhitungan. Benchmark CAC/CAD Indonesia tidak ditemukan di sumber terbuka. Halaman ini tidak boleh dipakai untuk penawaran sebelum angka ini diganti.</td></tr>
+            <tr><td>Seluruh pita gaji 20 posisi di dua kota</td><td>SDM, pendanaan</td><td>Minimal 5 penawaran gaji riil per level.</td></tr>
+            <tr><td>Seluruh biaya non-gaji SDM (Rp1,927 miliar / 24 bulan)</td><td>Pendanaan</td><td>Kutipan harga nyata vendor coworking, perangkat, lisensi, asuransi di kedua kota.</td></tr>
+            <tr><td>Perlakuan biaya jasa aplikasi Rp1.000 terhadap batas 8%</td><td>Unit economics</td><td>Penegasan konsultan hukum sebelum tarif final ditetapkan.</td></tr>
+            <tr><td>Bebas kewajiban izin PJP selama hanya menjadi merchant PJP berizin</td><td>Kepatuhan, AntarPay</td><td>Opini konsultan sistem pembayaran.</td></tr>
+            <tr><td>Kewajiban menunjuk DPO pada kasus konkret</td><td>Kepatuhan</td><td>Opini hukum. Risikonya asimetris — kami tetap menunjuk DPO.</td></tr>
+            <tr><td>Headcount Fase 3 = 60 orang</td><td>Peta jalan</td><td>Indikatif; ditegaskan bukan komitmen.</td></tr>
+            <tr><td>Kolam ESOP 10%, vesting 4 tahun, cliff 1 tahun</td><td>Tata kelola</td><td>Keputusan pemegang saham / RUPS.</td></tr>
+            <tr><td>SOM Pekanbaru + Padang</td><td>Pasar</td><td><b>Sengaja dikosongkan.</b> Akan dihitung dari data order nyata 90 hari pertama. Tidak ada benchmark GMV on-demand kota tier-2 Sumatera.</td></tr>
+            <tr><td>Karakterisasi masalah 01, 02, dan 04</td><td>Masalah</td><td>Survei pelanggan Pekanbaru/Padang; saat ini berstatus hipotesis kerja.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="hr"></div>
+
+      <h3>Pasar dan posisi</h3>
+      <div class="grid g3" style="margin-top:14px;">
+        <div class="card"><div class="minihead">TAM</div><div class="stat__n" style="font-size:28px;">US$100 M</div><p style="margin-top:6px;">GMV ekonomi digital Indonesia 2025, tumbuh +14% YoY; proyeksi ≈US$180 miliar pada 2030. <span class="tag tag--src">S-53</span><span class="tag tag--src">S-54</span></p></div>
+        <div class="card"><div class="minihead">SAM</div><div class="stat__n" style="font-size:28px;">US$10 M</div><p style="margin-top:6px;">GMV transportasi dan antar makanan Indonesia 2025 — e-Conomy SEA 2025 (Google–Temasek–Bain). <span class="tag tag--src">S-53</span></p></div>
+        <div class="card" style="border-color:var(--amber);"><div class="minihead" style="color:var(--amber);">SOM</div><div class="stat__n" style="font-size:28px;color:var(--amber);">tidak diisi</div><p style="margin-top:6px;">Sengaja tidak diangkakan. Benchmark kota tier-2 Sumatera tidak tersedia di sumber terbuka, dan kami menolak mengarang angka. <span class="tag tag--asumsi">ASUMSI</span></p></div>
+      </div>
+      <div class="prov" style="margin-top:12px;">"M" pada kartu ini berarti miliar dolar AS (billion). Sumber: e-Conomy SEA 2025 via <span class="tag tag--src">S-53</span><span class="tag tag--src">S-54</span> dan <span class="tag tag--src">E-03</span>, diakses 7 September 2026.</div>
+    </div>
+  </section>
+
+  <!-- ============ PENUTUP ============ -->
+  <footer class="foot">
+    <div class="wrap">
+      <span class="eyebrow">Langkah berikutnya</span>
+      <h2 style="margin-top:10px;">Produknya sudah ada. Yang kami cari adalah mitra untuk menyalakannya.</h2>
+      <div class="foot__cta">
+        <div class="card"><h3>Pendanaan tahap awal</h3><p>Rp26,12 miliar untuk 24 bulan, dengan pos non-SDM yang masih terbuka untuk dibahas bersama.</p></div>
+        <div class="card"><h3>Peluncuran Pekanbaru</h3><p>Membuka kota pertama dan mencapai likuiditas pasar satu kota dalam 12 bulan.</p></div>
+        <div class="card"><h3>Uji tuntas terbuka</h3><p>Basis kode, laporan uji 34 skenario, model biaya SDM, dan riset regulasi 61 sumber tersedia untuk diperiksa.</p></div>
+      </div>
+      <div class="kv" style="margin-bottom:18px;">
+        <span><b>Erza Pradipta Madana</b></span>
+        <span>Pemilik &amp; Komisaris Utama, PT AntarKita Indonesia</span>
+        <span>erzamadana@gmail.com</span>
+      </div>
+      <p class="foot__small">Halaman ini memakai dua penanda yang sama dengan deck investor: <span class="tag tag--src">S-xx</span> dan <span class="tag tag--int">INT</span> untuk angka yang dapat ditelusuri ke sumber atau ke berkas internal, dan <span class="tag tag--asumsi">ASUMSI</span> untuk perkiraan penyusun yang <b>bukan klaim faktual</b>. Dokumen ini bukan nasihat hukum, pajak, atau keuangan, dan bukan penawaran efek. Seluruh kutipan pasal wajib diverifikasi ke teks resmi JDIH sebelum dipakai dalam dokumen yang mengikat. Disusun 7 September 2026.</p>
+    </div>
+  </footer>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  var rupiah = function (n) { return "Rp" + Math.round(n).toLocaleString("id-ID"); };
+  var el = function (id) { return document.getElementById(id); };
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------------- tema ---------------- */
+  var root = document.documentElement;
+  var themeBtn = el("themeBtn");
+  try {
+    var saved = localStorage.getItem("antarkita-tema");
+    if (saved === "dark" || saved === "light") root.setAttribute("data-theme", saved);
+  } catch (e) { /* penyimpanan tidak tersedia — halaman tetap benar */ }
+  themeBtn.addEventListener("click", function () {
+    var now = root.getAttribute("data-theme");
+    var systemDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var next = now ? (now === "dark" ? "light" : "dark") : (systemDark ? "light" : "dark");
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("antarkita-tema", next); } catch (e) {}
+  });
+
+  /* ---------------- angka menghitung naik ---------------- */
+  var counters = document.querySelectorAll("[data-count]");
+  var runCount = function (node) {
+    var target = parseInt(node.getAttribute("data-count"), 10);
+    if (reduceMotion || !target) { node.textContent = target; return; }
+    var start = performance.now(), dur = 750;
+    var tick = function (t) {
+      var p = Math.min(1, (t - start) / dur);
+      var eased = 1 - Math.pow(1 - p, 3);
+      node.textContent = Math.round(target * eased);
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+  if ("IntersectionObserver" in window) {
+    var co = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { runCount(en.target); co.unobserve(en.target); }
+      });
+    }, { threshold: 0.5 });
+    Array.prototype.forEach.call(counters, function (c) { co.observe(c); });
+  }
+
+  /* ---------------- scrollspy ---------------- */
+  var links = Array.prototype.slice.call(document.querySelectorAll(".nav__link"));
+  var sections = links.map(function (a) { return document.querySelector(a.getAttribute("href")); });
+  var setActive = function (id) {
+    links.forEach(function (a) {
+      var on = a.getAttribute("href") === "#" + id;
+      if (on) { a.setAttribute("aria-current", "true"); } else { a.removeAttribute("aria-current"); }
+    });
+  };
+  if ("IntersectionObserver" in window) {
+    var so = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) { if (en.isIntersecting) setActive(en.target.id); });
+    }, { rootMargin: "-56px 0px -62% 0px", threshold: 0 });
+    sections.forEach(function (s) { if (s) so.observe(s); });
+  }
+
+  /* ---------------- 1. layanan ---------------- */
+  var ICON = {
+    ride: '<path d="M5 17.5h2.5l3-6h5l2 6H19"/><circle cx="5" cy="17.5" r="2.6"/><circle cx="19" cy="17.5" r="2.6"/><path d="M13.5 6.5h3"/>',
+    food: '<path d="M6 3v8a2.5 2.5 0 0 0 5 0V3"/><path d="M8.5 11v10"/><path d="M17.5 3c-1.6 1-2.5 2.8-2.5 5s.9 3.5 2.5 3.5V21"/>',
+    send: '<path d="M3.5 12 20.5 4l-4 16-4.5-6z"/><path d="M12 14l8.5-10"/>',
+    box: '<path d="M3 8.5h13v8H3z"/><path d="M16 11h3.2l1.8 3v2.5H16z"/><circle cx="7" cy="18.5" r="1.8"/><circle cx="18" cy="18.5" r="1.8"/>',
+    shop: '<path d="M4 8h16l-1.2 11H5.2z"/><path d="M8.5 8V6a3.5 3.5 0 0 1 7 0v2"/>',
+    market: '<path d="M4 10h16v9H4z"/><path d="M3 6.5h18L20 10H4z"/><path d="M9.5 19v-5h5v5"/>',
+    travel: '<path d="M4 16.5h16"/><path d="M6 16.5V9l4-3.5 4 3.5v7.5"/><circle cx="8" cy="19.5" r="1.6"/><circle cx="16" cy="19.5" r="1.6"/>',
+    pay: '<rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 10.5h18"/><path d="M16.5 14.5h2"/>'
+  };
+  var SERVICES = [
+    {
+      id: "ride", name: "AntarRide", tag: "Ojek motor &amp; mobil", color: "var(--c-ride)",
+      apa: "Perjalanan dalam kota dengan motor atau mobil. Tarif muncul lengkap sebelum pesan, driver dicarikan dalam radius 5 km (motor) atau 8 km (mobil), dan prioritas tawaran ditentukan rating driver.",
+      siapa: "Warga yang berpindah harian: pekerja, pelajar, keluarga dengan bawaan banyak.",
+      uang: [["Dibayar pelanggan (contoh S1)", "Rp9.000"], ["Biaya jasa aplikasi", "Rp1.000"], ["Komisi maks. roda dua", "8%"], ["Komisi mobil", "20%"], ["Diterima driver pada 8%", "Rp7.360"]],
+      prov: "INT skenario uji S1 · migrasi 0025 (radius &amp; prioritas) · S-25 Perpres 27/2026"
+    },
+    {
+      id: "food", name: "AntarFood", tag: "Antar makanan", color: "var(--c-food)",
+      apa: "Pesan dari warung, restoran, dan UMKM sekitar. Merchant menerima atau menolak pesanan, mengatur waktu persiapan, dan driver dipanggil saat pesanan siap.",
+      siapa: "Pelanggan rumah dan kantor; pemilik warung yang belum punya kanal pesanan digital.",
+      uang: [["Contoh subtotal uji S3", "Rp60.000"], ["Komisi merchant", "15%"], ["Diterima merchant", "Rp51.000"], ["Ongkos antar", "tarif AntarRide"], ["Komisi driver", "20%"]],
+      prov: "INT pricing.merchant_commission_pct · skenario uji S3"
+    },
+    {
+      id: "send", name: "AntarSend", tag: "Kirim dalam kota", color: "var(--c-send)",
+      apa: "Kirim dokumen dan paket dalam kota. Ada foto bukti pengiriman dan PIN serah terima supaya sengketa punya jejak, bukan adu klaim.",
+      siapa: "UMKM yang mengirim pesanan harian, kantor, dan perorangan.",
+      uang: [["Radius jemput", "6 km"], ["Tarif per km", "Rp2.300"], ["Tarif minimum", "Rp9.000"], ["Biaya jasa aplikasi", "Rp1.000"], ["Komisi platform", "20%"]],
+      prov: "INT tabel pricing (service 'send') · app_settings.pickup_radius_km, migrasi 0025"
+    },
+    {
+      id: "box", name: "AntarBox", tag: "Mobil box &amp; pindahan", color: "var(--c-box)",
+      apa: "Mobil box dan pick up untuk pindahan, angkut barang besar, atau kirim stok usaha. Radius jemputnya paling lebar di antara seluruh layanan: 15 km.",
+      siapa: "Rumah tangga yang pindah, toko dan grosir yang mengangkut stok.",
+      uang: [["Radius jemput", "15 km"], ["Contoh order uji S6", "Rp172.000"], ["Refund saat batal", "penuh"], ["Komisi platform", "20%"]],
+      prov: "INT app_settings.pickup_radius_km · skenario uji S6 (refund penuh)"
+    },
+    {
+      id: "shop", name: "AntarShop", tag: "Titip beli di toko", color: "var(--c-shop)",
+      apa: "Tulis daftar belanja, mitra membelikan lalu mengantar. Harga belanja dijaga pagar kewajaran: di atas 1,35× acuan wajib melampirkan nota, di atas 2× acuan ditolak sistem.",
+      siapa: "Pelanggan yang butuh barang tertentu dari toko yang tidak punya layanan antar.",
+      uang: [["Radius jemput", "5 km"], ["Batas wajib nota", "1,35× acuan"], ["Batas tolak otomatis", "2× acuan"], ["Komisi platform", "20%"]],
+      prov: "INT skenario uji S8 (pagar harga) · migrasi 0025"
+    },
+    {
+      id: "market", name: "AntarMarket", tag: "Pasar tradisional", color: "var(--c-market)",
+      apa: "Belanja sayur, buah, daging, ikan, dan sembako langsung dari pedagang pasar tradisional, dengan harga pasar hari itu yang diperbarui pedagang sendiri. Ini layanan yang tidak dilayani pemain nasional mana pun di dua kota ini.",
+      siapa: "Rumah tangga kota; dan di sisi pasokan, pedagang lapak yang mendapat kanal digital pertamanya.",
+      uang: [["Radius jemput", "5 km"], ["Harga acuan", "diperbarui harian"], ["Pagar harga", "1,35× / 2× acuan"], ["Komisi platform", "20%"], ["Pencairan pedagang", "rekening sendiri"]],
+      prov: "INT tabel market_vendors &amp; market_prices · skenario uji S8"
+    },
+    {
+      id: "travel", name: "AntarTravel", tag: "Antar kota &amp; titipan", color: "var(--c-travel)",
+      apa: "Perjalanan antar kota dengan mitra travel terverifikasi — pilih jadwal, kursi, atau sewa privat satu mobil. Titipan barang antar kota memakai armada yang sama, dengan batas 30 kg dan 120 cm.",
+      siapa: "Perantau Pekanbaru–Padang, keluarga, dan pengirim barang antar kota.",
+      uang: [["Bagi hasil mitra travel", "80%"], ["Bagian platform", "20%"], ["Batas berat titipan", "30 kg"], ["Batas dimensi", "120 cm"]],
+      prov: "INT app_settings.travel_send_partner_pct · migrasi 0025 travel_send_* · skenario uji S5"
+    },
+    {
+      id: "pay", name: "AntarPay", tag: "Dompet dalam aplikasi", color: "var(--c-pay)",
+      apa: "Dompet tertutup untuk membayar seluruh layanan. Top-up otomatis lewat QRIS, GoPay, ShopeePay, dan virtual account bank melalui Midtrans Snap. Setiap mutasi tercatat pada satu tabel yang dapat direkonsiliasi.",
+      siapa: "Pelanggan yang tidak ingin bayar tunai; mitra yang menerima pendapatan dan mencairkannya.",
+      uang: [["Metode top-up", "QRIS, e-wallet, VA"], ["Contoh refund uji S6", "Rp172.000"], ["Ambang izin BI", "float Rp1 miliar"], ["Pencairan mitra", "otomatis / PIN admin"]],
+      prov: "INT tabel wallets &amp; wallet_transactions · Edge Function midtrans-create/webhook · S-31 PBI 20/6/PBI/2018"
+    }
+  ];
+
+  var svcGrid = el("svcGrid"), svcDetail = el("svcDetail");
+  SERVICES.forEach(function (s, i) {
+    var b = document.createElement("button");
+    b.className = "svc"; b.type = "button"; b.style.setProperty("--sc", s.color);
+    b.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+    b.dataset.idx = i;
+    b.innerHTML =
+      '<span class="svc__icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICON[s.id] + '</svg></span>' +
+      '<span class="svc__name">' + s.name + '</span><span class="svc__tag">' + s.tag + '</span>';
+    svcGrid.appendChild(b);
+  });
+  var renderService = function (i) {
+    var s = SERVICES[i];
+    svcDetail.style.setProperty("--sc", s.color);
+    var rows = s.uang.map(function (r) {
+      return '<div class="flow__row"><span>' + r[0] + '</span><b>' + r[1] + '</b></div>';
+    }).join("");
+    svcDetail.innerHTML =
+      '<div class="svc-detail__head"><h3>' + s.name + '</h3><span class="svc__tag">' + s.tag + '</span></div>' +
+      '<div class="svc-detail__cols">' +
+        '<div><div class="minihead">Apa ini</div><p>' + s.apa + '</p></div>' +
+        '<div><div class="minihead">Untuk siapa</div><p>' + s.siapa + '</p></div>' +
+        '<div><div class="minihead">Bagaimana uangnya mengalir</div><div class="flow">' + rows + '</div></div>' +
+      '</div>' +
+      '<div class="prov" style="margin-top:14px;">' + s.prov + '</div>';
+  };
+  svcGrid.addEventListener("click", function (ev) {
+    var b = ev.target.closest(".svc");
+    if (!b) return;
+    Array.prototype.forEach.call(svcGrid.children, function (c) { c.setAttribute("aria-pressed", "false"); });
+    b.setAttribute("aria-pressed", "true");
+    renderService(parseInt(b.dataset.idx, 10));
+  });
+  renderService(0);
+
+  /* ---------------- 2. simulasi perjalanan pesanan ---------------- */
+  var STEPS = [
+    {
+      key: "Pesan",
+      cust: { pill: "Menyusun pesanan", pillClass: "pill", title: "AntarRide · Jl. Sudirman → Jl. Riau", lines: ["Estimasi tiba 14 menit · 3,4 km", "Metode bayar: AntarPay"], box: "Total yang dibayar <b>Rp9.000</b><br><span style=\"font-size:12.5px\">biaya jasa Rp8.000 + biaya jasa aplikasi Rp1.000</span>", progress: 5 },
+      drv: { pill: "Online", pillClass: "pill pill--live", title: "Menunggu tawaran", lines: ["Rating 4,9 · 312 perjalanan", "Berada 1,2 km dari titik jemput"], box: "Belum ada tawaran masuk." },
+      log: [["00:00", "insert into <b>orders</b> — status <b>searching</b>, service <b>ride_motor</b>, total 9.000, payment_method <b>wallet</b>"]]
+    },
+    {
+      key: "Dicarikan driver",
+      cust: { pill: "Mencari driver", pillClass: "pill pill--wait", title: "Mencari driver terdekat…", lines: ["Radius pencarian 5 km", "Kami memberi tahu Anda bila lebih dari 5 menit"], box: "Harga terkunci di <b>Rp9.000</b>. Bila tidak ada driver online, harga dinamis 1,25× berlaku sebelum Anda menekan pesan — bukan sesudahnya.", progress: 18 },
+      drv: { pill: "Tawaran masuk", pillClass: "pill pill--wait", title: "Ojek · 3,4 km · 14 menit", lines: ["Jemput: Jl. Sudirman (1,2 km dari Anda)"], box: "Pendapatan bersih Anda <b>Rp7.360</b><br><span style=\"font-size:12.5px\">biaya jasa Rp8.000 − komisi 8% Rp640</span>" },
+      log: [["00:02", "dispatch — <b>pickup_radius_km('ride_motor')</b> = 5 km"], ["00:02", "prioritas rating: 4,9 ≥ 4,8 → tawaran dikirim tanpa jeda (<b>delay 0 dtk</b>)"]]
+    },
+    {
+      key: "Diterima",
+      cust: { pill: "Driver ditemukan", pillClass: "pill pill--live", title: "Rudi H. menuju titik jemput", lines: ["Honda Vario · BM 4821 QD · rating 4,9"], box: "Chat dan telepon berjalan di dalam aplikasi. <b>Nomor HP Anda tidak dibagikan</b> ke siapa pun.", progress: 35, driverCard: true },
+      drv: { pill: "Menuju jemput", pillClass: "pill pill--live", title: "Navigasi ke Jl. Sudirman", lines: ["1,2 km · perkiraan 4 menit"], box: "Order dikunci untuk Anda. Pembatalan berulang 3× dalam 24 jam memicu penangguhan otomatis." },
+      log: [["00:41", "update <b>orders</b> — status <b>accepted</b>, driver_id terisi"], ["00:41", "kanal <b>realtime</b> order dibuka: pelanggan, driver, admin melihat status yang sama"]]
+    },
+    {
+      key: "Jemput",
+      cust: { pill: "Driver tiba", pillClass: "pill pill--live", title: "Rudi H. sudah di titik jemput", lines: ["Cocokkan plat: BM 4821 QD"], box: "Sebelum berangkat: tombol <b>SOS</b>, <b>bagikan perjalanan</b> ke keluarga, dan kontak darurat aktif di layar.", progress: 48, driverCard: true },
+      drv: { pill: "Menunggu pelanggan", pillClass: "pill pill--wait", title: "Tiba di titik jemput", lines: ["Konfirmasi penumpang lalu mulai perjalanan"], box: "Bila menunggu lebih dari <b>5 menit</b>, sistem mengirim permohonan maaf ke pelanggan secara otomatis." },
+      log: [["04:10", "update <b>orders</b> — status <b>arrived</b>"], ["04:10", "pg_cron memantau ambang <b>wait_apology_minutes</b> = 5"]]
+    },
+    {
+      key: "Antar",
+      cust: { pill: "Dalam perjalanan", pillClass: "pill pill--live", title: "Menuju Jl. Riau", lines: ["Posisi driver bergerak di peta secara langsung", "Perkiraan tiba 14:26"], box: "Rute dan posisi diambil dari <b>OSM/OSRM</b>. Perjalanan dapat dibagikan lewat tautan tanpa membuka aplikasi.", progress: 76, driverCard: true },
+      drv: { pill: "Mengantar", pillClass: "pill pill--live", title: "3,4 km menuju tujuan", lines: ["Navigasi aktif · chat tersedia"], box: "Pendapatan perjalanan ini <b>Rp7.360</b> masuk ringkasan harian setelah selesai." },
+      log: [["04:55", "update <b>orders</b> — status <b>in_progress</b>"], ["04:55", "posisi driver disiarkan ke kanal realtime tiap pembaruan lokasi"]]
+    },
+    {
+      key: "Selesai",
+      cust: { pill: "Selesai", pillClass: "pill pill--done", title: "Anda sudah tiba", lines: ["Perjalanan 13 menit · 3,4 km"], box: "Beri penilaian untuk Rudi H. Rating inilah yang menentukan prioritas tawaran berikutnya untuk driver.", progress: 100, driverCard: true, rate: true },
+      drv: { pill: "Selesai", pillClass: "pill pill--done", title: "Perjalanan selesai", lines: ["Kembali ke daftar tawaran"], box: "Perjalanan hari ini: 9 order · <b>Rp63.400</b>" },
+      log: [["17:32", "update <b>orders</b> — status <b>completed</b>"], ["17:32", "insert into <b>ratings</b> — 5 bintang untuk driver"]]
+    },
+    {
+      key: "Uang terbagi",
+      cust: { pill: "Terbayar", pillClass: "pill pill--done", title: "AntarPay terdebet Rp9.000", lines: ["Saldo tersisa Rp141.000"], box: "Struk lengkap tersimpan di riwayat pesanan: tarif, biaya jasa aplikasi, dan promo yang dipakai.", progress: 100, driverCard: true },
+      drv: { pill: "Masuk dompet", pillClass: "pill pill--done", title: "Saldo bertambah Rp7.360", lines: ["Dapat dicairkan ke rekening bank"], box: "Pencairan berjalan otomatis di bawah ambang, dan memerlukan <b>PIN admin</b> di atasnya — pemisahan tugas keuangan ditegakkan sistem." },
+      log: [
+        ["17:33", "update <b>orders</b> — payment_status <b>paid</b>"],
+        ["17:33", "insert <b>wallet_transactions</b> — pelanggan <b>payment</b> −9.000"],
+        ["17:33", "insert <b>wallet_transactions</b> — driver <b>earning</b> +7.360"],
+        ["17:33", "pendapatan platform <b>Rp1.640</b> = komisi 640 (8%) + biaya jasa aplikasi 1.000"],
+        ["17:33", "seluruh mutasi masuk <b>audit_logs</b> dan laporan admin_finance_cascade"]
+      ]
+    }
+  ];
+
+  var simSteps = el("simSteps"), custBody = el("custBody"), drvBody = el("drvBody"), sysLog = el("sysLog");
+  var custPill = el("custPill"), drvPill = el("drvPill");
+  var simIdx = -1, playing = null;
+
+  STEPS.forEach(function (s, i) {
+    var b = document.createElement("button");
+    b.className = "step"; b.type = "button"; b.dataset.idx = i;
+    b.innerHTML = '<span class="step__n">' + (i + 1) + '</span>' + s.key;
+    simSteps.appendChild(b);
+  });
+
+  var renderCustomer = function (c) {
+    custPill.className = c.pillClass; custPill.textContent = c.pill;
+    var html = '<div class="screen-title">' + c.title + '</div>';
+    if (c.driverCard) {
+      html += '<div class="avatarrow"><span class="avatar">RH</span><div><div style="font-weight:700;font-size:14px;">Rudi H.</div><div class="screen-line" style="font-size:12.5px;">BM 4821 QD · ★ 4,9</div></div></div>';
+    }
+    c.lines.forEach(function (l) { html += '<div class="screen-line">' + l + '</div>'; });
+    html += '<div class="track"><span class="track__fill" style="width:' + (c.progress || 0) + '%"></span></div>';
+    html += '<div class="screen-box">' + c.box + '</div>';
+    if (c.rate) html += '<div class="screen-line" style="font-size:19px;letter-spacing:3px;color:var(--amber);">★★★★★</div>';
+    custBody.innerHTML = html;
+  };
+  var renderDriver = function (d) {
+    drvPill.className = d.pillClass; drvPill.textContent = d.pill;
+    var html = '<div class="screen-title">' + d.title + '</div>';
+    d.lines.forEach(function (l) { html += '<div class="screen-line">' + l + '</div>'; });
+    html += '<div class="screen-box">' + d.box + '</div>';
+    drvBody.innerHTML = html;
+  };
+  var renderLog = function (upto, animateFrom) {
+    var html = "";
+    for (var i = 0; i <= upto; i++) {
+      STEPS[i].log.forEach(function (r) {
+        var cls = (i === animateFrom) ? "log__row log__row--new" : "log__row";
+        html += '<div class="' + cls + '"><span class="log__t">' + r[0] + '</span><span class="log__x">' + r[1] + '</span></div>';
+      });
+    }
+    sysLog.innerHTML = html;
+    sysLog.parentNode.scrollTop = sysLog.parentNode.scrollHeight;
+  };
+  var goStep = function (i, animate, scroll) {
+    if (i < 0 || i >= STEPS.length) return;
+    simIdx = i;
+    Array.prototype.forEach.call(simSteps.children, function (b, k) {
+      if (k === i) { b.setAttribute("aria-current", "true"); } else { b.removeAttribute("aria-current"); }
+      b.classList.toggle("step--done", k < i);
+    });
+    renderCustomer(STEPS[i].cust);
+    renderDriver(STEPS[i].drv);
+    renderLog(i, animate ? i : -1);
+    el("simPrev").disabled = (i === 0);
+    el("simNext").disabled = (i === STEPS.length - 1);
+    if (scroll) {
+      var btn = simSteps.children[i];
+      /* gulir hanya di dalam baris langkah, jangan menggeser halaman */
+      if (btn) simSteps.scrollLeft = Math.max(0, btn.offsetLeft - simSteps.clientWidth / 2 + btn.offsetWidth / 2);
+    }
+  };
+  var stopPlay = function () {
+    if (playing) { clearInterval(playing); playing = null; el("simPlay").textContent = "Putar otomatis"; }
+  };
+  el("simNext").addEventListener("click", function () { stopPlay(); goStep(simIdx + 1, true, true); });
+  el("simPrev").addEventListener("click", function () { stopPlay(); goStep(simIdx - 1, false, true); });
+  el("simReset").addEventListener("click", function () { stopPlay(); goStep(0, false, true); });
+  el("simPlay").addEventListener("click", function () {
+    if (playing) { stopPlay(); return; }
+    if (simIdx >= STEPS.length - 1) goStep(0, false, true);
+    el("simPlay").textContent = "Jeda";
+    playing = setInterval(function () {
+      if (simIdx >= STEPS.length - 1) { stopPlay(); return; }
+      goStep(simIdx + 1, true, true);
+    }, 1900);
+  });
+  simSteps.addEventListener("click", function (ev) {
+    var b = ev.target.closest(".step");
+    if (!b) return;
+    stopPlay(); goStep(parseInt(b.dataset.idx, 10), true, true);
+  });
+  goStep(0, false, false);
+
+  /* ---------------- 3. anatomi ---------------- */
+  var ANAT = {
+    apps: [
+      { id: "app-pel", n: "Aplikasi Pelanggan", s: "26 rute UI", awam: "Aplikasi yang dipasang warga: memesan delapan layanan, melacak driver di peta, membayar dengan AntarPay, chat dan telepon di dalam aplikasi, serta membuka tiket bantuan.", tech: "Expo / React Native, <code>id.antarkita.app</code>. 26 rute diuji render tanpa error. Peta OSM, panggilan WebRTC, notifikasi FCM v1." },
+      { id: "app-mit", n: "Aplikasi Mitra", s: "18 rute UI", awam: "Satu aplikasi untuk lima jenis mitra: driver, merchant, pedagang pasar, mitra travel, dan pemilik mobil box. Terima order, kelola dagangan, cairkan pendapatan.", tech: "<code>id.antarkita.mitra</code>, basis kode yang sama dengan aplikasi pelanggan. Onboarding dengan unggah dokumen dan skor auto-verifikasi ≥80." },
+      { id: "app-adm", n: "Panel Admin &amp; Portal Eksekutif", s: "24 rute UI · web", awam: "Ruang kendali perusahaan: tarif, promo, verifikasi mitra, keuangan, keamanan, dan laporan untuk Direksi serta Komisaris. Tidak dipublikasikan ke Play Store.", tech: "Web saja (<code>/admin/</code>). Gerbang PIN admin, <code>audit_logs</code>, laporan <code>admin_finance_cascade</code>, pengaturan <code>app_settings</code> tanpa rilis ulang." }
+    ],
+    backend: [
+      { id: "be-rls", n: "RLS · 98 kebijakan", s: "keamanan baris", awam: "Setiap baris data punya penjaganya sendiri. Pelanggan hanya bisa membaca ordernya sendiri, driver hanya order yang ditugaskan kepadanya — dijaga oleh basis data, bukan oleh aplikasi.", tech: "98 <code>create policy</code> pada 66 tabel di migrasi 0001–0030. Fungsi sensitif <code>revoke ... from public, anon</code> lalu <code>grant execute to authenticated</code>." },
+      { id: "be-fn", n: "Edge Functions", s: "3 fungsi", awam: "Tiga potong kode yang berjalan di sisi server untuk hal yang tidak boleh dipercayakan ke ponsel: membuat tagihan, menerima konfirmasi pembayaran, dan mengirim notifikasi.", tech: "<code>midtrans-create</code>, <code>midtrans-webhook</code>, <code>push-send</code> pada <code>supabase/functions/</code>. Webhook memverifikasi tanda tangan sebelum mengubah <code>payment_status</code>." },
+      { id: "be-rt", n: "Realtime", s: "kanal per order", awam: "Pelanggan, driver, dan admin melihat status yang persis sama pada saat yang sama — tanpa perlu menarik ulang layar.", tech: "Kanal Supabase Realtime per order menyiarkan perubahan <code>orders.status</code> dan posisi driver ke tiga aplikasi sekaligus." },
+      { id: "be-cron", n: "pg_cron", s: "otomasi terjadwal", awam: "Tugas rutin yang berjalan sendiri: menyapu order tersendat, memantau ambang menunggu, menutup buku harian, dan menyiapkan laporan.", tech: "Dijadwalkan pada migrasi 0009, 0019, dan 0030. Memantau <code>wait_apology_minutes</code>, penangguhan otomatis 3 pembatalan/24 jam, dan penahanan order AntarNow 120 detik." },
+      { id: "be-set", n: "app_settings", s: "aturan sebagai data", awam: "Tarif, radius jemput, sakelar layanan, dan prioritas dispatch disimpan sebagai data yang bisa diubah dari Panel Admin — bukan ditanam di dalam kode aplikasi.", tech: "<code>pickup_radius_km</code> (motor 5, mobil 8, food 5, send 6, shop/market 5, box 15), <code>priority_tiers</code> (≥4,8→0 dtk; ≥4,5→20; ≥4,0→45; sisanya 75), <code>travel_send_partner_pct</code> = 80, <code>direct_order_hold_seconds</code> = 120." },
+      { id: "be-wal", n: "Dompet &amp; buku besar", s: "setiap mutasi tercatat", awam: "Setiap rupiah masuk dan keluar punya satu baris catatan: top-up, pembayaran, pendapatan mitra, refund, penarikan, dan penyesuaian.", tech: "<code>wallets</code>, <code>wallet_transactions</code> (tipe topup/payment/earning/refund/withdrawal/fee/adjustment), <code>payments</code>; direkonsiliasi lewat laporan <code>admin_finance_cascade</code>." },
+      { id: "be-fn2", n: "207 fungsi SQL", s: "logika di basis data", awam: "Aturan penting — pembagian hasil, pagar harga, dispatch, penangguhan — dijalankan di basis data, sehingga hasilnya sama untuk semua aplikasi dan tidak bisa diakali dari sisi ponsel.", tech: "207 <code>create or replace function</code> pada 30 migrasi; termasuk <code>pickup_radius_km()</code>, penetapan prioritas dispatch, dan penghitungan bagi hasil AntarTravel." },
+      { id: "be-mig", n: "30 migrasi", s: "riwayat skema", awam: "Setiap perubahan struktur data tercatat berurutan dan dapat diputar ulang dari nol — termasuk 7 perbaikan bug yang ditemukan uji simulasi.", tech: "<code>supabase/migrations/0001–0030</code>. Perbaikan hasil uji ada pada 0022, 0024, 0027, 0028, dan 0029." }
+    ],
+    integrasi: [
+      { id: "in-pay", n: "Midtrans Snap", s: "payment gateway", awam: "Pintu masuk uang: top-up lewat QRIS, GoPay, ShopeePay, dan virtual account bank. Inilah satu kunci yang masih ditunggu sebelum peluncuran.", tech: "Edge Function <code>midtrans-create</code> membuat transaksi, <code>midtrans-webhook</code> mengonfirmasi dan menulis <code>payment_status</code>. Akun produksi dipegang pemilik." },
+      { id: "in-map", n: "OSM · OSRM · Nominatim", s: "peta &amp; rute", awam: "Peta, pencarian alamat, dan perhitungan jarak serta perkiraan waktu tempuh untuk seluruh layanan antar.", tech: "OpenStreetMap untuk ubin peta, OSRM untuk rute dan ETA, Nominatim untuk geocoding titik jemput dan antar." },
+      { id: "in-push", n: "FCM v1", s: "notifikasi", awam: "Pemberitahuan tawaran order untuk driver dan perubahan status untuk pelanggan.", tech: "Edge Function <code>push-send</code>. Antrean <code>push_outbox</code> + pg_cron; klien <code>expo-notifications</code> menangani aplikasi terbuka, tertutup, maupun dibuka dari notifikasi. Menunggu berkas kredensial Firebase dari pemilik untuk aktif." },
+      { id: "in-call", n: "WebRTC + STUN/TURN", s: "panggilan dalam aplikasi", awam: "Pelanggan dan driver bisa saling menelepon tanpa bertukar nomor HP.", tech: "Panggilan suara peer-to-peer dengan relay TURN. Pemindahan earpiece ↔ loudspeaker berjalan lewat <code>expo-audio</code>; belum diuji pada perangkat fisik." }
+    ]
+  };
+  var anatDetail = el("anatDetail");
+  var anatIndex = {};
+  Object.keys(ANAT).forEach(function (layer) {
+    var host = document.querySelector('.blocks[data-layer="' + layer + '"]');
+    ANAT[layer].forEach(function (b) {
+      anatIndex[b.id] = b;
+      var node = document.createElement("button");
+      node.className = "block"; node.type = "button"; node.dataset.id = b.id;
+      node.setAttribute("aria-pressed", "false");
+      node.innerHTML = '<span class="block__n">' + b.n + '</span><span class="block__s">' + b.s + '</span>';
+      host.appendChild(node);
+    });
+  });
+  var renderAnat = function (id) {
+    var b = anatIndex[id];
+    anatDetail.innerHTML =
+      '<div class="svc-detail__head"><h3>' + b.n + '</h3><span class="svc__tag">' + b.s + '</span></div>' +
+      '<div class="anat-detail__cols">' +
+        '<div><div class="minihead">Bahasa awam</div><p style="font-size:14.5px;color:var(--ink-2);">' + b.awam + '</p></div>' +
+        '<div><div class="minihead">Detail teknis</div><div class="tech">' + b.tech + '</div></div>' +
+      '</div>';
+  };
+  document.querySelectorAll(".blocks").forEach(function (host) {
+    host.addEventListener("click", function (ev) {
+      var b = ev.target.closest(".block");
+      if (!b) return;
+      document.querySelectorAll(".block").forEach(function (n) { n.setAttribute("aria-pressed", "false"); });
+      b.setAttribute("aria-pressed", "true");
+      renderAnat(b.dataset.id);
+    });
+  });
+  document.querySelector('.block[data-id="be-set"]').setAttribute("aria-pressed", "true");
+  renderAnat("be-set");
+
+  /* ---------------- 4. kalkulator unit economics ---------------- */
+  var CALC = [
+    { id: "ride_motor", label: "AntarRide motor", fee: 1000, pct: 8, cap: 8, fare: 9000, minFare: 6000, maxFare: 40000,
+      note: "<b>Batas 8% ditegakkan.</b> Perpres 27/2026 membatasi potongan aplikasi ojek roda dua maksimal 8% sejak 1 Juli 2026 — pengemudi menerima 92%. Slider berhenti di sana. <span class=\"tag tag--src\">S-25</span>" },
+    { id: "ride_car", label: "AntarCar", fee: 4000, pct: 20, cap: 25, fare: 25000, minFare: 12000, maxFare: 150000,
+      note: "Layanan roda empat belum dibatasi regulasi; konfigurasi terpasang 20%. Aturan tarif tiga layanan masih berstatus <b>rencana</b>, target terbit September 2026. <span class=\"tag tag--src\">S-28</span>" },
+    { id: "food", label: "AntarFood", fee: 1000, pct: 20, cap: 25, fare: 12000, minFare: 6000, maxFare: 60000,
+      note: "Angka di sini adalah komisi <b>ongkos antar</b>. Komisi merchant terpisah dan bernilai 15% dari subtotal makanan. <span class=\"tag tag--int\">INT</span>" },
+    { id: "send", label: "AntarSend", fee: 1000, pct: 20, cap: 25, fare: 12000, minFare: 6000, maxFare: 80000,
+      note: "Konfigurasi terpasang 20%, belum dibatasi regulasi. <span class=\"tag tag--int\">INT</span> tabel <code>pricing</code>" },
+    { id: "box", label: "AntarBox", fee: 1000, pct: 20, cap: 25, fare: 172000, minFare: 40000, maxFare: 400000,
+      note: "Tarif contoh Rp172.000 diambil dari skenario uji S6 (order yang kemudian dibatalkan dan di-refund penuh). <span class=\"tag tag--int\">INT</span>" }
+  ];
+  var calcIdx = 0;
+  var seg = el("calcSeg");
+  CALC.forEach(function (c, i) {
+    var b = document.createElement("button");
+    b.className = "seg"; b.type = "button"; b.dataset.idx = i;
+    b.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+    b.textContent = c.label;
+    seg.appendChild(b);
+  });
+
+  var rOrders = el("rOrders"), rFare = el("rFare"), rPct = el("rPct");
+  var HR_COST_F1 = 435555487; /* biaya SDM Fase 1 per bulan, model biaya SDM */
+
+  var recalc = function () {
+    var c = CALC[calcIdx];
+    var orders = parseInt(rOrders.value, 10);
+    var fare = parseInt(rFare.value, 10);
+    var pct = parseFloat(rPct.value);
+
+    var basis = Math.max(0, fare - c.fee);       /* biaya jasa = basis komisi */
+    var komisi = basis * pct / 100;
+    var driver = basis - komisi;
+    var platform = komisi + c.fee;
+
+    el("vOrders").textContent = orders.toLocaleString("id-ID");
+    el("vFare").textContent = rupiah(fare);
+    el("vPct").textContent = pct.toFixed(1).replace(".", ",") + "%";
+    el("hintFee").textContent = rupiah(c.fee);
+
+    var pd = driver / fare * 100, pk = komisi / fare * 100, pf = c.fee / fare * 100;
+    el("segDriver").style.width = pd + "%";
+    el("segKomisi").style.width = pk + "%";
+    el("segFee").style.width = pf + "%";
+    el("segDriver").textContent = pd > 16 ? Math.round(pd) + "%" : "";
+    el("segKomisi").textContent = pk > 16 ? Math.round(pk) + "%" : "";
+    el("segFee").textContent = pf > 16 ? Math.round(pf) + "%" : "";
+    el("lgDriver").textContent = rupiah(driver);
+    el("lgKomisi").textContent = rupiah(komisi);
+    el("lgFee").textContent = rupiah(c.fee);
+
+    var gmvM = orders * 30 * fare;
+    var platM = orders * 30 * platform;
+    var drvM = orders * 30 * driver;
+    var juta = function (n) {
+      if (n >= 1e9) return "Rp" + (n / 1e9).toFixed(2).replace(".", ",") + " M";
+      return "Rp" + (n / 1e6).toFixed(1).replace(".", ",") + " jt";
+    };
+    el("oGmv").textContent = juta(gmvM);
+    el("oPlat").textContent = juta(platM);
+    el("oPlatSub").textContent = rupiah(platform) + " per order × " + orders.toLocaleString("id-ID") + " × 30 hari";
+    el("oDrv").textContent = juta(drvM);
+    el("oDrvSub").textContent = rupiah(driver) + " per order, sebelum biaya bahan bakar dan perawatan mitra";
+    el("oTake").textContent = (platform / fare * 100).toFixed(1).replace(".", ",") + "%";
+
+    var cover = platM / HR_COST_F1 * 100;
+    el("oCover").innerHTML = "Pendapatan platform dari layanan ini menutup <b>" + cover.toFixed(0) +
+      "%</b> biaya SDM Fase 1 (24 orang, Rp435,6 juta per bulan). Perusahaan menjalankan delapan layanan sekaligus — angka ini hanya satu di antaranya.";
+  };
+
+  var applyService = function (i) {
+    calcIdx = i;
+    var c = CALC[i];
+    Array.prototype.forEach.call(seg.children, function (b, k) { b.setAttribute("aria-pressed", k === i ? "true" : "false"); });
+    rPct.max = c.cap;
+    rPct.value = Math.min(c.pct, c.cap);
+    rFare.min = c.minFare; rFare.max = c.maxFare;
+    rFare.value = c.fare;
+    el("capText").innerHTML = c.note;
+    recalc();
+  };
+  seg.addEventListener("click", function (ev) {
+    var b = ev.target.closest(".seg");
+    if (!b) return;
+    applyService(parseInt(b.dataset.idx, 10));
+  });
+  [rOrders, rFare, rPct].forEach(function (r) { r.addEventListener("input", recalc); });
+  applyService(0);
+
+  /* ---------------- 5. peta jalan ---------------- */
+  var PHASES = [
+    {
+      k: "Fase 0 · bulan 1–3", t: "Pra-peluncuran", hc: "9 orang",
+      cost: "Rp230,3 juta / bulan",
+      body: "Menyelesaikan produk, mengurus izin, dan menjalankan uji tertutup di Pekanbaru. Yang tersisa bukan pembangunan produk, melainkan langkah akun dan legal.",
+      items: [
+        "Akun produksi Midtrans aktif — kunci pembayaran yang sedang ditunggu",
+        "Keystore dan build AAB untuk dua aplikasi Android",
+        "Pendaftaran Google Play Console dan pengajuan listing",
+        "NIB dan KBLI 53200 di OSS, lalu pendaftaran PSE (TDPSE) di Komdigi",
+        "Mengambil opini hukum: apakah AntarFood dan AntarSend beroda dua ikut batas 8%"
+      ]
+    },
+    {
+      k: "Fase 1 · bulan 4–12", t: "Peluncuran Pekanbaru", hc: "24 orang",
+      cost: "Rp435,6 juta / bulan",
+      body: "Mengejar likuiditas pasar satu kota: cukup driver online agar waktu tunggu pendek, cukup pesanan agar driver bertahan. Unit economics positif per order menjadi ukuran keberhasilan.",
+      items: [
+        "Rekrutmen dan pembinaan mitra driver di lapangan",
+        "Onboarding merchant AntarFood dan pedagang pasar AntarMarket",
+        "Legal & Compliance dan DPO menjadi fungsi tetap sejak fase ini",
+        "Kanal darurat 24 jam dan Trust & Safety aktif",
+        "SOM dihitung untuk pertama kalinya dari data order 90 hari pertama"
+      ]
+    },
+    {
+      k: "Fase 2 · bulan 13–24", t: "Padang dan skala", hc: "42 orang",
+      cost: "Rp636,3 juta / bulan",
+      body: "Mereplikasi playbook Pekanbaru ke Padang. Target: dua kota profitabel di tingkat kota. Struktur dirancang agar kota berikutnya hanya menambah satu City Manager dan dua staf operasi.",
+      items: [
+        "Payroll dua struktur karena selisih UMK 25,6% antar kota",
+        "AntarTravel dan titipan antar kota berjalan pada rute Pekanbaru–Padang",
+        "Rekap Fase 2: Teknologi 16, Operasi 16, Growth 3, Keuangan 4, Legal 1, Direksi 2",
+        "Analisis otomasi AI mengusulkan Skenario B: 30 orang, penghematan run-rate 12,6% — usulan, belum keputusan"
+      ]
+    },
+    {
+      k: "Fase 3 · bulan 25–36", t: "Ekspansi Sumatera", hc: "60 orang",
+      cost: "belum dimodelkan",
+      asumsi: true,
+      body: "Dua kota tambahan di Sumatera. Fase ini indikatif dan bukan komitmen — ditandai asumsi di dokumen desain organisasi, dan biayanya sengaja belum masuk kebutuhan pendanaan 24 bulan.",
+      items: [
+        "Menambah kota hanya dengan 1 City Manager + 2 Ops per kota, tanpa lapisan organisasi baru",
+        "Keputusan ekspansi bergantung pada unit economics dua kota pertama",
+        "Headcount 60 orang berstatus asumsi, bukan angka model"
+      ]
+    }
+  ];
+  var phaseTabs = el("phaseTabs"), phaseDetail = el("phaseDetail");
+  PHASES.forEach(function (p, i) {
+    var b = document.createElement("button");
+    b.className = "phase"; b.type = "button"; b.dataset.idx = i;
+    b.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+    b.innerHTML = '<span class="phase__k">' + p.k + '</span><span class="phase__t">' + p.t + '</span><span class="phase__hc">' + p.hc +
+      (p.asumsi ? ' <span class="tag tag--asumsi">ASUMSI</span>' : '') + '</span>';
+    phaseTabs.appendChild(b);
+  });
+  var renderPhase = function (i) {
+    var p = PHASES[i];
+    phaseDetail.innerHTML =
+      '<div class="svc-detail__head"><h3>' + p.t + '</h3><span class="svc__tag">' + p.k + ' · ' + p.hc + ' · ' + p.cost + '</span></div>' +
+      '<p class="lede" style="margin-top:10px;">' + p.body + '</p>' +
+      '<ul class="ticks">' + p.items.map(function (x) { return '<li>' + x + '</li>'; }).join("") + '</ul>';
+  };
+  phaseTabs.addEventListener("click", function (ev) {
+    var b = ev.target.closest(".phase");
+    if (!b) return;
+    Array.prototype.forEach.call(phaseTabs.children, function (c) { c.setAttribute("aria-pressed", "false"); });
+    b.setAttribute("aria-pressed", "true");
+    renderPhase(parseInt(b.dataset.idx, 10));
+  });
+  renderPhase(0);
+
+  /* ---------------- 6. komposisi pendanaan ---------------- */
+  var FUND = [
+    { l: "Biaya SDM 24 bulan (gaji, iuran, THR)", v: 11.689, c: "var(--teal)", t: '<span class="tag tag--int">INT</span> model biaya SDM' },
+    { l: "Biaya non-gaji melekat SDM", v: 1.927, c: "var(--c-shop)", t: '<span class="tag tag--asumsi">ASUMSI</span> seluruh biaya satuan' },
+    { l: "Modal minimum sektoral KBLI 53200", v: 0.500, c: "var(--green)", t: '<span class="tag tag--src">S-41</span> wajib, risiko tinggi' },
+    { l: "Pos non-SDM lainnya", v: 12.000, c: "#F5A524", t: '<span class="tag tag--asumsi">ASUMSI</span> <b>placeholder — menunggu keputusan pemilik</b>' }
+  ];
+  var maxV = 12;
+  el("fundBars").innerHTML = FUND.map(function (f) {
+    return '<div class="fund__row">' +
+      '<div class="fund__top"><span>' + f.l + '</span><span class="fund__amt">Rp' + f.v.toFixed(3).replace(".", ",") + ' M</span></div>' +
+      '<div class="fund__bar"><span class="fund__fill" style="width:' + (f.v / maxV * 100) + '%;background:' + f.c + ';"></span></div>' +
+      '<div class="prov">' + f.t + '</div></div>';
+  }).join("");
+})();
+</script>
