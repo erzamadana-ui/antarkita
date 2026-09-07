@@ -1,8 +1,8 @@
 // Admin · AntarMarket: pasar tradisional, bahan/komoditas, harga acuan per pasar & statistik nota driver
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Switch } from 'react-native';
-import { AdminPage, Table, StatCard, FilterBar, adminFont as font, AdminCard as Card } from '@/components/admin';
-import { Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
+import { AdminPage, Table, StatCard, FilterBar, AdminSelect, adminFont as font, adminTone, adminSpace, AdminCard as Card } from '@/components/admin';
+import { Row, Input, Button, Badge, toast } from '@/components/ui';
 import { DocUpload } from '@/components/DocUpload';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
@@ -28,6 +28,7 @@ export default function AdminMarket() {
   const [prices, setPrices] = useState<Record<string, string>>({});
   const [priceMeta, setPriceMeta] = useState<Record<string, string>>({});
   const [stats, setStats] = useState<MarketPriceStat[]>([]);
+  const [cityFilter, setCityFilter] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -52,6 +53,9 @@ export default function AdminMarket() {
   useEffect(() => { if (priceMarket) loadPrices(priceMarket.id); else { setPrices({}); setPriceMeta({}); } }, [priceMarket, loadPrices]);
 
   const activeItems = useMemo(() => items.filter((i) => i.active !== false), [items]);
+  // Pemilihan kota & pasar memakai dropdown ringkas (bukan deret chip yang menghabiskan ruang).
+  const cityOptions = useMemo(() => cities.map((c) => ({ value: c.id, label: c.name, sublabel: c.province ?? undefined })), [cities]);
+  const shownMarkets = useMemo(() => (cityFilter ? markets.filter((m) => m.city_id === cityFilter) : markets), [markets, cityFilter]);
 
   const saveMarket = async () => {
     if (mf.name.trim().length < 3) return toast.error('Nama pasar minimal 3 huruf');
@@ -96,10 +100,10 @@ export default function AdminMarket() {
 
   return (
     <AdminPage title="AntarMarket · Pasar & Harga" subtitle="Pasar tradisional, daftar bahan, harga acuan per pasar & statistik nota driver" onRefresh={async () => { await load(); if (tab === 'stats') loadStats(); }}>
-      <Row gap={12} style={{ flexWrap: 'wrap' }}>
-        <StatCard index={0} label="Pasar aktif" value={markets.filter((m) => m.active !== false).length} hint={`${markets.length} pasar terdaftar`} color={colors.market} />
-        <StatCard index={1} label="Bahan aktif" value={activeItems.length} hint={`${items.length} total bahan`} color={colors.info} />
-        <StatCard index={2} label="Jasa belanja" value={`${settings.market_service_pct ?? '-'}%`} hint={`min ${rupiah(Number(settings.market_service_min) || 0)} · driver ${settings.market_driver_share_pct ?? '-'}%`} color={colors.accent} />
+      <Row gap={adminSpace.lg} style={{ flexWrap: 'wrap' }}>
+        <StatCard index={0} icon="storefront-outline" label="Pasar aktif" value={markets.filter((m) => m.active !== false).length} hint={`${markets.length} pasar terdaftar`} color={adminTone.teal} />
+        <StatCard index={1} icon="leaf-outline" label="Bahan aktif" value={activeItems.length} hint={`${items.length} total bahan`} color={adminTone.green} />
+        <StatCard index={2} icon="cash-outline" label="Jasa belanja" value={`${settings.market_service_pct ?? '-'}%`} hint={`min ${rupiah(Number(settings.market_service_min) || 0)} · driver ${settings.market_driver_share_pct ?? '-'}%`} color={adminTone.orange} />
       </Row>
       <Card style={{ backgroundColor: colors.market + '12', borderColor: colors.market + '40', gap: 4 }}>
         <Text style={font.small}>Acuan awal adalah perkiraan; survei pasar wajib sebelum komersial. Sumber publik: PIHPS Bank Indonesia (hargapangan.id) 10 komoditas, update harian — tidak menyediakan API, isi manual.</Text>
@@ -117,16 +121,19 @@ export default function AdminMarket() {
             <Input placeholder="Catatan (mis. ramai pagi, parkir motor di sisi utara)" value={mf.notes} onChangeText={(v) => setMf({ ...mf, notes: v })} multiline style={{ minHeight: 60, textAlignVertical: 'top' }} />
             <DocUpload label="Gambar pasar" hint="Opsional" value={mf.image_url || null} onChange={(u) => setMf({ ...mf, image_url: u })} bucket="merchant-images" color={colors.market} />
             <Row between><Text style={font.small}>Aktif (tampil untuk pelanggan)</Text><Switch value={mf.active} onValueChange={(v) => setMf({ ...mf, active: v })} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" /></Row>
-            <Button title={mf.id ? 'Simpan perubahan' : 'Tambah pasar'} color={colors.market} loading={busy} onPress={saveMarket} />
+            <Button title={mf.id ? 'Simpan perubahan' : 'Tambah pasar'} loading={busy} onPress={saveMarket} />
           </Card>
-          <View style={{ flex: 1.4, minWidth: 360 }}>
-            <Table rows={markets as unknown as Record<string, unknown>[]} emptyText="Belum ada pasar" columns={[
-              { key: 'name', label: 'Pasar', width: 220, render: (r) => { const m = r as unknown as Market; return <View><Text style={{ fontWeight: '700', color: colors.text }}>{m.name}</Text><Text style={font.tiny} numberOfLines={1}>{m.address ?? '-'}</Text></View>; } },
+          <View style={{ flex: 1.4, minWidth: 360, gap: adminSpace.sm }}>
+            <Row gap={adminSpace.sm} style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <AdminSelect icon="location-outline" placeholder="Semua kota" width={200} value={cityFilter} options={cityOptions} onChange={setCityFilter} clearable clearLabel="Semua kota" />
+            </Row>
+            <Table rows={shownMarkets as unknown as Record<string, unknown>[]} emptyText="Belum ada pasar pada kota ini" columns={[
+              { key: 'name', label: 'Pasar', width: 220, render: (r) => { const m = r as unknown as Market; return <View style={{ minWidth: 0 }}><Text style={font.bodyStrong} numberOfLines={1}>{m.name}</Text><Text style={font.tiny} numberOfLines={1}>{m.address ?? '-'}</Text></View>; } },
               { key: 'city', label: 'Kota', width: 100, render: (r) => <Text style={font.small}>{cityName(cities, String(r.city_id ?? ''))}</Text> },
               { key: 'open_hours', label: 'Jam', width: 100, render: (r) => <Text style={font.tiny}>{String(r.open_hours ?? '-')}</Text> },
               { key: 'notes', label: 'Catatan', width: 180, render: (r) => <Text style={font.tiny} numberOfLines={2}>{String(r.notes ?? '-')}</Text> },
               { key: 'active', label: 'Aktif', width: 70, render: (r) => { const m = r as unknown as Market; return <Switch value={m.active !== false} onValueChange={() => toggleMarket(m)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />; } },
-              { key: 'actions', label: 'Aksi', width: 170, render: (r) => { const m = r as unknown as Market; return <Row gap={6}><Button size="sm" title="Harga" color={colors.market} onPress={() => { setPriceMarket(m); setTab('prices'); }} /><Button size="sm" variant="outline" title="Ubah" color={colors.market} onPress={() => editMarket(m)} /></Row>; } },
+              { key: 'actions', label: 'Aksi', width: 170, align: 'right', render: (r) => { const m = r as unknown as Market; return <Row gap={6} style={{ flexWrap: 'nowrap' }}><Button size="sm" title="Harga" onPress={() => { setPriceMarket(m); setTab('prices'); }} /><Button size="sm" variant="outline" title="Ubah" onPress={() => editMarket(m)} /></Row>; } },
             ]} />
           </View>
         </Row>
@@ -137,22 +144,22 @@ export default function AdminMarket() {
           <Card style={{ flex: 1, minWidth: 300, gap: 10 }}>
             <Row between><Text style={font.label}>{itf.id ? 'Ubah bahan' : 'Tambah bahan'}</Text>{itf.id ? <Button size="sm" variant="ghost" title="Batal ubah" onPress={() => setItf({ ...emptyItem })} /> : null}</Row>
             <Input placeholder="Nama bahan (mis. Cabai merah keriting)" value={itf.name} onChangeText={(v) => setItf({ ...itf, name: v })} />
-            <Row gap={6} style={{ flexWrap: 'wrap' }}>{CATS.map((c) => <Chip key={c} label={marketCategoryLabel[c]} active={itf.category === c} onPress={() => setItf({ ...itf, category: c })} color={colors.market} />)}</Row>
+            <AdminSelect label="Kategori" icon="pricetags-outline" width="100%" value={itf.category} options={CATS.map((c) => ({ value: c, label: marketCategoryLabel[c] }))} onChange={(v) => setItf({ ...itf, category: v })} />
             <Row gap={8}><Input placeholder="Satuan (kg/ikat/butir)" value={itf.unit} onChangeText={(v) => setItf({ ...itf, unit: v })} containerStyle={{ flex: 1 }} /><Input placeholder="Harga acuan (Rp)" value={itf.ref_price} onChangeText={(v) => setItf({ ...itf, ref_price: v })} keyboardType="number-pad" containerStyle={{ flex: 1 }} /><Input placeholder="Urutan" value={itf.sort} onChangeText={(v) => setItf({ ...itf, sort: v })} keyboardType="number-pad" containerStyle={{ width: 80 }} /></Row>
             <Row between><Text style={font.small}>Aktif</Text><Switch value={itf.active} onValueChange={(v) => setItf({ ...itf, active: v })} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" /></Row>
-            <Button title={itf.id ? 'Simpan perubahan' : 'Tambah bahan'} color={colors.market} loading={busy} onPress={saveItem} />
+            <Button title={itf.id ? 'Simpan perubahan' : 'Tambah bahan'} loading={busy} onPress={saveItem} />
             <Text style={font.tiny}>Mengisi harga acuan saat ubah akan mencatat sumber "Admin" & memperbarui waktu. Kosongkan bila hanya mengubah nama/satuan.</Text>
           </Card>
           <View style={{ flex: 1.6, minWidth: 380 }}>
             <Table rows={items as unknown as Record<string, unknown>[]} emptyText="Belum ada bahan" columns={[
-              { key: 'name', label: 'Bahan', width: 200, render: (r) => <Text style={{ fontWeight: '700', color: colors.text }}>{String(r.name)}</Text> },
+              { key: 'name', label: 'Bahan', width: 200, render: (r) => <Text style={font.bodyStrong} numberOfLines={1}>{String(r.name)}</Text> },
               { key: 'category', label: 'Kategori', width: 110, render: (r) => <Badge text={marketCategoryLabel[String(r.category)] ?? String(r.category)} color={colors.market} /> },
               { key: 'unit', label: 'Satuan', width: 70 },
               { key: 'ref_price', label: 'Harga acuan', width: 110, render: (r) => <Text style={font.small}>{rupiah(Number(r.ref_price))}</Text> },
               { key: 'price_source', label: 'Sumber', width: 100, render: (r) => <Badge text={SOURCE_LABEL[String(r.price_source)] ?? String(r.price_source)} color={colors.info} /> },
               { key: 'price_updated_at', label: 'Diperbarui', width: 130, render: (r) => <Text style={font.tiny}>{r.price_updated_at ? formatDate(String(r.price_updated_at)) : '-'}</Text> },
               { key: 'active', label: 'Aktif', width: 70, render: (r) => { const i = r as unknown as MarketItem; return <Switch value={i.active !== false} onValueChange={() => toggleItem(i)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />; } },
-              { key: 'actions', label: 'Aksi', width: 90, render: (r) => <Button size="sm" variant="outline" title="Ubah" color={colors.market} onPress={() => editItem(r as unknown as MarketItem)} /> },
+              { key: 'actions', label: 'Aksi', width: 90, align: 'right', render: (r) => <Button size="sm" variant="outline" title="Ubah" onPress={() => editItem(r as unknown as MarketItem)} /> },
             ]} />
           </View>
         </Row>
@@ -161,18 +168,23 @@ export default function AdminMarket() {
       {tab === 'prices' && (
         <Card style={{ gap: 10 }}>
           <Text style={font.label}>Harga per pasar (survei)</Text>
-          <Row gap={6} style={{ flexWrap: 'wrap' }}>{markets.map((m) => <Chip key={m.id} label={m.name} active={priceMarket?.id === m.id} onPress={() => setPriceMarket(m)} color={colors.market} />)}</Row>
+          <Row gap={adminSpace.sm} style={{ flexWrap: 'wrap' }}>
+            <AdminSelect label="Kota" icon="location-outline" placeholder="Semua kota" width={200} value={cityFilter} options={cityOptions} onChange={(v) => { setCityFilter(v); setPriceMarket(null); }} clearable clearLabel="Semua kota" />
+            <AdminSelect label="Pasar" icon="storefront-outline" placeholder="Pilih pasar" width={260} value={priceMarket?.id ?? ''}
+              options={shownMarkets.map((m) => ({ value: m.id, label: m.name, sublabel: m.address ?? undefined }))}
+              onChange={(v) => setPriceMarket(shownMarkets.find((m) => m.id === v) ?? null)} />
+          </Row>
           {!priceMarket ? <Text style={font.small}>Pilih pasar untuk mengisi harga hasil survei. Kosongkan baris untuk memakai acuan umum.</Text> : (<>
             <Text style={font.tiny}>{priceMarket.name} · {Object.keys(priceMeta).length} bahan sudah punya harga khusus pasar ini. Harga acuan umum ditampilkan sebagai pembanding.</Text>
             <Table rows={activeItems as unknown as Record<string, unknown>[]} emptyText="Belum ada bahan aktif" columns={[
-              { key: 'name', label: 'Bahan', width: 200, render: (r) => <Text style={{ fontWeight: '700', color: colors.text }}>{String(r.name)} <Text style={font.tiny}>/ {String(r.unit)}</Text></Text> },
+              { key: 'name', label: 'Bahan', width: 200, render: (r) => <Text style={font.bodyStrong} numberOfLines={1}>{String(r.name)} <Text style={font.tiny}>/ {String(r.unit)}</Text></Text> },
               { key: 'ref_price', label: 'Acuan umum', width: 110, render: (r) => <Text style={font.small}>{rupiah(Number(r.ref_price))}</Text> },
               { key: 'market_price', label: 'Harga pasar ini', width: 140, render: (r) => <Input value={prices[String(r.id)] ?? ''} placeholder="Rp" keyboardType="number-pad" onChangeText={(v) => setPrices((p) => ({ ...p, [String(r.id)]: v }))} containerStyle={{ width: 120 }} /> },
               { key: 'updated', label: 'Terakhir', width: 130, render: (r) => <Text style={font.tiny}>{priceMeta[String(r.id)] ? formatDate(priceMeta[String(r.id)]) : '-'}</Text> },
             ]} />
             <Row gap={8}>
-              <Button title="Simpan harga survei" color={colors.market} loading={busy} onPress={saveMarketPrices} />
-              <Button title="Salin dari acuan umum" variant="outline" color={colors.market} onPress={() => setPrices(Object.fromEntries(activeItems.map((i) => [i.id, prices[i.id] || String(i.ref_price)])))} />
+              <Button title="Simpan harga survei" loading={busy} onPress={saveMarketPrices} />
+              <Button title="Salin dari acuan umum" variant="outline" onPress={() => setPrices(Object.fromEntries(activeItems.map((i) => [i.id, prices[i.id] || String(i.ref_price)])))} />
             </Row>
           </>)}
         </Card>
@@ -182,12 +194,12 @@ export default function AdminMarket() {
         <Card padded={false}>
           <View style={{ padding: 14, gap: 4 }}><Text style={font.label}>Acuan vs median nota driver (30 hari)</Text><Text style={font.tiny}>Median dihitung dari harga riil yang diinput driver saat menyelesaikan belanja. "Pakai median" mengganti acuan umum & mencatat sumber survei.</Text></View>
           <Table rows={stats as unknown as Record<string, unknown>[]} emptyText="Belum ada data statistik" columns={[
-            { key: 'name', label: 'Bahan', width: 200, render: (r) => <Text style={{ fontWeight: '700', color: colors.text }}>{String(r.name)} <Text style={font.tiny}>/ {String(r.unit)}</Text></Text> },
+            { key: 'name', label: 'Bahan', width: 200, render: (r) => <Text style={font.bodyStrong} numberOfLines={1}>{String(r.name)} <Text style={font.tiny}>/ {String(r.unit)}</Text></Text> },
             { key: 'ref_price', label: 'Acuan', width: 110, render: (r) => <Text style={font.small}>{rupiah(Number(r.ref_price))}</Text> },
-            { key: 'driver_median', label: 'Median nota', width: 130, render: (r) => { const s = r as unknown as MarketPriceStat; if (!s.driver_median) return <Text style={font.tiny}>-</Text>; const diff = s.ref_price ? Math.round(((s.driver_median - s.ref_price) / s.ref_price) * 100) : 0; return <View><Text style={font.small}>{rupiah(s.driver_median)}</Text><Text style={[font.tiny, { color: Math.abs(diff) >= 15 ? colors.danger : colors.textMuted }]}>{diff > 0 ? '+' : ''}{diff}% vs acuan</Text></View>; } },
+            { key: 'driver_median', label: 'Median nota', width: 130, render: (r) => { const s = r as unknown as MarketPriceStat; if (!s.driver_median) return <Text style={font.tiny}>-</Text>; const diff = s.ref_price ? Math.round(((s.driver_median - s.ref_price) / s.ref_price) * 100) : 0; return <View><Text style={font.small}>{rupiah(s.driver_median)}</Text><Text style={[font.tiny, { color: Math.abs(diff) >= 15 ? adminTone.red : adminTone.faint }]}>{diff > 0 ? '+' : ''}{diff}% vs acuan</Text></View>; } },
             { key: 'driver_samples', label: 'Sampel', width: 80, render: (r) => <Badge text={String(r.driver_samples ?? 0)} color={Number(r.driver_samples) >= 3 ? colors.success : colors.textMuted} /> },
             { key: 'last_seen', label: 'Terakhir', width: 130, render: (r) => <Text style={font.tiny}>{r.last_seen ? formatDate(String(r.last_seen)) : '-'}</Text> },
-            { key: 'actions', label: 'Aksi', width: 200, render: (r) => { const s = r as unknown as MarketPriceStat; return <Button size="sm" variant="outline" title="Pakai median sebagai acuan" color={colors.market} disabled={!s.driver_median || s.driver_median === s.ref_price} onPress={() => applyMedian(s)} />; } },
+            { key: 'actions', label: 'Aksi', width: 200, align: 'right', render: (r) => { const s = r as unknown as MarketPriceStat; return <Button size="sm" variant="outline" title="Pakai median sebagai acuan" disabled={!s.driver_median || s.driver_median === s.ref_price} onPress={() => applyMedian(s)} />; } },
           ]} keyField="item_id" />
         </Card>
       )}

@@ -10,13 +10,43 @@ import { colors, motion } from '@/lib/theme';
 
 export { FadeIn, FadeOut, FadeInDown, FadeInUp, ZoomIn, Layout, LinearTransition };
 
-/** Muncul dari bawah dengan jeda berurutan (index * stagger). */
+/**
+ * Muncul dengan jeda berurutan (index * stagger).
+ *
+ * PENTING (bug "menu blank" di APK Android): dulu komponen ini memakai animasi layout
+ * `entering={FadeInDown.delay(...)}`. Animasi `entering` dijalankan oleh modul
+ * LayoutAnimations Reanimated di sisi native — pada build release Android animasi itu
+ * bisa TIDAK PERNAH dijalankan (layar dibekukan `react-native-screens`, induk re-render /
+ * remount saat navigasi cepat, atau view sudah terpasang sebelum manajer animasi siap).
+ * Bila itu terjadi, view tetap berada di keadaan awal animasi, yaitu `opacity: 0` —
+ * selamanya. Hasilnya: grid layanan, pesanan berjalan, dan promo hilang walau datanya ada.
+ *
+ * Sekarang animasi digerakkan dari mount (useEffect + shared value) dan SELALU berakhir
+ * di keadaan terlihat (progress = 1), dengan jaring pengaman timer yang memaksa nilai akhir
+ * bila animasi tidak berjalan. API tidak berubah: `index`, `from`, `delay`, `style`.
+ */
+const ENTRANCE_SHIFT = 14;
 export function Entrance({ children, index = 0, style, from = 'down', delay = 0 }: { children: React.ReactNode; index?: number; style?: StyleProp<ViewStyle>; from?: 'down' | 'up' | 'fade' | 'zoom'; delay?: number }) {
   const reduce = useReducedMotion();
-  if (reduce) return <View style={style}>{children}</View>;
   const d = delay + Math.min(index, 8) * motion.stagger;
-  const anim = from === 'up' ? FadeInUp : from === 'fade' ? FadeIn : from === 'zoom' ? ZoomIn : FadeInDown;
-  return <Animated.View entering={anim.delay(d).duration(motion.slow).easing(motion.easeOut)} style={style}>{children}</Animated.View>;
+  // 0 = keadaan awal animasi, 1 = terlihat penuh. Reduce Motion → langsung 1 (tanpa animasi).
+  const p = useSharedValue(reduce ? 1 : 0);
+  useEffect(() => {
+    if (reduce) { cancelAnimation(p); p.value = 1; return; }
+    p.value = withDelay(d, withTiming(1, { duration: motion.slow, easing: motion.easeOut }));
+    // Jaring pengaman: apa pun yang terjadi pada UI thread, sesudah jeda + durasi + margin
+    // elemen dipaksa terlihat. Idempoten — bila animasi normal, nilainya memang sudah 1.
+    const tm = setTimeout(() => { cancelAnimation(p); p.value = 1; }, d + motion.slow + 400);
+    return () => clearTimeout(tm);
+  }, [reduce, d, p]);
+  const a = useAnimatedStyle(() => {
+    const t = p.value;
+    if (from === 'fade') return { opacity: t, transform: [] };
+    if (from === 'zoom') return { opacity: t, transform: [{ scale: 0.94 + t * 0.06 }] };
+    // 'down' = datang dari bawah (seperti FadeInDown), 'up' = datang dari atas.
+    return { opacity: t, transform: [{ translateY: (1 - t) * ENTRANCE_SHIFT * (from === 'up' ? -1 : 1) }] };
+  }, [from]);
+  return <Animated.View style={[style, a]}>{children}</Animated.View>;
 }
 
 /** Pressable dengan efek pegas (mengecil saat ditekan) + haptic ringan. */
@@ -77,7 +107,7 @@ export function LiveDot({ color = colors.success, size = 10 }: { color?: string;
   );
 }
 
-/** Placeholder berkilau saat memuat. */
+/** Placeholder berkilau saat memuat. Aman: opacity minimum 0.45 walau animasi tidak pernah jalan. */
 export function Skeleton({ width = '100%', height = 16, radius = 10, style }: { width?: number | `${number}%`; height?: number; radius?: number; style?: StyleProp<ViewStyle> }) {
   const p = useSharedValue(0);
   const reduce = useReducedMotion();
@@ -109,7 +139,15 @@ export function AnimatedNumber({ value, format = (n) => String(Math.round(n)), s
 /** Bar progres status pesanan (0..1) dengan animasi lebar. */
 export function ProgressBar({ progress, color = colors.primary, height = 6, track = 'rgba(11,31,42,0.08)' }: { progress: number; color?: string; height?: number; track?: string }) {
   const w = useSharedValue(0);
-  useEffect(() => { w.value = withTiming(Math.max(0, Math.min(1, progress)), { duration: motion.slow, easing: motion.easeOut }); }, [progress, w]);
+  const reduce = useReducedMotion();
+  useEffect(() => {
+    const to = Math.max(0, Math.min(1, progress));
+    if (reduce) { cancelAnimation(w); w.value = to; return; }
+    w.value = withTiming(to, { duration: motion.slow, easing: motion.easeOut });
+    // Jaring pengaman sama seperti Entrance: bar tidak boleh tertinggal di 0 bila animasi gagal.
+    const tm = setTimeout(() => { cancelAnimation(w); w.value = to; }, motion.slow + 400);
+    return () => clearTimeout(tm);
+  }, [progress, w, reduce]);
   const a = useAnimatedStyle(() => ({ width: `${w.value * 100}%` }));
   return (
     <View style={{ height, borderRadius: height, backgroundColor: track, overflow: 'hidden' }}>

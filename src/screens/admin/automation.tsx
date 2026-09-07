@@ -1,13 +1,13 @@
 // Admin · Otomasi: verifikasi bertingkat, pencairan otomatis, retensi, harga dinamis, anti-fraud & koefisien, moderasi data, laporan terjadwal
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Switch, Modal, StyleSheet, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { AdminPage, StatCard, Table, adminFont as font, AdminCard as Card } from '@/components/admin';
-import { Row, Button, Badge, Input, Chip, IconCircle, toast, type IconName } from '@/components/ui';
+import { AdminPage, StatCard, Table, AdminSelect, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, AdminCard as Card } from '@/components/admin';
+import { Row, Button, Badge, Input, IconCircle, toast, type IconName } from '@/components/ui';
 import { Entrance, Skeleton } from '@/components/motion';
 import { rpc } from '@/lib/supabase';
-import { colors, radius } from '@/lib/theme';
+import { colors } from '@/lib/theme';
 import { formatDate, rupiah } from '@/lib/format';
 import type { AutomationRun, ScheduledReport } from '@/lib/types';
 
@@ -120,13 +120,13 @@ export default function AdminAutomation() {
 
   return (
     <AdminPage title="Otomasi" subtitle="Aturan yang berjalan sendiri: verifikasi, pencairan, retensi, harga dinamis, anti-fraud, moderasi data, laporan" onRefresh={load}>
-      <Row gap={12} style={{ flexWrap: 'wrap' }}>
-        <StatCard index={0} label="Antrean manual" value={pendingTotal} hint="butuh keputusan admin" color={pendingTotal > 0 ? colors.warning : colors.success} />
-        <StatCard index={1} label="Driver · Merchant" value={`${pending.drivers ?? 0} · ${pending.merchants ?? 0}`} hint="verifikasi di bawah ambang" color={colors.ride} />
-        <StatCard index={2} label="Pedagang pasar" value={pending.vendors ?? 0} hint="pengajuan lapak" color={colors.market} />
-        <StatCard index={3} label="Penarikan" value={pending.withdrawals ?? 0} hint="di luar syarat otomatis" color={colors.primary} />
-        <StatCard index={4} label="Usulan tempat" value={pending.places ?? 0} hint="belum mencapai ambang" color={colors.shop} />
-        <StatCard index={5} label="Flag anti-fraud" value={pending.fraud ?? 0} hint="terbuka" color={colors.danger} />
+      <Row gap={adminSpace.lg} style={{ flexWrap: 'wrap' }}>
+        <StatCard index={0} icon="hourglass-outline" label="Antrean manual" value={pendingTotal} hint="butuh keputusan admin" color={pendingTotal > 0 ? adminTone.amber : adminTone.green} />
+        <StatCard index={1} icon="people-outline" label="Driver · Merchant" value={`${pending.drivers ?? 0} · ${pending.merchants ?? 0}`} hint="verifikasi di bawah ambang" color={adminTone.blue} />
+        <StatCard index={2} icon="leaf-outline" label="Pedagang pasar" value={pending.vendors ?? 0} hint="pengajuan lapak" color={adminTone.green} />
+        <StatCard index={3} icon="cash-outline" label="Penarikan" value={pending.withdrawals ?? 0} hint="di luar syarat otomatis" color={adminTone.teal} />
+        <StatCard index={4} icon="map-outline" label="Usulan tempat" value={pending.places ?? 0} hint="belum mencapai ambang" color={adminTone.orange} />
+        <StatCard index={5} icon="alert-circle-outline" label="Flag anti-fraud" value={pending.fraud ?? 0} hint="terbuka" color={adminTone.red} />
       </Row>
       {!st ? <View style={{ gap: 12 }}><Skeleton height={200} radius={20} /><Skeleton height={200} radius={20} /></View> : (
         <Row gap={16} style={{ flexWrap: 'wrap', alignItems: 'stretch' }}>
@@ -140,7 +140,7 @@ export default function AdminAutomation() {
                   <Row between style={{ gap: 8 }}>
                     <Row gap={10} style={{ flex: 1 }}>
                       <IconCircle name={sec.icon} color={sec.color} size={40} />
-                      <View style={{ flex: 1 }}><Text style={[font.h3, { fontSize: 16 }]}>{sec.title}</Text><Text style={font.tiny}>{sec.toggle ? (on ? 'Aktif' : 'Nonaktif') : 'Selalu aktif'}</Text></View>
+                      <View style={{ flex: 1, minWidth: 0 }}><Text style={font.h2} numberOfLines={2}>{sec.title}</Text><Text style={font.tiny}>{sec.toggle ? (on ? 'Aktif' : 'Nonaktif') : 'Selalu aktif'}</Text></View>
                     </Row>
                     {sec.toggle ? <Switch value={on} onValueChange={(v) => setToggle(sec.toggle, v)} trackColor={{ true: sec.color, false: colors.border }} thumbColor="#fff" /> : null}
                   </Row>
@@ -156,7 +156,7 @@ export default function AdminAutomation() {
                     {sec.run ? <Button size="sm" title={sec.run.label} variant="outline" color={sec.color} icon="play-outline" loading={running === sec.run.kind} onPress={() => run(sec.run!.kind)} /> : null}
                     <Button size="sm" title={dirty ? `Simpan (${dirty})` : 'Simpan'} color={sec.color} disabled={!dirty} loading={saving === sec.id} onPress={() => saveSection(sec)} />
                   </Row>
-                  {sec.run ? <Row gap={6}><Ionicons name="time-outline" size={13} color={colors.textMuted} /><Text style={font.tiny}>Terakhir: {fmtRun(last)}. {sec.run.hint}</Text></Row> : null}
+                  {sec.run ? <Row gap={6}><Ionicons name="time-outline" size={adminIcon.sm} color={adminTone.faint} /><Text style={font.tiny}>Terakhir: {fmtRun(last)}. {sec.run.hint}</Text></Row> : null}
                   {sec.id === 'fraud' ? <Pressable onPress={() => router.push('/(admin)/security' as never)}><Text style={s.link}>Tinjau flag di Pusat Keamanan</Text></Pressable> : null}
                   {sec.id === 'places' ? <Row gap={12}><Pressable onPress={() => router.push('/(admin)/places' as never)}><Text style={s.link}>Data Tempat</Text></Pressable><Pressable onPress={() => router.push('/(admin)/vendors' as never)}><Text style={s.link}>Mitra Pasar</Text></Pressable></Row> : null}
                 </Card>
@@ -173,13 +173,13 @@ export default function AdminAutomation() {
             <Button size="sm" title="Tambah jadwal" icon="add" onPress={() => setEdit({ name: '', cadence: 'weekly', hour: 7, months: 3, recipients: [], active: true })} />
           </Row>
           <Table rows={(st?.reports ?? []) as unknown as Record<string, unknown>[]} emptyText="Belum ada jadwal laporan" columns={[
-            { key: 'name', label: 'Nama', width: 200, render: (r) => <Text style={{ fontWeight: '700', color: colors.text }}>{String(r.name)}</Text> },
+            { key: 'name', label: 'Nama', width: 200, render: (r) => <Text style={font.bodyStrong} numberOfLines={1}>{String(r.name)}</Text> },
             { key: 'cadence', label: 'Kadens', width: 110, render: (r) => <Badge text={CADENCE_LABEL[String(r.cadence)] ?? String(r.cadence)} color={colors.info} /> },
             { key: 'hour', label: 'Jam WIB', width: 80, render: (r) => <Text style={font.small}>{String(r.hour).padStart(2, '0')}.00</Text> },
             { key: 'months', label: 'Data', width: 80, render: (r) => <Text style={font.small}>{String(r.months)} bln</Text> },
             { key: 'active', label: 'Aktif', width: 70, render: (r) => <Switch value={!!r.active} onValueChange={() => toggleReport(r as unknown as ScheduledReport)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" /> },
             { key: 'last_run_at', label: 'Terakhir / berikutnya', width: 220, render: (r) => <Text style={font.tiny}>{r.last_run_at ? formatDate(String(r.last_run_at)) : 'belum'} / {r.next_run_at ? formatDate(String(r.next_run_at)) : '-'}</Text> },
-            { key: 'actions', label: 'Aksi', width: 220, render: (r) => { const x = r as unknown as ScheduledReport; return <Row gap={6}><Button size="sm" title="Kirim sekarang" variant="secondary" loading={running === x.id} onPress={() => run('reports', x.id)} /><Button size="sm" title="Ubah" variant="ghost" onPress={() => setEdit({ ...x })} /></Row>; } },
+            { key: 'actions', label: 'Aksi', width: 220, align: 'right', render: (r) => { const x = r as unknown as ScheduledReport; return <Row gap={6} style={{ flexWrap: 'nowrap' }}><Button size="sm" title="Kirim sekarang" variant="secondary" loading={running === x.id} onPress={() => run('reports', x.id)} /><Button size="sm" title="Ubah" variant="ghost" onPress={() => setEdit({ ...x })} /></Row>; } },
           ]} />
         </Card>
       </Entrance>
@@ -189,7 +189,7 @@ export default function AdminAutomation() {
           <Card style={{ gap: 8 }}>
             <Text style={font.label}>Jadwal server (pg_cron, hanya baca)</Text>
             {(st?.cron ?? []).length === 0 ? <Text style={font.tiny}>pg_cron belum aktif di proyek ini — otomasi hanya berjalan lewat tombol "Jalankan sekarang" atau saat kejadian (trigger).</Text> : null}
-            {(st?.cron ?? []).map((c) => <Row key={c.name} between style={{ gap: 8 }}><View style={{ flex: 1 }}><Text style={[font.small, { color: colors.text, fontWeight: '700' }]}>{CRON_LABEL[c.name] ?? c.name}</Text><Text style={font.tiny}>{cronText(c.schedule)} · {c.schedule}</Text></View><Badge text={c.active ? 'Aktif' : 'Nonaktif'} color={c.active ? colors.success : colors.textMuted} /></Row>)}
+            {(st?.cron ?? []).map((c) => <Row key={c.name} between style={{ gap: 8 }}><View style={{ flex: 1, minWidth: 0 }}><Text style={font.h3} numberOfLines={1}>{CRON_LABEL[c.name] ?? c.name}</Text><Text style={font.tiny}>{cronText(c.schedule)} · {c.schedule}</Text></View><Badge text={c.active ? 'Aktif' : 'Nonaktif'} color={c.active ? colors.success : colors.textMuted} /></Row>)}
           </Card>
         </Entrance>
         <Entrance index={11} style={{ flex: 2, minWidth: 360 }}>
@@ -198,7 +198,7 @@ export default function AdminAutomation() {
             <Table rows={(st?.recent_runs ?? []) as unknown as Record<string, unknown>[]} emptyText="Belum ada run" columns={[
               { key: 'started_at', label: 'Waktu', width: 140, render: (r) => <Text style={font.tiny}>{formatDate(String(r.started_at))}</Text> },
               { key: 'kind', label: 'Otomasi', width: 160, render: (r) => <Text style={font.small}>{RUN_LABEL[String(r.kind)] ?? String(r.kind)}</Text> },
-              { key: 'count', label: 'Diproses', width: 80, render: (r) => <Text style={{ fontWeight: '700', color: colors.text }}>{String(r.count)}</Text> },
+              { key: 'count', label: 'Diproses', width: 90, align: 'right', mono: true, render: (r) => <Text style={font.mono}>{String(r.count)}</Text> },
               { key: 'ok', label: 'Status', width: 100, render: (r) => <Badge text={r.ok ? 'OK' : 'Gagal'} color={r.ok ? colors.success : colors.danger} /> },
               { key: 'triggered_by', label: 'Pemicu', width: 90, render: (r) => <Text style={font.tiny}>{r.triggered_by ? 'Manual' : 'Jadwal'}</Text> },
               { key: 'detail', label: 'Detail', width: 220, render: (r) => <Text style={font.tiny} numberOfLines={2}>{Object.entries((r.detail as Record<string, unknown>) ?? {}).map(([k, v]) => `${k}: ${String(v)}`).join(' · ')}</Text> },
@@ -211,10 +211,11 @@ export default function AdminAutomation() {
         <Pressable onPress={() => setEdit(null)} style={s.backdrop}>
           <Pressable onPress={() => {}} style={{ width: '100%', maxWidth: 480 }}>
             <View style={s.dialog}>
-              <Text style={font.h3}>{edit?.id ? 'Ubah jadwal laporan' : 'Jadwal laporan baru'}</Text>
+              <Text style={font.h1}>{edit?.id ? 'Ubah jadwal laporan' : 'Jadwal laporan baru'}</Text>
               <Input label="Nama laporan" value={edit?.name ?? ''} onChangeText={(v) => setEdit((e) => ({ ...e, name: v }))} placeholder="Laporan mingguan manajemen" />
-              <Text style={font.label}>Kadens</Text>
-              <Row gap={6}>{(['daily', 'weekly', 'monthly'] as const).map((c) => <Chip key={c} label={CADENCE_LABEL[c]} active={edit?.cadence === c} onPress={() => setEdit((e) => ({ ...e, cadence: c }))} />)}</Row>
+              <AdminSelect label="Kadens" icon="repeat-outline" width="100%" value={edit?.cadence ?? 'weekly'}
+                options={(['daily', 'weekly', 'monthly'] as const).map((c) => ({ value: c, label: CADENCE_LABEL[c] }))}
+                onChange={(v) => setEdit((e) => ({ ...e, cadence: v as ScheduledReport['cadence'] }))} />
               <Row gap={8}>
                 <Input label="Jam kirim (WIB)" value={String(edit?.hour ?? 7)} onChangeText={(v) => setEdit((e) => ({ ...e, hour: Math.min(23, Math.max(0, Number(v.replace(/\D/g, '')) || 0)) }))} keyboardType="number-pad" containerStyle={{ flex: 1 }} right={<Text style={font.tiny}>0–23</Text>} />
                 <Input label="Bulan data" value={String(edit?.months ?? 3)} onChangeText={(v) => setEdit((e) => ({ ...e, months: Math.min(24, Math.max(1, Number(v.replace(/\D/g, '')) || 1)) }))} keyboardType="number-pad" containerStyle={{ flex: 1 }} right={<Text style={font.tiny}>1–24</Text>} />
@@ -234,8 +235,8 @@ export default function AdminAutomation() {
 }
 
 const s = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  link: { color: colors.primary, fontWeight: '700', fontSize: 13 },
-  backdrop: { flex: 1, backgroundColor: colors.overlay, alignItems: 'center', justifyContent: 'center', padding: 20 },
-  dialog: { backgroundColor: '#fff', borderRadius: radius.xl, padding: 20, gap: 12, borderWidth: 1, borderColor: colors.border },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: adminSpace.sm },
+  link: { color: colors.primary, fontWeight: '700', fontSize: 13, lineHeight: 18 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(15,29,32,0.42)', alignItems: 'center', justifyContent: 'center', padding: adminSpace.xl },
+  dialog: { backgroundColor: adminTone.surface, borderRadius: adminRadius.lg, padding: adminSpace.xl, gap: adminSpace.md, borderWidth: 1, borderColor: adminTone.border },
 });

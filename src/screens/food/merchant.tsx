@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Image, Alert, Platform, Share, useW
 import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Row, Stars, Stepper, Loading, Badge, CircleButton, IconCircle, toast, type IconName } from '@/components/ui';
 import { CartBar } from '@/components/CartBar';
 import { Entrance, PressableScale, Skeleton } from '@/components/motion';

@@ -2,10 +2,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { Screen, Button, Row, Badge, Input, Chip, Stepper, Avatar, Empty, Card, IconCircle, toast } from '@/components/ui';
 import { PressableScale, Skeleton, Entrance, ProgressBar } from '@/components/motion';
+import { Dropdown } from '@/components/Dropdown';
 import { LocationFields } from '@/components/LocationField';
 import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
 import { ServiceIllustration } from '@/components/ServiceArt';
@@ -112,10 +113,27 @@ export default function TravelScreen() {
         </Row></Entrance>
 
         <View style={s.group}>
-          <Text style={font.label}>Dari kota</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>{cities.map((c) => <Chip key={c.id} label={c.name} active={from === c.id} onPress={() => setFrom(c.id)} />)}</ScrollView>
-          <Text style={font.label}>Ke kota</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>{cities.filter((c) => c.id !== from).map((c) => <Chip key={c.id} label={c.name} active={to === c.id} onPress={() => setTo(c.id)} />)}</ScrollView>
+          {/* Pemilih kota memakai dropdown (bukan deretan chip) supaya hemat ruang saat kota bertambah banyak. */}
+          <Dropdown
+            label="Dari kota"
+            title="Pilih kota asal"
+            value={from}
+            options={cities.map((c) => ({ value: c.id, label: c.name, icon: 'navigate-outline' as const }))}
+            onChange={(v) => setFrom(v)}
+            placeholder="Pilih kota asal"
+            emptyText="Belum ada kota yang dilayani."
+            icon="navigate-outline"
+          />
+          <Dropdown
+            label="Ke kota"
+            title="Pilih kota tujuan"
+            value={to}
+            options={cities.filter((c) => c.id !== from).map((c) => ({ value: c.id, label: c.name, icon: 'flag-outline' as const }))}
+            onChange={(v) => setTo(v)}
+            placeholder="Pilih kota tujuan"
+            emptyText="Belum ada kota tujuan lain."
+            icon="flag-outline"
+          />
           <Text style={font.label}>Tanggal berangkat</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
             <Pressable onPress={() => setDay(null)} style={[s.day, !day && { backgroundColor: colors.primary, borderColor: colors.primary }]}><Text style={{ fontSize: 12, fontWeight: '700', color: !day ? '#fff' : colors.textMuted }}>Semua</Text><Text style={{ fontSize: 15, fontWeight: '800', color: !day ? '#fff' : colors.text }} numberOfLines={1}>10 hr</Text></Pressable>

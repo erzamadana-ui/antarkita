@@ -46,6 +46,9 @@ const config: ExpoConfig = {
       NSLocationAlwaysAndWhenInUseUsageDescription: 'Mitra driver membagikan lokasi saat online agar pelanggan bisa melacak pesanan.',
       NSCameraUsageDescription: 'Kamera dipakai untuk foto profil, dokumen mitra, selfie keamanan, dan bukti pengiriman.',
       NSPhotoLibraryUsageDescription: 'Galeri dipakai untuk mengunggah foto profil, dokumen mitra, dan bukti transfer.',
+      // Ditulis eksplisit (tidak hanya mengandalkan plugin react-native-webrtc) supaya teks izin
+      // mikrofon di iOS selalu Bahasa Indonesia dan jelas alasannya.
+      NSMicrophoneUsageDescription: 'Mikrofon dipakai hanya untuk panggilan suara di dalam aplikasi. Nomor HP Anda tidak dibagikan.',
       ITSAppUsesNonExemptEncryption: false,
     },
   },
@@ -58,6 +61,11 @@ const config: ExpoConfig = {
     // foto profil/dokumen/bukti kirim dan panggilan suara WebRTC. Bila kelak pelacakan latar untuk Mitra diaktifkan,
     // tambahkan FOREGROUND_SERVICE + FOREGROUND_SERVICE_LOCATION (+ ACCESS_BACKGROUND_LOCATION) khusus APP === 'mitra'
     // dan isi deklarasi + video di Play Console (lihat docs/rilis/PLAY-STORE-LISTING.md).
+    // RECORD_AUDIO diminta saat pengguna menekan tombol telepon (lihat src/lib/webrtc.native.ts),
+    // MODIFY_AUDIO_SETTINGS disiapkan untuk pemindah rute speaker bila kelak modul audio native
+    // ditambahkan; VIBRATE dipakai nada dering & notifikasi in-app (src/lib/sound.ts).
+    // Catatan: POST_NOTIFICATIONS sengaja BELUM diminta karena expo-notifications belum terpasang —
+    // meminta izin notifikasi tanpa ada notifikasi hanya akan ditolak reviewer Play Store.
     permissions: [
       'android.permission.ACCESS_COARSE_LOCATION', 'android.permission.ACCESS_FINE_LOCATION',
       'android.permission.CAMERA', 'android.permission.RECORD_AUDIO', 'android.permission.MODIFY_AUDIO_SETTINGS',
@@ -87,7 +95,11 @@ const config: ExpoConfig = {
     ['expo-location', { locationWhenInUsePermission: `${m.name} memakai lokasi Anda untuk titik jemput dan pelacakan.` }],
     ['expo-image-picker', { photosPermission: 'Galeri dipakai untuk unggah foto & bukti transfer.' }],
     ['expo-splash-screen', { backgroundColor: m.bg, image: `${assets}/splash-icon.png`, imageWidth: 140 }],
-    ['@config-plugins/react-native-webrtc', { cameraPermission: 'Kamera tidak dipakai untuk panggilan suara.', microphonePermission: 'Mikrofon dipakai untuk panggilan suara dalam aplikasi.' }],
+    ['@config-plugins/react-native-webrtc', { cameraPermission: 'Kamera tidak dipakai untuk panggilan suara.', microphonePermission: 'Mikrofon dipakai untuk panggilan suara dalam aplikasi. Nomor HP Anda tidak dibagikan.' }],
+    // TODO(notifikasi): setelah `npx expo install expo-notifications`, tambahkan di sini:
+    //   ['expo-notifications', { icon: `${assets}/notification-icon.png`, color: m.bg, sounds: ['./assets/sounds/ring.wav', './assets/sounds/order.wav', './assets/sounds/message.wav'] }]
+    // lalu buat channel Android sesuai ANDROID_CHANNELS di src/lib/push.ts (suara & prioritas
+    // dikunci di level channel — channel yang terlanjur dibuat tanpa suara harus ganti id).
     'expo-localization',
   ],
   experiments: { typedRoutes: false, reactCompiler: true, baseUrl },

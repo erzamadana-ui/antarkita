@@ -5,20 +5,20 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Screen, Row, Button, Chip, Empty, toast } from '@/components/ui';
 import { Entrance, useShake } from '@/components/motion';
 import { BrandGradient } from '@/components/glass';
 import {
   AdminCard, Panel, DataTable, StatCard, TrendChart, Grid, Col, Pill, CITY_COLORS,
-  adminFont as af, adminTone, adminSpace,
+  adminFont as af, adminTone, adminSpace, adminRadius, adminIcon,
 } from '@/components/admin';
 import { LineItem, DefinitionList, FootNote, StackedBars, pctId, rupiahShort, share } from '@/components/reports';
 import { BrandLogo } from '@/components/Logo';
 import { useAuth } from '@/store/auth';
 import { rpc, supabase } from '@/lib/supabase';
-import { colors, font, radius, shadow, glass, motion } from '@/lib/theme';
+import { colors, font, shadow, glass, motion } from '@/lib/theme';
 import { rupiah, serviceLabel, shortMonth, execLevelLabel, formatDate } from '@/lib/format';
 import type { ExecAccess, ExecReport, ReportRun, Recommendation, ServiceType } from '@/lib/types';
 
@@ -400,7 +400,7 @@ export default function ExecPortal() {
                       </View>
                       {top && pc ? (
                         <Row gap={6} style={{ alignItems: 'flex-start', marginTop: 6 }}>
-                          <Ionicons name={pc.icon} size={14} color={pc.color} style={{ marginTop: 1 }} />
+                          <Ionicons name={pc.icon} size={adminIcon.sm} color={pc.color} style={{ marginTop: 1 }} />
                           <Text style={[af.tiny, { flex: 1, color: pc.color, fontWeight: '700' }]} numberOfLines={2}>{top.title}</Text>
                         </Row>
                       ) : null}
@@ -483,13 +483,13 @@ function RecoCard({ rc, index }: { rc: Recommendation; index: number }) {
     <Entrance index={index} style={{ flex: 1 }}>
       <View style={[s.reco, { borderColor: p.color + '44', backgroundColor: p.color + '0D' }]}>
         <Row gap={10} style={{ alignItems: 'flex-start' }}>
-          <View style={[s.recoIcon, { backgroundColor: p.color + '1A', borderColor: p.color + '33' }]}><Ionicons name={p.icon} size={16} color={p.color} /></View>
+          <View style={[s.recoIcon, { backgroundColor: p.color + '1A', borderColor: p.color + '33' }]}><Ionicons name={p.icon} size={adminIcon.md} color={p.color} /></View>
           <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
             <Row gap={6} style={{ flexWrap: 'wrap' }}><Pill text={p.label} color={p.color} /><Pill text={rc.area} tone="neutral" /></Row>
             <Text style={af.h3} numberOfLines={2}>{rc.title}</Text>
             <Text style={af.small}>{rc.detail}</Text>
             <Row gap={6} style={{ alignItems: 'flex-start', marginTop: 2 }}>
-              <Ionicons name="arrow-forward-circle" size={15} color={p.color} style={{ marginTop: 1 }} />
+              <Ionicons name="arrow-forward-circle" size={adminIcon.md} color={p.color} style={{ marginTop: 1 }} />
               <Text style={[af.small, { flex: 1, color: adminTone.ink, fontWeight: '700' }]}>{rc.action}</Text>
             </Row>
           </View>
@@ -500,13 +500,14 @@ function RecoCard({ rc, index }: { rc: Recommendation; index: number }) {
 }
 
 const s = StyleSheet.create({
-  login: { alignItems: 'center', gap: 12, padding: 24, borderRadius: radius.xl, backgroundColor: 'rgba(255,255,255,0.8)', borderWidth: 1, borderColor: glass.border, maxWidth: 420, alignSelf: 'center', width: '100%' },
+  login: { alignItems: 'center', gap: adminSpace.md, padding: adminSpace.xxl, borderRadius: adminRadius.lg, backgroundColor: 'rgba(255,255,255,0.8)', borderWidth: 1, borderColor: glass.border, maxWidth: 420, alignSelf: 'center', width: '100%' },
   pin: { fontSize: 30, fontWeight: '800', letterSpacing: 14, textAlign: 'center', color: colors.text, borderBottomWidth: 2, borderBottomColor: '#0B1F2A', paddingVertical: 8, width: 220 },
-  hero: { borderRadius: radius.xl, padding: 20, overflow: 'hidden' },
-  heroKicker: { color: 'rgba(255,255,255,0.78)', fontSize: 11, fontWeight: '700', letterSpacing: 0.7, lineHeight: 16 },
-  heroTitle: { color: '#fff', fontSize: 22, fontWeight: '800', letterSpacing: -0.3, lineHeight: 28 },
-  heroSub: { color: 'rgba(255,255,255,0.78)', fontSize: 12, lineHeight: 17 },
-  totalStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: 20, paddingHorizontal: adminSpace.lg, paddingVertical: adminSpace.md, borderTopWidth: 1, borderTopColor: adminTone.border, backgroundColor: adminTone.surfaceAlt },
-  reco: { flex: 1, padding: 14, borderRadius: 16, borderWidth: 1 },
-  recoIcon: { width: 32, height: 32, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  hero: { borderRadius: adminRadius.lg, padding: adminSpace.xl, overflow: 'hidden' },
+  // Kepala portal memakai skala tipografi yang sama dengan panel admin, hanya warnanya dibalik.
+  heroKicker: { ...af.label, color: 'rgba(255,255,255,0.78)', lineHeight: 16 },
+  heroTitle: { ...af.display, color: '#fff' },
+  heroSub: { ...af.tiny, color: 'rgba(255,255,255,0.78)' },
+  totalStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: adminSpace.xl, paddingHorizontal: adminSpace.lg, paddingVertical: adminSpace.md, borderTopWidth: 1, borderTopColor: adminTone.border, backgroundColor: adminTone.surfaceAlt },
+  reco: { flex: 1, padding: adminSpace.lg, borderRadius: adminRadius.lg, borderWidth: 1 },
+  recoIcon: { width: 32, height: 32, borderRadius: adminRadius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 });

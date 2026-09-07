@@ -2,7 +2,7 @@
 // verifikasi wajah driver (selfie) sebelum online, kontak darurat.
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Platform, Share, Linking, TextInput, Modal } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn, FadeInDown, FadeOut, ZoomIn, useSharedValue, useAnimatedStyle, withTiming, cancelAnimation } from 'react-native-reanimated';
 import { Row, Badge, Button, toast, Card } from '@/components/ui';
 import { PressableScale, useShake } from '@/components/motion';

@@ -1,14 +1,14 @@
 // Admin · Merchant — daftar + tinjauan pengajuan (dokumen, halal, setujui/tolak + catatan)
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Linking, StyleSheet, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
-import { AdminPage, DataTable, Toolbar, StatusPill, ContactActions, DeleteButton, DeletePartnerDialog, Truncate, StatCard, Grid, adminFont as font, adminTone, adminSpace } from '@/components/admin';
+import { AdminPage, DataTable, Toolbar, StatusPill, ContactActions, DeleteButton, DeletePartnerDialog, RowActions, Truncate, StatCard, Grid, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, adminTable } from '@/components/admin';
 import { Row, Badge, Button, toast, Input, Chip } from '@/components/ui';
 import { HalalBadge } from '@/components/MerchantStatus';
 import { rpc, supabase } from '@/lib/supabase';
 import { signedUrl } from '@/lib/upload';
-import { colors, radius, motion } from '@/lib/theme';
+import { colors, motion } from '@/lib/theme';
 import { formatDate } from '@/lib/format';
 import type { ApprovalStatus, Merchant, MerchantDocuments, Profile } from '@/lib/types';
 
@@ -62,13 +62,17 @@ export default function AdminMerchants() {
         { key: 'rating', label: 'Rating', width: 100, align: 'right', render: (r) => { const m = r as unknown as Row_; return <Text style={font.mono}>{Number(m.rating_avg).toFixed(1)} ({m.rating_count})</Text>; } },
         { key: 'status', label: 'Status', width: 130, render: (r) => <StatusPill status={String(r.status)} label={statusLabel[r.status as ApprovalStatus]} /> },
         { key: 'created_at', label: 'Diajukan', width: 120, render: (r) => { const m = r as unknown as Row_; return <Text style={font.tiny}>{formatDate(m.docs?.submitted_at ?? m.created_at, false)}</Text>; } },
-        { key: 'contact', label: 'Kontak', width: 180, render: (r) => { const m = r as unknown as Row_; return m.owner ? <ContactActions userId={m.owner.id} name={m.owner.full_name} role="merchant" subject={`Panel admin · merchant ${m.name}`} /> : <Text style={font.tiny}>Tanpa pemilik</Text>; } },
-        { key: 'actions', label: 'Aksi', width: 260, render: (r) => { const m = r as unknown as Row_; return (
-          <Row gap={6} style={{ flexWrap: 'wrap' }}>
-            <Button size="sm" title={m.status === 'pending' ? 'Tinjau' : 'Tinjau / ubah'} color={m.status === 'pending' ? colors.warning : colors.primary} variant={m.status === 'pending' ? 'primary' : 'outline'} icon="document-text-outline" onPress={() => setReview(m)} />
-            <DeleteButton onPress={() => setDel({ kind: 'merchant', id: m.id, name: m.name, meta: [m.category, `${m.menu_count} menu`] })} />
-          </Row>
-        ); } },
+        {
+          // Aksi utama layar ini = Tinjau; kontak & hapus dipindah ke kebab.
+          key: 'actions', label: 'Aksi', width: adminTable.actionsWideW, align: 'right', render: (r) => { const m = r as unknown as Row_; return (
+            <RowActions
+              contact={m.owner ? { userId: m.owner.id, name: m.owner.full_name, role: 'merchant', subject: `Panel admin · merchant ${m.name}` } : undefined}
+              primary={[{ key: 'review', label: 'Tinjau', icon: 'document-text-outline', variant: 'solid' as const, color: m.status === 'pending' ? colors.warning : colors.primary, onPress: () => setReview(m) }]}
+              menu={[
+                { key: 'del', label: 'Hapus merchant…', icon: 'trash-outline', danger: true, hint: 'butuh PIN & alasan', onPress: () => setDel({ kind: 'merchant', id: m.id, name: m.name, meta: [m.category, `${m.menu_count} menu`] }) },
+              ]}
+            />
+          ); } },
       ]} />
     </AdminPage>
   );
@@ -94,9 +98,9 @@ function ReviewPanel({ m, onClose, onDone, onDelete }: { m: Row_; onClose: () =>
   };
   const Doc = ({ label, value, no, required }: { label: string; value?: string | null; no?: string | null; required?: boolean }) => (
     <Pressable onPress={() => openDoc(value)} style={[s.doc, !value && !no && { opacity: 0.6 }]}>
-      <Ionicons name={value ? 'document-attach' : no ? 'text-outline' : 'remove-circle-outline'} size={18} color={value ? colors.success : no ? colors.info : required ? colors.danger : colors.textMuted} />
-      <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', fontSize: 13, color: colors.text }}>{label}{required ? ' *' : ''}</Text><Text style={font.tiny}>{no ?? (value ? 'Ketuk untuk lihat' : 'Tidak diunggah')}</Text></View>
-      {value && <Ionicons name="open-outline" size={16} color={colors.textMuted} />}
+      <Ionicons name={value ? 'document-attach' : no ? 'text-outline' : 'remove-circle-outline'} size={adminIcon.lg} color={value ? colors.success : no ? colors.info : required ? colors.danger : adminTone.faint} />
+      <View style={{ flex: 1 }}><Text style={font.h3}>{label}{required ? ' *' : ''}</Text><Text style={font.tiny}>{no ?? (value ? 'Ketuk untuk lihat' : 'Tidak diunggah')}</Text></View>
+      {value && <Ionicons name="open-outline" size={adminIcon.md} color={adminTone.faint} />}
     </Pressable>
   );
   return (
@@ -110,7 +114,7 @@ function ReviewPanel({ m, onClose, onDone, onDelete }: { m: Row_; onClose: () =>
         <Row gap={8}>
           {m.owner ? <ContactActions userId={m.owner.id} name={m.owner.full_name} role="merchant" subject={`Panel admin · merchant ${m.name}`} /> : null}
           {onDelete ? <DeleteButton onPress={onDelete} /> : null}
-          <Pressable onPress={onClose} style={s.close}><Ionicons name="close" size={20} color={colors.textSecondary} /></Pressable>
+          <Pressable onPress={onClose} style={s.close}><Ionicons name="close" size={adminIcon.lg} color={adminTone.muted} /></Pressable>
         </Row>
       </Row>
       <View style={s.cols}>
@@ -151,9 +155,9 @@ function ReviewPanel({ m, onClose, onDone, onDelete }: { m: Row_; onClose: () =>
 }
 
 const s = StyleSheet.create({
-  panel: { backgroundColor: adminTone.surface, borderRadius: radius.xl, padding: 16, borderWidth: 1.5, borderColor: colors.warning + '66', gap: 12, marginBottom: 4 },
-  close: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(11,31,42,0.06)', alignItems: 'center', justifyContent: 'center' },
-  cols: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
-  col: { flexGrow: 1, flexBasis: 320, gap: 8 },
-  doc: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: radius.md, borderWidth: 1, borderColor: adminTone.border, backgroundColor: adminTone.surface },
+  panel: { backgroundColor: adminTone.surface, borderRadius: adminRadius.lg, padding: adminSpace.lg, borderWidth: 1, borderColor: colors.warning + '66', gap: adminSpace.md, marginBottom: 4 },
+  close: { width: 30, height: 30, borderRadius: adminRadius.md, backgroundColor: adminTone.surfaceAlt, borderWidth: 1, borderColor: adminTone.border, alignItems: 'center', justifyContent: 'center' },
+  cols: { flexDirection: 'row', flexWrap: 'wrap', gap: adminSpace.lg },
+  col: { flexGrow: 1, flexBasis: 320, gap: adminSpace.sm },
+  doc: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: adminRadius.md, borderWidth: 1, borderColor: adminTone.border, backgroundColor: adminTone.surface },
 });

@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Linking, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { Screen, Card, Row, Badge, Button, Chip, Input, Avatar, Empty, toast } from '@/components/ui';
 import { Entrance, PressableScale, ProgressBar } from '@/components/motion';

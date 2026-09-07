@@ -3,7 +3,7 @@ import React from 'react';
 import { View, StyleSheet, useWindowDimensions, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { BlurView } from 'expo-blur';
 import { DraggableSheet } from '@/components/Sheet';
 import { PressableScale } from '@/components/motion';

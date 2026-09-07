@@ -3,10 +3,10 @@
 // dan rpc('admin_order_split') (migrasi 0026, view `order_economics`).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   AdminPage, Panel, DataTable, Toolbar, FilterBar, StatCard, Pill, AdminDialog, Truncate,
-  adminFont as font, adminTone, adminSpace,
+  adminFont as font, adminTone, adminSpace, adminIcon,
 } from '@/components/admin';
 import {
   Breadcrumb, DateField, FootNote, LineItem, SplitBar, RANGE_PRESETS, presetRange, rangeError, rangeLabel, pctId, share,
@@ -135,8 +135,8 @@ export default function AdminFinanceReport() {
         ) : <Text style={font.small}>{rangeLabel(range)}</Text>}
       </Toolbar>
 
-      {invalid ? <Panel><Row gap={8}><Ionicons name="alert-circle-outline" size={16} color={adminTone.red} /><Text style={[font.small, { color: adminTone.red, flex: 1 }]}>{invalid}</Text></Row></Panel> : null}
-      {err && !invalid ? <Panel><Row gap={8}><Ionicons name="close-circle-outline" size={16} color={adminTone.red} /><Text style={[font.small, { color: adminTone.red, flex: 1 }]} selectable>{err}</Text></Row></Panel> : null}
+      {invalid ? <Panel><Row gap={8}><Ionicons name="alert-circle-outline" size={adminIcon.md} color={adminTone.red} /><Text style={[font.small, { color: adminTone.red, flex: 1 }]}>{invalid}</Text></Row></Panel> : null}
+      {err && !invalid ? <Panel><Row gap={8}><Ionicons name="close-circle-outline" size={adminIcon.md} color={adminTone.red} /><Text style={[font.small, { color: adminTone.red, flex: 1 }]} selectable>{err}</Text></Row></Panel> : null}
 
       {level2 ? (
         <Breadcrumb items={[

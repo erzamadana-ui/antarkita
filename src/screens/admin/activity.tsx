@@ -1,13 +1,13 @@
 // Admin · Log Aktivitas — jejak semua kejadian (pesanan, driver, merchant, saldo, tarif, tiket, SOS) realtime
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
-import { AdminPage, FilterBar, StatCard, adminFont as font, adminTone, EmptyState as Empty } from '@/components/admin';
-import { Row, Badge, Input, Chip, Button } from '@/components/ui';
+import { AdminPage, FilterBar, StatCard, AdminSelect, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, EmptyState as Empty } from '@/components/admin';
+import { Row, Badge, Input, Button } from '@/components/ui';
 import { LiveDot, PressableScale } from '@/components/motion';
 import { supabase, realtimeChannel } from '@/lib/supabase';
-import { colors, radius, motion } from '@/lib/theme';
+import { colors, motion } from '@/lib/theme';
 import { formatDate, timeAgo, roleLabelId } from '@/lib/format';
 import type { AuditLog } from '@/lib/types';
 
@@ -73,16 +73,20 @@ export default function AdminActivity() {
   return (
     <AdminPage title="Log Aktivitas" subtitle={`${rows.length} kejadian · ${RANGES.find((r) => r.key === range)?.label} terakhir`} onRefresh={load}
       right={<Row gap={8}><Pressable onPress={() => setLive(!live)}><Row gap={6}><LiveDot color={live ? colors.success : colors.textMuted} size={8} /><Text style={font.tiny}>{live ? 'Realtime' : 'Jeda'}</Text></Row></Pressable><Button size="sm" variant="outline" title="CSV" icon="download-outline" onPress={exportCsv} /></Row>}>
-      <Row gap={12} style={{ flexWrap: 'wrap' }}>
-        <StatCard label="Aktivitas pesanan" value={counts.orders} color={colors.ride} index={0} />
-        <StatCard label="Aksi admin" value={counts.admin} color={colors.primary} index={1} />
-        <StatCard label="Mutasi saldo" value={counts.money} color={colors.success} index={2} />
-        <StatCard label="Tiket & SOS baru" value={counts.alerts} color={colors.danger} index={3} />
+      <Row gap={adminSpace.lg} style={{ flexWrap: 'wrap' }}>
+        <StatCard icon="receipt-outline" label="Aktivitas pesanan" value={counts.orders} color={adminTone.teal} index={0} />
+        <StatCard icon="shield-outline" label="Aksi admin" value={counts.admin} color={adminTone.violet} index={1} />
+        <StatCard icon="wallet-outline" label="Mutasi saldo" value={counts.money} color={adminTone.green} index={2} />
+        <StatCard icon="warning-outline" label="Tiket & SOS baru" value={counts.alerts} color={adminTone.red} index={3} />
       </Row>
-      <Row gap={8} style={{ flexWrap: 'wrap' }}>{ENTITIES.map((e) => <Chip key={e.key} label={e.label} active={entity === e.key} color={e.color} onPress={() => setEntity(e.key)} />)}</Row>
-      <Row gap={10} style={{ flexWrap: 'wrap' }}>
+      <Row gap={adminSpace.md} style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <FilterBar value={range} onChange={setRange} options={RANGES.map((r) => ({ key: r.key, label: r.label }))} />
-        <FilterBar value={role} onChange={setRole} options={[{ key: 'all', label: 'Semua aktor' }, { key: 'admin', label: 'Admin' }, { key: 'customer', label: 'Pelanggan' }, { key: 'driver', label: 'Driver' }, { key: 'merchant', label: 'Merchant' }, { key: 'system', label: 'Sistem' }]} />
+        <AdminSelect icon="layers-outline" width={190} value={entity === 'all' ? '' : entity} clearable clearLabel="Semua entitas" placeholder="Semua entitas"
+          options={ENTITIES.filter((e) => e.key !== 'all').map((e) => ({ value: e.key, label: e.label, icon: `${e.icon}-outline` as never, color: e.color }))}
+          onChange={(v) => setEntity(v || 'all')} />
+        <AdminSelect icon="person-outline" width={170} value={role === 'all' ? '' : role} clearable clearLabel="Semua aktor" placeholder="Semua aktor"
+          options={[{ value: 'admin', label: 'Admin' }, { value: 'customer', label: 'Pelanggan' }, { value: 'driver', label: 'Driver' }, { value: 'merchant', label: 'Merchant' }, { value: 'system', label: 'Sistem' }]}
+          onChange={(v) => setRole(v || 'all')} />
         <Input placeholder="Cari ringkasan / aksi / nama / ID" value={q} onChangeText={setQ} icon="search" containerStyle={{ minWidth: 240, flex: 1 }} />
       </Row>
       {shown.length === 0 && <Empty icon="time-outline" title="Belum ada aktivitas" subtitle="Ubah rentang waktu atau filter." />}
@@ -93,9 +97,9 @@ export default function AdminActivity() {
           return (
             <Animated.View key={r.id} entering={i < 3 ? FadeInDown.duration(motion.base) : undefined} layout={LinearTransition.springify().stiffness(280).damping(20)}>
               <PressableScale onPress={() => setOpen(open === r.id ? null : r.id)} scaleTo={0.995} haptic={false} style={[s.row, danger && { borderLeftWidth: 3, borderLeftColor: colors.danger }]}>
-                <View style={[s.icon, { backgroundColor: e.color + '1A' }]}><Ionicons name={e.icon as never} size={16} color={e.color} /></View>
+                <View style={[s.icon, { backgroundColor: e.color + '14', borderColor: e.color + '2E' }]}><Ionicons name={e.icon as never} size={adminIcon.md} color={e.color} /></View>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }} numberOfLines={open === r.id ? undefined : 1}>{r.summary ?? r.action}</Text>
+                  <Text style={font.bodyStrong} numberOfLines={open === r.id ? undefined : 1}>{r.summary ?? r.action}</Text>
                   <Row gap={6} style={{ flexWrap: 'wrap' }}>
                     <Text style={font.tiny}>{timeAgo(r.created_at)} · {formatDate(r.created_at)}</Text>
                     <Badge text={r.action} color={e.color} />
@@ -104,7 +108,7 @@ export default function AdminActivity() {
                   {open === r.id && r.detail && <Text selectable style={s.detail}>{JSON.stringify(r.detail, null, 1)}</Text>}
                   {open === r.id && r.entity_id && <Text selectable style={font.tiny}>ID: {r.entity_id}</Text>}
                 </View>
-                <Ionicons name={open === r.id ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+                <Ionicons name={open === r.id ? 'chevron-up' : 'chevron-down'} size={adminIcon.md} color={adminTone.faint} />
               </PressableScale>
             </Animated.View>
           );
@@ -115,7 +119,7 @@ export default function AdminActivity() {
 }
 
 const s = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 10, alignItems: 'center', padding: 10, borderRadius: radius.md, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border },
-  icon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  detail: { fontFamily: 'monospace', fontSize: 12, color: colors.textSecondary, backgroundColor: 'rgba(11,31,42,0.05)', padding: 8, borderRadius: 8, marginTop: 6 },
+  row: { flexDirection: 'row', gap: 10, alignItems: 'center', padding: adminSpace.md, borderRadius: adminRadius.card, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border, minHeight: 56 },
+  icon: { width: 30, height: 30, borderRadius: adminRadius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  detail: { fontFamily: 'monospace', fontSize: 12, lineHeight: 17, color: adminTone.ink2, backgroundColor: adminTone.surfaceAlt, padding: adminSpace.sm, borderRadius: adminRadius.sm, marginTop: 6 },
 });

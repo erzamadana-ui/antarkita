@@ -1,8 +1,8 @@
 // Admin · AntarShop: toko katalog (minimarket/apotek/supermarket) & produk — impor CSV / pembaruan manual
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Switch, Platform } from 'react-native';
-import { AdminPage, Table, StatCard, adminFont as font, AdminCard as Card } from '@/components/admin';
-import { Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
+import { AdminPage, Table, StatCard, AdminSelect, adminFont as font, adminTone, adminSpace, AdminCard as Card } from '@/components/admin';
+import { Row, Input, Button, Badge, toast } from '@/components/ui';
 import { DocUpload } from '@/components/DocUpload';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
@@ -59,6 +59,7 @@ export default function AdminShop() {
   const [cat, setCat] = useState('');
   const [pf, setPf] = useState({ ...emptyProduct });
   const [csv, setCsv] = useState('');
+  const [cityFilter, setCityFilter] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -82,6 +83,9 @@ export default function AdminShop() {
   useEffect(() => { if (selected) loadProducts(selected.id); else setProducts([]); }, [selected, loadProducts]);
 
   const totals = useMemo(() => Object.values(counts).reduce((a, m) => ({ total: a.total + m.total, out: a.out + m.out }), { total: 0, out: 0 }), [counts]);
+  // Pemilihan kota memakai dropdown ringkas (bukan deret chip).
+  const cityOptions = useMemo(() => cities.map((c) => ({ value: c.id, label: c.name, sublabel: c.province ?? undefined })), [cities]);
+  const shownStores = useMemo(() => (cityFilter ? stores.filter((x) => x.city_id === cityFilter) : stores), [stores, cityFilter]);
   const filtered = useMemo(() => products.filter((p) => (!cat || p.category === cat) && (!q || `${p.name} ${p.sku ?? ''}`.toLowerCase().includes(q.toLowerCase()))), [products, cat, q]);
   const preview = useMemo(() => parseCsv(csv), [csv]);
 
@@ -129,10 +133,10 @@ export default function AdminShop() {
 
   return (
     <AdminPage title="AntarShop · Toko & Produk" subtitle="Toko katalog (minimarket, apotek, supermarket), produk, stok & impor CSV" onRefresh={load}>
-      <Row gap={12} style={{ flexWrap: 'wrap' }}>
-        <StatCard index={0} label="Toko aktif" value={stores.filter((s) => s.active !== false).length} hint={`${stores.length} toko terdaftar`} color={colors.shop} />
-        <StatCard index={1} label="Produk aktif" value={totals.total} hint="Semua toko" color={colors.info} />
-        <StatCard index={2} label="Produk habis" value={totals.out} hint="Ditandai tidak tersedia" color={colors.warning} />
+      <Row gap={adminSpace.lg} style={{ flexWrap: 'wrap' }}>
+        <StatCard index={0} icon="storefront-outline" label="Toko aktif" value={stores.filter((s) => s.active !== false).length} hint={`${stores.length} toko terdaftar`} color={adminTone.teal} />
+        <StatCard index={1} icon="cube-outline" label="Produk aktif" value={totals.total} hint="Semua toko" color={adminTone.blue} />
+        <StatCard index={2} icon="alert-circle-outline" label="Produk habis" value={totals.out} hint="Ditandai tidak tersedia" color={adminTone.amber} />
       </Row>
       <Card style={{ backgroundColor: colors.shop + '12', borderColor: colors.shop + '40', gap: 4 }}>
         <Text style={font.small}>Katalog & harga diambil dari sumber toko (file harga supermarket/CSV). Integrasi API resmi Klik Indomaret/Alfagift belum tersedia publik — gunakan impor CSV/pembaruan manual.</Text>
@@ -143,18 +147,25 @@ export default function AdminShop() {
         <Card style={{ flex: 1, minWidth: 320, gap: 10 }}>
           <Row between><Text style={font.label}>{sf.id ? 'Ubah toko' : 'Tambah toko'}</Text>{sf.id ? <Button size="sm" variant="ghost" title="Batal ubah" onPress={() => setSf({ ...emptyStore })} /> : null}</Row>
           <Input placeholder="Nama toko (mis. Indomaret Sudirman)" value={sf.name} onChangeText={(v) => setSf({ ...sf, name: v })} />
-          <Row gap={6} style={{ flexWrap: 'wrap' }}>{BRANDS.map((b) => <Chip key={b} label={storeBrandLabel[b]} active={sf.brand === b} onPress={() => setSf({ ...sf, brand: b, category: b === 'apotek' ? 'apotek' : b === 'supermarket' ? 'supermarket' : sf.category })} color={colors.shop} />)}</Row>
-          <Row gap={6} style={{ flexWrap: 'wrap' }}>{STORE_CATS.map((c) => <Chip key={c} label={storeCategoryLabel[c]} active={sf.category === c} onPress={() => setSf({ ...sf, category: c })} color={colors.shop} />)}</Row>
+          <Row gap={adminSpace.sm} style={{ flexWrap: 'wrap' }}>
+            <AdminSelect label="Brand" icon="pricetag-outline" width={180} value={sf.brand} options={BRANDS.map((b) => ({ value: b, label: storeBrandLabel[b] }))}
+              onChange={(b) => setSf({ ...sf, brand: b, category: b === 'apotek' ? 'apotek' : b === 'supermarket' ? 'supermarket' : sf.category })} />
+            <AdminSelect label="Kategori toko" icon="grid-outline" width={180} value={sf.category} options={STORE_CATS.map((c) => ({ value: c, label: storeCategoryLabel[c] }))}
+              onChange={(c) => setSf({ ...sf, category: c })} />
+          </Row>
           <Input placeholder="Alamat" value={sf.address} onChangeText={(v) => setSf({ ...sf, address: v })} />
           <Row gap={8}><Input placeholder="Lat" value={sf.lat} onChangeText={(v) => setSf({ ...sf, lat: v })} containerStyle={{ flex: 1 }} /><Input placeholder="Lng" value={sf.lng} onChangeText={(v) => setSf({ ...sf, lng: v })} containerStyle={{ flex: 1 }} /><Input placeholder="Jam buka" value={sf.open_hours} onChangeText={(v) => setSf({ ...sf, open_hours: v })} containerStyle={{ flex: 1 }} /></Row>
           <Input placeholder="Telepon" value={sf.phone} onChangeText={(v) => setSf({ ...sf, phone: v })} />
           <DocUpload label="Gambar toko" hint="Opsional, tampil di daftar toko pelanggan" value={sf.image_url || null} onChange={(u) => setSf({ ...sf, image_url: u })} bucket="merchant-images" color={colors.shop} />
           <Row between><Text style={font.small}>Aktif (tampil untuk pelanggan)</Text><Switch value={sf.active} onValueChange={(v) => setSf({ ...sf, active: v })} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" /></Row>
-          <Button title={sf.id ? 'Simpan perubahan' : 'Tambah toko'} color={colors.shop} loading={busy} onPress={saveStore} />
+          <Button title={sf.id ? 'Simpan perubahan' : 'Tambah toko'} loading={busy} onPress={saveStore} />
         </Card>
-        <View style={{ flex: 1.4, minWidth: 360 }}>
-          <Table rows={stores as unknown as Record<string, unknown>[]} emptyText="Belum ada toko katalog" columns={[
-            { key: 'name', label: 'Toko', width: 220, render: (r) => { const s = r as unknown as ShopStore; return <View><Text style={{ fontWeight: '700', color: selected?.id === s.id ? colors.shop : colors.text }}>{s.name}</Text><Text style={font.tiny} numberOfLines={1}>{s.address ?? '-'}</Text></View>; } },
+        <View style={{ flex: 1.4, minWidth: 360, gap: adminSpace.sm }}>
+          <Row gap={adminSpace.sm} style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <AdminSelect icon="location-outline" placeholder="Semua kota" width={200} value={cityFilter} options={cityOptions} onChange={setCityFilter} clearable clearLabel="Semua kota" />
+          </Row>
+          <Table rows={shownStores as unknown as Record<string, unknown>[]} emptyText="Belum ada toko katalog pada kota ini" columns={[
+            { key: 'name', label: 'Toko', width: 220, render: (r) => { const s = r as unknown as ShopStore; return <View style={{ minWidth: 0 }}><Text style={[font.bodyStrong, selected?.id === s.id && { color: colors.shop }]} numberOfLines={1}>{s.name}</Text><Text style={font.tiny} numberOfLines={1}>{s.address ?? '-'}</Text></View>; } },
             { key: 'brand', label: 'Brand', width: 100, render: (r) => <Badge text={storeBrandLabel[String(r.brand)] ?? String(r.brand)} color={colors.shop} /> },
             { key: 'category', label: 'Kategori', width: 100, render: (r) => <Text style={font.small}>{storeCategoryLabel[String(r.category)] ?? String(r.category)}</Text> },
             { key: 'city', label: 'Kota', width: 100, render: (r) => <Text style={font.small}>{cityName(cities, String(r.city_id ?? ''))}</Text> },
@@ -162,7 +173,7 @@ export default function AdminShop() {
             { key: 'catalog_source', label: 'Sumber katalog', width: 110, render: (r) => <Badge text={String(r.catalog_source ?? 'admin')} color={colors.info} /> },
             { key: 'products', label: 'Produk', width: 90, render: (r) => { const m = counts[String(r.id)]; return <Text style={font.small}>{m?.total ?? 0}{m?.out ? ` (${m.out} habis)` : ''}</Text>; } },
             { key: 'active', label: 'Aktif', width: 70, render: (r) => { const s = r as unknown as ShopStore; return <Switch value={s.active !== false} onValueChange={() => toggleStore(s)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />; } },
-            { key: 'actions', label: 'Aksi', width: 170, render: (r) => { const s = r as unknown as ShopStore; return <Row gap={6}><Button size="sm" title="Produk" color={colors.shop} onPress={() => setSelected(s)} /><Button size="sm" variant="outline" title="Ubah" color={colors.shop} onPress={() => editStore(s)} /></Row>; } },
+            { key: 'actions', label: 'Aksi', width: 170, align: 'right', render: (r) => { const s = r as unknown as ShopStore; return <Row gap={6} style={{ flexWrap: 'nowrap' }}><Button size="sm" title="Produk" onPress={() => setSelected(s)} /><Button size="sm" variant="outline" title="Ubah" onPress={() => editStore(s)} /></Row>; } },
           ]} />
         </View>
       </Row>
@@ -177,13 +188,11 @@ export default function AdminShop() {
             </Row>
           </Row>
           <Input placeholder="Cari nama / SKU" icon="search-outline" value={q} onChangeText={setQ} />
-          <Row gap={6} style={{ flexWrap: 'wrap' }}>
-            <Chip label="Semua" active={!cat} onPress={() => setCat('')} color={colors.shop} />
-            {PRODUCT_CATS.map((c) => <Chip key={c} label={productCategoryLabel[c]} active={cat === c} onPress={() => setCat(c)} color={colors.shop} />)}
-          </Row>
+          <AdminSelect icon="pricetags-outline" placeholder="Semua kategori" width={220} value={cat} clearable clearLabel="Semua kategori"
+            options={PRODUCT_CATS.map((c) => ({ value: c, label: productCategoryLabel[c] }))} onChange={setCat} />
           <Table rows={filtered as unknown as Record<string, unknown>[]} emptyText="Belum ada produk — tambah manual atau impor CSV" columns={[
             { key: 'sku', label: 'SKU', width: 110, render: (r) => <Text style={font.tiny} numberOfLines={1}>{String(r.sku ?? '-')}</Text> },
-            { key: 'name', label: 'Nama', width: 220, render: (r) => <Text style={{ fontWeight: '700', color: colors.text }} numberOfLines={2}>{String(r.name)}</Text> },
+            { key: 'name', label: 'Nama', width: 220, render: (r) => <Text style={font.bodyStrong} numberOfLines={2}>{String(r.name)}</Text> },
             { key: 'category', label: 'Kategori', width: 110, render: (r) => <Badge text={productCategoryLabel[String(r.category)] ?? String(r.category)} color={colors.shop} /> },
             { key: 'unit', label: 'Satuan', width: 70 },
             { key: 'price', label: 'Harga', width: 130, render: (r) => { const p = r as unknown as ShopProduct; return <NumCell value={p.price} width={120} onSave={(n) => { if (n && n > 0) patchProduct(p.id, { price: n }); }} />; } },
@@ -199,16 +208,17 @@ export default function AdminShop() {
             <Text style={font.label}>Tambah produk</Text>
             <Row gap={8}><Input placeholder="SKU (opsional)" value={pf.sku} onChangeText={(v) => setPf({ ...pf, sku: v })} containerStyle={{ flex: 1 }} /><Input placeholder="Satuan (pcs/kg/botol)" value={pf.unit} onChangeText={(v) => setPf({ ...pf, unit: v })} containerStyle={{ flex: 1 }} /></Row>
             <Input placeholder="Nama produk" value={pf.name} onChangeText={(v) => setPf({ ...pf, name: v })} />
-            <Row gap={6} style={{ flexWrap: 'wrap' }}>{PRODUCT_CATS.map((c) => <Chip key={c} label={productCategoryLabel[c]} active={pf.category === c} onPress={() => setPf({ ...pf, category: c })} color={colors.shop} />)}</Row>
+            <AdminSelect label="Kategori produk" icon="pricetags-outline" width="100%" value={pf.category}
+              options={PRODUCT_CATS.map((c) => ({ value: c, label: productCategoryLabel[c] }))} onChange={(c) => setPf({ ...pf, category: c })} />
             <Row gap={8}><Input placeholder="Harga (Rp)" value={pf.price} onChangeText={(v) => setPf({ ...pf, price: v })} keyboardType="number-pad" containerStyle={{ flex: 1 }} /><Input placeholder="Stok (opsional)" value={pf.stock} onChangeText={(v) => setPf({ ...pf, stock: v })} keyboardType="number-pad" containerStyle={{ flex: 1 }} /></Row>
             <Row between><Text style={font.small}>Tersedia</Text><Switch value={pf.in_stock} onValueChange={(v) => setPf({ ...pf, in_stock: v })} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" /></Row>
-            <Button title="Simpan produk" color={colors.shop} loading={busy} onPress={saveProduct} />
+            <Button title="Simpan produk" loading={busy} onPress={saveProduct} />
           </Card>
           <Card style={{ flex: 1.2, minWidth: 320, gap: 10 }}>
             <Text style={font.label}>Impor CSV</Text>
             <Text style={font.tiny}>Format: sku,name,category,unit,price,in_stock (baris pertama boleh header; pemisah koma atau titik koma). Kategori: {PRODUCT_CATS.join(', ')}. SKU sama pada toko ini akan diperbarui (harga & stok).</Text>
             <Row gap={8}>
-              <Button size="sm" variant="outline" title={Platform.OS === 'web' ? 'Unggah file .csv' : 'Tempel teks CSV'} color={colors.shop} icon="document-attach-outline" onPress={pickCsvFile} />
+              <Button size="sm" variant="outline" title={Platform.OS === 'web' ? 'Unggah file .csv' : 'Tempel teks CSV'} icon="document-attach-outline" onPress={pickCsvFile} />
               {csv ? <Button size="sm" variant="ghost" title="Kosongkan" onPress={() => setCsv('')} /> : null}
             </Row>
             <Input placeholder={'sku,name,category,unit,price,in_stock\nIDM-001,Indomie Goreng 85g,sembako,pcs,3500,true'} value={csv} onChangeText={setCsv} multiline style={{ minHeight: 120, textAlignVertical: 'top' }} />
@@ -222,7 +232,7 @@ export default function AdminShop() {
                 ]} />
               </View>
             )}
-            <Button title={`Impor ${preview.length} produk ke ${selected.name}`} color={colors.shop} loading={busy} disabled={!preview.length} onPress={importCsv} />
+            <Button title={`Impor ${preview.length} produk ke ${selected.name}`} loading={busy} disabled={!preview.length} onPress={importCsv} />
           </Card>
         </Row>
       </>)}

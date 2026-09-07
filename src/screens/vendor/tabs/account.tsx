@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Row, Avatar, Badge, Button, CircleButton, Card, Input, Chip, toast, type IconName } from '@/components/ui';
 import { Entrance, PressableScale } from '@/components/motion';
 import { TAB_BAR_SPACE } from '@/components/GlassTabBar';

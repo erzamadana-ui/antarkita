@@ -3,8 +3,8 @@
 // tipografi berjenjang, angka tabular-nums. Tidak mengubah komponen milik tim desain — hanya memakainya.
 import React from 'react';
 import { View, Text, Pressable, Platform, TextInput, StyleSheet, StyleProp, ViewStyle } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { adminFont as font, adminTone, adminRadius, adminSpace } from '@/components/admin';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { adminFont as font, adminTone, adminRadius, adminSpace, adminIcon } from '@/components/admin';
 import { Row } from '@/components/ui';
 import { fam } from '@/lib/theme';
 import { formatDate } from '@/lib/format';
@@ -103,7 +103,7 @@ export function Breadcrumb({ items }: { items: { label: string; onPress?: () => 
     <Row gap={6} style={{ flexWrap: 'wrap' }}>
       {items.map((it, i) => (
         <Row key={`${it.label}-${i}`} gap={6}>
-          {i > 0 ? <Ionicons name="chevron-forward" size={12} color={adminTone.faint} /> : null}
+          {i > 0 ? <Ionicons name="chevron-forward" size={adminIcon.sm} color={adminTone.faint} /> : null}
           {it.onPress ? (
             <Pressable onPress={it.onPress} hitSlop={6}>
               <Text style={[font.small, { color: adminTone.teal, ...fam(700) }]}>{it.label}</Text>
@@ -133,7 +133,7 @@ export function LineItem({ label, value, hint, color, strong, indent, top, dot }
           {hint ? <Text style={font.tiny} numberOfLines={2}>{hint}</Text> : null}
         </View>
       </Row>
-      <Text style={[font.mono, strong && { fontSize: 14.5, ...fam(700) }, color ? { color } : null]} numberOfLines={1}>{value}</Text>
+      <Text style={[font.mono, strong && { fontSize: 14, ...fam(700) }, color ? { color } : null]} numberOfLines={1}>{value}</Text>
     </View>
   );
 }
@@ -215,7 +215,7 @@ export function FootNote({ title = 'Sumber data & keterbatasan', lines, style }:
   return (
     <View style={[st.note, style]}>
       <Row gap={7}>
-        <Ionicons name="information-circle-outline" size={14} color={adminTone.muted} />
+        <Ionicons name="information-circle-outline" size={adminIcon.sm} color={adminTone.muted} />
         <Text style={font.label}>{title}</Text>
       </Row>
       {lines.map((l, i) => (

@@ -1,7 +1,7 @@
 // Penjaga error global: layar tidak "force close" — tampilkan pesan & tombol kembali ke beranda.
 import React from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, font, radius } from '@/lib/theme';
 
 type Props = { children: React.ReactNode; onReset?: () => void };

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Row, Input, Button, toast } from '@/components/ui';
 import { PressableScale } from '@/components/motion';
 import { useAuth } from '@/store/auth';

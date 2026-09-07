@@ -1,12 +1,12 @@
 // Admin · Data Tempat: toko & pasar terdaftar (admin / pengguna / peta OSM) + usulan pengguna (crowdsourcing) dengan moderasi otomatis
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Image, Linking, Pressable, StyleSheet, Switch } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { AdminPage, FilterBar, StatCard, ReasonPrompt, Table, adminFont as font, AdminCard as Card, EmptyState as Empty } from '@/components/admin';
-import { Row, Button, Badge, IconCircle, Input, Chip, toast } from '@/components/ui';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { AdminPage, FilterBar, StatCard, ReasonPrompt, Table, AdminSelect, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, AdminCard as Card, EmptyState as Empty } from '@/components/admin';
+import { Row, Button, Badge, IconCircle, Input, toast } from '@/components/ui';
 import { Entrance, Skeleton } from '@/components/motion';
 import { rpc, supabase } from '@/lib/supabase';
-import { colors, radius } from '@/lib/theme';
+import { colors } from '@/lib/theme';
 import { cityName, formatDate, storeBrandLabel, storeCategoryLabel } from '@/lib/format';
 import type { City, Market, PlaceSuggestion, ShopStore } from '@/lib/types';
 
@@ -36,6 +36,7 @@ function RegisteredPlaces() {
   const [cities, setCities] = useState<City[]>([]);
   const [kind, setKind] = useState<'all' | 'store' | 'market'>('all');
   const [source, setSource] = useState<'all' | Source>('all');
+  const [city, setCity] = useState('');
   const [q, setQ] = useState('');
   const load = useCallback(async () => {
     try {
@@ -64,35 +65,40 @@ function RegisteredPlaces() {
   };
 
   const all = rows ?? [];
-  const shown = useMemo(() => all.filter((r) => (kind === 'all' || r.kind === kind) && (source === 'all' || r.source === source) && (!q || r.name.toLowerCase().includes(q.toLowerCase()) || (r.address ?? '').toLowerCase().includes(q.toLowerCase()))), [all, kind, source, q]);
+  const shown = useMemo(() => all.filter((r) => (kind === 'all' || r.kind === kind) && (source === 'all' || r.source === source) && (!city || r.city_id === city)
+    && (!q || r.name.toLowerCase().includes(q.toLowerCase()) || (r.address ?? '').toLowerCase().includes(q.toLowerCase()))), [all, kind, source, city, q]);
   const n = (f: (r: PlaceRow) => boolean) => all.filter(f).length;
 
   return (<>
-    <Row gap={12} style={{ flexWrap: 'wrap' }}>
-      <StatCard index={0} label="Toko" value={n((r) => r.kind === 'store')} hint={`${n((r) => r.kind === 'store' && r.active)} aktif`} color={colors.shop} />
-      <StatCard index={1} label="Pasar" value={n((r) => r.kind === 'market')} hint={`${n((r) => r.kind === 'market' && r.active)} aktif`} color={colors.market} />
-      <StatCard index={2} label="Dari pengguna" value={n((r) => r.source === 'crowd')} hint="usulan disetujui" color={colors.info} />
-      <StatCard index={3} label="Dari peta (OSM)" value={n((r) => r.source === 'osm')} hint="impor otomatis" color={colors.primary} />
+    <Row gap={adminSpace.lg} style={{ flexWrap: 'wrap' }}>
+      <StatCard index={0} icon="storefront-outline" label="Toko" value={n((r) => r.kind === 'store')} hint={`${n((r) => r.kind === 'store' && r.active)} aktif`} color={adminTone.teal} />
+      <StatCard index={1} icon="basket-outline" label="Pasar" value={n((r) => r.kind === 'market')} hint={`${n((r) => r.kind === 'market' && r.active)} aktif`} color={adminTone.orange} />
+      <StatCard index={2} icon="people-outline" label="Dari pengguna" value={n((r) => r.source === 'crowd')} hint="usulan disetujui" color={adminTone.blue} />
+      <StatCard index={3} icon="map-outline" label="Dari peta (OSM)" value={n((r) => r.source === 'osm')} hint="impor otomatis" color={adminTone.violet} />
     </Row>
-    <Row gap={10} style={{ flexWrap: 'wrap' }}>
+    <Row gap={adminSpace.md} style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
       <FilterBar value={kind} onChange={(v) => setKind(v as never)} options={[{ key: 'all', label: `Semua (${all.length})` }, { key: 'store', label: 'Toko' }, { key: 'market', label: 'Pasar' }]} />
-      <Row gap={6}>{(['all', 'admin', 'crowd', 'osm'] as const).map((s) => <Chip key={s} label={s === 'all' ? 'Semua sumber' : SOURCE_LABEL[s]} active={source === s} onPress={() => setSource(s)} color={s === 'all' ? colors.primary : SOURCE_COLOR[s]} />)}</Row>
-      <Input placeholder="Cari nama / alamat" value={q} onChangeText={setQ} icon="search" containerStyle={{ minWidth: 220 }} />
+      <AdminSelect icon="git-branch-outline" width={180} value={source === 'all' ? '' : source} clearable clearLabel="Semua sumber" placeholder="Semua sumber"
+        options={(['admin', 'crowd', 'osm'] as const).map((k) => ({ value: k, label: SOURCE_LABEL[k], color: SOURCE_COLOR[k] }))}
+        onChange={(v) => setSource((v || 'all') as 'all' | Source)} />
+      <AdminSelect icon="location-outline" width={180} value={city} clearable clearLabel="Semua kota" placeholder="Semua kota"
+        options={cities.map((c) => ({ value: c.id, label: c.name, sublabel: c.province ?? undefined }))} onChange={setCity} />
+      <Input placeholder="Cari nama / alamat" value={q} onChangeText={setQ} icon="search" containerStyle={{ minWidth: 220, flex: 1 }} />
     </Row>
     <Entrance index={1}>
       <Card style={{ backgroundColor: colors.tint, borderColor: colors.primary + '30', gap: 4 }}>
-        <Row gap={8}><Ionicons name="information-circle-outline" size={16} color={colors.primary} /><Text style={[font.small, { color: colors.text, fontWeight: '700' }]}>Sumber data</Text></Row>
+        <Row gap={8}><Ionicons name="information-circle-outline" size={adminIcon.md} color={colors.primary} /><Text style={font.h3}>Sumber data</Text></Row>
         <Text style={font.small}>Admin: dibuat lewat menu AntarShop / AntarMarket. Pengguna: usulan pelanggan yang disetujui (tab Usulan pengguna). Peta (OSM): diimpor otomatis dari OpenStreetMap saat area pelanggan belum punya data — periksa nama & jam buka, nonaktifkan bila tidak sesuai. Sakelar Aktif langsung menyembunyikan tempat dari pelanggan.</Text>
       </Card>
     </Entrance>
     {rows === null ? <Skeleton height={240} radius={20} /> : (
       <Table rows={shown as unknown as Record<string, unknown>[]} keyField="id" emptyText="Tidak ada tempat pada filter ini" columns={[
-        { key: 'name', label: 'Tempat', width: 260, render: (r) => { const p = r as unknown as PlaceRow; return <View><Text style={{ fontWeight: '700' }} numberOfLines={1}>{p.name}</Text><Text style={font.tiny} numberOfLines={2}>{p.address ?? '—'}</Text></View>; } },
+        { key: 'name', label: 'Tempat', width: 260, render: (r) => { const p = r as unknown as PlaceRow; return <View style={{ minWidth: 0 }}><Text style={font.bodyStrong} numberOfLines={1}>{p.name}</Text><Text style={font.tiny} numberOfLines={2}>{p.address ?? '—'}</Text></View>; } },
         { key: 'kind', label: 'Jenis', width: 150, render: (r) => { const p = r as unknown as PlaceRow; return <View style={{ gap: 2 }}><Badge text={p.kind === 'store' ? 'Toko' : 'Pasar'} color={p.kind === 'store' ? colors.shop : colors.market} /><Text style={font.tiny} numberOfLines={1}>{p.sub}</Text></View>; } },
         { key: 'source', label: 'Sumber', width: 120, render: (r) => { const p = r as unknown as PlaceRow; return <Badge text={SOURCE_LABEL[p.source]} color={SOURCE_COLOR[p.source]} />; } },
         { key: 'city', label: 'Kota', width: 120, render: (r) => { const p = r as unknown as PlaceRow; return <Text style={font.small}>{p.city_id ? cityName(cities, p.city_id) : '—'}</Text>; } },
         { key: 'open_hours', label: 'Jam buka', width: 110, render: (r) => <Text style={font.tiny}>{String(r.open_hours ?? '—')}</Text> },
-        { key: 'map', label: 'Peta', width: 150, render: (r) => { const p = r as unknown as PlaceRow; return <Pressable onPress={() => Linking.openURL(p.osm_id && /^(node|way|relation)\//.test(p.osm_id) ? `https://www.openstreetmap.org/${p.osm_id}` : osm(p.lat, p.lng))} hitSlop={4}><Row gap={4}><Ionicons name="navigate-outline" size={14} color={colors.primary} /><Text style={{ color: colors.primary, fontSize: 12, fontWeight: '700' }}>{p.osm_id ? 'Buka di OSM' : `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`}</Text></Row></Pressable>; } },
+        { key: 'map', label: 'Peta', width: 150, render: (r) => { const p = r as unknown as PlaceRow; return <Pressable onPress={() => Linking.openURL(p.osm_id && /^(node|way|relation)\//.test(p.osm_id) ? `https://www.openstreetmap.org/${p.osm_id}` : osm(p.lat, p.lng))} hitSlop={4}><Row gap={4}><Ionicons name="navigate-outline" size={adminIcon.sm} color={colors.primary} /><Text style={[font.tiny, { color: colors.primary, fontWeight: '700' }]}>{p.osm_id ? 'Buka di OSM' : `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`}</Text></Row></Pressable>; } },
         { key: 'active', label: 'Aktif', width: 80, render: (r) => { const p = r as unknown as PlaceRow; return <Switch value={p.active} onValueChange={() => toggleActive(p)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />; } },
       ]} />
     )}
@@ -135,14 +141,14 @@ function Suggestions() {
 
   return (<>
     <ReasonPrompt visible={!!reject} title={`Tolak usulan "${reject?.name}"?`} subtitle="Alasan dikirim ke pengusul sebagai notifikasi." confirmLabel="Tolak usulan" optional quick={['Tempat tidak ditemukan di lokasi', 'Duplikat data yang sudah ada', 'Informasi tidak lengkap / tidak jelas', 'Sudah tutup permanen']} onCancel={() => setReject(null)} onSubmit={(r) => review(reject!, false, r || undefined)} />
-    <Row gap={12} style={{ flexWrap: 'wrap' }}>
-      <StatCard index={0} label="Menunggu (tab ini)" value={pending} color={colors.warning} />
-      <StatCard index={1} label="Berpotensi duplikat" value={conflicts} hint={`usulan lain dalam ${rule.radius} m`} color={colors.danger} />
-      <StatCard index={2} label="Disetujui otomatis" value={autoN} hint={`ambang ${rule.reports} laporan konsisten`} color={colors.success} />
+    <Row gap={adminSpace.lg} style={{ flexWrap: 'wrap' }}>
+      <StatCard index={0} icon="hourglass-outline" label="Menunggu (tab ini)" value={pending} color={adminTone.amber} />
+      <StatCard index={1} icon="copy-outline" label="Berpotensi duplikat" value={conflicts} hint={`usulan lain dalam ${rule.radius} m`} color={adminTone.red} />
+      <StatCard index={2} icon="sparkles-outline" label="Disetujui otomatis" value={autoN} hint={`ambang ${rule.reports} laporan konsisten`} color={adminTone.green} />
     </Row>
     <Entrance index={1}>
       <Card style={{ backgroundColor: colors.tint, borderColor: colors.primary + '30', gap: 4 }}>
-        <Row gap={8}><Ionicons name="sparkles-outline" size={16} color={colors.primary} /><Text style={[font.small, { color: colors.text, fontWeight: '700' }]}>Moderasi otomatis</Text></Row>
+        <Row gap={8}><Ionicons name="sparkles-outline" size={adminIcon.md} color={colors.primary} /><Text style={font.h3}>Moderasi otomatis</Text></Row>
         <Text style={font.small}>Usulan yang sama (nama mirip dalam radius {rule.radius} m) digabung menjadi satu dan menambah hitungan laporan. Saat mencapai {rule.reports} laporan dari pengguna berbeda, tempat aktif otomatis tanpa tinjauan admin (ditandai "Otomatis"). Usulan pembaruan data toko/pasar yang sudah ada memperbarui kolom yang diisi saja. Ambang & radius diubah di halaman Otomasi.</Text>
       </Card>
     </Entrance>
@@ -162,18 +168,18 @@ function Suggestions() {
                   {s.auto ? <Badge text="Otomatis" color={colors.success} /> : null}
                   {s.target_id && s.existing_name ? <Badge text={`memperbarui: ${s.existing_name}`} color={colors.info} /> : null}
                 </Row>
-                <Text style={[font.h3, { fontSize: 17 }]}>{s.name}</Text>
+                <Text style={font.h2}>{s.name}</Text>
                 <Text style={font.small}>{[s.brand ? (storeBrandLabel[s.brand] ?? s.brand) : null, s.category ? (storeCategoryLabel[s.category] ?? s.category) : null].filter(Boolean).join(' · ') || 'Tanpa brand/kategori'}</Text>
-                {s.address ? <Row gap={6} style={{ alignItems: 'flex-start' }}><Ionicons name="location-outline" size={14} color={colors.textMuted} style={{ marginTop: 2 }} /><Text style={[font.small, { flex: 1 }]}>{s.address}</Text></Row> : null}
+                {s.address ? <Row gap={6} style={{ alignItems: 'flex-start' }}><Ionicons name="location-outline" size={adminIcon.sm} color={adminTone.faint} style={{ marginTop: 2 }} /><Text style={[font.small, { flex: 1 }]}>{s.address}</Text></Row> : null}
                 <Row gap={14} style={{ flexWrap: 'wrap' }}>
-                  {s.open_hours ? <Row gap={4}><Ionicons name="time-outline" size={14} color={colors.textMuted} /><Text style={font.tiny}>{s.open_hours}</Text></Row> : null}
-                  {s.phone ? <Row gap={4}><Ionicons name="call-outline" size={14} color={colors.textMuted} /><Text style={font.tiny}>{s.phone}</Text></Row> : null}
-                  <Pressable onPress={() => Linking.openURL(osm(s.lat, s.lng))}><Row gap={4}><Ionicons name="navigate-outline" size={14} color={colors.primary} /><Text style={[font.tiny, { color: colors.primary, fontWeight: '700' }]}>{s.lat.toFixed(5)}, {s.lng.toFixed(5)} · buka peta</Text></Row></Pressable>
+                  {s.open_hours ? <Row gap={4}><Ionicons name="time-outline" size={adminIcon.sm} color={adminTone.faint} /><Text style={font.tiny}>{s.open_hours}</Text></Row> : null}
+                  {s.phone ? <Row gap={4}><Ionicons name="call-outline" size={adminIcon.sm} color={adminTone.faint} /><Text style={font.tiny}>{s.phone}</Text></Row> : null}
+                  <Pressable onPress={() => Linking.openURL(osm(s.lat, s.lng))}><Row gap={4}><Ionicons name="navigate-outline" size={adminIcon.sm} color={colors.primary} /><Text style={[font.tiny, { color: colors.primary, fontWeight: '700' }]}>{s.lat.toFixed(5)}, {s.lng.toFixed(5)} · buka peta</Text></Row></Pressable>
                 </Row>
                 {s.notes ? <Text style={[font.tiny, { fontStyle: 'italic' }]}>"{s.notes}"</Text> : null}
                 <Text style={font.tiny}>Pengusul {s.submitter ?? '-'} · {formatDate(s.created_at)}{s.reviewed_at ? ` · ditinjau ${formatDate(s.reviewed_at)}` : ''}{s.review_note ? ` · ${s.review_note}` : ''}</Text>
                 {(s.nearby_conflicts ?? 0) > 0 ? (
-                  <View style={st.warn}><Ionicons name="warning-outline" size={16} color={colors.warning} /><Text style={[font.small, { color: colors.warning, fontWeight: '700', flex: 1 }]}>{s.nearby_conflicts} usulan lain dengan nama berbeda dalam radius {rule.radius} m — periksa duplikat sebelum menyetujui.</Text></View>
+                  <View style={st.warn}><Ionicons name="warning-outline" size={adminIcon.md} color={colors.warning} /><Text style={[font.small, { color: colors.warning, fontWeight: '700', flex: 1 }]}>{s.nearby_conflicts} usulan lain dengan nama berbeda dalam radius {rule.radius} m — periksa duplikat sebelum menyetujui.</Text></View>
                 ) : null}
               </View>
             </Row>
@@ -190,6 +196,6 @@ function Suggestions() {
 }
 
 const st = StyleSheet.create({
-  photo: { width: 96, height: 96, borderRadius: radius.lg, backgroundColor: colors.bgSoft },
-  warn: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: radius.md, backgroundColor: colors.accentLight, borderWidth: 1, borderColor: colors.warning + '44' },
+  photo: { width: 96, height: 96, borderRadius: adminRadius.card, backgroundColor: adminTone.surfaceAlt },
+  warn: { flexDirection: 'row', alignItems: 'center', gap: adminSpace.sm, padding: 10, borderRadius: adminRadius.card, backgroundColor: colors.accentLight, borderWidth: 1, borderColor: colors.warning + '44' },
 });

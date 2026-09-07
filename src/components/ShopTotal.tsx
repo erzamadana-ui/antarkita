@@ -1,7 +1,7 @@
 // Driver memasukkan belanja riil (AntarShop & AntarMarket): harga per item sesuai nota, total, foto nota → set_shopping_actual
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Row, Button, Badge, toast } from '@/components/ui';
 import { PressableScale } from '@/components/motion';
 import { DocUpload } from '@/components/DocUpload';

@@ -6,7 +6,7 @@
 // - usePickupRadiusText  : teks radius jemput dinamis dari app_public_settings().pickup_radius_km
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
 import { Row, Badge, Button, Chip, Input } from '@/components/ui';
 import { PressableScale, ProgressBar } from '@/components/motion';

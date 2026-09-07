@@ -2,11 +2,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   AdminPage, DataTable, Toolbar, ReasonPrompt, StatCard, Grid, Pill, StatusPill,
-  ContactActions, DeleteButton, DeletePartnerDialog, IconAction, Truncate,
-  adminFont as font, adminTone, adminSpace,
+  RowActions, DeletePartnerDialog, IconAction, Truncate,
+  adminFont as font, adminTone, adminSpace, adminTable, adminIcon,
 } from '@/components/admin';
 import { Row, Button, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
@@ -111,7 +111,7 @@ export default function AdminDrivers() {
             const d = r as unknown as Row_;
             return (
               <View style={{ alignItems: 'flex-start', gap: 3 }}>
-                <Row gap={4}><Ionicons name="star" size={12} color={colors.accent} /><Text style={font.mono}>{Number(d.rating_avg).toFixed(1)}</Text><Text style={font.tiny}>· {d.total_trips} trip</Text></Row>
+                <Row gap={4}><Ionicons name="star" size={adminIcon.sm} color={colors.accent} /><Text style={font.mono}>{Number(d.rating_avg).toFixed(1)}</Text><Text style={font.tiny}>· {d.total_trips} trip</Text></Row>
                 {d.is_online ? <Pill text="Online" tone="ok" /> : null}
               </View>
             );
@@ -129,30 +129,34 @@ export default function AdminDrivers() {
           },
         },
         {
-          key: 'contact', label: 'Kontak', width: 180, render: (r) => {
+          // Aksi utama layar ini = keputusan verifikasi; Chat mengisi slot kedua, sisanya di kebab.
+          key: 'actions', label: 'Aksi', width: adminTable.actionsWideW, align: 'right', render: (r) => {
             const d = r as unknown as Row_;
-            return <ContactActions userId={d.id} name={d.profile?.full_name ?? 'Driver'} role="driver" subject={`Panel admin · driver ${d.profile?.full_name ?? ''}`.trim()} />;
-          },
-        },
-        {
-          key: 'actions', label: 'Aksi', width: 260, render: (r) => {
-            const d = r as unknown as Row_;
+            const name = d.profile?.full_name ?? 'Driver';
             return (
-              <Row gap={6} style={{ flexWrap: 'wrap' }}>
-                {d.status !== 'approved' && <Button size="sm" title={d.status === 'suspended' ? 'Aktifkan' : 'Setujui'} color={colors.success} onPress={() => setStatus(d.id, 'approved', d.status === 'suspended' ? 'Diaktifkan kembali oleh admin' : undefined)} />}
-                {d.status === 'pending' && <Button size="sm" title="Tolak" variant="outline" color={colors.danger} onPress={() => setStatus(d.id, 'rejected')} />}
-                {d.status === 'approved' && <Button size="sm" title="Tangguhkan" variant="outline" color={colors.warning} onPress={() => setStatus(d.id, 'suspended')} />}
-                <DeleteButton onPress={() => setDel({ kind: 'driver', id: d.id, name: d.profile?.full_name ?? 'Driver', meta: [d.vehicle_plate, `${d.total_trips} trip`] })} />
-              </Row>
+              <RowActions
+                contact={{ userId: d.id, name, role: 'driver', subject: `Panel admin · driver ${name}`.trim() }}
+                primary={[
+                  d.status !== 'approved' && {
+                    key: 'ok', label: d.status === 'suspended' ? 'Aktifkan' : 'Setujui', variant: 'solid' as const, color: colors.success,
+                    onPress: () => setStatus(d.id, 'approved', d.status === 'suspended' ? 'Diaktifkan kembali oleh admin' : undefined),
+                  },
+                ]}
+                menu={[
+                  d.status === 'pending' && { key: 'reject', label: 'Tolak pengajuan…', icon: 'close-circle-outline', danger: true, onPress: () => setStatus(d.id, 'rejected') },
+                  d.status === 'approved' && { key: 'susp', label: 'Tangguhkan…', icon: 'pause-circle-outline', danger: true, onPress: () => setStatus(d.id, 'suspended') },
+                  { key: 'del', label: 'Hapus mitra…', icon: 'trash-outline', danger: true, hint: 'butuh PIN & alasan', onPress: () => setDel({ kind: 'driver', id: d.id, name, meta: [d.vehicle_plate, `${d.total_trips} trip`] }) },
+                ]}
+              />
             );
           },
         },
       ]} />
 
       <Row gap={8} style={{ flexWrap: 'wrap' }}>
-        <Ionicons name="information-circle-outline" size={15} color={adminTone.faint} />
+        <Ionicons name="information-circle-outline" size={adminIcon.md} color={adminTone.faint} />
         <Text style={font.tiny}>Driver travel antar kota (agen & sopir pribadi) dikelola di menu</Text>
-        <Pressable onPress={() => router.push('/(admin)/travel' as never)} hitSlop={6}><Text style={{ color: colors.primary, fontSize: 11.5, fontWeight: '700' }}>Mitra Travel →</Text></Pressable>
+        <Pressable onPress={() => router.push('/(admin)/travel' as never)} hitSlop={6}><Text style={[font.tiny, { color: colors.primary, fontWeight: '700' }]}>Mitra Travel →</Text></Pressable>
       </Row>
     </AdminPage>
   );

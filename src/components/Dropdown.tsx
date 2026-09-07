@@ -3,7 +3,7 @@
 // Dipakai antara lain untuk memilih gudang AntarSend (asal & tujuan).
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, ScrollView, Platform, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { PressableScale } from '@/components/motion';
 import { colors, font, glass, motion, radius, shadow } from '@/lib/theme';

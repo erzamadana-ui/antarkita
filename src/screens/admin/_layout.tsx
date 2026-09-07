@@ -3,14 +3,14 @@ import React from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 import { Slot, usePathname, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 import { RequireAuth } from '@/components/AuthGate';
 import { AdminUnlockGate } from '@/components/AdminUnlockGate';
 import { PressableScale } from '@/components/motion';
 import { BrandLogo } from '@/components/Logo';
 import { useAuth } from '@/store/auth';
-import { adminFont, adminTone, adminRadius, adminShadow, AdminCallBar } from '@/components/admin';
+import { adminFont, adminTone, adminRadius, adminShadow, adminIcon, AdminCallBar } from '@/components/admin';
 import { colors, fam, motion } from '@/lib/theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -98,7 +98,7 @@ export default function AdminLayout() {
                 <View style={s.brand}>
                   <BrandLogo size={32} />
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={{ color: adminTone.ink, fontSize: 15, ...fam(700) }} numberOfLines={1}>AntarKita</Text>
+                    <Text style={adminFont.h2} numberOfLines={1}>AntarKita</Text>
                     <Text style={adminFont.tiny} numberOfLines={1}>Panel Admin</Text>
                   </View>
                 </View>
@@ -111,7 +111,7 @@ export default function AdminLayout() {
                         return (
                           <Pressable key={n.href} onPress={() => go(n.href)} style={(st) => [s.item, !active && (st as { hovered?: boolean }).hovered && { backgroundColor: adminTone.surfaceAlt }, active && s.itemOn]}>
                             {active ? <View style={s.marker} /> : null}
-                            <Ionicons name={active ? n.iconActive : n.icon} size={17} color={active ? colors.primary : adminTone.muted} />
+                            <Ionicons name={active ? n.iconActive : n.icon} size={adminIcon.md} color={active ? colors.primary : adminTone.muted} />
                             <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, ...fam(active ? 700 : 500), color: active ? colors.primaryDark : adminTone.ink2 }}>{n.label}</Text>
                           </Pressable>
                         );
@@ -122,7 +122,7 @@ export default function AdminLayout() {
                 <View style={s.foot}>
                   <Text style={{ color: adminTone.ink, fontSize: 12.5, ...fam(700) }} numberOfLines={1}>{profile?.full_name ?? 'Admin'}</Text>
                   <PressableScale haptic={false} onPress={async () => { await signOut(); router.replace('/(auth)/welcome'); }} style={s.footBtn}>
-                    <Ionicons name="log-out-outline" size={15} color={colors.danger} />
+                    <Ionicons name="log-out-outline" size={adminIcon.md} color={colors.danger} />
                     <Text style={{ color: colors.danger, fontSize: 12.5, ...fam(700) }}>Keluar</Text>
                   </PressableScale>
                 </View>
@@ -133,7 +133,7 @@ export default function AdminLayout() {
                   <BrandLogo size={26} />
                   <Text style={[adminFont.h1, { flex: 1 }]}>Panel Admin</Text>
                   <PressableScale onPress={async () => { await signOut(); router.replace('/(auth)/welcome'); }} scaleTo={0.9} style={s.iconBtn}>
-                    <Ionicons name="log-out-outline" size={18} color={colors.danger} />
+                    <Ionicons name="log-out-outline" size={adminIcon.lg} color={colors.danger} />
                   </PressableScale>
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, padding: 10 }}>
@@ -141,7 +141,7 @@ export default function AdminLayout() {
                     const active = isActive(n.href);
                     return (
                       <PressableScale key={n.href} haptic={false} scaleTo={0.95} onPress={() => go(n.href)} style={[s.chip, active && s.chipOn]}>
-                        <Ionicons name={active ? n.iconActive : n.icon} size={15} color={active ? '#fff' : adminTone.muted} />
+                        <Ionicons name={active ? n.iconActive : n.icon} size={adminIcon.md} color={active ? '#fff' : adminTone.muted} />
                         <Text style={{ color: active ? '#fff' : adminTone.ink2, fontSize: 12.5, ...fam(700) }}>{n.label}</Text>
                       </PressableScale>
                     );

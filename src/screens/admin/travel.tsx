@@ -1,15 +1,15 @@
 // Admin · Mitra Travel: verifikasi & pengelolaan agen travel / sopir pribadi AntarTravel
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, Linking, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { AdminPage, FilterBar, StatCard, ReasonPrompt, ContactActions, DeleteButton, DeletePartnerDialog, adminFont as font, AdminCard as Card, EmptyState as Empty } from '@/components/admin';
+import { AdminPage, FilterBar, StatCard, ReasonPrompt, RowActions, DeletePartnerDialog, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, AdminCard as Card, EmptyState as Empty } from '@/components/admin';
 import { Row, Button, Badge, Input, IconCircle, Stars, toast } from '@/components/ui';
 import { Entrance, Skeleton } from '@/components/motion';
 import { rpc } from '@/lib/supabase';
 import { signedUrl } from '@/lib/upload';
 import { handleAdminError } from '@/store/adminSecurity';
-import { colors, radius } from '@/lib/theme';
+import { colors } from '@/lib/theme';
 import { formatDate, phoneDisplay, phoneMasked, rupiah } from '@/lib/format';
 import type { ApprovalStatus, TravelPartner } from '@/lib/types';
 
@@ -66,11 +66,11 @@ export default function AdminTravelPartners() {
       right={<Button size="sm" title="Rute & permintaan" variant="secondary" icon="map-outline" onPress={() => router.push('/(admin)/logistics' as never)} />}>
       <ReasonPrompt visible={!!ask} title={ask?.status === 'suspended' ? `Tangguhkan ${askName}?` : `Tolak ${askName}?`} subtitle="Alasan wajib — tersimpan di Log Aktivitas dan ditampilkan ke mitra." onCancel={() => setAsk(null)} onSubmit={(r) => { const p = all.find((x) => x.id === ask!.id); if (p) return setStatus(p, ask!.status, r); }} confirmLabel={ask?.status === 'suspended' ? 'Tangguhkan' : 'Tolak'} />
       <DeletePartnerDialog target={del} onClose={() => setDel(null)} onDeleted={load} />
-      <Row gap={12} style={{ flexWrap: 'wrap' }}>
-        <StatCard index={0} label="Menunggu" value={count('pending')} color={colors.warning} />
-        <StatCard index={1} label="Aktif" value={count('approved')} color={colors.success} />
-        <StatCard index={2} label="Ditangguhkan" value={count('suspended')} color={colors.danger} />
-        <StatCard index={3} label="Total trip" value={all.reduce((s, r) => s + (Number(r.trips) || 0), 0)} hint="jadwal kursi bersama" color={colors.travel} />
+      <Row gap={adminSpace.lg} style={{ flexWrap: 'wrap' }}>
+        <StatCard index={0} icon="hourglass-outline" label="Menunggu" value={count('pending')} color={adminTone.amber} />
+        <StatCard index={1} icon="checkmark-circle-outline" label="Aktif" value={count('approved')} color={adminTone.green} />
+        <StatCard index={2} icon="pause-circle-outline" label="Ditangguhkan" value={count('suspended')} color={adminTone.red} />
+        <StatCard index={3} icon="bus-outline" label="Total trip" value={all.reduce((s, r) => s + (Number(r.trips) || 0), 0)} hint="jadwal kursi bersama" color={adminTone.violet} />
       </Row>
       <Row gap={10} style={{ flexWrap: 'wrap' }}>
         <FilterBar value={filter} onChange={setFilter} options={FILTERS.map((f) => ({ ...f, label: f.key === 'all' ? `Semua (${all.length})` : `${f.label} (${count(f.key as ApprovalStatus)})` }))} />
@@ -95,14 +95,14 @@ export default function AdminTravelPartners() {
                       <Badge text={STATUS_LABEL[p.status]} color={STATUS_COLOR[p.status]} />
                       {p.is_electric ? <Badge text="Kendaraan listrik" color={colors.success} /> : null}
                     </Row>
-                    <Text style={[font.h3, { fontSize: 17 }]}>{displayName(p)}</Text>
+                    <Text style={font.h2}>{displayName(p)}</Text>
                     {p.company_name && p.full_name && p.company_name !== p.full_name ? <Text style={font.small}>Penanggung jawab: {p.full_name}{p.driver_name && p.driver_name !== p.full_name ? ` · sopir: ${p.driver_name}` : ''}</Text> : p.driver_name && p.driver_name !== p.full_name ? <Text style={font.small}>Sopir: {p.driver_name}</Text> : null}
                     <Row gap={6} style={{ flexWrap: 'wrap' }}>
-                      <Ionicons name="call-outline" size={14} color={colors.textMuted} />
+                      <Ionicons name="call-outline" size={adminIcon.sm} color={adminTone.faint} />
                       <Text style={font.tiny}>{open ? `${phoneDisplay(p.phone)} · ${p.email ?? '-'}` : `${phoneMasked(p.phone)} · ${emailMasked(p.email)}`}</Text>
                       {!open ? <Pressable onPress={() => reveal(p)} hitSlop={6}><Text style={st.link}>Tampilkan</Text></Pressable> : null}
                     </Row>
-                    <Row gap={6}><Ionicons name="location-outline" size={14} color={colors.textMuted} /><Text style={font.tiny}>Kota basis: {p.base_city_name ?? '—'} · daftar {formatDate(p.created_at, false)}</Text></Row>
+                    <Row gap={6}><Ionicons name="location-outline" size={adminIcon.sm} color={adminTone.faint} /><Text style={font.tiny}>Kota basis: {p.base_city_name ?? '—'} · daftar {formatDate(p.created_at, false)}</Text></Row>
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 4 }}>
                     <Stars value={Number(p.rating_avg) || 0} />
@@ -114,12 +114,12 @@ export default function AdminTravelPartners() {
                 <Row gap={12} style={{ flexWrap: 'wrap', alignItems: 'stretch' }}>
                   <View style={st.block}>
                     <Text style={st.blockTitle}>Kendaraan</Text>
-                    <Text style={[font.body, { fontWeight: '700' }]}>{p.vehicle_model}{p.vehicle_year ? ` (${p.vehicle_year})` : ''}</Text>
+                    <Text style={font.bodyStrong}>{p.vehicle_model}{p.vehicle_year ? ` (${p.vehicle_year})` : ''}</Text>
                     <Text style={font.small}>{p.vehicle_plate} · {p.seats} kursi{p.is_electric ? ' · listrik' : ''}</Text>
                   </View>
                   <View style={st.block}>
                     <Text style={st.blockTitle}>Layanan</Text>
-                    <Text style={[font.body, { fontWeight: '700' }]}>{services.join(' · ') || '—'}</Text>
+                    <Text style={font.bodyStrong}>{services.join(' · ') || '—'}</Text>
                     <Text style={font.small} numberOfLines={3}>
                       {[p.daily_rate ? `Harian ${rupiah(p.daily_rate)}` : null, p.overtime_rate ? `lembur ${rupiah(p.overtime_rate)}/jam` : null, p.charter_rate_km ? `carter ${rupiah(p.charter_rate_km)}/km` : null, p.fuel_included ? 'BBM termasuk' : null,
                         p.accommodation?.length ? `menginap: ${p.accommodation.map((a) => ACCOM_LABEL[a] ?? a).join(' / ')}${p.accommodation_fee ? ` (${rupiah(p.accommodation_fee)}/malam)` : ''}` : null].filter(Boolean).join(' · ') || 'Tarif mengikuti rute'}
@@ -130,7 +130,7 @@ export default function AdminTravelPartners() {
                     <Row gap={10} style={{ flexWrap: 'wrap' }}>
                       {([['Foto kendaraan', p.photo_url], ['SIM', p.license_url], ['Izin usaha', p.permit_url]] as const).map(([label, v]) => (
                         <Pressable key={label} onPress={() => openDoc(v, label)} hitSlop={4}>
-                          <Row gap={4}><Ionicons name={v ? 'document-attach-outline' : 'close-circle-outline'} size={14} color={v ? colors.primary : colors.textMuted} /><Text style={[st.link, !v && { color: colors.textMuted }]}>{label}</Text></Row>
+                          <Row gap={4}><Ionicons name={v ? 'document-attach-outline' : 'close-circle-outline'} size={adminIcon.sm} color={v ? colors.primary : adminTone.faint} /><Text style={[st.link, !v && { color: adminTone.faint }]}>{label}</Text></Row>
                         </Pressable>
                       ))}
                     </Row>
@@ -141,24 +141,29 @@ export default function AdminTravelPartners() {
                 {/* Statistik */}
                 <Row gap={8} style={{ flexWrap: 'wrap' }}>
                   {([['Trip', p.trips], ['Booking', p.bookings], ['Permintaan selesai', p.requests_done], ['Tawaran', p.offers], ['Total perjalanan', p.total_trips]] as const).map(([l, v]) => (
-                    <View key={l} style={st.stat}><Text style={[font.body, { fontWeight: '800', color: colors.travel }]}>{Number(v) || 0}</Text><Text style={font.tiny}>{l}</Text></View>
+                    <View key={l} style={st.stat}><Text style={[font.mono, { fontSize: 14, color: adminTone.teal }]}>{Number(v) || 0}</Text><Text style={font.tiny}>{l}</Text></View>
                   ))}
-                  <View style={st.stat}><Text style={[font.body, { fontWeight: '800', color: (p.wallet ?? 0) < 0 ? colors.danger : colors.text }]}>{rupiah(Number(p.wallet) || 0)}</Text><Text style={font.tiny}>Saldo AntarPay</Text></View>
+                  <View style={st.stat}><Text style={[font.mono, { fontSize: 14, color: (p.wallet ?? 0) < 0 ? adminTone.red : adminTone.ink }]}>{rupiah(Number(p.wallet) || 0)}</Text><Text style={font.tiny}>Saldo AntarPay</Text></View>
                 </Row>
 
                 {p.status_reason && p.status !== 'approved' ? (
-                  <View style={st.reason}><Ionicons name="information-circle-outline" size={16} color={STATUS_COLOR[p.status]} /><Text style={[font.small, { flex: 1, color: colors.text }]}>Alasan: {p.status_reason}</Text></View>
+                  <View style={st.reason}><Ionicons name="information-circle-outline" size={adminIcon.md} color={STATUS_COLOR[p.status]} /><Text style={[font.small, { flex: 1, color: adminTone.ink }]}>Alasan: {p.status_reason}</Text></View>
                 ) : null}
 
                 {/* Aksi */}
-                <Row gap={8} style={{ justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                  <ContactActions userId={p.id} name={displayName(p)} role="driver" subject={`Panel admin · mitra travel ${displayName(p)}`} />
-                  <DeleteButton onPress={() => setDel({ kind: 'travel', id: p.id, name: displayName(p), meta: [p.vehicle_plate ?? '', `${p.trips} trip`].filter(Boolean) })} />
-                  {p.status === 'pending' ? <Button size="sm" title="Tolak" variant="outline" color={colors.danger} onPress={() => setStatus(p, 'rejected')} /> : null}
-                  {p.status === 'approved' ? <Button size="sm" title="Tangguhkan" variant="outline" color={colors.danger} onPress={() => setStatus(p, 'suspended')} /> : null}
-                  {p.status === 'suspended' ? <Button size="sm" title="Pulihkan" color={colors.success} icon="refresh" loading={busyId === p.id} onPress={() => setStatus(p, 'approved', 'Dipulihkan oleh admin')} /> : null}
-                  {p.status === 'pending' || p.status === 'rejected' ? <Button size="sm" title="Setujui" color={colors.success} icon="checkmark" loading={busyId === p.id} onPress={() => setStatus(p, 'approved', 'Disetujui admin setelah verifikasi dokumen')} /> : null}
-                </Row>
+                {/* Aksi ringkas: satu tombol utama + Chat, sisanya di menu kebab. */}
+                <RowActions
+                  contact={{ userId: p.id, name: displayName(p), role: 'driver', subject: `Panel admin · mitra travel ${displayName(p)}` }}
+                  primary={[
+                    (p.status === 'pending' || p.status === 'rejected') && { key: 'ok', label: 'Setujui', icon: 'checkmark' as const, variant: 'solid' as const, color: colors.success, busy: busyId === p.id, onPress: () => setStatus(p, 'approved', 'Disetujui admin setelah verifikasi dokumen') },
+                    p.status === 'suspended' && { key: 'restore', label: 'Pulihkan', icon: 'refresh' as const, variant: 'solid' as const, color: colors.success, busy: busyId === p.id, onPress: () => setStatus(p, 'approved', 'Dipulihkan oleh admin') },
+                  ]}
+                  menu={[
+                    p.status === 'pending' && { key: 'reject', label: 'Tolak pengajuan…', icon: 'close-circle-outline', danger: true, onPress: () => setStatus(p, 'rejected') },
+                    p.status === 'approved' && { key: 'susp', label: 'Tangguhkan…', icon: 'pause-circle-outline', danger: true, onPress: () => setStatus(p, 'suspended') },
+                    { key: 'del', label: 'Hapus mitra…', icon: 'trash-outline', danger: true, hint: 'butuh PIN & alasan', onPress: () => setDel({ kind: 'travel', id: p.id, name: displayName(p), meta: [p.vehicle_plate ?? '', `${p.trips} trip`].filter(Boolean) }) },
+                  ]}
+                />
               </Card>
             </Entrance>
           );
@@ -170,9 +175,9 @@ export default function AdminTravelPartners() {
 function displayName(p: PartnerRow) { return p.company_name || p.full_name || p.driver_name || 'Mitra travel'; }
 
 const st = StyleSheet.create({
-  link: { color: colors.primary, fontWeight: '700', fontSize: 12 },
-  block: { flex: 1, minWidth: 200, gap: 4, padding: 12, borderRadius: radius.md, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border },
-  blockTitle: { fontSize: 12, fontWeight: '800', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
-  stat: { minWidth: 96, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.md, backgroundColor: colors.tint, gap: 2 },
-  reason: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: radius.md, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border },
+  link: { color: colors.primary, fontWeight: '700', fontSize: 12, lineHeight: 16 },
+  block: { flex: 1, minWidth: 200, gap: 4, padding: adminSpace.md, borderRadius: adminRadius.card, backgroundColor: adminTone.surfaceAlt, borderWidth: 1, borderColor: adminTone.border },
+  blockTitle: { ...font.label },
+  stat: { minWidth: 96, paddingHorizontal: adminSpace.md, paddingVertical: adminSpace.sm, borderRadius: adminRadius.card, backgroundColor: adminTone.surfaceAlt, borderWidth: 1, borderColor: adminTone.border, gap: 2 },
+  reason: { flexDirection: 'row', alignItems: 'center', gap: adminSpace.sm, padding: 10, borderRadius: adminRadius.card, backgroundColor: adminTone.surfaceAlt, borderWidth: 1, borderColor: adminTone.border },
 });

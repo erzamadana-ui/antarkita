@@ -540,7 +540,7 @@ begin
     update orders set created_at = now() - interval '2 minutes' where id = o.id;   -- order "dituakan" 2 menit
     perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
     select count(*) into n from driver_available_orders() av where av.id = o.id;
-    select f.priority_note, f.waiting_minutes into k1, s_wait from driver_available_orders() av where av.id = o.id;
+    select av.priority_note, av.waiting_minutes into k1, s_wait from driver_available_orders() av where av.id = o.id;
     perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
     select count(*) into n2 from driver_available_orders() av where av.id = o.id;
     log := log || format('S24c %s setelah order berumur 2 menit: feed rating rendah=%s feed rating tinggi=%s waiting_minutes=%s priority_note="%s"',
@@ -814,6 +814,141 @@ begin
     -- kembalikan setelan dispatch ke nilai semula (tetap ikut rollback)
     perform admin_set_settings(jsonb_build_object('priority_tiers', s_tier0, 'pickup_radius_km', s_rad0));
   exception when others then log := log || 'S30 BUG portal eksekutif: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S31 Chat admin di pesanan (kebijakan RLS order_messages — perbaikan migrasi 0028) =====
+  -- Catatan: RLS diuji SUNGGUHAN. set_config('role','authenticated') membuat pernyataan berikutnya
+  -- tunduk pada kebijakan (peran postgres punya BYPASSRLS, jadi tanpa ini uji akan selalu "lulus" palsu).
+  begin
+    update orders set status = 'cancelled' where customer_id = cust and status in ('searching','accepted','arrived','in_progress');
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    o := create_order(jsonb_build_object('service', 'ride_motor', 'vehicle_class', 'motor_economy',
+      'pickup', jsonb_build_object('lat', 0.4950, 'lng', 101.4320, 'address', 'Jl. Uji Chat Admin'),
+      'dropoff', jsonb_build_object('lat', 0.5100, 'lng', 101.4450, 'address', 'Tujuan Uji Chat'), 'paid_via', 'cash'));
+    o := cancel_order(o.id, 'uji chat admin');   -- status di luar accepted/arrived/in_progress → cabang is_admin() yang diuji
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      perform set_config('role', 'authenticated', true);
+      insert into order_messages (order_id, sender_id, body) values (o.id, adm, 'Halo, ini Admin AntarKita (uji QC).');
+      perform set_config('role', 'none', true);
+      select count(*) into n from order_messages where order_id = o.id and sender_id = adm;
+      log := log || format('S31a %s admin mengirim pesan di order %s (status %s) → baris tersimpan=%s', case when n = 1 then 'OK' else 'BUG' end, o.code, o.status, n) || E'\n';
+    exception when others then
+      log := log || format('S31a BUG admin tidak bisa membalas chat pesanan (status %s): %s', o.status, sqlerrm) || E'\n';
+      insert into order_messages (order_id, sender_id, body) values (o.id, adm, 'Pesan admin disisipkan langsung karena RLS menolak (uji QC).');
+    end;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      perform set_config('role', 'authenticated', true);
+      select count(*) into n2 from order_messages where order_id = o.id;
+      perform set_config('role', 'none', true);
+      log := log || format('S31b %s pelanggan pemilik order bisa membaca pesan admin → %s baris', case when n2 >= 1 then 'OK' else 'BUG' end, n2) || E'\n';
+    exception when others then perform set_config('role', 'none', true); log := log || 'S31b BUG baca pelanggan: ' || sqlerrm || E'\n'; end;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', mown, 'role', 'authenticated')::text, true);
+      perform set_config('role', 'authenticated', true);
+      select count(*) into n3 from order_messages where order_id = o.id;
+      perform set_config('role', 'none', true);
+      log := log || format('S31c %s pengguna bukan peserta membaca chat → %s baris (harus 0)', case when n3 = 0 then 'OK' else 'BUG' end, n3) || E'\n';
+    exception when others then perform set_config('role', 'none', true); log := log || 'S31c BUG baca pihak ketiga: ' || sqlerrm || E'\n'; end;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', mown, 'role', 'authenticated')::text, true);
+      perform set_config('role', 'authenticated', true);
+      insert into order_messages (order_id, sender_id, body) values (o.id, mown, 'Saya bukan peserta order ini.');
+      perform set_config('role', 'none', true);
+      log := log || 'S31d BUG: pengguna bukan peserta bisa menulis di chat pesanan' || E'\n';
+    exception when others then log := log || format('S31d OK pengguna bukan peserta ditolak menulis: %s', left(sqlerrm, 60)) || E'\n'; end;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      perform set_config('role', 'authenticated', true);
+      insert into order_messages (order_id, sender_id, body) values (o.id, cust, 'Menyamar sebagai pelanggan.');
+      perform set_config('role', 'none', true);
+      log := log || 'S31e BUG: sender_id boleh berbeda dari auth.uid() (penyamaran identitas)' || E'\n';
+    exception when others then log := log || format('S31e OK sender_id wajib = auth.uid(): %s', left(sqlerrm, 60)) || E'\n'; end;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      perform set_config('role', 'authenticated', true);
+      insert into order_messages (order_id, sender_id, body) values (o.id, cust, 'Halo, order sudah batal.');
+      perform set_config('role', 'none', true);
+      log := log || 'S31f BUG: pelanggan bisa menulis pada order yang sudah dibatalkan (aturan lama ikut longgar)' || E'\n';
+    exception when others then log := log || format('S31f OK syarat peserta TIDAK dilonggarkan (order %s): %s', o.status, left(sqlerrm, 55)) || E'\n'; end;
+    begin
+      perform set_config('antaraja.bypass', 'on', true);
+      update orders set status = 'accepted', driver_id = drv2 where id = o.id;
+      perform set_config('antaraja.bypass', 'off', true);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      perform set_config('role', 'authenticated', true);
+      insert into order_messages (order_id, sender_id, body) values (o.id, cust, 'Baik Pak, saya tunggu di depan pagar.');
+      perform set_config('role', 'none', true);
+      select count(*) into n from order_messages where order_id = o.id and sender_id = cust;
+      log := log || format('S31g %s pelanggan tetap bisa chat saat order berjalan (status accepted) → %s baris', case when n = 1 then 'OK' else 'BUG' end, n) || E'\n';
+    exception when others then perform set_config('role', 'none', true); log := log || 'S31g BUG pelanggan tidak bisa chat saat order berjalan: ' || sqlerrm || E'\n'; end;
+    update orders set status = 'cancelled' where id = o.id;
+  exception when others then perform set_config('role', 'none', true); log := log || 'S31 BUG chat admin di pesanan: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S32 Realtime app_settings (publication) + sakelar layanan admin =====
+  begin
+    select count(*) into n from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'app_settings';
+    select relreplident::text into k1 from pg_class where oid = 'public.app_settings'::regclass;
+    select count(*) into n2 from pg_policy where polrelid = 'public.app_settings'::regclass and polcmd = 'r';
+    log := log || format('S32a %s app_settings terdaftar di publication supabase_realtime=%s (harus 1); replica identity=%s; kebijakan SELECT=%s (payload realtime butuh keduanya)',
+      case when n = 1 and n2 >= 1 then 'OK' else 'BUG' end, n, k1, n2) || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    j := app_public_settings();
+    bo := (j->'services_enabled'->>'market')::boolean;
+    r := admin_set_service_enabled('market', not bo);
+    j1 := app_public_settings();
+    log := log || format('S32b %s admin_set_service_enabled(market,%s) → app_public_settings().services_enabled.market %s→%s (nilai balik RPC=%s)',
+      case when (j1->'services_enabled'->>'market')::boolean = (not bo) then 'OK' else 'BUG' end,
+      not bo, bo, j1->'services_enabled'->>'market', r->>'market') || E'\n';
+    select count(*) into n3 from app_settings where key = 'services_enabled' and updated_at >= transaction_timestamp();
+    log := log || format('S32c %s baris app_settings.services_enabled benar-benar ter-UPDATE (%s baris, updated_at diperbarui) sehingga replikasi mengirim payload', case when n3 = 1 then 'OK' else 'BUG' end, n3) || E'\n';
+    r := admin_set_service_enabled('market', bo);
+    j1 := app_public_settings();
+    log := log || format('S32d %s nilai dikembalikan ke semula: market=%s', case when (j1->'services_enabled'->>'market')::boolean = bo then 'OK' else 'BUG' end, j1->'services_enabled'->>'market') || E'\n';
+  exception when others then log := log || 'S32 BUG realtime app_settings: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S33 Setiap notifikasi harus punya kunci tujuan di kolom `data` =====
+  -- Kunci yang dibaca aplikasi: src/hooks/useNotifications.ts → notificationData()
+  begin
+    -- (a) chat admin ↔ pengguna: ticket_id
+    select count(*) into n from notifications where created_at >= transaction_timestamp() and kind = 'system' and jsonb_exists(coalesce(data, '{}'::jsonb), 'ticket_id');
+    log := log || format('S33a %s notifikasi admin_contact_thread membawa ticket_id → %s baris', case when n >= 1 then 'OK' else 'BUG' end, n) || E'\n';
+    -- (b) status pesanan (titipan travel AntarSend): order_id
+    select count(*) into n from notifications where created_at >= transaction_timestamp() and kind = 'order' and jsonb_exists(coalesce(data, '{}'::jsonb), 'order_id');
+    select count(*) into n2 from notifications where created_at >= transaction_timestamp() and kind = 'order' and not jsonb_exists(coalesce(data, '{}'::jsonb), 'order_id') and not jsonb_exists(coalesce(data, '{}'::jsonb), 'travel_request_id') and not jsonb_exists(coalesce(data, '{}'::jsonb), 'booking_id');
+    log := log || format('S33b %s notifikasi kind=order: %s membawa order_id, %s tanpa kunci tujuan apa pun (harus 0)', case when n >= 1 and n2 = 0 then 'OK' else 'BUG' end, n, n2) || E'\n';
+    -- (c) travel carter: travel_request_id
+    select count(*) into n from notifications where created_at >= transaction_timestamp() and jsonb_exists(coalesce(data, '{}'::jsonb), 'travel_request_id');
+    log := log || format('S33c %s notifikasi permintaan/penawaran travel membawa travel_request_id → %s baris', case when n >= 1 then 'OK' else 'BUG' end, n) || E'\n';
+    -- (d) pembatalan jadwal travel oleh mitra → notifikasi ke penumpang harus membawa booking_id
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '3 days')::text, 'seats_total', 4, 'seat_price', 120000, 'allow_private', false));
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    tb := travel_book(jsonb_build_object('trip_id', tt.id, 'pax', 1, 'pickup_address', 'Jl. Uji Notifikasi', 'pickup_lat', 0.5, 'pickup_lng', 101.44,
+      'passengers', jsonb_build_array(jsonb_build_object('name', 'Uji QC')), 'paid_via', 'cash'));
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    perform travel_trip_set_status(tt.id, 'cancelled', 'uji pembatalan jadwal oleh mitra');
+    select count(*) into n2 from notifications where user_id = cust and created_at >= transaction_timestamp() and title = 'Travel ' || tb.code || ' dibatalkan';
+    select count(*) into n from notifications where user_id = cust and created_at >= transaction_timestamp() and title = 'Travel ' || tb.code || ' dibatalkan' and jsonb_exists(coalesce(data, '{}'::jsonb), 'booking_id');
+    log := log || format('S33d %s pembatalan jadwal travel: notifikasi ke penumpang=%s, yang membawa booking_id=%s (harus sama)', case when n2 = 1 and n = 1 then 'OK' else 'BUG' end, n2, n) || E'\n';
+    -- (e) pembayaran gateway: payment_settle harus menulis payment_id
+    select count(*) into n from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
+      where ns.nspname = 'public' and p.proname = 'payment_settle' and pg_get_functiondef(p.oid) like '%''payment_id'', p.id%';
+    log := log || format('S33e %s payment_settle menulis data.payment_id pada notifikasi pembayaran (%s fungsi cocok)', case when n = 1 then 'OK' else 'BUG' end, n) || E'\n';
+    -- (f) pindai statis: fungsi yang menulis notifikasi TANPA kolom `data` sama sekali
+    select coalesce(string_agg(distinct p.proname, ', '), '(tidak ada)') into k1
+      from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
+      where ns.nspname = 'public' and p.prokind = 'f'
+        and pg_get_functiondef(p.oid) ~* 'insert into notifications \(user_id, kind, title, body\)';
+    log := log || format('S33f %s fungsi yang menulis notifikasi tanpa kolom data: %s', case when k1 = '(tidak ada)' then 'OK' else 'BUG' end, k1) || E'\n';
+    -- (g) pindai dinamis: notifikasi yang lahir dalam simulasi ini tanpa satu pun kunci tujuan
+    select coalesce(string_agg(x.info, ' | ' order by x.info), '(tidak ada)'), count(*) into k1, n
+      from (select distinct kind::text || ' "' || left(title, 44) || '"' as info from notifications
+            where created_at >= transaction_timestamp()
+              and not jsonb_exists_any(coalesce(data, '{}'::jsonb),
+                    array['order_id','ticket_id','travel_request_id','booking_id','trip_id','payment_id','withdrawal_id','merchant_id','blast_id','suggestion_id','flag_id','report_run_id','target_id'])) x;
+    log := log || format('S33g %s jenis notifikasi tanpa kunci tujuan (informatif/tanpa halaman tujuan): %s', case when n = 0 then 'OK' else 'CATATAN' end, k1) || E'\n';
+  exception when others then log := log || 'S33 BUG notifikasi tujuan: ' || sqlerrm || E'\n'; end;
 
   raise exception using message = 'SIMULASI_SELESAI' || log;
 end $sim$;

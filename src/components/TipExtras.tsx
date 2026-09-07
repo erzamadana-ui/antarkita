@@ -1,7 +1,7 @@
 // Tip (pelanggan) & biaya tambahan parkir/tol/tunggu (driver mengajukan → pelanggan menyetujui)
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { Row, Button, Chip, Badge, toast } from '@/components/ui';
 import { PressableScale, useShake } from '@/components/motion';

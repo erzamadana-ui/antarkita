@@ -1,7 +1,7 @@
 // Pemilih bahasa: baris bendera (welcome) & daftar lengkap (Akun → Bahasa)
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { PressableScale } from '@/components/motion';
 import { toast } from '@/components/ui';
 import { useI18n, LOCALES, useT } from '@/lib/i18n';

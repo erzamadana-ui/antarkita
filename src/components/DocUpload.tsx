@@ -1,7 +1,7 @@
 // Kotak unggah dokumen/foto (KTP, NPWP, sertifikat, selfie) → bucket privat 'documents'
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Linking } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { toast } from '@/components/ui';
 import { pickAndUpload, signedUrl } from '@/lib/upload';
 import { useAuth } from '@/store/auth';

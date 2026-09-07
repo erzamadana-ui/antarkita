@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown, FadeInUp, LinearTransition } from 'react-native-reanimated';
 import { Screen, Row, Chip, toast, Avatar } from '@/components/ui';
 import { PressableScale } from '@/components/motion';
 import { BrandGradient } from '@/components/glass';
+import { OfflineNotice } from '@/components/call/OfflineNotice';
+import { notify } from '@/lib/push';
 import { useOrderChat, useOrder } from '@/hooks/useOrder';
 import { useAuth } from '@/store/auth';
 import { colors, font, radius, glass, shadow, motion } from '@/lib/theme';
@@ -26,6 +28,17 @@ export default function OrderChat() {
 
   useEffect(() => { setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 50); }, [messages.length]);
 
+  // Bunyi pendek + getar untuk pesan masuk dari lawan bicara (bukan pesan sendiri, bukan saat memuat riwayat).
+  const lastSeen = useRef<number | null>(null);
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!last) return;
+    if (lastSeen.current === null) { lastSeen.current = last.id; return; }
+    if (last.id === lastSeen.current) return;
+    lastSeen.current = last.id;
+    if (last.sender_id !== uid) notify('message');
+  }, [messages, uid]);
+
   const submit = async (t: string) => {
     if (!uid || !t.trim()) return;
     try { await send(uid, t); setText(''); } catch (e) { toast.error((e as Error).message); }
@@ -44,6 +57,7 @@ export default function OrderChat() {
   return (
     <Screen back scroll={false} padded={false} keyboard={false} right={title}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={60}>
+        <OfflineNotice />
         <ScrollView ref={scroll} contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
           <Text style={[font.tiny, { textAlign: 'center', marginBottom: 8 }]}>Chat hanya tersedia selama pesanan berlangsung. Jaga sopan santun ya.</Text>
           {messages.map((m, i) => {

@@ -1,7 +1,7 @@
 // Kartu status pengajuan merchant + label halal
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Card, Row, Badge } from '@/components/ui';
 import { supabase } from '@/lib/supabase';
 import { colors, font, radius } from '@/lib/theme';

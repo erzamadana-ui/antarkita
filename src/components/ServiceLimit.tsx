@@ -1,7 +1,7 @@
 // Kartu peringatan batas jarak layanan (dari estimate_fare.limit) + teks info batas dalam kota.
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Button, Empty, Row } from '@/components/ui';
 import { useAppSettings } from '@/hooks/useAppSettings';

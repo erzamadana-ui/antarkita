@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView, Image, RefreshControl } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '@/store/auth';
 import { useMyOrders } from '@/hooks/useOrder';
 import { useCurrentLocation } from '@/hooks/useLocation';
@@ -36,7 +36,10 @@ export default function CustomerHome() {
   const t = useT();
   const { unread } = useNotifications(session?.user.id);
   // Layanan yang dinonaktifkan admin (kunci services_enabled = id layanan: ride_motor, ride_car, food, send, shop, market, box, travel)
-  const { isEnabled } = useAppSettings();
+  const { isEnabled, reload: reloadSettings } = useAppSettings();
+  // Sakelar layanan di panel admin harus terasa langsung: setiap kali beranda difokuskan,
+  // pengaturan publik dimuat ulang (selain lewat AppState 'active' & realtime di useAppSettings).
+  useFocusEffect(React.useCallback(() => { reloadSettings(); }, [reloadSettings]));
 
   const loadExtras = async () => {
     const [{ data: m }, { data: p }, { data: f }] = await Promise.all([

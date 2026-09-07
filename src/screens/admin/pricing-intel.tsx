@@ -1,13 +1,13 @@
 // Intelijen harga: harga kompetitor (input admin), sesi harga high/middle/low, dan usulan penyesuaian tarif.
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Switch, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { LinearTransition } from 'react-native-reanimated';
-import { AdminPage, StatCard, Table, FilterBar, adminFont as font, adminTone, AdminCard as Card } from '@/components/admin';
+import { AdminPage, StatCard, Table, FilterBar, AdminSelect, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, AdminCard as Card } from '@/components/admin';
 import { Row, Input, Button, Badge, Chip, toast } from '@/components/ui';
 import { Entrance, PressableScale, ProgressBar } from '@/components/motion';
 import { supabase, rpc } from '@/lib/supabase';
-import { colors, radius } from '@/lib/theme';
+import { colors } from '@/lib/theme';
 import { serviceLabel, rupiah } from '@/lib/format';
 import type { CompetitorPrice, PricingSession, ServiceType } from '@/lib/types';
 
@@ -69,16 +69,16 @@ export default function PricingIntel() {
 
   return (
     <AdminPage title="Intelijen Harga" subtitle="Bandingkan tarif dengan kompetitor & atur sesi harga high/middle/low" onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} refreshing={refreshing}>
-      <Row gap={12} style={{ flexWrap: 'wrap' }}>
-        <StatCard index={1} label="Sesi aktif sekarang" value={current ? `${current.name} · ${current.multiplier}×` : 'Normal (1×)'} hint={current ? `Level ${current.level} · bonus driver ${current.driver_bonus_pct}%` : 'Tidak ada sesi yang cocok'} color={current?.level === 'high' ? colors.danger : current?.level === 'low' ? colors.success : colors.info} />
-        <StatCard index={2} label="Data kompetitor" value={comps.length} hint="90 hari terakhir dipakai untuk usulan" color={colors.accent} />
-        <StatCard index={3} label="Sesi harga" value={sessions.filter((s) => s.active).length} hint={`${sessions.length} total`} color={colors.primary} />
+      <Row gap={adminSpace.lg} style={{ flexWrap: 'wrap' }}>
+        <StatCard index={1} icon="flash-outline" label="Sesi aktif sekarang" value={current ? `${current.name} · ${current.multiplier}×` : 'Normal (1×)'} hint={current ? `Level ${current.level} · bonus driver ${current.driver_bonus_pct}%` : 'Tidak ada sesi yang cocok'} color={current?.level === 'high' ? adminTone.red : current?.level === 'low' ? adminTone.green : adminTone.blue} />
+        <StatCard index={2} icon="bar-chart-outline" label="Data kompetitor" value={comps.length} hint="90 hari terakhir dipakai untuk usulan" color={adminTone.orange} />
+        <StatCard index={3} icon="time-outline" label="Sesi harga" value={sessions.filter((s) => s.active).length} hint={`${sessions.length} total`} color={adminTone.teal} />
       </Row>
 
       {/* Usulan */}
       <Entrance index={1}><Card style={{ gap: 12 }}>
         <Row between style={{ flexWrap: 'wrap', gap: 8 }}>
-          <View><Text style={font.h3}>Usulan penyesuaian tarif</Text><Text style={font.tiny}>Strategi: low 5% di bawah kompetitor, middle setara, high 3% di bawah (tetap unggul saat sibuk). Bonus driver diambil dari komisi platform.</Text></View>
+          <View style={{ flex: 1, minWidth: 240 }}><Text style={font.h2}>Usulan penyesuaian tarif</Text><Text style={font.tiny}>Strategi: low 5% di bawah kompetitor, middle setara, high 3% di bawah (tetap unggul saat sibuk). Bonus driver diambil dari komisi platform.</Text></View>
           <Row gap={8}><Text style={font.small}>Simulasi jarak</Text><Input value={km} onChangeText={setKm} keyboardType="decimal-pad" containerStyle={{ width: 96 }} /><Text style={font.small}>km</Text></Row>
         </Row>
         <FilterBar value={svc} onChange={setSvc} options={SERVICES.map((k) => ({ key: k, label: serviceLabel[k] }))} />
@@ -90,16 +90,16 @@ export default function PricingIntel() {
             return (
               <Animated.View key={lv.key} layout={LinearTransition.springify().stiffness(280).damping(20)} style={[s.sugg, { borderColor: lv.color + '66' }]}>
                 <Row between><Badge text={lv.label} color={lv.color} />{sg.competitor_n > 0 ? <Text style={font.tiny}>{sg.competitor_n} data kompetitor</Text> : <Text style={[font.tiny, { color: colors.warning }]}>tanpa data kompetitor</Text>}</Row>
-                <Row between style={{ marginTop: 8 }}><Text style={font.small}>Tarif kita ({sg.km} km)</Text><Text style={{ fontWeight: '700' }}>{rupiah(sg.our_fare)}</Text></Row>
-                <Row between><Text style={font.small}>Rata-rata kompetitor</Text><Text style={{ fontWeight: '700' }}>{sg.competitor_avg ? rupiah(Math.round(sg.competitor_avg)) : '—'}</Text></Row>
+                <Row between style={{ marginTop: 8 }}><Text style={font.small}>Tarif kita ({sg.km} km)</Text><Text style={font.mono}>{rupiah(sg.our_fare)}</Text></Row>
+                <Row between><Text style={font.small}>Rata-rata kompetitor</Text><Text style={font.mono}>{sg.competitor_avg ? rupiah(Math.round(sg.competitor_avg)) : '—'}</Text></Row>
                 <View style={s.suggBox}>
                   <Text style={font.tiny}>USULAN</Text>
-                  <Row between><Text style={{ fontSize: 22, fontWeight: '800', color: lv.color }}>{rupiah(sg.suggested_fare)}</Text><Badge text={`${sg.suggested_multiplier}×`} color={lv.color} /></Row>
+                  <Row between><Text style={[font.num, { color: lv.color }]} numberOfLines={1}>{rupiah(sg.suggested_fare)}</Text><Badge text={`${sg.suggested_multiplier}×`} color={lv.color} /></Row>
                   <Text style={[font.tiny, { color: diff >= 0 ? colors.success : colors.danger }]}>{diff >= 0 ? '+' : ''}{rupiah(diff)} vs sekarang</Text>
                 </View>
-                <Row between style={{ marginTop: 6 }}><Text style={font.tiny}>Driver dapat</Text><Text style={font.tiny}>{rupiah(sg.driver_now)} → <Text style={{ fontWeight: '800', color: colors.text }}>{rupiah(sg.driver_earning)}</Text></Text></Row>
+                <Row between style={{ marginTop: 6 }}><Text style={font.tiny}>Driver dapat</Text><Text style={font.tiny}>{rupiah(sg.driver_now)} → <Text style={{ fontWeight: '700', color: adminTone.ink }}>{rupiah(sg.driver_earning)}</Text></Text></Row>
                 <ProgressBar progress={sg.driver_earning / Math.max(sg.suggested_fare, 1)} color={colors.ride} height={4} />
-                <Row between style={{ marginTop: 4 }}><Text style={font.tiny}>Platform dapat</Text><Text style={font.tiny}>{rupiah(sg.platform_now)} → <Text style={{ fontWeight: '800', color: colors.text }}>{rupiah(sg.platform_revenue)}</Text></Text></Row>
+                <Row between style={{ marginTop: 4 }}><Text style={font.tiny}>Platform dapat</Text><Text style={font.tiny}>{rupiah(sg.platform_now)} → <Text style={{ fontWeight: '700', color: adminTone.ink }}>{rupiah(sg.platform_revenue)}</Text></Text></Row>
                 <Button title={`Terapkan ke sesi ${lv.key}`} size="sm" color={lv.color} style={{ marginTop: 8 }} onPress={() => applySuggestion(sg)} />
               </Animated.View>
             );
@@ -109,17 +109,17 @@ export default function PricingIntel() {
 
       {/* Sesi harga */}
       <Entrance index={2}><Card style={{ gap: 10 }}>
-        <Text style={font.h3}>Sesi harga (waktu tertentu)</Text>
+        <Text style={font.h2}>Sesi harga (waktu tertentu)</Text>
         <Text style={font.tiny}>Multiplier dikalikan ke tarif dasar saat jam tersebut (WIB). Level high diprioritaskan jika tumpang tindih.</Text>
         {sessions.map((sess) => (
           <Row key={sess.id} between style={s.sessRow}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Row gap={8}><Text style={{ fontWeight: '800', color: colors.text }}>{sess.name}</Text><Badge text={sess.level} color={sess.level === 'high' ? colors.danger : sess.level === 'low' ? colors.success : colors.info} />{current?.id === sess.id && <Badge text="AKTIF SEKARANG" color={colors.primary} />}</Row>
+              <Row gap={8}><Text style={font.h3}>{sess.name}</Text><Badge text={sess.level} color={sess.level === 'high' ? colors.danger : sess.level === 'low' ? colors.success : colors.info} />{current?.id === sess.id && <Badge text="AKTIF SEKARANG" color={colors.primary} />}</Row>
               <Text style={font.tiny}>{(sess.days ?? []).map((d) => DAYS[d]).join(', ')} · {String(sess.start_time ?? "").slice(0, 5)}–{String(sess.end_time ?? "").slice(0, 5)} · {sess.multiplier}× · bonus driver {sess.driver_bonus_pct}%{sess.note ? ` · ${sess.note}` : ''}</Text>
             </View>
             <Row gap={8}>
               <Switch value={sess.active} onValueChange={() => toggleSession(sess)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />
-              <PressableScale onPress={() => delSession(sess.id)} scaleTo={0.9} haptic={false}><Ionicons name="trash-outline" size={18} color={colors.danger} /></PressableScale>
+              <PressableScale onPress={() => delSession(sess.id)} scaleTo={0.9} haptic={false}><Ionicons name="trash-outline" size={adminIcon.lg} color={colors.danger} /></PressableScale>
             </Row>
           </Row>
         ))}
@@ -127,7 +127,9 @@ export default function PricingIntel() {
           <Text style={font.label}>Tambah sesi</Text>
           <Row gap={8} style={{ flexWrap: 'wrap' }}>
             <Input placeholder="Nama sesi (mis. Hujan sore)" value={ns.name} onChangeText={(v) => setNs({ ...ns, name: v })} containerStyle={{ flex: 1, minWidth: 180 }} />
-            <Row gap={6}>{LEVELS.map((lv) => <Chip key={lv.key} label={lv.key} active={ns.level === lv.key} onPress={() => setNs({ ...ns, level: lv.key })} color={lv.color} />)}</Row>
+            <AdminSelect label="Level" icon="speedometer-outline" width={180} value={ns.level}
+              options={LEVELS.map((lv) => ({ value: lv.key, label: lv.label, color: lv.color }))}
+              onChange={(v) => setNs({ ...ns, level: v as 'low' | 'middle' | 'high' })} />
           </Row>
           <Row gap={6} style={{ flexWrap: 'wrap' }}>{DAYS.map((d, i) => <Chip key={d} label={d} active={ns.days.includes(i)} onPress={() => setNs({ ...ns, days: ns.days.includes(i) ? ns.days.filter((x) => x !== i) : [...ns.days, i].sort() })} />)}</Row>
           <Row gap={8} style={{ flexWrap: 'wrap' }}>
@@ -142,7 +144,7 @@ export default function PricingIntel() {
 
       {/* Kompetitor */}
       <Entrance index={3}><Card style={{ gap: 10 }}>
-        <Text style={font.h3}>Harga kompetitor — {serviceLabel[svc as ServiceType]}</Text>
+        <Text style={font.h2}>Harga kompetitor — {serviceLabel[svc as ServiceType]}</Text>
         <Text style={font.tiny}>Catat hasil survei tarif dari aplikasi kompetitor (cek estimasi untuk rute yang sama pada jam sibuk/normal/sepi). Data &gt; 90 hari tidak dipakai.</Text>
         <Table rows={compShown as unknown as Record<string, unknown>[]} emptyText="Belum ada data kompetitor untuk layanan ini" columns={[
           { key: 'competitor', label: 'Kompetitor', width: 140 },
@@ -152,16 +154,18 @@ export default function PricingIntel() {
           { key: 'min_fare', label: 'Minimal', width: 100, render: (r) => <Text style={font.small}>{rupiah(Number(r.min_fare))}</Text> },
           { key: 'captured_at', label: 'Tanggal', width: 110 },
           { key: 'source', label: 'Sumber', width: 220, render: (r) => <Text style={font.tiny} numberOfLines={2}>{String(r.source ?? '-')}</Text> },
-          { key: 'x', label: '', width: 50, render: (r) => <PressableScale onPress={() => delComp(String(r.id))} scaleTo={0.9} haptic={false}><Ionicons name="trash-outline" size={18} color={colors.danger} /></PressableScale> },
+          { key: 'x', label: '', width: 50, render: (r) => <PressableScale onPress={() => delComp(String(r.id))} scaleTo={0.9} haptic={false}><Ionicons name="trash-outline" size={adminIcon.lg} color={colors.danger} /></PressableScale> },
         ]} />
         <View style={s.form}>
           <Text style={font.label}>Catat harga kompetitor</Text>
           <Row gap={8} style={{ flexWrap: 'wrap' }}>
             <Input placeholder="Nama kompetitor" value={nc.competitor} onChangeText={(v) => setNc({ ...nc, competitor: v })} containerStyle={{ flex: 1, minWidth: 160 }} />
-            <Row gap={6} style={{ flexWrap: 'wrap' }}>{SERVICES.map((k) => <Chip key={k} label={serviceLabel[k]} active={nc.service === k} onPress={() => setNc({ ...nc, service: k })} />)}</Row>
+            <AdminSelect label="Layanan" icon="layers-outline" width={190} value={nc.service}
+              options={SERVICES.map((k) => ({ value: k, label: serviceLabel[k] }))} onChange={(v) => setNc({ ...nc, service: v as ServiceType })} />
           </Row>
-          <Row gap={8} style={{ flexWrap: 'wrap' }}>
-            <Row gap={6}>{LEVELS.map((lv) => <Chip key={lv.key} label={lv.key} active={nc.level === lv.key} onPress={() => setNc({ ...nc, level: lv.key })} color={lv.color} />)}</Row>
+          <Row gap={8} style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <AdminSelect label="Sesi" icon="speedometer-outline" width={180} value={nc.level}
+              options={LEVELS.map((lv) => ({ value: lv.key, label: lv.label, color: lv.color }))} onChange={(v) => setNc({ ...nc, level: v as 'low' | 'middle' | 'high' })} />
             <Input label="Tarif dasar" value={nc.base_fare} keyboardType="number-pad" onChangeText={(v) => setNc({ ...nc, base_fare: v })} containerStyle={{ width: 110 }} />
             <Input label="Per km" value={nc.per_km} keyboardType="number-pad" onChangeText={(v) => setNc({ ...nc, per_km: v })} containerStyle={{ width: 110 }} />
             <Input label="Minimal" value={nc.min_fare} keyboardType="number-pad" onChangeText={(v) => setNc({ ...nc, min_fare: v })} containerStyle={{ width: 110 }} />
@@ -175,8 +179,8 @@ export default function PricingIntel() {
 }
 
 const s = StyleSheet.create({
-  sugg: { flex: 1, minWidth: 240, borderWidth: 1.5, borderRadius: radius.lg, padding: 12, backgroundColor: adminTone.surface },
-  suggBox: { marginTop: 8, padding: 10, borderRadius: radius.md, backgroundColor: 'rgba(11,31,42,0.04)' },
-  sessRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: 'rgba(11,31,42,0.07)' },
-  form: { gap: 10, padding: 12, borderRadius: radius.lg, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border, marginTop: 6 },
+  sugg: { flex: 1, minWidth: 240, borderWidth: 1, borderRadius: adminRadius.card, padding: adminSpace.md, backgroundColor: adminTone.surface },
+  suggBox: { marginTop: 8, padding: 10, borderRadius: adminRadius.md, backgroundColor: adminTone.surfaceAlt, borderWidth: 1, borderColor: adminTone.border },
+  sessRow: { paddingVertical: 10, borderTopWidth: 1, borderTopColor: adminTone.border },
+  form: { gap: 10, padding: adminSpace.md, borderRadius: adminRadius.card, backgroundColor: adminTone.surfaceAlt, borderWidth: 1, borderColor: adminTone.border, marginTop: 6 },
 });

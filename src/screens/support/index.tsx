@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Card, Row, Badge, Button, Empty, ListItem, Divider, IconCircle } from '@/components/ui';
 import { Entrance, PressableScale, LiveDot, Skeleton } from '@/components/motion';
 import { useMyTickets } from '@/hooks/useTickets';

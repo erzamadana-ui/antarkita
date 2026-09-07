@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { View, Pressable, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Input, Button, Avatar, toast } from '@/components/ui';
 import { Entrance } from '@/components/motion';
 import { useAuth } from '@/store/auth';

@@ -3,9 +3,9 @@
 //   • atau dititipkan ke mitra AntarTravel (door to door, batas berat/ukuran lebih kecil)
 // Berat (kg) & sisi terpanjang (cm) wajib diisi: menentukan kendaraan yang dibutuhkan (batas dari app_public_settings().send_limits).
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { Screen, Button, Row, Badge, Input, Chip, toast } from '@/components/ui';
 import { PressableScale } from '@/components/motion';
@@ -269,10 +269,17 @@ export default function SendScreen() {
                 accent={colors.send} icon="business"
                 disabled={originWhs.length === 0}
               />
-              <Text style={font.label}>Kota tujuan</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                {cities.filter((c) => c.id !== originCity?.id).map((c) => <Chip key={c.id} label={c.name} active={destCity?.id === c.id} onPress={() => { setDestCity(c); setDestWhId(null); }} color={colors.send} />)}
-              </ScrollView>
+              {/* Kota tujuan memakai dropdown (bukan deretan chip) supaya hemat ruang. */}
+              <Dropdown
+                label="Kota tujuan"
+                title="Pilih kota tujuan"
+                value={destCity?.id ?? null}
+                options={cities.filter((c) => c.id !== originCity?.id).map((c) => ({ value: c.id, label: c.name, icon: 'flag-outline' as const }))}
+                onChange={(v) => { const c = cities.find((x) => x.id === v); if (c) { setDestCity(c); setDestWhId(null); } }}
+                placeholder="Pilih kota tujuan"
+                emptyText="Belum ada kota tujuan lain."
+                accent={colors.send} icon="flag-outline"
+              />
               {destCity && (
                 <Animated.View entering={FadeInDown.duration(motion.base)} style={{ gap: 10 }}>
                   <Dropdown

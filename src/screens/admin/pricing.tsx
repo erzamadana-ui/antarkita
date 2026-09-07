@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Switch } from 'react-native';
-import { AdminPage, adminFont as font, AdminCard as Card } from '@/components/admin';
+import { AdminPage, adminFont as font, adminTone, adminSpace, AdminSelect, AdminCard as Card } from '@/components/admin';
 import { Row, Input, Button, Badge, toast } from '@/components/ui';
 import { PromoCard } from '@/components/PromoCard';
 import { Image, Pressable, StyleSheet } from 'react-native';
@@ -58,7 +58,7 @@ export default function AdminPricing() {
             </Row>
             {Object.entries(pricing).map(([service, v], i) => (
               <Row key={service} gap={8} style={[s.tr, i % 2 ? s.trAlt : null]}>
-                <Text style={{ width: 120, fontWeight: '800', color: colors.text }}>{serviceLabel[service as ServiceType] ?? service}</Text>
+                <Text style={[font.bodyStrong, { width: 120 }]} numberOfLines={1}>{serviceLabel[service as ServiceType] ?? service}</Text>
                 {numFields.map((k) => <Input key={k} value={v[k]} keyboardType="decimal-pad" onChangeText={(t) => setPricing((p) => ({ ...p, [service]: { ...p[service], [k]: t } }))} containerStyle={{ width: 104 }} style={{ textAlign: 'right', paddingVertical: 6 }} />)}
                 <Button title="Simpan" size="sm" onPress={() => savePricing(service)} style={{ width: 90 }} />
               </Row>
@@ -73,7 +73,7 @@ export default function AdminPricing() {
             <Row key={p.code} between style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }}>
               <PressableThumb promo={p} onPress={() => setNp({ code: p.code, title: p.title ?? '', description: p.description ?? '', discount_type: p.discount_type, value: String(p.value), max_discount: p.max_discount ? String(p.max_discount) : '', min_total: String(p.min_total), service: p.service ?? '', quota: p.quota ? String(p.quota) : '', image_url: p.image_url ?? '' })} />
               <View style={{ flex: 1 }}>
-                <Row gap={8}><Text style={{ fontWeight: '800' }}>{p.code}</Text><Badge text={p.discount_type === 'percent' ? `${p.value}%${p.max_discount ? ` maks ${p.max_discount}` : ''}` : `Rp${p.value}`} />{!!p.service && <Badge text={serviceLabel[p.service]} color={colors.info} />}</Row>
+                <Row gap={8}><Text style={font.h3}>{p.code}</Text><Badge text={p.discount_type === 'percent' ? `${p.value}%${p.max_discount ? ` maks ${p.max_discount}` : ''}` : `Rp${p.value}`} />{!!p.service && <Badge text={serviceLabel[p.service]} color={colors.info} />}</Row>
                 <Text style={font.tiny}>{p.description} · min Rp{p.min_total} · dipakai {p.used_count}{p.quota ? `/${p.quota}` : ''}</Text>
               </View>
               <Switch value={p.is_active} onValueChange={() => togglePromo(p)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />
@@ -96,9 +96,9 @@ export default function AdminPricing() {
             <Input placeholder="Min transaksi" keyboardType="number-pad" value={np.min_total} onChangeText={(v) => setNp({ ...np, min_total: v })} containerStyle={{ width: 120 }} />
             <Input placeholder="Kuota" keyboardType="number-pad" value={np.quota} onChangeText={(v) => setNp({ ...np, quota: v })} containerStyle={{ width: 90 }} />
           </Row>
-          <Row gap={6} style={{ flexWrap: 'wrap' }}>
-            {[['', 'Semua layanan'], ['ride_motor', 'AntarRide'], ['ride_car', 'AntarCar'], ['food', 'AntarFood'], ['send', 'AntarSend'], ['shop', 'AntarShop']].map(([k, l]) => <Button key={k} size="sm" title={l} variant={np.service === k ? 'primary' : 'outline'} onPress={() => setNp({ ...np, service: k })} />)}
-          </Row>
+          <AdminSelect label="Berlaku untuk layanan" icon="layers-outline" width={240} value={np.service} clearable clearLabel="Semua layanan"
+            options={[['ride_motor', 'AntarRide'], ['ride_car', 'AntarCar'], ['food', 'AntarFood'], ['send', 'AntarSend'], ['shop', 'AntarShop']].map(([k, l]) => ({ value: k, label: l }))}
+            onChange={(v) => setNp({ ...np, service: v })} />
           <Button title="Simpan promo" onPress={savePromo} />
         </Card>
       </Entrance>
@@ -114,7 +114,7 @@ function PressableThumb({ promo, onPress }: { promo: Promo; onPress: () => void 
   );
 }
 const s = StyleSheet.create({
-  th: { paddingHorizontal: 14, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: 'rgba(11,31,42,0.03)' },
-  tr: { paddingHorizontal: 14, paddingVertical: 6, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center' },
-  trAlt: { backgroundColor: 'rgba(255,255,255,0.35)' },
+  th: { paddingHorizontal: adminSpace.lg, paddingVertical: adminSpace.sm, borderTopWidth: 1, borderTopColor: adminTone.border, backgroundColor: adminTone.surfaceAlt },
+  tr: { paddingHorizontal: adminSpace.lg, paddingVertical: 6, borderTopWidth: 1, borderTopColor: adminTone.border, alignItems: 'center', minHeight: 56 },
+  trAlt: { backgroundColor: adminTone.zebra },
 });

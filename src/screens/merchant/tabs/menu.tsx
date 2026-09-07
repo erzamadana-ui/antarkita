@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, Switch, ScrollView, Modal, StyleSheet, Image, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { Entrance, PressableScale } from '@/components/motion';
 import { TAB_BAR_SPACE } from '@/components/GlassTabBar';

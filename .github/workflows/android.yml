@@ -4,6 +4,16 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      arsitektur:
+        description: 'ABI yang dibangun. "arm" = arm64-v8a + armeabi-v7a (semua HP Android nyata, APK jauh lebih kecil). "arm64" = paling kecil, hanya HP 64-bit (2016 ke atas). "semua" = termasuk x86/x86_64 untuk emulator.'
+        type: choice
+        default: arm
+        options: [arm, arm64, semua]
+      minify:
+        description: 'Aktifkan R8/ProGuard + shrinkResources (APK lebih kecil ~15-25%, tapi berisiko crash pada modul native yang mengandalkan refleksi — pakai untuk uji coba dulu, jangan untuk rilis sebelum diuji di HP).'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -31,6 +41,24 @@ jobs:
           java-version: 17
       - uses: android-actions/setup-android@v3
       - run: npm ci
+
+      # Menerjemahkan pilihan workflow_dispatch → properti Gradle.
+      # Build otomatis (push ke main) memakai default "arm": tidak ada lagi
+      # pustaka native x86/x86_64 di dalam APK — itu murni ukuran mati untuk
+      # HP Android. Kalau butuh menjalankan di emulator, jalankan manual
+      # dengan pilihan "semua".
+      - name: Tentukan opsi ukuran APK
+        id: opsi
+        run: |
+          case "${{ inputs.arsitektur || 'arm' }}" in
+            arm64) ABI="arm64-v8a" ;;
+            semua) ABI="armeabi-v7a,arm64-v8a,x86,x86_64" ;;
+            *)     ABI="armeabi-v7a,arm64-v8a" ;;
+          esac
+          echo "abi=$ABI" >> "$GITHUB_OUTPUT"
+          echo "minify=${{ inputs.minify || 'false' }}" >> "$GITHUB_OUTPUT"
+          echo "ABI yang dibangun: $ABI · minify: ${{ inputs.minify || 'false' }}"
+
       - name: Prebuild proyek Android (Expo) — aplikasi ${{ matrix.app }}
         env:
           APP: ${{ matrix.app }}
@@ -41,6 +69,21 @@ jobs:
           EXPO_NO_TELEMETRY: 1
           CI: 1
         run: npx expo prebuild --platform android --no-install
+
+      # OPSIONAL. Hanya jalan bila input `minify` dicentang. Ditulis ke
+      # android/gradle.properties (hasil prebuild, tidak masuk git) supaya
+      # app.config.ts tidak perlu diubah dan alur build default tetap sama.
+      - name: (Opsional) Aktifkan R8/ProGuard + shrinkResources
+        if: steps.opsi.outputs.minify == 'true'
+        run: |
+          {
+            echo ''
+            echo '# ditambahkan oleh .github/workflows/android.yml (input minify)'
+            echo 'android.enableProguardInReleaseBuilds=true'
+            echo 'android.enableShrinkResourcesInReleaseBuilds=true'
+          } >> android/gradle.properties
+          tail -5 android/gradle.properties
+
       - name: Build APK release (ditandatangani keystore debug — cukup untuk distribusi langsung/uji)
         env:
           APP: ${{ matrix.app }}
@@ -53,8 +96,18 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=${{ steps.opsi.outputs.abi }}
           cp app/build/outputs/apk/release/app-release.apk ../antarkita-${{ matrix.app }}-${{ github.run_number }}.apk
+
+      # Ukuran APK dicetak ke ringkasan job supaya perubahan ukuran terlihat
+      # tiap build tanpa harus mengunduh berkasnya.
+      - name: Catat ukuran APK
+        run: |
+          F=antarkita-${{ matrix.app }}-${{ github.run_number }}.apk
+          SZ=$(du -h "$F" | cut -f1)
+          echo "| ${{ matrix.app }} | ${{ steps.opsi.outputs.abi }} | minify=${{ steps.opsi.outputs.minify }} | $SZ |" >> "$GITHUB_STEP_SUMMARY"
+          echo "Ukuran $F = $SZ"
+
       - uses: actions/upload-artifact@v4
         with:
           name: antarkita-${{ matrix.app }}-apk
@@ -68,6 +121,14 @@ jobs:
         with:
           pattern: antarkita-*-apk
           merge-multiple: true
+      - name: Kumpulkan daftar ukuran APK
+        id: daftar
+        run: |
+          {
+            echo 'list<<EOF'
+            for f in antarkita-*.apk; do echo "• \`$f\` — $(du -h "$f" | cut -f1)"; done
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
       - name: Terbitkan sebagai GitHub Release (link unduh permanen)
         uses: softprops/action-gh-release@v2
         with:
@@ -77,6 +138,12 @@ jobs:
             APK Android AntarKita (dua aplikasi terpisah):
             • `antarkita-pelanggan-${{ github.run_number }}.apk` — aplikasi Pelanggan
             • `antarkita-mitra-${{ github.run_number }}.apk` — aplikasi Mitra (driver, merchant, travel, mobil box)
+
+            Ukuran berkas:
+            ${{ steps.daftar.outputs.list }}
+
+            Dibangun untuk ABI `armeabi-v7a` + `arm64-v8a` (semua HP Android nyata; **tidak** untuk emulator x86 — jalankan workflow manual dengan pilihan arsitektur "semua" bila perlu emulator).
+
             Panel Admin dipakai lewat web: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/admin/
-            Buka APK di HP Android, izinkan "instal dari sumber tidak dikenal". Untuk Play Store gunakan `eas build -p android --profile production`.
+            Buka APK di HP Android, izinkan "instal dari sumber tidak dikenal". Untuk Play Store gunakan `eas build -p android --profile production` (AAB — Play Store memecah per-perangkat sendiri, biasanya 30-40% lebih kecil dari APK ini).
           files: antarkita-*.apk

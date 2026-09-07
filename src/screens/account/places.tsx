@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Card, Input, Button, ListItem, Empty, Row, toast } from '@/components/ui';
 import { Entrance } from '@/components/motion';
 import { useAuth } from '@/store/auth';

@@ -2,10 +2,10 @@
 // Latar abu sangat muda, kartu putih radius 14–16 + border 1px, kepadatan tinggi tapi lapang,
 // tipografi berjenjang (adminFont), angka memakai tabular-nums, aksen warna tipis.
 // Palet merek tidak berubah: teal #187A85 tetap warna utama.
-import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable, RefreshControl, Platform, Modal, TextStyle, ViewStyle, StyleProp } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, TextInput, ScrollView, StyleSheet, Pressable, RefreshControl, Platform, Modal, useWindowDimensions, TextStyle, ViewStyle, StyleProp } from 'react-native';
 import Svg, { Polyline, Circle, Line, Text as SvgText } from 'react-native-svg';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { shortMonth } from '@/lib/format';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, useReducedMotion } from 'react-native-reanimated';
@@ -48,6 +48,25 @@ export const adminTone = {
 export const adminSpace = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24 };
 /** Radius panel admin — kartu 14–16. */
 export const adminRadius = { chip: 999, sm: 8, md: 10, card: 14, lg: 16 };
+/**
+ * Ukuran ikon baku panel admin — hanya tiga langkah supaya konsisten:
+ * `sm` 14 (inline pada teks kecil), `md` 16 (aksi & judul), `lg` 18 (tombol tutup / kepala dialog).
+ */
+export const adminIcon = { sm: 14, md: 16, lg: 18 } as const;
+/**
+ * Ukuran baku tabel: tinggi baris seragam 60 px (header 40), tinggi kontrol baris 28 px,
+ * dan lebar kolom aksi tetap sesuai jumlah aksi utama yang terlihat.
+ */
+export const adminTable = {
+  rowHeight: 60,
+  headHeight: 40,
+  /** Tinggi kontrol kecil di dalam baris (ikon aksi & kebab). */
+  control: 32,
+  /** Kolom aksi: 2 ikon + kebab. */
+  actionsW: 124,
+  /** Kolom aksi: 1 tombol utama + 1 ikon + kebab. */
+  actionsWideW: 200,
+} as const;
 /** Bayangan sangat halus (kartu tidak boleh "melayang"). */
 export const adminShadow = {
   card: { shadowColor: '#0F1D20', shadowOpacity: 0.045, shadowRadius: 10, shadowOffset: { width: 0, height: 2 }, elevation: 1 },
@@ -136,7 +155,7 @@ export function Panel({ title, subtitle, right, children, style, padded = true, 
       {(title || right) ? (
         <View style={s.panelHead}>
           <Row gap={10} style={{ flex: 1, minWidth: 0 }}>
-            {icon ? <View style={[s.iconBox, { backgroundColor: iconColor + '14', borderColor: iconColor + '2E' }]}><Ionicons name={icon} size={15} color={iconColor} /></View> : null}
+            {icon ? <View style={[s.iconBox, { backgroundColor: iconColor + '14', borderColor: iconColor + '2E' }]}><Ionicons name={icon} size={adminIcon.md} color={iconColor} /></View> : null}
             <View style={{ flex: 1, minWidth: 0 }}>
               {title ? <Text style={adminFont.h2} numberOfLines={1}>{title}</Text> : null}
               {subtitle ? <Text style={adminFont.tiny} numberOfLines={2}>{subtitle}</Text> : null}
@@ -181,24 +200,28 @@ export function StatCard({ label, value, hint, color = adminTone.teal, index = 0
     <Entrance index={index} from="up" style={{ flexGrow: 1, flexBasis: 190, minWidth: 170 }}>
       <Pressable onPress={onPress} disabled={!onPress} onHoverIn={() => { if (!reduce) lift.value = withSpring(1, motion.spring); }} onHoverOut={() => { lift.value = withSpring(0, motion.springSoft); }}>
         <Animated.View style={[s.stat, a]}>
-          <Row gap={8} style={{ minHeight: 28, alignItems: 'flex-start' }}>
-            {icon ? <View style={[s.iconBox, { backgroundColor: color + '14', borderColor: color + '2E' }]}><Ionicons name={icon} size={15} color={color} /></View> : <View style={[s.dot, { backgroundColor: color }]} />}
-            <Truncate style={adminFont.label} title={label} lines={2}>{label}</Truncate>
+          {/* Label boleh dua baris penuh (11 px, lineHeight 15) — tinggi minimum 30 agar tidak terpotong. */}
+          <Row gap={8} style={{ minHeight: 30, alignItems: 'flex-start' }}>
+            {icon ? <View style={[s.iconBox, { backgroundColor: color + '14', borderColor: color + '2E' }]}><Ionicons name={icon} size={adminIcon.md} color={color} /></View> : <View style={[s.dot, { backgroundColor: color }]} />}
+            <View style={{ flex: 1, minWidth: 0, justifyContent: 'center', minHeight: 28 }}>
+              <Truncate style={adminFont.label} title={label} lines={2}>{label}</Truncate>
+            </View>
           </Row>
-          <View style={{ marginTop: 6, minHeight: 32, justifyContent: 'center' }}>
+          <View style={{ marginTop: 8, minHeight: 32, justifyContent: 'center' }}>
             {numeric
               ? <AnimatedNumber value={value as number} format={(n) => Math.round(n).toLocaleString('id-ID')} style={adminFont.num} />
-              : <Text style={[adminFont.num, str.length > 10 && { fontSize: 19, lineHeight: 25 }, str.length > 15 && { fontSize: 16, lineHeight: 22 }]} numberOfLines={1}>{str}</Text>}
+              : <Text style={[adminFont.num, str.length > 10 && { fontSize: 19, lineHeight: 26 }, str.length > 15 && { fontSize: 16, lineHeight: 22 }]} numberOfLines={1}>{str}</Text>}
           </View>
-          <Row gap={6} style={{ marginTop: 4, minHeight: 18, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          {/* Hint dua baris (15 px per baris) → 30 px, ditambah baris delta bila ada. */}
+          <View style={{ marginTop: 6, minHeight: 30, gap: 2 }}>
             {delta != null ? (
-              <Row gap={2}>
-                <Ionicons name={up ? 'trending-up' : 'trending-down'} size={12} color={deltaColor} />
-                <Text style={[adminFont.tiny, { color: deltaColor, ...fam(700) }]}>{up ? '+' : ''}{Number(delta).toFixed(1)}%</Text>
+              <Row gap={3}>
+                <Ionicons name={up ? 'trending-up' : 'trending-down'} size={adminIcon.sm} color={deltaColor} />
+                <Text style={[adminFont.tiny, { color: deltaColor, ...fam(700), fontVariant: tnum }]}>{up ? '+' : ''}{Number(delta).toFixed(1)}%</Text>
               </Row>
             ) : null}
             {hint || deltaLabel ? <Truncate style={adminFont.tiny} title={hint ?? deltaLabel} lines={2}>{hint ?? deltaLabel}</Truncate> : null}
-          </Row>
+          </View>
         </Animated.View>
       </Pressable>
     </Entrance>
@@ -212,8 +235,8 @@ export function Pill({ text, tone = 'neutral', color, icon, style }: { text: str
   const fg = color ?? t.fg;
   return (
     <View style={[s.pill, { backgroundColor: color ? color + '12' : t.bg, borderColor: color ? color + '33' : t.border }, style]}>
-      {icon ? <Ionicons name={icon} size={11} color={fg} /> : null}
-      <Text style={{ color: fg, fontSize: 11.5, ...fam(700) }} numberOfLines={1}>{text}</Text>
+      {icon ? <Ionicons name={icon} size={adminIcon.sm - 2} color={fg} /> : null}
+      <Text style={{ color: fg, fontSize: 11.5, lineHeight: 15, ...fam(700) }} numberOfLines={1}>{text}</Text>
     </View>
   );
 }
@@ -561,17 +584,151 @@ export function ContactActions({ userId, name, role, subject, orderId, compact, 
   userId?: string | null; name?: string | null; role?: string | null; subject?: string; orderId?: string | null;
   compact?: boolean; showLabel?: boolean;
 }) {
+  const c = useContact({ userId, name, role, subject, orderId });
+  return (
+    <Row gap={6} style={{ flexWrap: 'nowrap' }}>
+      <IconAction icon="chatbubble-ellipses-outline" label={showLabel ? 'Chat' : undefined} title="Chat" color={adminTone.blue} onPress={c.openChat} busy={c.busy} compact={compact} />
+      <IconAction icon="call-outline" label={showLabel ? c.callLabel : undefined} title={c.callLabel} color={c.onThisPeer ? TONE.ok.fg : adminTone.green} onPress={c.startCall} compact={compact} />
+    </Row>
+  );
+}
+
+/** Tombol kecil ikon+label (dipakai untuk aksi baris tabel). `title` menjadi tooltip di web. */
+export function IconAction({ icon, label, color = adminTone.teal, onPress, busy, compact, disabled, title }: { icon: IconName; label?: string; color?: string; onPress: () => void; busy?: boolean; compact?: boolean; disabled?: boolean; title?: string }) {
+  const btn = (
+    <Pressable
+      onPress={onPress}
+      disabled={busy || disabled}
+      accessibilityRole="button"
+      accessibilityLabel={title ?? label}
+      style={(st) => [
+        s.iconAction,
+        { borderColor: color + '33', backgroundColor: color + '0F' },
+        (st as { hovered?: boolean }).hovered && { backgroundColor: color + '1F' },
+        compact && { paddingHorizontal: label ? 8 : 0, width: label ? undefined : adminTable.control, height: adminTable.control, justifyContent: 'center' },
+        (busy || disabled) && { opacity: 0.45 },
+      ]}
+    >
+      <Ionicons name={icon} size={adminIcon.sm} color={color} />
+      {label ? <Text style={{ color, fontSize: 12, lineHeight: 16, ...fam(700) }} numberOfLines={1}>{label}</Text> : null}
+    </Pressable>
+  );
+  if (Platform.OS === 'web' && title) return React.createElement('div', { title, style: { display: 'inline-flex' } }, btn);
+  return btn;
+}
+
+/* ───────── Popover berjangkar (dirender sebagai overlay, tidak terpotong tabel) ───────── */
+
+type Anchor = { x: number; y: number; w: number; h: number };
+
+/** Mengukur posisi sebuah elemen di layar untuk menjangkarkan popover. */
+function useAnchor() {
+  const ref = useRef<View>(null);
+  const [anchor, setAnchor] = useState<Anchor | null>(null);
+  const open = () => {
+    const node = ref.current as unknown as { measureInWindow?: (cb: (x: number, y: number, w: number, h: number) => void) => void } | null;
+    if (!node?.measureInWindow) { setAnchor({ x: 0, y: 0, w: 0, h: 0 }); return; }
+    node.measureInWindow((x, y, w, h) => setAnchor({ x: x || 0, y: y || 0, w: w || 0, h: h || 0 }));
+  };
+  return { ref, anchor, open, close: () => setAnchor(null), visible: anchor != null };
+}
+
+/**
+ * Kartu mengambang berjangkar pada sebuah tombol. Dirender di dalam `Modal` transparan supaya
+ * tidak pernah terpotong oleh tabel yang bisa digeser (overflow) — posisinya dihitung dari
+ * hasil pengukuran tombol, dan otomatis dibalik ke atas / digeser bila mepet tepi layar.
+ */
+export function Popover({ anchor, onClose, children, width = 236, align = 'right', maxHeight = 380 }: {
+  anchor: Anchor | null; onClose: () => void; children: React.ReactNode; width?: number; align?: 'left' | 'right'; maxHeight?: number;
+}) {
+  const { width: winW, height: winH } = useWindowDimensions();
+  if (!anchor) return null;
+  const gap = 6, pad = 12;
+  const spaceBelow = winH - (anchor.y + anchor.h) - pad - gap;
+  const spaceAbove = anchor.y - pad - gap;
+  // Tampil di bawah tombol bila ruangnya cukup; bila mepet bawah, dibalik ke atas.
+  // Saat dibalik, posisi dikunci lewat `bottom` supaya kartu tumbuh ke atas dan tetap menempel
+  // pada tombol berapa pun tinggi isinya (tanpa perlu mengukur ulang).
+  const flip = spaceBelow < Math.min(maxHeight, 200) && spaceAbove > spaceBelow;
+  const box: ViewStyle = flip
+    ? { bottom: Math.max(pad, winH - anchor.y + gap), maxHeight: Math.max(120, Math.min(maxHeight, spaceAbove)) }
+    : { top: Math.max(pad, anchor.y + anchor.h + gap), maxHeight: Math.max(120, Math.min(maxHeight, spaceBelow)) };
+  const rawLeft = align === 'right' ? anchor.x + anchor.w - width : anchor.x;
+  const left = Math.max(pad, Math.min(rawLeft, Math.max(pad, winW - width - pad)));
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Tutup menu">
+        <Pressable onPress={() => {}} style={[s.popover, adminShadow.pop, { position: 'absolute', left, width }, box]}>
+          {children}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+/* ───────────────────── Menu aksi baris (kebab ⋮) ───────────────────── */
+
+/** Satu butir menu. `danger` otomatis dikelompokkan di bagian bawah, dipisah garis, berwarna merah. */
+export interface MenuItem {
+  key: string; label: string; icon?: IconName; onPress: () => void;
+  disabled?: boolean; danger?: boolean; hint?: string; color?: string;
+}
+/** Aksi utama yang selalu terlihat pada baris. */
+export interface RowAction {
+  key: string; label: string; icon?: IconName; color?: string; onPress: () => void;
+  disabled?: boolean; busy?: boolean;
+  /** `solid` tombol berwarna · `soft` ikon+label lembut · `icon` ikon saja (bawaan). */
+  variant?: 'solid' | 'soft' | 'icon';
+  /** Tooltip di web (bawaan: label). */
+  title?: string;
+}
+/** Sasaran kontak untuk aksi Chat / Telepon. */
+export interface ContactTarget { userId?: string | null; name?: string | null; role?: string | null; subject?: string; orderId?: string | null }
+
+/** Daftar menu di dalam popover (dipakai `RowActions`, bisa juga dipakai sendiri). */
+export function MenuList({ items, onPick }: { items: MenuItem[]; onPick: () => void }) {
+  const safe = items.filter(Boolean);
+  const normal = safe.filter((i) => !i.danger);
+  const danger = safe.filter((i) => i.danger);
+  const render = (it: MenuItem) => (
+    <Pressable
+      key={it.key}
+      disabled={it.disabled}
+      onPress={() => { onPick(); it.onPress(); }}
+      accessibilityRole="menuitem"
+      style={(st) => [s.menuItem, (st as { hovered?: boolean }).hovered && !it.disabled && { backgroundColor: it.danger ? TONE.bad.bg : adminTone.hover }, it.disabled && { opacity: 0.42 }]}
+    >
+      {it.icon ? <Ionicons name={it.icon} size={adminIcon.md} color={it.danger ? TONE.bad.fg : it.color ?? adminTone.muted} /> : <View style={{ width: adminIcon.md }} />}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text numberOfLines={1} style={{ fontSize: 13, lineHeight: 18, ...fam(600), color: it.danger ? TONE.bad.fg : it.color ?? adminTone.ink }}>{it.label}</Text>
+        {it.hint ? <Text style={adminFont.tiny} numberOfLines={1}>{it.hint}</Text> : null}
+      </View>
+    </Pressable>
+  );
+  return (
+    <ScrollView contentContainerStyle={{ paddingVertical: 5 }} showsVerticalScrollIndicator={false}>
+      {normal.map(render)}
+      {normal.length > 0 && danger.length > 0 ? <View style={s.menuSep} /> : null}
+      {danger.map(render)}
+      {safe.length === 0 ? <Text style={[adminFont.tiny, { padding: adminSpace.md }]}>Tidak ada aksi lain.</Text> : null}
+    </ScrollView>
+  );
+}
+
+/** Logika Chat & Telepon dari panel admin (dipakai `ContactActions` dan `RowActions`). */
+function useContact(t: ContactTarget | undefined) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const phase = useCall((st) => st.phase);
   const peerId = useCall((st) => st.peer?.id);
+  const userId = t?.userId ?? null;
   const onThisPeer = !!userId && peerId === userId && phase !== 'idle' && phase !== 'ended';
 
   const openChat = async () => {
     if (!userId) return toast.error('Pengguna tidak dikenal');
     setBusy(true);
     try {
-      const r = await rpc<{ ticket_id: string } | { ticket_id: string }[]>('admin_contact_thread', { p_user: userId, p_subject: subject ?? `Pesan admin untuk ${name ?? 'pengguna'}` });
+      const r = await rpc<{ ticket_id: string } | { ticket_id: string }[]>('admin_contact_thread', { p_user: userId, p_subject: t?.subject ?? `Pesan admin untuk ${t?.name ?? 'pengguna'}` });
       const id = Array.isArray(r) ? r[0]?.ticket_id : r?.ticket_id;
       if (!id) throw new Error('Tiket tidak terbentuk');
       router.push(`/(admin)/cs?ticket=${id}` as never);
@@ -585,27 +742,149 @@ export function ContactActions({ userId, name, role, subject, orderId, compact, 
     if (st.phase !== 'idle' && st.phase !== 'ended') return toast.show('Sedang ada panggilan berjalan');
     useCall.getState().reset();
     try {
-      const id = await useCall.getState().startCall({ id: userId, name: name ?? 'Pengguna', role: role ?? undefined }, orderId ?? null);
+      const id = await useCall.getState().startCall({ id: userId, name: t?.name ?? 'Pengguna', role: t?.role ?? undefined }, t?.orderId ?? null);
       if (!id) { toast.error(useCall.getState().endReason ?? 'Gagal memulai panggilan'); return; }
       router.push(`/call/${id}` as never);
     } catch (e) { toast.error((e as Error).message || 'Gagal memulai panggilan'); }
   };
 
+  const callLabel = onThisPeer ? CALL_PHASE_ID[phase] ?? 'Telepon' : 'Telepon';
+  return { openChat, startCall, busy, onThisPeer, callLabel };
+}
+
+/**
+ * Aksi baris tabel yang ringkas: maksimal **dua aksi utama** yang terlihat + satu kebab `⋮`
+ * berisi sisanya. Aksi berbahaya (`danger`) selalu turun ke kelompok bawah menu, dipisah garis
+ * dan berwarna merah. Menu dirender sebagai overlay ber-posisi terukur sehingga tidak terpotong
+ * oleh tabel yang digeser.
+ *
+ * - `primary` — aksi utama layar ini (maks 2; sisanya otomatis pindah ke menu).
+ * - `contact` — bila diisi, Chat & Telepon ikut mengisi slot utama yang masih kosong,
+ *   sisanya masuk ke menu (fungsinya sama persis dengan `ContactActions`).
+ * - `menu` — aksi lain.
+ */
+export function RowActions({ primary = [], menu = [], contact, disabled, menuTitle = 'Aksi lainnya', align = 'right' }: {
+  primary?: (RowAction | false | null | undefined)[];
+  menu?: (MenuItem | false | null | undefined)[];
+  contact?: ContactTarget;
+  disabled?: boolean;
+  menuTitle?: string;
+  align?: 'right' | 'left';
+}) {
+  const { ref, anchor, open, close } = useAnchor();
+  const c = useContact(contact);
+
+  const base = primary.filter(Boolean) as RowAction[];
+  const contactActions: RowAction[] = contact
+    ? [
+      { key: '__chat', label: 'Chat', icon: 'chatbubble-ellipses-outline', color: adminTone.blue, onPress: c.openChat, busy: c.busy, variant: 'icon', title: 'Chat' },
+      { key: '__call', label: c.callLabel, icon: 'call-outline', color: c.onThisPeer ? TONE.ok.fg : adminTone.green, onPress: c.startCall, variant: 'icon', title: c.callLabel },
+    ]
+    : [];
+  const all = [...base, ...contactActions];
+  const visible = all.slice(0, 2);
+  const overflow = all.slice(2).map<MenuItem>((a) => ({ key: a.key, label: a.label, icon: a.icon, color: a.color, onPress: a.onPress, disabled: a.disabled }));
+  const items = [...overflow, ...(menu.filter(Boolean) as MenuItem[])];
+
   return (
-    <Row gap={6} style={{ flexWrap: 'wrap' }}>
-      <IconAction icon="chatbubble-ellipses-outline" label={showLabel ? 'Chat' : undefined} color={adminTone.blue} onPress={openChat} busy={busy} compact={compact} />
-      <IconAction icon="call-outline" label={showLabel ? (onThisPeer ? CALL_PHASE_ID[phase] ?? 'Telepon' : 'Telepon') : undefined} color={onThisPeer ? TONE.ok.fg : adminTone.green} onPress={startCall} compact={compact} />
+    <Row gap={6} style={{ justifyContent: align === 'right' ? 'flex-end' : 'flex-start', flexWrap: 'nowrap' }}>
+      {visible.map((a) => (a.variant === 'solid'
+        ? <Button key={a.key} size="sm" title={a.label} icon={a.icon} color={a.color} loading={a.busy} disabled={a.disabled || disabled} onPress={a.onPress} />
+        : <IconAction key={a.key} compact icon={a.icon ?? 'ellipse-outline'} label={a.variant === 'soft' ? a.label : undefined} color={a.color} busy={a.busy} disabled={a.disabled || disabled} title={a.title ?? a.label} onPress={a.onPress} />))}
+      {items.length > 0 ? (
+        <View ref={ref} collapsable={false}>
+          <IconAction compact icon="ellipsis-vertical" color={adminTone.muted} disabled={disabled} title={menuTitle} onPress={open} />
+        </View>
+      ) : null}
+      <Popover anchor={anchor} onClose={close} align={align}><MenuList items={items} onPick={close} /></Popover>
     </Row>
   );
 }
 
-/** Tombol kecil ikon+label (dipakai untuk aksi baris tabel). */
-export function IconAction({ icon, label, color = adminTone.teal, onPress, busy, compact, disabled }: { icon: IconName; label?: string; color?: string; onPress: () => void; busy?: boolean; compact?: boolean; disabled?: boolean }) {
+/* ───────────────────── Pemilih (dropdown) gaya desktop ───────────────────── */
+
+export interface SelectOption { value: string; label: string; sublabel?: string; icon?: IconName; disabled?: boolean; color?: string }
+
+/**
+ * Dropdown ringkas untuk panel admin (bukan bottom-sheet): satu baris menampilkan pilihan
+ * terpilih, diklik → popover berisi daftar; pencarian muncul otomatis bila pilihan > 8.
+ * Dipakai untuk pemilihan kota/pasar/merchant supaya tidak memakan ruang seperti deret chip.
+ */
+export function AdminSelect({
+  value, options, onChange, placeholder = 'Pilih…', label, icon, width = 220, disabled,
+  searchable, clearable, clearLabel = 'Semua', helper, size = 'md', style, popoverWidth,
+}: {
+  value?: string | null;
+  options: SelectOption[];
+  onChange: (v: string) => void;
+  placeholder?: string; label?: string; icon?: IconName;
+  width?: number | `${number}%`; disabled?: boolean;
+  /** Bawaan: aktif bila pilihan lebih dari 8. */
+  searchable?: boolean;
+  /** Tambahkan butir "Semua" yang mengirim string kosong. */
+  clearable?: boolean; clearLabel?: string;
+  helper?: string; size?: 'sm' | 'md';
+  style?: StyleProp<ViewStyle>; popoverWidth?: number;
+}) {
+  const { ref, anchor, open, close } = useAnchor();
+  const [q, setQ] = useState('');
+  const useSearch = searchable ?? options.length > 8;
+  const selected = options.find((o) => o.value === value) ?? null;
+  const list = useMemo(() => {
+    const base = clearable ? [{ value: '', label: clearLabel, icon: 'apps-outline' as IconName }, ...options] : options;
+    if (!useSearch || !q.trim()) return base;
+    const k = q.trim().toLowerCase();
+    return base.filter((o) => o.label.toLowerCase().includes(k) || (o.sublabel ?? '').toLowerCase().includes(k));
+  }, [options, clearable, clearLabel, q, useSearch]);
+  const h = size === 'sm' ? 30 : 34;
+
   return (
-    <Pressable onPress={onPress} disabled={busy || disabled} style={(st) => [s.iconAction, { borderColor: color + '33', backgroundColor: color + '0F' }, (st as { hovered?: boolean }).hovered && { backgroundColor: color + '1F' }, compact && { paddingHorizontal: 7, height: 26 }, (busy || disabled) && { opacity: 0.5 }]}>
-      <Ionicons name={icon} size={13} color={color} />
-      {label ? <Text style={{ color, fontSize: 12, ...fam(700) }} numberOfLines={1}>{label}</Text> : null}
-    </Pressable>
+    <View style={[{ gap: 4, width }, style]}>
+      {label ? <Text style={adminFont.label}>{label}</Text> : null}
+      <View ref={ref} collapsable={false}>
+        <Pressable
+          disabled={disabled}
+          onPress={() => { setQ(''); open(); }}
+          accessibilityRole="button"
+          accessibilityLabel={`${label ?? 'Pilihan'}: ${selected?.label ?? placeholder}`}
+          style={(st) => [s.select, { height: h }, (st as { hovered?: boolean }).hovered && !disabled && { borderColor: adminTone.borderStrong, backgroundColor: adminTone.surfaceAlt }, disabled && { opacity: 0.5 }]}
+        >
+          {selected?.icon || icon ? <Ionicons name={(selected?.icon ?? icon) as IconName} size={adminIcon.sm} color={selected?.color ?? (selected ? adminTone.teal : adminTone.faint)} /> : null}
+          <Text numberOfLines={1} style={{ flex: 1, fontSize: 12.5, lineHeight: 17, ...fam(selected ? 700 : 500), color: selected ? adminTone.ink : adminTone.faint }}>{selected?.label ?? placeholder}</Text>
+          <Ionicons name="chevron-down" size={adminIcon.sm} color={adminTone.muted} />
+        </Pressable>
+      </View>
+      {helper ? <Text style={adminFont.tiny}>{helper}</Text> : null}
+      <Popover anchor={anchor} onClose={close} align="left" width={popoverWidth ?? (typeof width === 'number' ? Math.max(220, width) : 260)}>
+        {useSearch ? (
+          <View style={s.selectSearch}>
+            <Ionicons name="search" size={adminIcon.sm} color={adminTone.faint} />
+            <TextInput value={q} onChangeText={setQ} placeholder="Cari…" placeholderTextColor={adminTone.faint} autoFocus style={s.selectSearchInput} />
+          </View>
+        ) : null}
+        <ScrollView contentContainerStyle={{ paddingVertical: 5 }} showsVerticalScrollIndicator={false}>
+          {list.length === 0 ? <Text style={[adminFont.tiny, { padding: adminSpace.md }]}>Tidak ada pilihan yang cocok.</Text> : null}
+          {list.map((o) => {
+            const on = (value ?? '') === o.value;
+            return (
+              <Pressable
+                key={o.value || '__all'}
+                disabled={o.disabled}
+                onPress={() => { close(); onChange(o.value); }}
+                style={(st) => [s.menuItem, (st as { hovered?: boolean }).hovered && !o.disabled && { backgroundColor: adminTone.hover }, on && { backgroundColor: colors.primary + '10' }, o.disabled && { opacity: 0.42 }]}
+              >
+                {o.icon ? <Ionicons name={o.icon} size={adminIcon.md} color={o.color ?? (on ? colors.primary : adminTone.muted)} /> : <View style={{ width: adminIcon.md }} />}
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text numberOfLines={1} style={{ fontSize: 13, lineHeight: 18, ...fam(on ? 700 : 600), color: on ? colors.primaryDark : adminTone.ink }}>{o.label}</Text>
+                  {o.sublabel ? <Text style={adminFont.tiny} numberOfLines={1}>{o.sublabel}</Text> : null}
+                </View>
+                {on ? <Ionicons name="checkmark" size={adminIcon.md} color={colors.primary} /> : null}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </Popover>
+    </View>
   );
 }
 
@@ -655,8 +934,9 @@ const s = StyleSheet.create({
 
   table: { backgroundColor: adminTone.surface, borderRadius: adminRadius.lg, overflow: 'hidden', borderWidth: 1, borderColor: adminTone.border, ...adminShadow.card },
   tr: { flexDirection: 'row', paddingHorizontal: adminSpace.lg, alignItems: 'center' },
-  th: { backgroundColor: adminTone.surfaceAlt, borderBottomWidth: 1, borderBottomColor: adminTone.border, paddingVertical: 9, minHeight: 38 },
-  td: { paddingVertical: 11, minHeight: 52, borderBottomWidth: 1, borderBottomColor: adminTone.border },
+  th: { backgroundColor: adminTone.surfaceAlt, borderBottomWidth: 1, borderBottomColor: adminTone.border, paddingVertical: 10, height: adminTable.headHeight },
+  // Tinggi baris seragam: cukup untuk dua baris teks (nama + meta) tanpa tombol yang membungkus.
+  td: { paddingVertical: 10, minHeight: adminTable.rowHeight, borderBottomWidth: 1, borderBottomColor: adminTone.border },
 
   backdrop: { flex: 1, backgroundColor: 'rgba(15,29,32,0.42)', alignItems: 'center', justifyContent: 'center', padding: 20 },
   dialog: { backgroundColor: adminTone.surface, borderRadius: adminRadius.lg, borderWidth: 1, borderColor: adminTone.border, padding: adminSpace.xl, gap: adminSpace.md, ...adminShadow.pop },
@@ -667,6 +947,14 @@ const s = StyleSheet.create({
   errBox: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: TONE.bad.bg, borderRadius: adminRadius.md, borderWidth: 1, borderColor: TONE.bad.border, padding: adminSpace.md },
 
   iconAction: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 30, paddingHorizontal: 9, borderRadius: adminRadius.md, borderWidth: 1 },
+
+  popover: { backgroundColor: adminTone.surface, borderRadius: adminRadius.card, borderWidth: 1, borderColor: adminTone.borderStrong, overflow: 'hidden' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 9, minHeight: 34, paddingHorizontal: adminSpace.md, paddingVertical: 5 },
+  menuSep: { height: 1, backgroundColor: adminTone.border, marginVertical: 5 },
+
+  select: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 10, borderRadius: adminRadius.sm, borderWidth: 1, borderColor: adminTone.border, backgroundColor: adminTone.surface },
+  selectSearch: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: adminSpace.md, height: 36, borderBottomWidth: 1, borderBottomColor: adminTone.border, backgroundColor: adminTone.surfaceAlt },
+  selectSearchInput: { flex: 1, minWidth: 0, fontSize: 12.5, color: adminTone.ink, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null) },
 
   callBar: { position: 'absolute', right: 20, bottom: 20, zIndex: 900 },
   callCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: adminTone.surface, borderRadius: adminRadius.card, borderWidth: 1, borderColor: adminTone.border, paddingHorizontal: adminSpace.md, paddingVertical: adminSpace.md, minWidth: 280, maxWidth: 360 },

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, rpc, realtimeChannel } from '@/lib/supabase';
 import { useAuth } from '@/store/auth';
+import { notify } from '@/lib/push';
 import { useWatchLocation } from './useLocation';
 import type { AvailableOrder, Driver, DriverPriorityInfo, LatLng, Order } from '@/lib/types';
 
@@ -15,6 +16,9 @@ export function useDriverSession() {
   const lastSent = useRef(0);
   // order yang baru saja ditolak: disaring lokal agar tidak sempat muncul lagi dari fetch yang masih berjalan
   const rejected = useRef<Set<string>>(new Set());
+  // id order yang sudah pernah terlihat — dipakai agar bunyi "order baru" hanya sekali per order,
+  // dan tidak berbunyi pada pemuatan pertama setelah layar dibuka.
+  const seen = useRef<Set<string> | null>(null);
   const online = !!driver?.is_online;
 
   // Siarkan lokasi saat online (maks. tiap 4 dtk)
@@ -34,9 +38,17 @@ export function useDriverSession() {
   }, [uid]);
 
   const loadAvailable = useCallback(async () => {
-    if (!online) { setAvailable([]); return; }
+    if (!online) { setAvailable([]); seen.current = null; return; }
     const { data } = await supabase.rpc('driver_available_orders');
-    setAvailable(((data as AvailableOrder[]) ?? []).filter((o) => !rejected.current.has(o.id)));
+    const list = ((data as AvailableOrder[]) ?? []).filter((o) => !rejected.current.has(o.id));
+    // Bunyi + getar "order baru" (hanya saat aplikasi terbuka — lihat catatan di src/lib/push.ts)
+    if (seen.current === null) seen.current = new Set(list.map((o) => o.id));
+    else {
+      const fresh = list.filter((o) => !seen.current!.has(o.id));
+      fresh.forEach((o) => seen.current!.add(o.id));
+      if (fresh.length) notify('order');
+    }
+    setAvailable(list);
   }, [online]);
 
   useEffect(() => { loadActive(); loadAvailable(); }, [loadActive, loadAvailable]);

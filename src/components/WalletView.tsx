@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, RefreshControl, ScrollView, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { LinearTransition } from 'react-native-reanimated';
 import { Card, Empty, Row, IconCircle, Badge } from '@/components/ui';
 import { BrandGradient } from '@/components/glass';

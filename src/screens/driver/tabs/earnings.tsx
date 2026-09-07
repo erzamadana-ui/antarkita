@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Row } from '@/components/ui';
 import { WalletView } from '@/components/WalletView';
 import { AnimatedNumber, Entrance } from '@/components/motion';

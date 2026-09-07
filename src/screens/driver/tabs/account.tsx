@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Row, Avatar, Badge, Button, CircleButton, type IconName } from '@/components/ui';
 import { Entrance, PressableScale } from '@/components/motion';
 import { TAB_BAR_SPACE } from '@/components/GlassTabBar';

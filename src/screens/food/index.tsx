@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { LinearTransition } from 'react-native-reanimated';
 import { Screen, Chip, Row, Empty, type IconName } from '@/components/ui';
 import { CartBar } from '@/components/CartBar';

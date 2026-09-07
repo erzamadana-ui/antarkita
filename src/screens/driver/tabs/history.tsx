@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Empty, Row, Badge, Chip } from '@/components/ui';
 import { Entrance, PressableScale, Skeleton } from '@/components/motion';
 import { ServiceIllustration } from '@/components/ServiceArt';

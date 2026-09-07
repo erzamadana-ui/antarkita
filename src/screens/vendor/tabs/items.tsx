@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, Switch, ScrollView, Modal, StyleSheet, Image, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Entrance, PressableScale, Skeleton } from '@/components/motion';
 import { TAB_BAR_SPACE } from '@/components/GlassTabBar';

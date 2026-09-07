@@ -3,8 +3,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  AdminPage, DataTable, Toolbar, Panel, Pill, ContactActions, Truncate, Grid, Col,
-  adminFont as font, adminTone, adminSpace,
+  AdminPage, DataTable, Toolbar, Panel, Pill, ContactActions, RowActions, Truncate, Grid, Col,
+  adminFont as font, adminTone, adminSpace, adminTable,
 } from '@/components/admin';
 import { Row, Button, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
@@ -73,7 +73,7 @@ export default function AdminOrders() {
             </Col>
             <Col span={3} min={200} style={{ gap: 6 }}>
               <Text style={font.label}>Pembayaran</Text>
-              <Text style={[font.num, { fontSize: 20, lineHeight: 26 }]}>{rupiah(open.total)}</Text>
+              <Text style={[font.num, { fontSize: 19, lineHeight: 26 }]} numberOfLines={1}>{rupiah(open.total)}</Text>
               <Text style={font.small}>{open.payment_method === 'wallet' ? 'AntarPay' : 'Tunai'} · {open.payment_status}</Text>
               {!['completed', 'cancelled'].includes(open.status)
                 ? <Button size="sm" variant="outline" color={colors.danger} title="Batalkan pesanan" icon="close-circle-outline" onPress={() => cancel(open)} style={{ marginTop: 8 }} />
@@ -118,19 +118,20 @@ export default function AdminOrders() {
           },
           { key: 'status', label: 'Status', width: 160, render: (r) => { const o = r as unknown as Row_; return <Pill text={statusLabel(o.status, o.service, o.merchant_status)} color={statusColor(o.status)} />; } },
           {
-            key: 'contact', label: 'Kontak', width: 180, render: (r) => {
+            // Aksi utama layar ini = Detail; kontak pelanggan/driver & pembatalan ada di kebab.
+            key: 'actions', label: 'Aksi', width: adminTable.actionsWideW, align: 'right', render: (r) => {
               const o = r as unknown as Row_;
-              return <ContactActions userId={o.customer_id} name={o.customer_name ?? 'Pelanggan'} role="customer" orderId={o.id} subject={`Pesanan ${o.code}`} showLabel={false} compact />;
-            },
-          },
-          {
-            key: 'actions', label: 'Aksi', width: 210, render: (r) => {
-              const o = r as unknown as Row_;
+              const live = !['completed', 'cancelled'].includes(o.status);
               return (
-                <Row gap={6} style={{ flexWrap: 'wrap' }}>
-                  <Button size="sm" title="Detail" variant="outline" onPress={() => setOpen(o)} />
-                  {!['completed', 'cancelled'].includes(o.status) && <Button size="sm" title="Batalkan" variant="outline" color={colors.danger} onPress={() => cancel(o)} />}
-                </Row>
+                <RowActions
+                  contact={{ userId: o.customer_id, name: o.customer_name ?? 'Pelanggan', role: 'customer', orderId: o.id, subject: `Pesanan ${o.code}` }}
+                  primary={[{ key: 'detail', label: 'Detail', icon: 'reader-outline', variant: 'solid' as const, onPress: () => setOpen(o) }]}
+                  menu={[
+                    { key: 'page', label: 'Buka halaman pesanan', icon: 'open-outline', onPress: () => router.push(`/order/${o.id}` as never) },
+                    !!o.driver_id && { key: 'drv', label: 'Hubungi driver…', icon: 'bicycle-outline', hint: o.driver_name ?? undefined, onPress: () => setOpen(o) },
+                    live && { key: 'cancel', label: 'Batalkan pesanan…', icon: 'close-circle-outline', danger: true, onPress: () => cancel(o) },
+                  ]}
+                />
               );
             },
           },

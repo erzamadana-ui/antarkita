@@ -1,9 +1,9 @@
 // Admin · CS & Tiket — antrean aduan pelanggan/driver/merchant, chat CS online, SOS
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, useWindowDimensions, Linking } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
-import { AdminPage, StatCard, FilterBar, adminFont as font, adminTone, EmptyState as Empty } from '@/components/admin';
+import { AdminPage, StatCard, FilterBar, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, EmptyState as Empty } from '@/components/admin';
 import { Row, Badge, Button, toast, Input, Chip, Avatar } from '@/components/ui';
 import { LiveDot, PressableScale } from '@/components/motion';
 import { TicketChat } from '@/components/TicketChat';
@@ -11,7 +11,7 @@ import { useTicket } from '@/hooks/useTickets';
 import { useLocalSearchParams } from 'expo-router';
 import { rpc, supabase, realtimeChannel } from '@/lib/supabase';
 import { useAuth } from '@/store/auth';
-import { colors, radius, glass, motion, shadow } from '@/lib/theme';
+import { colors, glass, motion, shadow } from '@/lib/theme';
 import { timeAgo, formatDate, ticketStatusLabel, ticketStatusColor, ticketCategoryLabel, ticketPriorityLabel, ticketPriorityColor, roleLabelId } from '@/lib/format';
 import type { Ticket, Profile, SosAlert, TicketStatus, TicketPriority } from '@/lib/types';
 
@@ -70,12 +70,12 @@ export default function AdminSupport() {
       right={<Row gap={6}><LiveDot color={colors.success} size={8} /><Text style={font.tiny}>Realtime</Text></Row>}>
       {openSos.length > 0 && (
         <Animated.View entering={FadeInDown.duration(motion.base)} style={[s.sos, shadow.glow(colors.danger)]}>
-          <Row gap={10}><Ionicons name="warning" size={22} color="#fff" /><Text style={{ color: '#fff', fontWeight: '800', fontSize: 15, flex: 1 }}>🚨 {openSos.length} SOS AKTIF — segera hubungi & tangani</Text></Row>
+          <Row gap={10}><Ionicons name="warning" size={adminIcon.lg} color="#fff" /><Text style={[font.h2, { color: '#fff', flex: 1 }]}>{openSos.length} SOS AKTIF — segera hubungi & tangani</Text></Row>
           {openSos.map((a) => (
             <Row key={a.id} between style={s.sosRow}>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: '#fff', fontWeight: '800' }}>{a.user?.full_name ?? 'Pengguna'} · {roleLabelId[a.role]}</Text>
-                <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12 }}>{timeAgo(a.created_at)}{a.note ? ` · ${a.note}` : ''}{a.lat ? ` · ${a.lat.toFixed(4)},${a.lng?.toFixed(4)}` : ''}</Text>
+                <Text style={[font.h3, { color: '#fff' }]} numberOfLines={1}>{a.user?.full_name ?? 'Pengguna'} · {roleLabelId[a.role]}</Text>
+                <Text style={[font.tiny, { color: 'rgba(255,255,255,0.9)' }]} numberOfLines={2}>{timeAgo(a.created_at)}{a.note ? ` · ${a.note}` : ''}{a.lat ? ` · ${a.lat.toFixed(4)},${a.lng?.toFixed(4)}` : ''}</Text>
               </View>
               <Row gap={6}>
                 {!!a.lat && <Button size="sm" title="Peta" variant="glass" color="#fff" icon="map" onPress={() => Linking.openURL(`https://www.google.com/maps?q=${a.lat},${a.lng}`)} />}
@@ -87,13 +87,13 @@ export default function AdminSupport() {
           ))}
         </Animated.View>
       )}
-      <Row gap={12} style={{ flexWrap: 'wrap' }}>
-        <StatCard label="Terbuka" value={stats?.open ?? 0} color={colors.warning} index={0} />
-        <StatCard label="Ditangani" value={stats?.in_progress ?? 0} color={colors.info} index={1} />
-        <StatCard label="Darurat" value={stats?.urgent ?? 0} color={colors.danger} index={2} />
-        <StatCard label="Selesai 7 hari" value={stats?.resolved ?? 0} color={colors.success} index={3} />
-        <StatCard label="Respons pertama" value={stats?.avg_first_response_min != null ? `${stats.avg_first_response_min} mnt` : '—'} hint="rata-rata 30 hari" color={colors.primary} index={4} />
-        <StatCard label="Kepuasan" value={stats?.avg_rating != null ? `${stats.avg_rating}/5` : '—'} color={colors.accent} index={5} />
+      <Row gap={adminSpace.lg} style={{ flexWrap: 'wrap' }}>
+        <StatCard icon="mail-open-outline" label="Terbuka" value={stats?.open ?? 0} color={adminTone.amber} index={0} />
+        <StatCard icon="construct-outline" label="Ditangani" value={stats?.in_progress ?? 0} color={adminTone.blue} index={1} />
+        <StatCard icon="warning-outline" label="Darurat" value={stats?.urgent ?? 0} color={adminTone.red} index={2} />
+        <StatCard icon="checkmark-done-outline" label="Selesai 7 hari" value={stats?.resolved ?? 0} color={adminTone.green} index={3} />
+        <StatCard icon="timer-outline" label="Respons pertama" value={stats?.avg_first_response_min != null ? `${stats.avg_first_response_min} mnt` : '—'} hint="rata-rata 30 hari" color={adminTone.teal} index={4} />
+        <StatCard icon="star-outline" label="Kepuasan" value={stats?.avg_rating != null ? `${stats.avg_rating}/5` : '—'} color={adminTone.orange} index={5} />
       </Row>
       <View style={{ flexDirection: wide ? 'row' : 'column', gap: 16, alignItems: 'flex-start' }}>
         <View style={{ flex: wide ? 1 : undefined, width: wide ? undefined : '100%', gap: 10 }}>
@@ -107,7 +107,7 @@ export default function AdminSupport() {
               <Avatar name={t.user?.full_name} url={t.user?.avatar_url} size={38} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Row between>
-                  <Text style={{ fontWeight: '800', color: colors.text, flex: 1 }} numberOfLines={1}>{t.subject}</Text>
+                  <Text style={[font.h3, { flex: 1 }]} numberOfLines={1}>{t.subject}</Text>
                   <Text style={font.tiny}>{timeAgo(t.last_message_at)}</Text>
                 </Row>
                 <Text style={font.tiny} numberOfLines={1}>{t.code} · {t.user?.full_name ?? '—'} ({roleLabelId[t.role]}) · {ticketCategoryLabel[t.category]}</Text>
@@ -155,11 +155,11 @@ function TicketPanel({ id, onClose, onChanged }: { id: string; onClose: () => vo
             <Text style={font.h3} numberOfLines={2}>{ticket.subject}</Text>
             <Text style={font.tiny}>{ticket.code} · {ticketCategoryLabel[ticket.category]} · dibuat {formatDate(ticket.created_at)}{orderCode ? ` · pesanan ${orderCode}` : ''}</Text>
           </View>
-          <Pressable onPress={onClose} style={s.close}><Ionicons name="close" size={20} color={colors.textSecondary} /></Pressable>
+          <Pressable onPress={onClose} style={s.close}><Ionicons name="close" size={adminIcon.lg} color={adminTone.muted} /></Pressable>
         </Row>
         <Row gap={10} style={{ marginTop: 8 }}>
           <Avatar name={user?.full_name} url={user?.avatar_url} size={34} />
-          <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text, fontSize: 13 }}>{user?.full_name ?? '—'} · {roleLabelId[ticket.role]}</Text><Text style={font.tiny}>{user?.email ?? ''} {user?.phone ? `· ${user.phone}` : ''}</Text></View>
+          <View style={{ flex: 1, minWidth: 0 }}><Text style={font.h3} numberOfLines={1}>{user?.full_name ?? '—'} · {roleLabelId[ticket.role]}</Text><Text style={font.tiny} numberOfLines={1}>{user?.email ?? ''} {user?.phone ? `· ${user.phone}` : ''}</Text></View>
           {!!ticket.rating && <Badge text={`Nilai ${ticket.rating}/5`} color={colors.accent} />}
         </Row>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginTop: 10 }}>
@@ -175,10 +175,10 @@ function TicketPanel({ id, onClose, onChanged }: { id: string; onClose: () => vo
 }
 
 const s = StyleSheet.create({
-  sos: { backgroundColor: colors.danger, borderRadius: radius.xl, padding: 14, gap: 8 },
-  sosRow: { backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: radius.md, padding: 10, flexWrap: 'wrap', gap: 8 },
-  row: { flexDirection: 'row', gap: 10, alignItems: 'center', padding: 10, borderRadius: radius.lg, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border },
-  panel: { backgroundColor: adminTone.surface, borderRadius: radius.xl, borderWidth: 1, borderColor: adminTone.border, overflow: 'hidden', minHeight: 520 },
-  panelHead: { padding: 14, borderBottomWidth: 1, borderBottomColor: adminTone.border, backgroundColor: adminTone.surface },
-  close: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(11,31,42,0.06)', alignItems: 'center', justifyContent: 'center' },
+  sos: { backgroundColor: colors.danger, borderRadius: adminRadius.lg, padding: adminSpace.lg, gap: adminSpace.sm },
+  sosRow: { backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: adminRadius.card, padding: adminSpace.md, flexWrap: 'wrap', gap: adminSpace.sm },
+  row: { flexDirection: 'row', gap: 10, alignItems: 'center', padding: adminSpace.md, borderRadius: adminRadius.card, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border, minHeight: 72 },
+  panel: { backgroundColor: adminTone.surface, borderRadius: adminRadius.lg, borderWidth: 1, borderColor: adminTone.border, overflow: 'hidden', minHeight: 520 },
+  panelHead: { padding: adminSpace.lg, borderBottomWidth: 1, borderBottomColor: adminTone.border, backgroundColor: adminTone.surface },
+  close: { width: 30, height: 30, borderRadius: adminRadius.md, backgroundColor: adminTone.surfaceAlt, borderWidth: 1, borderColor: adminTone.border, alignItems: 'center', justifyContent: 'center' },
 });

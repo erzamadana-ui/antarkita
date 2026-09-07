@@ -4,8 +4,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, Linking, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  AdminPage, Panel, DataTable, Toolbar, FilterBar, StatCard, Pill, IconAction, Truncate,
-  statusTone, adminFont as font, adminTone, adminSpace,
+  AdminPage, Panel, DataTable, Toolbar, FilterBar, StatCard, Pill, RowActions, Truncate,
+  statusTone, adminFont as font, adminTone, adminSpace, adminTable,
 } from '@/components/admin';
 import { Row, Button, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
@@ -117,11 +117,17 @@ export default function AdminFinance() {
             { key: 'created_at', label: 'Waktu', width: 150, render: (r) => when(String(r.created_at)) },
             { key: 'status', label: 'Status', width: 110, render: (r) => status(String(r.status)) },
             {
-              key: 'actions', label: 'Aksi', width: 190, render: (r) => r.status === 'pending'
-                ? <Row gap={6} style={{ flexWrap: 'wrap' }}>
-                  <Button size="sm" title="Setujui" color={colors.success} onPress={() => reviewTopup(String(r.id), true)} />
-                  <Button size="sm" title="Tolak" variant="outline" color={colors.danger} onPress={() => reviewTopup(String(r.id), false)} />
-                </Row>
+              // Aksi utama = Setujui; penolakan (berbahaya) ada di menu kebab.
+              key: 'actions', label: 'Aksi', width: adminTable.actionsWideW, align: 'right', render: (r) => r.status === 'pending'
+                ? (
+                  <RowActions
+                    primary={[{ key: 'ok', label: 'Setujui', icon: 'checkmark', variant: 'solid' as const, color: colors.success, onPress: () => reviewTopup(String(r.id), true) }]}
+                    menu={[
+                      { key: 'proof', label: 'Lihat bukti transfer', icon: 'image-outline', disabled: !r.proof_url, onPress: () => openProof(String(r.proof_url ?? '')) },
+                      { key: 'no', label: 'Tolak top up…', icon: 'close-circle-outline', danger: true, onPress: () => reviewTopup(String(r.id), false) },
+                    ]}
+                  />
+                )
                 : <Truncate style={font.tiny} title={String(r.review_note ?? '')}>{String(r.review_note ?? '—')}</Truncate>,
             },
           ]} />
@@ -139,11 +145,7 @@ export default function AdminFinance() {
                   <View style={{ gap: 4, minWidth: 0 }}>
                     <Truncate style={font.small} title={`${x.bank_name} ${x.bank_account}`}>{x.bank_name} · {x.bank_account}</Truncate>
                     <Truncate style={font.tiny} title={x.account_name}>a.n. {x.account_name}</Truncate>
-                    <Row gap={6} style={{ flexWrap: 'wrap' }}>
-                      <Pill text={x.bank_verified ? 'Terverifikasi' : 'Belum terverifikasi'} tone={x.bank_verified ? 'ok' : 'off'} />
-                      <IconAction compact icon={x.bank_verified ? 'close-circle-outline' : 'checkmark-circle-outline'} label={x.bank_verified ? 'Cabut' : 'Verifikasi'}
-                        color={x.bank_verified ? colors.danger : adminTone.teal} onPress={() => setBankVerified(x.user_id, !x.bank_verified)} />
-                    </Row>
+                    <Pill text={x.bank_verified ? 'Rekening terverifikasi' : 'Rekening belum terverifikasi'} tone={x.bank_verified ? 'ok' : 'off'} />
                   </View>
                 );
               },
@@ -158,17 +160,26 @@ export default function AdminFinance() {
               ),
             },
             {
-              key: 'actions', label: 'Aksi', width: 210, render: (r) => r.status === 'pending'
-                ? <Row gap={6} style={{ flexWrap: 'wrap' }}>
-                  <Button size="sm" title="Sudah ditransfer" color={colors.success} onPress={() => reviewWd(String(r.id), true)} />
-                  <Button size="sm" title="Tolak" variant="outline" color={colors.danger} onPress={() => reviewWd(String(r.id), false)} />
-                </Row>
-                : <Truncate style={font.tiny} title={String(r.review_note ?? '')}>{String(r.review_note ?? '—')}</Truncate>,
+              // Aksi utama = tandai sudah ditransfer (butuh PIN); verifikasi rekening & penolakan di kebab.
+              key: 'actions', label: 'Aksi', width: 250, align: 'right', render: (r) => {
+                const x = r as unknown as W;
+                return x.status === 'pending'
+                  ? (
+                    <RowActions
+                      primary={[{ key: 'ok', label: 'Sudah ditransfer', variant: 'solid' as const, color: colors.success, onPress: () => reviewWd(x.id, true) }]}
+                      menu={[
+                        { key: 'bank', label: x.bank_verified ? 'Cabut verifikasi rekening' : 'Tandai rekening terverifikasi', icon: x.bank_verified ? 'close-circle-outline' : 'checkmark-circle-outline', onPress: () => setBankVerified(x.user_id, !x.bank_verified) },
+                        { key: 'no', label: 'Tolak penarikan…', icon: 'close-circle-outline', danger: true, hint: 'saldo dikembalikan', onPress: () => reviewWd(x.id, false) },
+                      ]}
+                    />
+                  )
+                  : <Truncate style={font.tiny} title={String(r.review_note ?? '')}>{String(r.review_note ?? '—')}</Truncate>;
+              },
             },
           ]} />
       </Panel>
 
-      <Text style={font.tiny}>Halaman ini hanya menangani arus kas dompet (top up & penarikan). Untuk GMV, pendapatan, bagi hasil mitra, dan marjin per layanan/kota, buka <Text style={{ color: adminTone.teal, fontWeight: '700' }} onPress={() => router.push('/(admin)/finance-report' as never)}>Laporan Keuangan</Text>.</Text>
+      <Text style={font.tiny}>Halaman ini hanya menangani arus kas dompet (top up & penarikan). Untuk GMV, pendapatan, bagi hasil mitra, dan marjin per layanan/kota, buka <Text style={[font.tiny, { color: adminTone.teal, fontWeight: '700' }]} onPress={() => router.push('/(admin)/finance-report' as never)}>Laporan Keuangan</Text>.</Text>
     </AdminPage>
   );
 }

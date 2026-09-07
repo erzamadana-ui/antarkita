@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Card, Input, Button, Row, Chip, Badge, Empty, toast } from '@/components/ui';
 import { Entrance, PressableScale, Skeleton, ProgressBar } from '@/components/motion';
 import { ServiceIllustration } from '@/components/ServiceArt';

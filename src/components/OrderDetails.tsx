@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Linking } from 'react-native';
 import { signedUrl } from '@/lib/upload';
 import { toast } from '@/components/ui';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Row, Avatar, Stars, Badge, Divider } from '@/components/ui';
 import { PressableScale } from '@/components/motion';
 import { CallButton } from '@/components/call/IncomingCall';

@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, Alert, Platform, ScrollView, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Screen, Row, Badge, Button, Avatar, Stars, Input, Loading, Empty, CircleButton, IconCircle, toast, type IconName } from '@/components/ui';
 import { Entrance, PressableScale } from '@/components/motion';

@@ -4,8 +4,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, Platform } from 'react-native';
 import {
   AdminPage, DataTable, Toolbar, ReasonPrompt, StatCard, Grid, Pill, AdminDialog, SoftChip,
-  ContactActions, DeleteButton, DeletePartnerDialog, Truncate,
-  adminFont as font, adminTone, adminSpace,
+  RowActions, DeletePartnerDialog, Truncate,
+  adminFont as font, adminTone, adminSpace, adminTable,
 } from '@/components/admin';
 import { Row, Button, toast, Input } from '@/components/ui';
 import { execLevelLabel } from '@/lib/format';
@@ -101,7 +101,7 @@ export default function AdminUsers() {
                 <Truncate style={font.bodyStrong} title={u.full_name}>{u.full_name}</Truncate>
                 <Row gap={6} style={{ flexWrap: 'wrap' }}>
                   <Truncate style={font.tiny} title={open ? `${u.email ?? '-'} · ${phoneDisplay(u.phone)}` : undefined}>{open ? `${u.email ?? '-'} · ${phoneDisplay(u.phone)}` : `${emailMasked(u.email)} · ${phoneMasked(u.phone)}`}</Truncate>
-                  {!open ? <Pressable onPress={() => reveal(u)} hitSlop={6}><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 11.5 }}>Tampilkan</Text></Pressable> : null}
+                  {!open ? <Pressable onPress={() => reveal(u)} hitSlop={6}><Text style={[font.tiny, { color: colors.primary, fontWeight: '700' }]}>Tampilkan</Text></Pressable> : null}
                 </Row>
               </View>
             );
@@ -119,26 +119,22 @@ export default function AdminUsers() {
         },
         { key: 'created_at', label: 'Daftar', width: 110, render: (r) => <Text style={font.tiny}>{formatDate(String(r.created_at), false)}</Text> },
         {
-          key: 'contact', label: 'Kontak', width: 180, render: (r) => {
-            const u = r as unknown as Row_;
-            return <ContactActions userId={u.id} name={u.full_name} role={u.role} subject={`Panel admin · ${u.full_name}`} />;
-          },
-        },
-        {
-          key: 'actions', label: 'Aksi', width: 360, render: (r) => {
+          // Dua aksi utama (Chat & Telepon) + kebab berisi sisanya — lebar tetap, rata kanan.
+          key: 'actions', label: 'Aksi', width: adminTable.actionsW, align: 'right', render: (r) => {
             const u = r as unknown as Row_;
             return (
-              <Row gap={6} style={{ flexWrap: 'wrap' }}>
-                <Button size="sm" title="Saldo ±" variant="outline" onPress={() => adjust(u)} />
-                {u.is_active
-                  ? <Button size="sm" title="Nonaktifkan" variant="outline" color={colors.warning} onPress={() => setUser(u.id, { active: false })} />
-                  : <Button size="sm" title="Aktifkan" color={colors.success} onPress={() => setUser(u.id, { active: true, reason: 'Diaktifkan kembali oleh admin' })} />}
-                {u.role !== 'admin'
-                  ? <Button size="sm" title="Jadikan admin" variant="ghost" onPress={() => setUser(u.id, { role: 'admin' })} />
-                  : <Button size="sm" title="Cabut admin" variant="ghost" color={colors.danger} onPress={() => setUser(u.id, { role: 'customer' })} />}
-                <Button size="sm" title="Eksekutif" variant="ghost" color="#0B1F2A" icon="shield-half-outline" onPress={() => { setExecFor(u); setExecPin(''); }} />
-                <DeleteButton onPress={() => setDel({ kind: 'user', id: u.id, name: u.full_name, meta: [ROLE_LABEL[u.role] ?? u.role, `saldo ${rupiah(u.balance)}`] })} />
-              </Row>
+              <RowActions
+                contact={{ userId: u.id, name: u.full_name, role: u.role, subject: `Panel admin · ${u.full_name}` }}
+                menu={[
+                  { key: 'saldo', label: 'Penyesuaian saldo', icon: 'wallet-outline', onPress: () => adjust(u) },
+                  !u.is_active && { key: 'on', label: 'Aktifkan akun', icon: 'checkmark-circle-outline', color: colors.success, onPress: () => setUser(u.id, { active: true, reason: 'Diaktifkan kembali oleh admin' }) },
+                  u.role !== 'admin' && { key: 'admin', label: 'Jadikan admin', icon: 'shield-outline', onPress: () => setUser(u.id, { role: 'admin' }) },
+                  { key: 'exec', label: 'Akses eksekutif', icon: 'shield-half-outline', onPress: () => { setExecFor(u); setExecPin(''); } },
+                  u.is_active && { key: 'off', label: 'Nonaktifkan akun', icon: 'close-circle-outline', danger: true, onPress: () => setUser(u.id, { active: false }) },
+                  u.role === 'admin' && { key: 'unadmin', label: 'Cabut hak admin', icon: 'shield-outline', danger: true, onPress: () => setUser(u.id, { role: 'customer' }) },
+                  { key: 'del', label: 'Hapus akun…', icon: 'trash-outline', danger: true, hint: 'butuh PIN & alasan', onPress: () => setDel({ kind: 'user', id: u.id, name: u.full_name, meta: [ROLE_LABEL[u.role] ?? u.role, `saldo ${rupiah(u.balance)}`] }) },
+                ]}
+              />
             );
           },
         },

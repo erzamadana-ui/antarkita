@@ -1,7 +1,7 @@
 // Percakapan tiket (pengguna ↔ CS) — dipakai di layar tiket pengguna & panel CS admin
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, ScrollView, Pressable, Linking, KeyboardAvoidingView, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown, FadeInUp, LinearTransition } from 'react-native-reanimated';
 import { Row, Chip, Badge, toast } from '@/components/ui';
 import { PressableScale } from '@/components/motion';

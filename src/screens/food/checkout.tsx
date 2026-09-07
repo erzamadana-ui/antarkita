@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet, TextInput } from 'react-native';
 import Animated, { LinearTransition } from 'react-native-reanimated';
 import { Entrance, PressableScale } from '@/components/motion';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Card, Row, Stepper, Button, Badge, Empty, toast } from '@/components/ui';
 import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';

@@ -2,9 +2,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Switch, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { AdminPage, Table, FilterBar, adminFont as font, AdminCard as Card } from '@/components/admin';
-import { Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { AdminPage, Table, FilterBar, AdminSelect, adminFont as font, adminTone, adminSpace, adminIcon, AdminCard as Card } from '@/components/admin';
+import { Row, Input, Button, Badge, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import { rupiah, formatDate, formatSchedule, cityName, travelRequestStatusLabel, travelKindLabel } from '@/lib/format';
@@ -37,6 +37,8 @@ export default function AdminLogistics() {
     setCities((c as City[]) ?? []); setWhs((w as Warehouse[]) ?? []); setRates((r as IntercityRate[]) ?? []); setRoutes((tr as TravelRoute[]) ?? []); setReqs(rq ?? []);
   }, []);
   const filteredReqs = reqStatus === 'all' ? reqs : reqs.filter((q) => q.status === reqStatus);
+  // Pilihan kota dipakai bersama oleh form gudang & rute travel (dropdown, bukan deret chip).
+  const cityOptions = cities.map((c) => ({ value: c.id, label: c.name, sublabel: c.province ?? undefined }));
   useEffect(() => { load(); }, [load]);
 
   const saveWh = async () => {
@@ -72,14 +74,17 @@ export default function AdminLogistics() {
         <Row gap={16} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <Card style={{ flex: 1, minWidth: 320, gap: 10 }}>
             <Text style={font.label}>Tambah gudang mitra / drop point</Text>
-            <Row gap={8} style={{ flexWrap: 'wrap' }}>{cities.map((c) => <Chip key={c.id} label={c.name} active={wh.city_id === c.id} onPress={() => setWh({ ...wh, city_id: c.id })} color={colors.send} />)}</Row>
-            <Row gap={8}><Chip label="Gudang besar" active={wh.type === 'big'} onPress={() => setWh({ ...wh, type: 'big' })} color={colors.send} /><Chip label="Gudang kecil (mitra warehouse)" active={wh.type === 'small'} onPress={() => setWh({ ...wh, type: 'small' })} color={colors.send} /></Row>
+            <Row gap={adminSpace.sm} style={{ flexWrap: 'wrap' }}>
+              <AdminSelect label="Kota layanan" icon="location-outline" placeholder="Pilih kota" value={wh.city_id} options={cityOptions} onChange={(v) => setWh({ ...wh, city_id: v })} width={200} />
+              <AdminSelect label="Jenis gudang" icon="cube-outline" value={wh.type} width={220}
+                options={[{ value: 'big', label: 'Gudang besar' }, { value: 'small', label: 'Gudang kecil (mitra warehouse)' }]} onChange={(v) => setWh({ ...wh, type: v })} />
+            </Row>
             <Input placeholder="Nama gudang / drop point" value={wh.name} onChangeText={(v) => setWh({ ...wh, name: v })} />
             <Input placeholder="Nama mitra / pemilik" value={wh.partner_name} onChangeText={(v) => setWh({ ...wh, partner_name: v })} />
             <Input placeholder="Alamat" value={wh.address} onChangeText={(v) => setWh({ ...wh, address: v })} />
             <Row gap={8}><Input placeholder="Lat" value={wh.lat} onChangeText={(v) => setWh({ ...wh, lat: v })} containerStyle={{ flex: 1 }} /><Input placeholder="Lng" value={wh.lng} onChangeText={(v) => setWh({ ...wh, lng: v })} containerStyle={{ flex: 1 }} /><Input placeholder="Jam buka" value={wh.open_hours} onChangeText={(v) => setWh({ ...wh, open_hours: v })} containerStyle={{ flex: 1 }} /></Row>
             <Input placeholder="Telepon" value={wh.phone} onChangeText={(v) => setWh({ ...wh, phone: v })} />
-            <Button title="Simpan gudang" color={colors.send} onPress={saveWh} />
+            <Button title="Simpan gudang" onPress={saveWh} />
           </Card>
           <Card style={{ flex: 1, minWidth: 280, gap: 10 }}>
             <Text style={font.label}>Tambah kota layanan</Text>
@@ -91,7 +96,7 @@ export default function AdminLogistics() {
           </Card>
         </Row>
         <Table rows={whs as unknown as Record<string, unknown>[]} columns={[
-          { key: 'name', label: 'Gudang', width: 240, render: (r) => { const w = r as unknown as Warehouse; return <View><Text style={{ fontWeight: '700' }}>{w.name}</Text><Text style={font.tiny} numberOfLines={2}>{w.address}</Text></View>; } },
+          { key: 'name', label: 'Gudang', width: 240, render: (r) => { const w = r as unknown as Warehouse; return <View style={{ minWidth: 0 }}><Text style={font.bodyStrong} numberOfLines={1}>{w.name}</Text><Text style={font.tiny} numberOfLines={2}>{w.address}</Text></View>; } },
           { key: 'city', label: 'Kota', width: 110, render: (r) => <Text style={font.small}>{cityName(cities, String(r.city_id))}</Text> },
           { key: 'type', label: 'Jenis', width: 120, render: (r) => <Badge text={r.type === 'big' ? 'Gudang besar' : 'Gudang kecil'} color={r.type === 'big' ? colors.send : colors.info} /> },
           { key: 'partner', label: 'Mitra', width: 170, render: (r) => { const w = r as unknown as Warehouse; return <Text style={font.small}>{w.partner_name ?? '—'}{'\n'}{w.phone ?? ''}</Text>; } },
@@ -104,7 +109,7 @@ export default function AdminLogistics() {
         <Card padded={false}>
           <View style={{ padding: 14 }}><Text style={font.label}>Tarif antar kota (base + per kg, ETA hari)</Text><Text style={font.tiny}>Ketuk angka untuk mengubah, tersimpan otomatis.</Text></View>
           <Table rows={rates as unknown as Record<string, unknown>[]} columns={[
-            { key: 'route', label: 'Rute', width: 220, render: (r) => <Text style={{ fontWeight: '700' }}>{cityName(cities, String(r.from_city))} → {cityName(cities, String(r.to_city))}</Text> },
+            { key: 'route', label: 'Rute', width: 220, render: (r) => <Text style={font.bodyStrong} numberOfLines={1}>{cityName(cities, String(r.from_city))} → {cityName(cities, String(r.to_city))}</Text> },
             { key: 'base_fare', label: 'Tarif dasar', width: 130, render: (r) => <Input value={String(r.base_fare)} keyboardType="number-pad" onChangeText={(v) => saveRate(r as unknown as IntercityRate, { base_fare: Number(v) || 0 })} containerStyle={{ width: 110 }} /> },
             { key: 'per_kg', label: 'Per kg', width: 120, render: (r) => <Input value={String(r.per_kg)} keyboardType="number-pad" onChangeText={(v) => saveRate(r as unknown as IntercityRate, { per_kg: Number(v) || 0 })} containerStyle={{ width: 100 }} /> },
             { key: 'eta_days', label: 'ETA (hari)', width: 100, render: (r) => <Input value={String(r.eta_days)} keyboardType="number-pad" onChangeText={(v) => saveRate(r as unknown as IntercityRate, { eta_days: Number(v) || 1 })} containerStyle={{ width: 70 }} /> },
@@ -116,8 +121,10 @@ export default function AdminLogistics() {
       {tab === 'travel' && (<>
         <Card style={{ gap: 10 }}>
           <Text style={font.label}>Rute travel (harga per kursi · carter private Innova · carter Hi-Ace · minimum penumpang)</Text>
-          <Row gap={8} style={{ flexWrap: 'wrap' }}><Text style={font.tiny}>Dari:</Text>{cities.map((c) => <Chip key={c.id} label={c.name} active={rt.from_city === c.id} onPress={() => setRt({ ...rt, from_city: c.id })} color={colors.travel} />)}</Row>
-          <Row gap={8} style={{ flexWrap: 'wrap' }}><Text style={font.tiny}>Ke:</Text>{cities.map((c) => <Chip key={c.id} label={c.name} active={rt.to_city === c.id} onPress={() => setRt({ ...rt, to_city: c.id })} color={colors.travel} />)}</Row>
+          <Row gap={adminSpace.sm} style={{ flexWrap: 'wrap' }}>
+            <AdminSelect label="Kota asal" icon="navigate-outline" placeholder="Pilih kota" value={rt.from_city} options={cityOptions} onChange={(v) => setRt({ ...rt, from_city: v })} width={200} />
+            <AdminSelect label="Kota tujuan" icon="flag-outline" placeholder="Pilih kota" value={rt.to_city} options={cityOptions} onChange={(v) => setRt({ ...rt, to_city: v })} width={200} />
+          </Row>
           <Row gap={8} style={{ flexWrap: 'wrap' }}>
             <Input placeholder="Jarak km" value={rt.distance_km} onChangeText={(v) => setRt({ ...rt, distance_km: v })} containerStyle={{ width: 100 }} />
             <Input placeholder="Durasi jam" value={rt.duration_h} onChangeText={(v) => setRt({ ...rt, duration_h: v })} containerStyle={{ width: 100 }} />
@@ -125,12 +132,12 @@ export default function AdminLogistics() {
             <Input placeholder="Private Innova" value={rt.private_price} onChangeText={(v) => setRt({ ...rt, private_price: v })} containerStyle={{ width: 130 }} keyboardType="number-pad" />
             <Input placeholder="Private Hi-Ace" value={rt.private_price_large} onChangeText={(v) => setRt({ ...rt, private_price_large: v })} containerStyle={{ width: 130 }} keyboardType="number-pad" />
             <Input placeholder="Min pax" value={rt.min_pax} onChangeText={(v) => setRt({ ...rt, min_pax: v })} containerStyle={{ width: 80 }} keyboardType="number-pad" />
-            <Button title="Simpan rute" color={colors.travel} onPress={saveRoute} />
+            <Button title="Simpan rute" onPress={saveRoute} />
           </Row>
           <Text style={font.tiny}>Acuan 2026: kursi Padang–Pekanbaru Rp120–250rb, carter Hi-Ace ±Rp2,5 jt (citratrans.com, rentalmobilterdekat.com, jasasewamobilpekanbaru.com). Minimum penumpang 4 = asumsi praktik umum; ubah per rute bila perlu.</Text>
         </Card>
         <Table rows={routes as unknown as Record<string, unknown>[]} columns={[
-          { key: 'route', label: 'Rute', width: 220, render: (r) => <Text style={{ fontWeight: '700' }}>{cityName(cities, String(r.from_city))} → {cityName(cities, String(r.to_city))}</Text> },
+          { key: 'route', label: 'Rute', width: 220, render: (r) => <Text style={font.bodyStrong} numberOfLines={1}>{cityName(cities, String(r.from_city))} → {cityName(cities, String(r.to_city))}</Text> },
           { key: 'dist', label: 'Jarak / durasi', width: 130, render: (r) => <Text style={font.small}>{String(r.distance_km)} km · {String(r.duration_h)} jam</Text> },
           { key: 'seat_price', label: 'Per kursi', width: 110, render: (r) => <Text style={font.small}>{rupiah(Number(r.seat_price))}</Text> },
           { key: 'private', label: 'Private (Innova / Hi-Ace)', width: 200, render: (r) => <Text style={font.small}>{rupiah(Number(r.private_price))} / {r.private_price_large ? rupiah(Number(r.private_price_large)) : '—'}</Text> },
@@ -140,22 +147,20 @@ export default function AdminLogistics() {
         <Card style={{ gap: 6 }}>
           <Row between style={{ flexWrap: 'wrap', gap: 8 }}>
             <Row gap={10} style={{ flex: 1, minWidth: 240 }}>
-              <Ionicons name="bus-outline" size={20} color={colors.travel} />
-              <Text style={[font.small, { flex: 1, color: colors.text }]}>Verifikasi, penangguhan, dokumen & statistik mitra travel (agen dan sopir pribadi) kini dikelola di halaman terpisah.</Text>
+              <Ionicons name="bus-outline" size={adminIcon.lg} color={colors.travel} />
+              <Text style={[font.small, { flex: 1, color: adminTone.ink }]}>Verifikasi, penangguhan, dokumen & statistik mitra travel (agen dan sopir pribadi) kini dikelola di halaman terpisah.</Text>
             </Row>
-            <Pressable onPress={() => router.push('/(admin)/travel' as never)} hitSlop={6}><Text style={{ color: colors.travel, fontWeight: '800', fontSize: 13 }}>Kelola mitra travel →</Text></Pressable>
+            <Pressable onPress={() => router.push('/(admin)/travel' as never)} hitSlop={6}><Text style={[font.h3, { color: colors.travel }]}>Kelola mitra travel →</Text></Pressable>
           </Row>
         </Card>
         <Card padded={false}>
           <View style={{ padding: 14, gap: 8 }}>
             <Text style={font.label}>Permintaan travel (carter & sopir harian) · {reqs.length}</Text>
-            <Row gap={6} style={{ flexWrap: 'wrap' }}>
-              <Chip label={`Semua (${reqs.length})`} active={reqStatus === 'all'} onPress={() => setReqStatus('all')} color={colors.travel} />
-              {REQ_STATUSES.map((st) => { const n = reqs.filter((q) => q.status === st).length; return <Chip key={st} label={`${travelRequestStatusLabel[st] ?? st} (${n})`} active={reqStatus === st} onPress={() => setReqStatus(st)} color={colors.travel} />; })}
-            </Row>
+            <AdminSelect label="Saring status" icon="filter-outline" value={reqStatus} width={240} onChange={setReqStatus}
+              options={[{ value: 'all', label: `Semua (${reqs.length})` }, ...REQ_STATUSES.map((st) => ({ value: st, label: `${travelRequestStatusLabel[st] ?? st} (${reqs.filter((q) => q.status === st).length})` }))]} />
           </View>
           <Table rows={filteredReqs as unknown as Record<string, unknown>[]} emptyText="Belum ada permintaan travel" columns={[
-            { key: 'code', label: 'Kode', width: 120, render: (r) => { const q = r as unknown as AdminTravelRequestRow; return <View><Text style={{ fontWeight: '700', color: colors.text }}>{q.code}</Text><Text style={font.tiny}>{formatDate(q.created_at, false)}</Text></View>; } },
+            { key: 'code', label: 'Kode', width: 120, render: (r) => { const q = r as unknown as AdminTravelRequestRow; return <View style={{ minWidth: 0 }}><Text style={font.bodyStrong} numberOfLines={1}>{q.code}</Text><Text style={font.tiny}>{formatDate(q.created_at, false)}</Text></View>; } },
             { key: 'kind', label: 'Jenis', width: 110, render: (r) => <Badge text={travelKindLabel[String(r.kind)] ?? String(r.kind)} color={colors.travel} /> },
             { key: 'status', label: 'Status', width: 150, render: (r) => <Badge text={travelRequestStatusLabel[String(r.status)] ?? String(r.status)} color={REQ_COLOR[String(r.status)] ?? colors.textMuted} /> },
             { key: 'customer_name', label: 'Pelanggan', width: 140, render: (r) => <Text style={font.small}>{String(r.customer_name ?? '—')}</Text> },

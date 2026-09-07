@@ -1,13 +1,28 @@
 // Pengaturan publik aplikasi (layanan aktif, batas jarak, impor peta, batas AntarSend, ambang permohonan maaf)
-// — dimuat sekali, di-cache di modul.
+//
+// Segarnya data penting: sakelar on/off layanan di panel admin harus terasa langsung di aplikasi
+// pelanggan. Karena itu pengaturan dimuat ulang lewat TIGA jalur:
+//   1. cache pendek (60 detik) — pemanggilan berikutnya sesudah itu memuat ulang;
+//   2. `AppState` kembali 'active' (pengguna membuka lagi aplikasi) dan saat layar beranda difokuskan;
+//   3. langganan realtime ke tabel `app_settings` — perubahan admin masuk seketika.
+//
+// `app_settings` sudah terdaftar di publication realtime sejak migrasi 0028, jadi perubahan
+// sakelar layanan di panel admin sampai ke aplikasi seketika; jalur (1) dan (2) tetap sebagai
+// cadangan bila koneksi realtime putus (perubahan tetap terlihat < 60 detik)
+// atau langsung begitu aplikasi dibuka/beranda difokuskan.
+//
+// Gagal-aman: bila pengaturan belum termuat atau gagal dimuat, SEMUA layanan dianggap aktif —
+// menu tidak boleh hilang hanya karena jaringan bermasalah.
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import { create } from 'zustand';
-import { rpc } from '@/lib/supabase';
+import { rpc, realtimeChannel } from '@/lib/supabase';
 import type { AppPublicSettings, SendLimit, SendLimits, SendVehicle } from '@/lib/types';
 
 interface State { settings: AppPublicSettings | null; loading: boolean; loadedAt: number; load: (force?: boolean) => Promise<void> }
 
-const STALE_MS = 5 * 60 * 1000;
+/** Umur cache pengaturan publik. Sengaja pendek supaya sakelar admin cepat terasa. */
+const STALE_MS = 60 * 1000;
 let inflight: Promise<void> | null = null;
 
 /** Nilai bawaan = default migrasi 0025 (dipakai bila server belum mengirim `send_limits`). */
@@ -59,6 +74,25 @@ export const useAppSettingsStore = create<State>((set, get) => ({
   },
 }));
 
+/** Muat ulang paksa dari mana pun (mis. sesudah admin menyimpan pengaturan). */
+export const reloadAppSettings = () => useAppSettingsStore.getState().load(true);
+
+// ---- Pemicu penyegaran global (dipasang sekali per proses) ----
+let watchersReady = false;
+function ensureWatchers() {
+  if (watchersReady) return;
+  watchersReady = true;
+  // (a) aplikasi kembali ke depan → pengaturan bisa saja berubah selagi di latar belakang
+  AppState.addEventListener('change', (st) => { if (st === 'active') reloadAppSettings(); });
+  // (b) realtime: admin mengubah sakelar layanan → langsung terasa di aplikasi pelanggan
+  try {
+    realtimeChannel('app-settings')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, () => { reloadAppSettings(); })
+      .subscribe();
+  } catch { /* realtime opsional — jalur AppState/fokus/cache tetap bekerja */ }
+  // Channel sengaja tidak dilepas: umurnya sepanjang umur aplikasi (satu langganan per proses).
+}
+
 /** Urutan kendaraan AntarSend dari yang paling kecil. */
 const SEND_ORDER: SendVehicle[] = ['motor', 'car', 'box'];
 
@@ -75,7 +109,7 @@ export function useAppSettings() {
   const settings = useAppSettingsStore((s) => s.settings);
   const loading = useAppSettingsStore((s) => s.loading);
   const load = useAppSettingsStore((s) => s.load);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { ensureWatchers(); load(); }, [load]);
   const isEnabled = (service: string) => settings?.services_enabled?.[service] !== false;
   const maxKm = (service: string): number | null => { const v = settings?.max_km?.[service]; return typeof v === 'number' && v > 0 ? v : null; };
   const sendLimits = settings?.send_limits ?? DEFAULT_SEND_LIMITS;

@@ -1,12 +1,12 @@
 // Admin · Blast Promo — kirim promo merchant/promo kode ke kotak masuk pelanggan (satu arah admin → pelanggan)
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { AdminPage, Table, StatCard, adminFont as font, adminTone, AdminCard as Card } from '@/components/admin';
-import { Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
+import { View, Text, StyleSheet } from 'react-native';
+import { AdminPage, Table, StatCard, AdminSelect, adminFont as font, adminTone, adminRadius, adminSpace, AdminCard as Card } from '@/components/admin';
+import { Row, Input, Button, Badge, toast } from '@/components/ui';
 import { PromoCard } from '@/components/PromoCard';
 import { DocUpload } from '@/components/DocUpload';
 import { rpc, supabase } from '@/lib/supabase';
-import { colors, radius } from '@/lib/theme';
+import { colors } from '@/lib/theme';
 import { formatDate } from '@/lib/format';
 import type { Blast, City, Merchant, Promo } from '@/lib/types';
 
@@ -45,17 +45,23 @@ export default function AdminBlast() {
 
   return (
     <AdminPage title="Blast Promo" subtitle="Satu arah: admin → kotak masuk pelanggan (notifikasi dalam aplikasi, realtime)" onRefresh={load}>
-      <Row gap={12} style={{ flexWrap: 'wrap' }}>
-        <StatCard label="Pengguna aktif" value={users} color={colors.info} index={0} />
-        <StatCard label="Blast terkirim" value={blasts.length} color={colors.accent} index={1} />
-        <StatCard label="Total notifikasi" value={blasts.reduce((a, b) => a + b.sent_count, 0)} color={colors.success} index={2} />
+      <Row gap={adminSpace.lg} style={{ flexWrap: 'wrap' }}>
+        <StatCard label="Pengguna aktif" icon="people-outline" value={users} color={adminTone.blue} index={0} />
+        <StatCard label="Blast terkirim" icon="megaphone-outline" value={blasts.length} color={adminTone.orange} index={1} />
+        <StatCard label="Total notifikasi" icon="notifications-outline" value={blasts.reduce((a, b) => a + b.sent_count, 0)} color={adminTone.green} index={2} />
       </Row>
       <Row gap={16} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <Card style={{ flex: 1.3, minWidth: 340, gap: 12 }}>
           <Text style={font.label}>Susun pesan</Text>
           <Text style={font.tiny}>Ambil dari promo aktif atau merchant yang sedang promo — judul, gambar, dan kode terisi otomatis.</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>{promos.map((p) => <Chip key={p.code} label={p.code} active={f.promo_code === p.code} onPress={() => pickPromo(p)} color={colors.accent} />)}</ScrollView>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>{merchants.map((m) => <Chip key={m.id} label={m.name} active={f.merchant_id === m.id} onPress={() => pickMerchant(m)} color={colors.food} />)}</ScrollView>
+          <Row gap={adminSpace.sm} style={{ flexWrap: 'wrap' }}>
+            <AdminSelect label="Ambil dari promo aktif" icon="pricetag-outline" placeholder="Pilih kode promo" width={220} value={f.promo_code}
+              options={promos.map((p) => ({ value: p.code, label: p.code, sublabel: p.title ?? undefined }))}
+              onChange={(v) => { const p = promos.find((x) => x.code === v); if (p) pickPromo(p); }} />
+            <AdminSelect label="Ambil dari merchant" icon="storefront-outline" placeholder="Pilih merchant" width={240} value={f.merchant_id}
+              options={merchants.map((m) => ({ value: m.id, label: m.name, sublabel: m.category }))}
+              onChange={(v) => { const m = merchants.find((x) => x.id === v); if (m) pickMerchant(m); }} />
+          </Row>
           <Input label="Judul" placeholder="Diskon 20% Sate Padang Mak Syukur hari ini!" value={f.title} onChangeText={set('title')} />
           <Input label="Isi pesan" placeholder="Berlaku s.d. 21.00 WIB, pakai kode MAKANENAK" value={f.body} onChangeText={set('body')} multiline style={{ minHeight: 70 }} />
           <Row gap={10}>
@@ -63,9 +69,14 @@ export default function AdminBlast() {
             <Input label="URL gambar (opsional)" value={f.image_url} onChangeText={set('image_url')} containerStyle={{ flex: 2 }} />
           </Row>
           <DocUpload label="Unggah gambar banner (16:9)" value={f.image_url.startsWith('http') ? '' : f.image_url} onChange={(p) => set('image_url')(p)} bucket="promo-images" color={colors.accent} />
-          <Text style={font.label}>Target penerima</Text>
-          <Row gap={8} style={{ flexWrap: 'wrap' }}>{TARGETS.map((t) => <Chip key={t.key} label={t.label} active={f.target === t.key} onPress={() => set('target')(t.key)} />)}</Row>
-          {f.target === 'city' && <Row gap={8} style={{ flexWrap: 'wrap' }}>{cities.map((c) => <Chip key={c.id} label={c.name} active={f.city_id === c.id} onPress={() => set('city_id')(c.id)} color={colors.info} />)}</Row>}
+          <Row gap={adminSpace.sm} style={{ flexWrap: 'wrap' }}>
+            <AdminSelect label="Target penerima" icon="people-outline" width={230} value={f.target}
+              options={TARGETS.map((t) => ({ value: t.key, label: t.label }))} onChange={(v) => set('target')(v)} />
+            {f.target === 'city' ? (
+              <AdminSelect label="Kota" icon="location-outline" placeholder="Pilih kota" width={200} value={f.city_id}
+                options={cities.map((c) => ({ value: c.id, label: c.name, sublabel: c.province ?? undefined }))} onChange={(v) => set('city_id')(v)} />
+            ) : null}
+          </Row>
           <Button title="Kirim blast sekarang" icon="send" color={colors.accent} loading={busy} onPress={send} />
           <Text style={font.tiny}>Pelanggan tidak bisa membalas (satu arah). Jangan kirim lebih dari 1–2 blast per hari agar tidak dianggap spam.</Text>
         </Card>
@@ -73,7 +84,7 @@ export default function AdminBlast() {
           <Text style={font.label}>Pratinjau di kotak masuk pelanggan</Text>
           <PromoCard promo={preview} width={280} />
           <View style={s.notif}>
-            <Text style={{ fontWeight: '800', color: colors.text }}>{f.title || 'Judul promo'}</Text>
+            <Text style={font.h3}>{f.title || 'Judul promo'}</Text>
             <Text style={font.small}>{f.body || 'Isi pesan…'}</Text>
             <Row gap={6}>{f.promo_code ? <Badge text={`Kode: ${f.promo_code}`} color={colors.accent} /> : null}{f.merchant_id ? <Badge text="Lihat merchant →" color={colors.food} /> : null}</Row>
           </View>
@@ -83,13 +94,13 @@ export default function AdminBlast() {
         <View style={{ padding: 14 }}><Text style={font.label}>Riwayat blast</Text></View>
         <Table rows={blasts as unknown as Record<string, unknown>[]} columns={[
           { key: 'created_at', label: 'Waktu', width: 150, render: (r) => <Text style={font.tiny}>{formatDate(String(r.created_at))}</Text> },
-          { key: 'title', label: 'Judul', width: 260, render: (r) => <View><Text style={{ fontWeight: '700' }}>{String(r.title)}</Text><Text style={font.tiny} numberOfLines={1}>{String(r.body ?? '')}</Text></View> },
+          { key: 'title', label: 'Judul', width: 260, render: (r) => <View style={{ minWidth: 0 }}><Text style={font.bodyStrong} numberOfLines={1}>{String(r.title)}</Text><Text style={font.tiny} numberOfLines={1}>{String(r.body ?? '')}</Text></View> },
           { key: 'promo_code', label: 'Kode', width: 110, render: (r) => <Text style={font.small}>{String(r.promo_code ?? '—')}</Text> },
           { key: 'target', label: 'Target', width: 120, render: (r) => <Badge text={TARGETS.find((t) => t.key === r.target)?.label ?? String(r.target)} color={colors.info} /> },
-          { key: 'sent_count', label: 'Terkirim', width: 90, render: (r) => <Text style={{ fontWeight: '800' }}>{String(r.sent_count)}</Text> },
+          { key: 'sent_count', label: 'Terkirim', width: 90, align: 'right', mono: true, render: (r) => <Text style={font.mono}>{String(r.sent_count)}</Text> },
         ]} emptyText="Belum ada blast" />
       </Card>
     </AdminPage>
   );
 }
-const s = StyleSheet.create({ notif: { gap: 4, padding: 12, borderRadius: radius.lg, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border } });
+const s = StyleSheet.create({ notif: { gap: 4, padding: adminSpace.md, borderRadius: adminRadius.card, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border } });

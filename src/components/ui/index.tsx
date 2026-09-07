@@ -4,11 +4,12 @@ import {
   Platform, ScrollView, KeyboardAvoidingView, Image,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import Animated, { FadeInDown, FadeOutUp, useSharedValue, useAnimatedStyle, withSpring, useReducedMotion, LinearTransition } from 'react-native-reanimated';
 import { colors, radius, shadow, spacing, font, glass, motion } from '@/lib/theme';
+import { friendlyError } from '@/lib/supabase';
 import { initials } from '@/lib/format';
 import { PressableScale } from '@/components/motion';
 import { LogoPulse } from '@/components/Logo';
@@ -262,7 +263,12 @@ type ToastMsg = { id: number; text: string; type: 'info' | 'error' | 'success' }
 let pushToast: ((t: ToastMsg) => void) | null = null;
 export const toast = {
   show: (text: string, type: ToastMsg['type'] = 'info') => pushToast?.({ id: Date.now(), text, type }),
-  error: (text: string) => pushToast?.({ id: Date.now(), text, type: 'error' }),
+  /**
+   * Pesan galat SELALU lewat friendlyError: banyak pemanggil mengoper `(e as Error).message`
+   * mentah, sehingga tanpa ini pengguna bisa melihat teks seperti
+   * "fetch failed: java.net.UnknownHostException: Unable to resolve host …supabase.co".
+   */
+  error: (text: string) => pushToast?.({ id: Date.now(), text: friendlyError(String(text ?? '')), type: 'error' }),
   success: (text: string) => pushToast?.({ id: Date.now(), text, type: 'success' }),
 };
 export function ToastHost() {

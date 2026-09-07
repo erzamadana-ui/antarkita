@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Switch, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { AdminPage, adminFont as font, AdminCard as Card } from '@/components/admin';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { AdminPage, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, AdminCard as Card } from '@/components/admin';
 import { Input, Button, Row, Badge, toast } from '@/components/ui';
 import { Entrance } from '@/components/motion';
 import { rpc, supabase } from '@/lib/supabase';
 import { useAppSettingsStore } from '@/hooks/useAppSettings';
-import { colors, radius } from '@/lib/theme';
+import { colors } from '@/lib/theme';
 import type { AppPublicSettings } from '@/lib/types';
 
 /** Layanan yang bisa dimatikan admin (kunci = nilai p_service di admin_set_service_enabled). */
@@ -98,7 +98,7 @@ export default function AdminSettings() {
       <Entrance index={0}>
         <Card style={{ gap: 12 }}>
           <Row between style={{ flexWrap: 'wrap', gap: 8 }}>
-            <View><Text style={font.h3}>Layanan aktif</Text><Text style={font.small}>Layanan nonaktif disembunyikan dari beranda pelanggan dan pesanan baru ditolak server. Berlaku langsung saat sakelar digeser.</Text></View>
+            <View style={{ flex: 1, minWidth: 260 }}><Text style={font.h2}>Layanan aktif</Text><Text style={font.small}>Layanan nonaktif disembunyikan dari beranda pelanggan dan pesanan baru ditolak server. Berlaku langsung saat sakelar digeser.</Text></View>
             <Badge text={`${activeCount}/${SERVICES.length} aktif`} color={activeCount === SERVICES.length ? colors.success : colors.warning} />
           </Row>
           <View style={st.grid}>
@@ -108,7 +108,7 @@ export default function AdminSettings() {
                 <View key={s.key} style={[st.service, !on && { backgroundColor: colors.bgSoft, borderColor: colors.border }]}>
                   <View style={[st.dot, { backgroundColor: on ? s.color : colors.textMuted }]} />
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={[font.body, { fontWeight: '700' }, !on && { color: colors.textSecondary }]}>{s.label}</Text>
+                    <Text style={[font.bodyStrong, !on && { color: adminTone.muted }]} numberOfLines={1}>{s.label}</Text>
                     <Text style={font.tiny} numberOfLines={1}>{on ? s.desc : 'Nonaktif — tersembunyi di beranda'}</Text>
                   </View>
                   <Switch value={on} disabled={busyService === s.key} onValueChange={(v) => toggleService(s.key, v)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />
@@ -121,7 +121,7 @@ export default function AdminSettings() {
 
       <Entrance index={1}>
         <Card style={{ gap: 12 }}>
-          <Text style={font.h3}>Batas jarak dalam kota (km)</Text>
+          <Text style={font.h2}>Batas jarak dalam kota (km)</Text>
           <Text style={font.small}>Pesanan dengan jarak di atas batas ditolak dan pelanggan diarahkan ke AntarTravel (penumpang) atau AntarSend antar kota (paket). AntarTravel tidak dibatasi.</Text>
           <View style={st.grid}>
             {LIMITED.map((s) => (
@@ -140,7 +140,7 @@ export default function AdminSettings() {
         <Card style={{ gap: 12 }}>
           <Row between style={{ flexWrap: 'wrap', gap: 8 }}>
             <View style={{ flex: 1, minWidth: 240 }}>
-              <Text style={font.h3}>Impor tempat dari peta</Text>
+              <Text style={font.h2}>Impor tempat dari peta</Text>
               <Text style={font.small}>Saat pelanggan membuka AntarShop / AntarMarket dan data toko atau pasar di sekitarnya kosong, aplikasi mengambil tempat dari OpenStreetMap dalam radius ini lalu menyimpannya (sumber "Peta"). Tinjau hasilnya di menu Data Tempat.</Text>
             </View>
             <Switch value={osm.enabled} onValueChange={(v) => saveOsm({ enabled: v })} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />
@@ -148,7 +148,7 @@ export default function AdminSettings() {
           <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <Input label="Radius impor (km)" value={osm.radius} onChangeText={(v) => setOsm((o) => ({ ...o, radius: v.replace(/[^\d.,]/g, '') }))} keyboardType="decimal-pad" containerStyle={{ width: 180 }} right={<Text style={font.tiny}>km</Text>} />
             <Button title="Simpan radius" variant="secondary" icon="save-outline" onPress={() => saveOsm({})} />
-            <Row gap={6}><Ionicons name={osm.enabled ? 'cloud-download-outline' : 'cloud-offline-outline'} size={16} color={osm.enabled ? colors.success : colors.textMuted} /><Text style={font.tiny}>{osm.enabled ? 'Impor aktif' : 'Impor nonaktif'}</Text></Row>
+            <Row gap={6}><Ionicons name={osm.enabled ? 'cloud-download-outline' : 'cloud-offline-outline'} size={adminIcon.md} color={osm.enabled ? colors.success : adminTone.faint} /><Text style={font.tiny}>{osm.enabled ? 'Impor aktif' : 'Impor nonaktif'}</Text></Row>
           </Row>
         </Card>
       </Entrance>
@@ -159,7 +159,7 @@ export default function AdminSettings() {
           <Input label="Bank" value={bank.bank} onChangeText={(v) => setBank({ ...bank, bank: v })} />
           <Input label="Nomor rekening" value={bank.number} onChangeText={(v) => setBank({ ...bank, number: v })} keyboardType="number-pad" />
           <Input label="Atas nama" value={bank.name} onChangeText={(v) => setBank({ ...bank, name: v })} />
-          <Text style={[font.h3, { marginTop: 8 }]}>Operasional</Text>
+          <Text style={[font.h2, { marginTop: 8 }]}>Operasional</Text>
           <Input label="Nomor WhatsApp CS" value={support} onChangeText={setSupport} keyboardType="phone-pad" />
           <Input label="Radius pencarian driver (km)" value={radiusKm} onChangeText={setRadiusKm} keyboardType="decimal-pad" />
           <Input label="Batas rasio rute vs garis lurus (anti-manipulasi jarak)" value={ratio} onChangeText={setRatio} keyboardType="decimal-pad" />
@@ -177,7 +177,7 @@ export default function AdminSettings() {
 }
 
 const st = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  service: { flexDirection: 'row', alignItems: 'center', gap: 10, flexGrow: 1, flexBasis: '45%', minWidth: 240, padding: 12, borderRadius: radius.md, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: adminSpace.md },
+  service: { flexDirection: 'row', alignItems: 'center', gap: 10, flexGrow: 1, flexBasis: '45%', minWidth: 240, minHeight: 56, padding: adminSpace.md, borderRadius: adminRadius.card, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border },
   dot: { width: 10, height: 10, borderRadius: 5 },
 });

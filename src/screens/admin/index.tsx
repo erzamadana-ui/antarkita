@@ -2,10 +2,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import {
   AdminPage, StatCard, MiniBars, TrendChart, CITY_COLORS, Panel, Grid, Col, Pill, EmptyState,
-  adminFont as font, adminTone, adminSpace, FilterBar, Truncate,
+  adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, FilterBar, Truncate,
 } from '@/components/admin';
 import { Row } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
@@ -151,18 +151,18 @@ export default function AdminDashboard() {
               ? <EmptyState icon="checkmark-done-outline" title="Tidak ada antrean" subtitle="Semua verifikasi, tiket, dan pencairan sudah tertangani." />
               : todo.map((t) => (
                 <Pressable key={t.key} onPress={() => router.replace(t.to as never)} style={(stt) => [rowStyle, (stt as { hovered?: boolean }).hovered && { backgroundColor: adminTone.zebra }]}>
-                  <View style={{ width: 28, height: 28, borderRadius: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: t.color + '14', borderColor: t.color + '2E' }}>
-                    <Ionicons name={t.icon} size={15} color={t.color} />
+                  <View style={{ width: 28, height: 28, borderRadius: adminRadius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: t.color + '14', borderColor: t.color + '2E' }}>
+                    <Ionicons name={t.icon} size={adminIcon.md} color={t.color} />
                   </View>
                   <Text style={[font.body, { flex: 1 }]} numberOfLines={1}>{t.label}</Text>
                   <Text style={[font.mono, { color: t.color }]}>{t.n}</Text>
-                  <Ionicons name="chevron-forward" size={15} color={adminTone.faint} />
+                  <Ionicons name="chevron-forward" size={adminIcon.md} color={adminTone.faint} />
                 </Pressable>
               ))}
           </Panel>
 
           <Panel title="Pesanan berjalan" icon="pulse-outline" iconColor={adminTone.teal} padded={false}
-            right={<Pressable onPress={() => router.replace('/(admin)/orders')}><Text style={{ color: colors.primary, fontSize: 12.5, ...fam(700) }}>Lihat semua</Text></Pressable>}>
+            right={<Pressable onPress={() => router.replace('/(admin)/orders')}><Text style={[font.small, { color: colors.primary, ...fam(700) }]}>Lihat semua</Text></Pressable>}>
             {live.length === 0
               ? <EmptyState icon="moon-outline" title="Tidak ada pesanan berjalan" />
               : live.map((o) => (
@@ -177,7 +177,7 @@ export default function AdminDashboard() {
           </Panel>
 
           <Panel title="Aktivitas terbaru" icon="time-outline" iconColor={adminTone.violet} padded={false}
-            right={<Pressable onPress={() => router.replace('/(admin)/activity')}><Text style={{ color: colors.primary, fontSize: 12.5, ...fam(700) }}>Log lengkap</Text></Pressable>}>
+            right={<Pressable onPress={() => router.replace('/(admin)/activity')}><Text style={[font.small, { color: colors.primary, ...fam(700) }]}>Log lengkap</Text></Pressable>}>
             {logs.length === 0
               ? <EmptyState icon="time-outline" title="Belum ada aktivitas" />
               : logs.map((l) => (
@@ -209,8 +209,9 @@ export default function AdminDashboard() {
   );
 }
 
+/** Baris di dalam panel dashboard — tinggi seragam seperti baris tabel. */
 const rowStyle = {
   flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10,
-  paddingHorizontal: adminSpace.lg, paddingVertical: 10,
+  paddingHorizontal: adminSpace.lg, paddingVertical: 10, minHeight: 52,
   borderBottomWidth: 1, borderBottomColor: adminTone.border,
 };

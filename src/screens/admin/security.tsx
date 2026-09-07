@@ -1,14 +1,14 @@
 // Admin · Pusat Keamanan: PIN panel, anti-fraud (ringkasan, flag, koefisien), log keamanan, daftar admin
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { AdminPage, FilterBar, StatCard, Table, ReasonPrompt, adminFont as font, AdminCard as Card, EmptyState as Empty } from '@/components/admin';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { AdminPage, FilterBar, StatCard, Table, ReasonPrompt, RowActions, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, AdminCard as Card, EmptyState as Empty } from '@/components/admin';
 import { Row, Button, Badge, Input, toast } from '@/components/ui';
 import { Entrance, Skeleton } from '@/components/motion';
 import { rpc } from '@/lib/supabase';
 import { useAdminSecurity, handleAdminError } from '@/store/adminSecurity';
 import { useAuth } from '@/store/auth';
-import { colors, radius } from '@/lib/theme';
+import { colors } from '@/lib/theme';
 import { formatDate, rupiah, roleLabelId } from '@/lib/format';
 import type { FraudFlag, SecurityEvent } from '@/lib/types';
 
@@ -112,12 +112,12 @@ export default function AdminSecurity() {
         quick={ask?.status === 'confirmed' ? ['Terbukti manipulasi order', 'Nota tidak sesuai harga pasar', 'Akun ganda / perangkat bersama'] : ['Positif palsu (sinyal GPS lemah)', 'Sudah diklarifikasi dengan mitra', 'Harga memang naik di pasar', 'Pembatalan atas permintaan pelanggan']}
         onCancel={() => setAsk(null)} onSubmit={(r) => reviewFlag(ask!.f, ask!.status, ask!.reinstate, r || undefined)} />
 
-      <Row gap={12} style={{ flexWrap: 'wrap' }}>
-        <StatCard index={0} label="Flag terbuka" value={fr?.open ?? 0} hint={`${fr?.open_high ?? 0} prioritas tinggi`} color={(fr?.open_high ?? 0) > 0 ? colors.danger : colors.warning} />
-        <StatCard index={1} label="Ditangguhkan otomatis" value={fr?.auto_suspended ?? 0} hint="menunggu peninjauan" color={colors.danger} />
-        <StatCard index={2} label="Flag 7 hari" value={fr?.last_7d ?? 0} color={colors.info} />
-        <StatCard index={3} label="Verifikasi otomatis 30 hari" value={ov?.auto_verified_30d ?? 0} color={colors.success} />
-        <StatCard index={4} label="Pencairan otomatis 30 hari" value={ov?.auto_payout_30d ?? 0} hint={`${ov?.bank_verified ?? 0} rekening terverifikasi`} color={colors.primary} />
+      <Row gap={adminSpace.lg} style={{ flexWrap: 'wrap' }}>
+        <StatCard index={0} icon="alert-circle-outline" label="Flag terbuka" value={fr?.open ?? 0} hint={`${fr?.open_high ?? 0} prioritas tinggi`} color={(fr?.open_high ?? 0) > 0 ? adminTone.red : adminTone.amber} />
+        <StatCard index={1} icon="pause-circle-outline" label="Ditangguhkan otomatis" value={fr?.auto_suspended ?? 0} hint="menunggu peninjauan" color={adminTone.red} />
+        <StatCard index={2} icon="time-outline" label="Flag 7 hari" value={fr?.last_7d ?? 0} color={adminTone.blue} />
+        <StatCard index={3} icon="shield-checkmark-outline" label="Verifikasi otomatis 30 hari" value={ov?.auto_verified_30d ?? 0} color={adminTone.green} />
+        <StatCard index={4} icon="cash-outline" label="Pencairan otomatis 30 hari" value={ov?.auto_payout_30d ?? 0} hint={`${ov?.bank_verified ?? 0} rekening terverifikasi`} color={adminTone.teal} />
       </Row>
 
       <Row gap={16} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -187,16 +187,18 @@ export default function AdminSecurity() {
               </Row>
               <Text style={[font.small, { color: colors.text }]}>{fraudDetailText(f)}</Text>
               <Row gap={12} style={{ flexWrap: 'wrap' }}>
-                <Row gap={4}><Ionicons name="person-outline" size={13} color={colors.textMuted} /><Text style={font.tiny}>{f.subject_name ?? 'Akun tidak diketahui'}{f.subject_role ? ` · ${roleLabelId[f.subject_role] ?? f.subject_role}` : ''}{f.driver_status ? ` · driver ${f.driver_status}` : ''}</Text></Row>
-                {f.order_code ? <Row gap={4}><Ionicons name="receipt-outline" size={13} color={colors.textMuted} /><Text style={font.tiny}>Order {f.order_code}</Text></Row> : null}
+                <Row gap={4}><Ionicons name="person-outline" size={adminIcon.sm} color={adminTone.faint} /><Text style={font.tiny}>{f.subject_name ?? 'Akun tidak diketahui'}{f.subject_role ? ` · ${roleLabelId[f.subject_role] ?? f.subject_role}` : ''}{f.driver_status ? ` · driver ${f.driver_status}` : ''}</Text></Row>
+                {f.order_code ? <Row gap={4}><Ionicons name="receipt-outline" size={adminIcon.sm} color={adminTone.faint} /><Text style={font.tiny}>Order {f.order_code}</Text></Row> : null}
               </Row>
               {f.review_note ? <Text style={font.tiny}>Catatan: {f.review_note}{f.reviewed_at ? ` (${formatDate(f.reviewed_at)})` : ''}</Text> : null}
               {f.status === 'open' ? (
-                <Row gap={6} style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  <Button size="sm" title="Konfirmasi" color={colors.danger} onPress={() => setAsk({ f, status: 'confirmed', reinstate: false })} />
-                  <Button size="sm" title="Abaikan" variant="outline" onPress={() => setAsk({ f, status: 'dismissed', reinstate: false })} />
-                  {f.auto_action === 'suspended' || f.driver_status === 'suspended' ? <Button size="sm" title="Abaikan & pulihkan akun" color={colors.success} icon="refresh" onPress={() => setAsk({ f, status: 'dismissed', reinstate: true })} /> : null}
-                </Row>
+                <RowActions
+                  primary={[{ key: 'ignore', label: 'Abaikan', icon: 'checkmark-done-outline', variant: 'soft' as const, onPress: () => setAsk({ f, status: 'dismissed', reinstate: false }) }]}
+                  menu={[
+                    (f.auto_action === 'suspended' || f.driver_status === 'suspended') && { key: 'restore', label: 'Abaikan & pulihkan akun', icon: 'refresh', color: colors.success, onPress: () => setAsk({ f, status: 'dismissed', reinstate: true }) },
+                    { key: 'confirm', label: 'Konfirmasi pelanggaran…', icon: 'alert-circle-outline', danger: true, onPress: () => setAsk({ f, status: 'confirmed', reinstate: false }) },
+                  ]}
+                />
               ) : null}
             </View>
           ))}
@@ -223,7 +225,7 @@ export default function AdminSecurity() {
             <Text style={font.label}>Admin & status PIN</Text>
             {(ov?.admins ?? []).map((a) => (
               <Row key={a.id} between style={{ gap: 8 }}>
-                <Text style={[font.small, { color: colors.text, fontWeight: '700', flex: 1 }]} numberOfLines={1}>{a.name}</Text>
+                <Text style={[font.h3, { flex: 1 }]} numberOfLines={1}>{a.name}</Text>
                 <Badge text={!a.has_pin ? 'Tanpa PIN' : a.unlocked ? 'Sesi terbuka' : 'Terkunci'} color={!a.has_pin ? colors.warning : a.unlocked ? colors.success : colors.textMuted} />
                 {a.has_pin && a.id !== myId ? <Button title="Reset PIN" size="sm" variant="outline" color={colors.danger} onPress={() => resetPin(a.id, a.name)} /> : null}
               </Row>
@@ -240,9 +242,9 @@ export default function AdminSecurity() {
   );
 }
 
-function KV({ k, v }: { k: string; v: string }) { return <Row between style={{ gap: 12 }}><Text style={font.small}>{k}</Text><Text style={{ fontWeight: '800', color: colors.text, fontSize: 13 }}>{v}</Text></Row>; }
+function KV({ k, v }: { k: string; v: string }) { return <Row between style={{ gap: 12 }}><Text style={[font.small, { flex: 1 }]}>{k}</Text><Text style={font.mono}>{v}</Text></Row>; }
 
 const st = StyleSheet.create({
-  sep: { height: 1, backgroundColor: colors.border, marginVertical: 2 },
-  flag: { gap: 6, padding: 12, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgSoft },
+  sep: { height: 1, backgroundColor: adminTone.border, marginVertical: 2 },
+  flag: { gap: 6, padding: adminSpace.md, borderRadius: adminRadius.card, borderWidth: 1, borderColor: adminTone.border, backgroundColor: adminTone.surfaceAlt },
 });

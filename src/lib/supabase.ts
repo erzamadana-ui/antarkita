@@ -38,20 +38,35 @@ export async function rpc<T = unknown>(fn: string, params?: Record<string, unkno
   return data as T;
 }
 
+/**
+ * Semua ragam kegagalan jaringan dari Android (java.net.UnknownHostException / SocketTimeoutException),
+ * iOS ("The Internet connection appears to be offline"), browser ("Failed to fetch", "Load failed"),
+ * dan Node/undici ("fetch failed", ENOTFOUND, EAI_AGAIN) dijadikan SATU pesan Indonesia.
+ * Dipakai juga oleh toast.error() (src/components/ui) agar tidak ada pesan mentah yang bocor ke layar.
+ */
+const NETWORK_RE = /UnknownHostException|Unable to resolve host|SocketTimeoutException|SocketException|ConnectException|Network request failed|Failed to fetch|NetworkError|ERR_INTERNET_DISCONNECTED|ERR_NAME_NOT_RESOLVED|ERR_NETWORK|ERR_CONNECTION|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|fetch failed|Load failed|network ?error|connection appears to be offline|socket hang up|AbortError|The request timed out|timed out|Gateway ?Time-?out/i;
+
+/** Pesan tunggal untuk semua kondisi tanpa internet. */
+export const OFFLINE_TEXT = 'Tidak ada koneksi internet. Periksa jaringan lalu coba lagi.';
+
 export function friendlyError(msg: string): string {
   if (!msg) return 'Terjadi kesalahan';
+  // Jaringan diperiksa PALING AWAL: saat offline, pesan apa pun dari server tidak relevan.
+  if (NETWORK_RE.test(msg)) return OFFLINE_TEXT;
   if (msg.includes('Invalid login credentials')) return 'Email atau kata sandi salah';
   if (msg.includes('User already registered')) return 'Email sudah terdaftar, silakan masuk';
   if (msg.includes('Password should be')) return 'Kata sandi minimal 6 karakter';
   if (msg.includes('Email not confirmed')) return 'Email belum dikonfirmasi';
-  if (msg.includes('Failed to fetch') || msg.includes('Network request failed')) return 'Tidak bisa terhubung ke server. Periksa koneksi internet.';
   if (msg.includes('JWT expired')) return 'Sesi berakhir, silakan masuk kembali';
   if (/rate limit|only request this after|over_email_send_rate_limit/i.test(msg)) return 'Terlalu sering meminta email. Tunggu beberapa menit lalu coba lagi.';
   if (/same password|different from the old/i.test(msg)) return 'Kata sandi baru harus berbeda dari kata sandi lama';
   if (/Token has expired|otp_expired|is invalid or has expired/i.test(msg)) return 'Kode/tautan sudah kedaluwarsa atau tidak valid. Minta tautan baru.';
   if (/Auth session missing/i.test(msg)) return 'Sesi pemulihan tidak ditemukan. Buka tautan dari email sekali lagi.';
   if (/Unable to validate email|invalid format/i.test(msg)) return 'Format email tidak valid';
-  return msg.replace(/^.*?:\s*/, (m) => (m.length > 40 ? '' : m));
+  if (/row-level security|violates row-level|permission denied|not authorized/i.test(msg)) return 'Anda tidak punya akses untuk tindakan ini';
+  // Buang jejak teknis (nama kelas Java, prefix "Error:", stack) sebelum ditampilkan.
+  const cleaned = msg.replace(/^(Error|TypeError|FetchError):\s*/i, '').replace(/\b(java|com|org|kotlin)\.[\w.$]+\b/g, '').trim();
+  return cleaned.replace(/^.*?:\s*/, (m) => (m.length > 40 ? '' : m)) || 'Terjadi kesalahan';
 }
 
 /**

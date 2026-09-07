@@ -2,10 +2,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { AdminPage, Table, StatCard, adminFont as font, AdminCard as Card } from '@/components/admin';
+import { AdminPage, Table, StatCard, adminFont as font, adminTone, adminSpace, adminRadius, AdminCard as Card } from '@/components/admin';
 import { Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
-import { colors, radius } from '@/lib/theme';
+import { colors } from '@/lib/theme';
 import { rupiah, formatDate } from '@/lib/format';
 import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import type { GatewayStatus } from '@/lib/types';
@@ -75,12 +75,12 @@ export default function AdminGateway() {
   const stats = st?.stats;
   return (
     <AdminPage title="Payment Gateway · Midtrans" subtitle="Top up AntarPay lewat GoPay, ShopeePay, QRIS, VA bank & kartu. Tanpa server key, top up berjalan dalam mode simulasi." onRefresh={load}>
-      <Row gap={12} style={{ flexWrap: 'wrap' }}>
-        <StatCard index={0} label="Total transaksi" value={stats?.total ?? 0} hint={`${stats?.last_7d ?? 0} dalam 7 hari · ${stats?.simulated ?? 0} simulasi`} color={colors.info} />
-        <StatCard index={1} label="Berhasil (settlement)" value={stats?.settlement ?? 0} color={colors.success} />
-        <StatCard index={2} label="Menunggu" value={stats?.pending ?? 0} color={colors.warning} />
-        <StatCard index={3} label="Gagal / batal" value={stats?.failed ?? 0} color={colors.danger} />
-        <StatCard index={4} label="Nominal berhasil" value={rupiah(stats?.amount_settled ?? 0)} color={colors.accent} />
+      <Row gap={adminSpace.lg} style={{ flexWrap: 'wrap' }}>
+        <StatCard index={0} icon="card-outline" label="Total transaksi" value={stats?.total ?? 0} hint={`${stats?.last_7d ?? 0} dalam 7 hari · ${stats?.simulated ?? 0} simulasi`} color={adminTone.blue} />
+        <StatCard index={1} icon="checkmark-circle-outline" label="Berhasil (settlement)" value={stats?.settlement ?? 0} color={adminTone.green} />
+        <StatCard index={2} icon="hourglass-outline" label="Menunggu" value={stats?.pending ?? 0} color={adminTone.amber} />
+        <StatCard index={3} icon="close-circle-outline" label="Gagal / batal" value={stats?.failed ?? 0} color={adminTone.red} />
+        <StatCard index={4} icon="cash-outline" label="Nominal berhasil" value={rupiah(stats?.amount_settled ?? 0)} color={adminTone.teal} />
       </Row>
 
       <Row gap={16} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -95,12 +95,12 @@ export default function AdminGateway() {
             ['Batas top up', st ? `${rupiah(st.topup_min)} - ${rupiah(st.topup_max)}` : '-'],
             ['Diperbarui', st?.updated_at ? `${formatDate(st.updated_at)}${st.updated_by ? ` oleh ${st.updated_by}` : ''}` : '-'],
             ['Webhook terakhir', st?.last_webhook_at ? formatDate(String(st.last_webhook_at).replace(/"/g, '')) : 'Belum pernah diterima'],
-          ].map(([k, v]) => <Row key={k} between style={{ gap: 12 }}><Text style={font.tiny}>{k}</Text><Text style={[font.small, { color: colors.text, flex: 1, textAlign: 'right' }]} numberOfLines={2}>{v}</Text></Row>)}
+          ].map(([k, v]) => <Row key={k} between style={{ gap: 12 }}><Text style={font.tiny}>{k}</Text><Text style={[font.small, { color: adminTone.ink, flex: 1, textAlign: 'right' }]} numberOfLines={2}>{v}</Text></Row>)}
           <Button title="Uji koneksi ke Midtrans" variant="outline" icon="pulse-outline" loading={testing} onPress={testConn} />
           {test ? <View style={[s.note, { backgroundColor: (test.ok ? colors.success : colors.danger) + '14', borderColor: (test.ok ? colors.success : colors.danger) + '50' }]}><Text style={[font.small, { color: test.ok ? colors.success : colors.danger }]}>{test.text}</Text></View> : null}
           <View style={{ gap: 6 }}>
             <Text style={font.label}>URL webhook (Payment Notification URL)</Text>
-            <View style={s.code}><Text selectable style={{ fontSize: 12, color: colors.text, fontFamily: 'monospace' }}>{WEBHOOK_URL}</Text></View>
+            <View style={s.code}><Text selectable style={s.codeText}>{WEBHOOK_URL}</Text></View>
             <Button size="sm" title="Salin URL webhook" icon="copy-outline" variant="secondary" onPress={copyWebhook} />
           </View>
         </Card>
@@ -125,7 +125,7 @@ export default function AdminGateway() {
         <Text style={font.label}>Checklist pengajuan Midtrans</Text>
         {CHECKLIST.map((c, i) => (
           <Row key={i} gap={10} style={{ alignItems: 'flex-start' }}>
-            <View style={s.step}><Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>{i + 1}</Text></View>
+            <View style={s.step}><Text style={s.stepText}>{i + 1}</Text></View>
             <Text style={[font.body, { flex: 1 }]}>{c}</Text>
           </Row>
         ))}
@@ -139,7 +139,7 @@ export default function AdminGateway() {
           { key: 'user', label: 'Pengguna', width: 150, render: (r) => <Text style={font.small}>{String(r.user ?? '-')}</Text> },
           { key: 'purpose', label: 'Tujuan', width: 90, render: (r) => <Text style={font.small}>{r.purpose === 'topup' ? 'Top up' : 'Pesanan'}</Text> },
           { key: 'method', label: 'Metode', width: 130, render: (r) => <Text style={font.small}>{String(r.method)} · {String(r.provider)}</Text> },
-          { key: 'amount', label: 'Nominal', width: 110, render: (r) => <Text style={{ fontWeight: '700', color: colors.text }}>{rupiah(Number(r.amount))}</Text> },
+          { key: 'amount', label: 'Nominal', width: 120, align: 'right', mono: true, render: (r) => <Text style={font.mono}>{rupiah(Number(r.amount))}</Text> },
           { key: 'status', label: 'Status', width: 110, render: (r) => <Badge text={STATUS_LABEL[String(r.status)] ?? String(r.status)} color={STATUS_COLOR[String(r.status)] ?? colors.textMuted} /> },
         ]} />
       </Card>
@@ -148,7 +148,9 @@ export default function AdminGateway() {
 }
 
 const s = StyleSheet.create({
-  note: { borderWidth: 1, borderRadius: radius.md, padding: 10 },
-  code: { backgroundColor: 'rgba(11,31,42,0.05)', borderRadius: radius.md, padding: 10, borderWidth: 1, borderColor: 'rgba(11,31,42,0.08)' },
-  step: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  note: { borderWidth: 1, borderRadius: adminRadius.card, padding: adminSpace.md },
+  code: { backgroundColor: adminTone.surfaceAlt, borderRadius: adminRadius.card, padding: adminSpace.md, borderWidth: 1, borderColor: adminTone.border },
+  codeText: { fontSize: 12, lineHeight: 17, color: adminTone.ink, fontFamily: 'monospace' },
+  step: { width: 24, height: 24, borderRadius: adminRadius.chip, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  stepText: { color: '#fff', fontWeight: '700', fontSize: 12, lineHeight: 16 },
 });
