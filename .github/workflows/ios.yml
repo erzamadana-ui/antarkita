@@ -1,0 +1,277 @@
+name: iOS (verifikasi konfigurasi + build EAS opsional)
+
+# ============================================================================================
+# KEJUJURAN SOAL BIAYA — BACA SEBELUM MENGUBAH BERKAS INI
+#
+# Membangun berkas .ipa untuk App Store WAJIB memakai Xcode, dan Xcode HANYA jalan di macOS.
+# Ada dua jalan, keduanya berbayar:
+#
+#   1) Runner macOS GitHub Actions  — 0,062 USD/menit (≈10x runner Linux), dan menit macOS
+#      TIDAK termasuk kuota gratis paket GitHub mana pun. Satu build Expo iOS bersih
+#      (pod install + kompilasi Hermes + arsip) realistis 25–45 menit → ±1,5–2,8 USD per build,
+#      per aplikasi. Dua aplikasi × beberapa percobaan/hari mudah menembus 20 USD/hari.
+#      Di ATAS itu masih perlu impor sertifikat penandatanganan Apple ke runner (fastlane match
+#      atau berkas .p12 sebagai secret) — pekerjaan tambahan yang gampang salah.
+#
+#   2) EAS Build (Expo)             — paket Gratis memberi 15 build iOS/bulan tanpa biaya, dan
+#      EAS mengurus sertifikat + provisioning profile secara otomatis. Untuk proyek ini itu
+#      JELAS lebih murah dan lebih sedikit yang bisa salah. Paket berbayar mulai 19 USD/bulan
+#      (Starter) bila kuota gratis habis.
+#
+# Karena itu berkas ini SENGAJA TIDAK memuat job `runs-on: macos-*`. Membuat job macOS yang
+# tidak punya sertifikat Apple = job yang dijamin gagal setiap kali dijalankan, dan tetap
+# menagih menit macOS. Yang ada di sini:
+#
+#   Job "verifikasi"  — GRATIS, jalan di ubuntu-latest, otomatis pada setiap push.
+#                       `expo prebuild -p ios` BISA dijalankan di Linux (yang tidak bisa hanya
+#                       kompilasinya). Job ini membongkar Info.plist + PrivacyInfo.xcprivacy
+#                       hasil prebuild dan MENGGAGALKAN build bila konfigurasi iOS melenceng
+#                       dari yang sudah diverifikasi — mis. pembaruan plugin Expo diam-diam
+#                       menyisipkan kembali teks izin generik berbahasa Inggris atau izin
+#                       lokasi "Always" yang tidak dipakai (dua penyebab penolakan App Review).
+#
+#   Job "eas-build"   — MANUAL saja (workflow_dispatch) dan hanya jalan bila secret EXPO_TOKEN
+#                       sudah diisi. Selama pemilik belum punya akun Apple + Expo, job ini
+#                       melewati diri sendiri dengan pesan jelas, bukan gagal merah.
+#
+# Rujukan biaya (diakses 9 September 2026):
+#   https://docs.github.com/en/billing/managing-billing-for-your-products/about-billing-for-github-actions
+#   https://expo.dev/pricing
+# ============================================================================================
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app.config.ts'
+      - 'eas.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ios.yml'
+  pull_request:
+    paths:
+      - 'app.config.ts'
+      - 'eas.json'
+      - 'package.json'
+  workflow_dispatch:
+    inputs:
+      eas_build:
+        description: 'Jalankan EAS Build iOS (butuh secret EXPO_TOKEN + akun Apple Developer aktif). Biarkan false untuk hanya memverifikasi konfigurasi.'
+        type: boolean
+        default: false
+      profil:
+        description: 'Profil eas.json yang dipakai bila eas_build = true.'
+        type: choice
+        default: production
+        options: [production, preview, development]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # --------------------------------------------------------------------------------------
+  # GRATIS. Membuktikan konfigurasi iOS masih benar, tanpa satu menit macOS pun.
+  # --------------------------------------------------------------------------------------
+  verifikasi:
+    name: Verifikasi konfigurasi iOS (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [pelanggan, mitra]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Prebuild proyek iOS (Expo) — aplikasi ${{ matrix.app }}
+        env:
+          APP: ${{ matrix.app }}
+          EXPO_PUBLIC_APP: ${{ matrix.app }}
+          IOS_BUILD_NUMBER: ${{ github.run_number }}
+          EXPO_NO_TELEMETRY: 1
+          CI: 1
+        run: npx expo prebuild --platform ios --no-install
+
+      # Inti job ini. Bukan "prebuild-nya jalan" (itu mudah), tapi "hasilnya masih memenuhi
+      # syarat App Store". Tiap pemeriksaan di bawah punya alasan penolakan yang konkret.
+      - name: Periksa Info.plist & PrivacyInfo.xcprivacy terhadap syarat App Store
+        env:
+          APP: ${{ matrix.app }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          python3 - <<'PY'
+          import glob, os, plistlib, sys
+
+          app = os.environ['APP']
+          run_number = os.environ.get('RUN_NUMBER', '')
+          gagal, catatan = [], []
+
+          info_path = glob.glob('ios/*/Info.plist')[0]
+          info = plistlib.load(open(info_path, 'rb'))
+          print(f'Info.plist  : {info_path}')
+
+          # -- 1. Bundle identifier harus sesuai aplikasi ------------------------------------
+          diharapkan_id = {'pelanggan': 'id.antarkita.app', 'mitra': 'id.antarkita.mitra'}[app]
+          pbx = open(glob.glob('ios/*.xcodeproj/project.pbxproj')[0]).read()
+          if f'PRODUCT_BUNDLE_IDENTIFIER = "{diharapkan_id}"' not in pbx:
+              gagal.append(f'bundleIdentifier bukan {diharapkan_id}')
+
+          # -- 2. Teks izin: ADA, berbahasa Indonesia, dan TIDAK generik ---------------------
+          # Apple menolak purpose string generik (Guideline 5.1.1). Teks bawaan plugin Expo
+          # berbentuk "Allow $(PRODUCT_NAME) to ..." — itu justru contoh teks generik.
+          wajib = [
+              'NSLocationWhenInUseUsageDescription',
+              'NSCameraUsageDescription',
+              'NSPhotoLibraryUsageDescription',
+              'NSMicrophoneUsageDescription',
+          ]
+          for k in wajib:
+              teks = info.get(k)
+              if not teks:
+                  gagal.append(f'{k} HILANG dari Info.plist')
+                  continue
+              if 'Allow $(PRODUCT_NAME)' in teks or teks.strip().startswith('Allow '):
+                  gagal.append(f'{k} memakai teks bawaan berbahasa Inggris: {teks!r}')
+              elif len(teks) < 60:
+                  gagal.append(f'{k} terlalu pendek/umum ({len(teks)} karakter): {teks!r}')
+              else:
+                  catatan.append(f'OK  {k} ({len(teks)} karakter)')
+
+          # -- 3. Izin yang TIDAK BOLEH ada -------------------------------------------------
+          # Aplikasi ini foreground-only (src/hooks/useLocation.ts) dan tidak memakai Face ID,
+          # gerak, maupun pelacakan iklan. Kunci-kunci ini pernah disisipkan otomatis oleh
+          # plugin expo-location & expo-secure-store; app.config.ts mematikannya dengan `false`.
+          # Kalau salah satu muncul lagi setelah upgrade SDK, build ini HARUS gagal.
+          terlarang = {
+              'NSLocationAlwaysAndWhenInUseUsageDescription': 'lokasi latar belakang tidak dipakai aplikasi ini',
+              'NSLocationAlwaysUsageDescription': 'lokasi latar belakang tidak dipakai aplikasi ini',
+              'NSMotionUsageDescription': 'sensor gerak tidak dipakai aplikasi ini',
+              'NSFaceIDUsageDescription': 'Face ID tidak dipakai (SecureStore tanpa requireAuthentication)',
+              'NSUserTrackingUsageDescription': 'aplikasi tidak melakukan tracking (ATT tidak dipicu)',
+              'NSBluetoothAlwaysUsageDescription': 'Bluetooth tidak dipakai',
+              'NSContactsUsageDescription': 'kontak telepon tidak dibaca',
+          }
+          for k, alasan in terlarang.items():
+              if k in info:
+                  gagal.append(f'{k} MUNCUL KEMBALI di Info.plist — {alasan}')
+
+          if info.get('UIBackgroundModes'):
+              gagal.append(f'UIBackgroundModes terisi {info["UIBackgroundModes"]!r} — rilis ini tidak memakai mode latar apa pun')
+
+          # -- 4. Export compliance ----------------------------------------------------------
+          # Tanpa ini setiap build tertahan "Missing Compliance" di App Store Connect.
+          if info.get('ITSAppUsesNonExemptEncryption') is not False:
+              gagal.append('ITSAppUsesNonExemptEncryption bukan false')
+
+          # -- 5. Nomor build harus ikut naik ------------------------------------------------
+          # Apple menolak CFBundleVersion yang berulang pada CFBundleShortVersionString yang sama.
+          if run_number and info.get('CFBundleVersion') != run_number:
+              gagal.append(f'CFBundleVersion {info.get("CFBundleVersion")!r} != IOS_BUILD_NUMBER {run_number!r}')
+
+          # -- 6. Privacy manifest (wajib App Store Connect sejak 1 Mei 2024) ----------------
+          priv_paths = glob.glob('ios/*/PrivacyInfo.xcprivacy')
+          if not priv_paths:
+              gagal.append('PrivacyInfo.xcprivacy TIDAK dihasilkan — App Store Connect akan menolak unggahan')
+          else:
+              priv = plistlib.load(open(priv_paths[0], 'rb'))
+              print(f'PrivacyInfo : {priv_paths[0]}')
+              kategori = {d.get('NSPrivacyAccessedAPIType') for d in priv.get('NSPrivacyAccessedAPITypes', [])}
+              for k in ('NSPrivacyAccessedAPICategoryFileTimestamp',
+                        'NSPrivacyAccessedAPICategoryUserDefaults',
+                        'NSPrivacyAccessedAPICategoryDiskSpace'):
+                  if k not in kategori:
+                      gagal.append(f'PrivacyInfo.xcprivacy kehilangan kategori {k}')
+              if priv.get('NSPrivacyTracking') is not False:
+                  gagal.append('NSPrivacyTracking bukan false')
+              # Berkas HARUS ikut masuk target Xcode, kalau tidak ia tidak terbundel ke .ipa.
+              if 'PrivacyInfo.xcprivacy' not in pbx:
+                  gagal.append('PrivacyInfo.xcprivacy tidak terdaftar di project.pbxproj (tidak akan ikut ke .ipa)')
+
+          print()
+          for c in catatan:
+              print(' ', c)
+          print()
+          if gagal:
+              print('GAGAL — konfigurasi iOS tidak memenuhi syarat App Store:')
+              for g in gagal:
+                  print('  ✗', g)
+              sys.exit(1)
+          print('✔ Konfigurasi iOS aplikasi', app, 'memenuhi semua pemeriksaan.')
+          PY
+
+      - name: Ringkasan
+        if: always()
+        run: |
+          echo "| iOS ${{ matrix.app }} | prebuild + pemeriksaan Info.plist/PrivacyInfo | ${{ job.status }} |" >> "$GITHUB_STEP_SUMMARY"
+
+  # --------------------------------------------------------------------------------------
+  # MANUAL & OPSIONAL. Melewati diri sendiri (bukan gagal) selama EXPO_TOKEN belum ada.
+  # --------------------------------------------------------------------------------------
+  eas-build:
+    name: EAS Build iOS (manual, butuh akun)
+    if: github.event_name == 'workflow_dispatch' && inputs.eas_build
+    runs-on: ubuntu-latest
+    needs: verifikasi
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [pelanggan, mitra]
+    steps:
+      - name: Cek ketersediaan kredensial
+        id: cek
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "siap=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### EAS Build iOS dilewati"
+              echo ""
+              echo "Secret \`EXPO_TOKEN\` belum diisi, jadi tidak ada build yang dijalankan (dan tidak ada biaya)."
+              echo ""
+              echo "Untuk mengaktifkannya: expo.dev → Account settings → Access tokens → buat token,"
+              echo "lalu simpan di GitHub → Settings → Secrets and variables → Actions → \`EXPO_TOKEN\`."
+              echo "Akun Apple Developer aktif juga harus sudah ada — lihat docs/rilis/RUNBOOK-LISTING-IOS.md."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "siap=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.cek.outputs.siap == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.cek.outputs.siap == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - name: Pasang EAS CLI
+        if: steps.cek.outputs.siap == 'true'
+        run: npm install -g eas-cli
+      - run: npm ci
+        if: steps.cek.outputs.siap == 'true'
+
+      # --no-wait: pekerjaan diantre di server Expo dan job ini selesai. Kalau menunggu,
+      # menit runner Linux terbakar percuma selama antrean EAS (bisa puluhan menit).
+      # Pantau hasilnya di https://expo.dev → Projects → Builds.
+      - name: eas build --platform ios
+        if: steps.cek.outputs.siap == 'true'
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_NO_TELEMETRY: 1
+        run: |
+          eas build \
+            --platform ios \
+            --profile "${{ inputs.profil }}-${{ matrix.app }}" \
+            --non-interactive \
+            --no-wait

@@ -21,7 +21,7 @@ import { usePayPrefs } from '@/store/payprefs';
 import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
-import { getRoute, reverseGeocode, haversineKm, type RouteResult } from '@/lib/geo';
+import { getRoute, reverseGeocode, haversineKm, finalizeRoute, type RouteResult } from '@/lib/geo';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors, font, radius, motion, glass } from '@/lib/theme';
 import { rupiah, km, minutes } from '@/lib/format';
@@ -150,10 +150,15 @@ export default function SendScreen() {
     if (!valid || !pickup) return;
     setOrdering(true);
     try {
+      // Hemat §5.3: rute sungguhan (GEOMETRI saja) baru diambil DI SINI. Jarak/durasi
+      // tetap angka pratinjau yang menjadi dasar harga yang ditampilkan.
+      const fin = legDrop
+        ? await finalizeRoute(pickup, legDrop, route)
+        : { route_km: route?.distance_km ?? null, duration_min: route?.duration_min ?? null, coords: route?.coords ?? null };
       const o = await rpc<Order>('create_order', { p: {
         service: 'send', pickup: { lat: pickup.lat, lng: pickup.lng, address: pickup.address },
         dropoff: scope === 'in_city' ? { lat: dropoff!.lat, lng: dropoff!.lng, address: dropoff!.address } : { lat: legDrop!.lat, lng: legDrop!.lng, address: legDrop!.address },
-        route_km: route?.distance_km, duration_min: route?.duration_min, route_geometry: route?.coords, payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null, notes: notes || null,
+        route_km: fin.route_km, duration_min: fin.duration_min, route_geometry: fin.coords, payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null, notes: notes || null,
         recipient_name: recipient.name.trim(), recipient_phone: recipient.phone.trim(),
         package_details: { type, weight: `${fmtNum(wKg)} kg`, description: desc, dest_address: scope === 'intercity' ? (travelPicked ? destAddress.trim() : `${destWh?.name} · ${destCity?.name}`) : undefined },
         send_scope: scope, dest_city_id: destCity?.id ?? null, warehouse_id: destWh?.id ?? null,

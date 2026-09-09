@@ -13,7 +13,7 @@ import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
-import { getRoute, reverseGeocode, type RouteResult } from '@/lib/geo';
+import { getRoute, reverseGeocode, finalizeRoute, type RouteResult } from '@/lib/geo';
 import { importOsmPlaces } from '@/lib/osm';
 import { rpc, friendlyError } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
@@ -167,9 +167,14 @@ export default function ShopScreen() {
   const driverCode = useAntarNowCode('shop');
   const order = async () => {
     if (!dropoff || !est) return;
+    // Hemat §5.3: rute sungguhan (GEOMETRI saja) baru diambil DI SINI. Jarak/durasi
+    // tetap angka pratinjau yang menjadi dasar harga yang ditampilkan.
+    const fin = origin
+      ? await finalizeRoute(origin, dropoff, route)
+      : { route_km: route?.distance_km ?? null, duration_min: route?.duration_min ?? null, coords: route?.coords ?? null };
     const base = {
       service: 'shop', dropoff: { lat: dropoff.lat, lng: dropoff.lng, address: dropoff.address },
-      route_km: route?.distance_km, duration_min: route?.duration_min, route_geometry: route?.coords,
+      route_km: fin.route_km, duration_min: fin.duration_min, route_geometry: fin.coords,
       payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null, notes: notes || null, shop_vehicle: vehicle, driver_code: driverCode,
     };
     let p: Record<string, unknown>;

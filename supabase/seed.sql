@@ -110,25 +110,25 @@ where not exists (select 1 from competitor_prices);
 -- Tahap 4: label halal demo (klaim + 2 terverifikasi)
 update merchants set is_halal = true where name not ilike '%kopi%';
 update merchants set halal_verified = true where id in ('b0000000-0000-4000-8000-000000000001','b0000000-0000-4000-8000-000000000002');
-update promos set image_url = 'https://erzamadana-ui.github.io/antar-aja/promos/' || code || '.jpg', sort_order = case code when 'ANTARBARU' then 1 when 'MAKANENAK' then 2 else 3 end where code in ('ANTARBARU','MAKANENAK','HEMAT5');
+update promos set image_url = 'https://erzamadana-ui.github.io/antarkita/promos/' || code || '.jpg', sort_order = case code when 'ANTARBARU' then 1 when 'MAKANENAK' then 2 else 3 end where code in ('ANTARBARU','MAKANENAK','HEMAT5');
 insert into promos (code, title, description, discount_type, value, max_discount, min_total, service, quota, is_active, image_url, sort_order) values
-('RIDEHEMAT', 'Ride Hemat 15%', 'AntarRide · s.d. Rp5.000 · min. Rp15.000', 'percent', 15, 5000, 15000, 'ride_motor', 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/RIDEHEMAT.jpg', 4),
-('CARKELUARGA', 'AntarCar Diskon Rp10.000', 'Kelas Standar & Premium · min. Rp40.000', 'fixed', 10000, null, 40000, 'ride_car', 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/CARKELUARGA.jpg', 5),
-('LISTRIKHIJAU', 'Naik Mobil Listrik Hemat 20%', 'AntarCar Listrik · s.d. Rp15.000', 'percent', 20, 15000, 30000, 'ride_car', 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/LISTRIKHIJAU.jpg', 6),
-('SENDKILAT', 'Ongkir Kirim Rp3.000', 'AntarSend dalam kota · min. Rp12.000', 'fixed', 3000, null, 12000, 'send', 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/SENDKILAT.jpg', 7),
-('ANTARKOTA', 'Antar Kota Hemat Rp15.000', 'AntarSend antar kota via gudang mitra', 'fixed', 15000, null, 50000, 'send', 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/ANTARKOTA.jpg', 8),
-('PINDAHAN', 'Pindahan Hemat Rp50.000', 'AntarBox mobil box + pembantu · min. Rp300.000', 'fixed', 50000, null, 300000, 'box', 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/PINDAHAN.jpg', 9),
-('PICKUPHEMAT', 'Pick Up Diskon 10%', 'AntarBox pick up · s.d. Rp30.000', 'percent', 10, 30000, 80000, 'box', 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/PICKUPHEMAT.jpg', 10),
-('TRAVELPAGI', 'Travel Pagi Hemat Rp20.000', 'AntarTravel keberangkatan 05.00–09.00', 'fixed', 20000, null, 120000, 'ride_car', 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/TRAVELPAGI.jpg', 11),
-('BELANJAHEMAT', 'Ongkir Belanja Rp5.000', 'AntarShop Alfamart/Indomaret · min. Rp50.000', 'fixed', 5000, null, 50000, 'shop', 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/BELANJAHEMAT.jpg', 12),
-('SARAPAN', 'Sarapan Diskon 25%', 'AntarFood 06.00–10.00 · s.d. Rp12.000', 'percent', 25, 12000, 25000, 'food', 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/SARAPAN.jpg', 13),
-('MAKANSIANG', 'Makan Siang Rp8.000 Off', 'AntarFood 11.00–14.00 · min. Rp30.000', 'fixed', 8000, null, 30000, 'food', 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/MAKANSIANG.jpg', 14),
-('NGOPI', 'Ngopi Diskon 30%', 'Kopi & minuman · s.d. Rp10.000', 'percent', 30, 10000, 20000, 'food', 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/NGOPI.jpg', 15),
-('HALALFEST', 'Halal Fest 20%', 'Merchant halal terverifikasi · s.d. Rp15.000', 'percent', 20, 15000, 35000, 'food', 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/HALALFEST.jpg', 16),
-('WEEKEND', 'Weekend Hemat 15%', 'Semua layanan Sabtu–Minggu · s.d. Rp10.000', 'percent', 15, 10000, 20000, null, 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/WEEKEND.jpg', 17),
-('GAJIAN', 'Gajian Diskon Rp20.000', 'Tanggal 25–31 · min. Rp100.000', 'fixed', 20000, null, 100000, null, 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/GAJIAN.jpg', 18),
-('TOPUP50', 'Top Up Bonus 5%', 'Top up AntarPay via e-wallet · s.d. Rp25.000', 'percent', 5, 25000, 100000, null, 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/TOPUP50.jpg', 19),
-('AJAKTEMAN', 'Ajak Teman Rp15.000', 'Teman baru pakai kode ini, kamu dapat bonus', 'fixed', 15000, null, 20000, null, 500, true, 'https://erzamadana-ui.github.io/antar-aja/promos/AJAKTEMAN.jpg', 20)
+('RIDEHEMAT', 'Ride Hemat 15%', 'AntarRide · s.d. Rp5.000 · min. Rp15.000', 'percent', 15, 5000, 15000, 'ride_motor', 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/RIDEHEMAT.jpg', 4),
+('CARKELUARGA', 'AntarCar Diskon Rp10.000', 'Kelas Standar & Premium · min. Rp40.000', 'fixed', 10000, null, 40000, 'ride_car', 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/CARKELUARGA.jpg', 5),
+('LISTRIKHIJAU', 'Naik Mobil Listrik Hemat 20%', 'AntarCar Listrik · s.d. Rp15.000', 'percent', 20, 15000, 30000, 'ride_car', 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/LISTRIKHIJAU.jpg', 6),
+('SENDKILAT', 'Ongkir Kirim Rp3.000', 'AntarSend dalam kota · min. Rp12.000', 'fixed', 3000, null, 12000, 'send', 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/SENDKILAT.jpg', 7),
+('ANTARKOTA', 'Antar Kota Hemat Rp15.000', 'AntarSend antar kota via gudang mitra', 'fixed', 15000, null, 50000, 'send', 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/ANTARKOTA.jpg', 8),
+('PINDAHAN', 'Pindahan Hemat Rp50.000', 'AntarBox mobil box + pembantu · min. Rp300.000', 'fixed', 50000, null, 300000, 'box', 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/PINDAHAN.jpg', 9),
+('PICKUPHEMAT', 'Pick Up Diskon 10%', 'AntarBox pick up · s.d. Rp30.000', 'percent', 10, 30000, 80000, 'box', 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/PICKUPHEMAT.jpg', 10),
+('TRAVELPAGI', 'Travel Pagi Hemat Rp20.000', 'AntarTravel keberangkatan 05.00–09.00', 'fixed', 20000, null, 120000, 'ride_car', 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/TRAVELPAGI.jpg', 11),
+('BELANJAHEMAT', 'Ongkir Belanja Rp5.000', 'AntarShop Alfamart/Indomaret · min. Rp50.000', 'fixed', 5000, null, 50000, 'shop', 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/BELANJAHEMAT.jpg', 12),
+('SARAPAN', 'Sarapan Diskon 25%', 'AntarFood 06.00–10.00 · s.d. Rp12.000', 'percent', 25, 12000, 25000, 'food', 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/SARAPAN.jpg', 13),
+('MAKANSIANG', 'Makan Siang Rp8.000 Off', 'AntarFood 11.00–14.00 · min. Rp30.000', 'fixed', 8000, null, 30000, 'food', 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/MAKANSIANG.jpg', 14),
+('NGOPI', 'Ngopi Diskon 30%', 'Kopi & minuman · s.d. Rp10.000', 'percent', 30, 10000, 20000, 'food', 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/NGOPI.jpg', 15),
+('HALALFEST', 'Halal Fest 20%', 'Merchant halal terverifikasi · s.d. Rp15.000', 'percent', 20, 15000, 35000, 'food', 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/HALALFEST.jpg', 16),
+('WEEKEND', 'Weekend Hemat 15%', 'Semua layanan Sabtu–Minggu · s.d. Rp10.000', 'percent', 15, 10000, 20000, null, 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/WEEKEND.jpg', 17),
+('GAJIAN', 'Gajian Diskon Rp20.000', 'Tanggal 25–31 · min. Rp100.000', 'fixed', 20000, null, 100000, null, 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/GAJIAN.jpg', 18),
+('TOPUP50', 'Top Up Bonus 5%', 'Top up AntarPay via e-wallet · s.d. Rp25.000', 'percent', 5, 25000, 100000, null, 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/TOPUP50.jpg', 19),
+('AJAKTEMAN', 'Ajak Teman Rp15.000', 'Teman baru pakai kode ini, kamu dapat bonus', 'fixed', 15000, null, 20000, null, 500, true, 'https://erzamadana-ui.github.io/antarkita/promos/AJAKTEMAN.jpg', 20)
 on conflict (code) do update set title = excluded.title, description = excluded.description, image_url = excluded.image_url, sort_order = excluded.sort_order;
 -- ===== Tahap 6: seed toko katalog, produk, pasar tradisional, bahan masak (harga acuan = perkiraan, wajib disurvei admin) =====
 insert into shop_stores (name, brand, category, address, lat, lng, open_hours, catalog_source) values

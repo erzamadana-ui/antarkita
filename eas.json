@@ -1,21 +1,93 @@
 {
+  "$schema": "https://raw.githubusercontent.com/expo/eas-cli/main/packages/eas-json/schema/eas.schema.json",
   "cli": { "version": ">= 12.0.0", "appVersionSource": "remote" },
+
   "build": {
-    "development": { "developmentClient": true, "distribution": "internal" },
+    "base": {
+      "node": "22.11.0",
+      "env": { "EXPO_NO_TELEMETRY": "1" },
+      "ios": { "resourceClass": "m-medium" }
+    },
+
+    "development": {
+      "extends": "base",
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": { "simulator": true, "buildConfiguration": "Debug" },
+      "android": { "buildType": "apk" }
+    },
+    "development-pelanggan": {
+      "extends": "development",
+      "env": { "APP": "pelanggan", "EXPO_PUBLIC_APP": "pelanggan" }
+    },
+    "development-mitra": {
+      "extends": "development",
+      "env": { "APP": "mitra", "EXPO_PUBLIC_APP": "mitra" }
+    },
+    "development-device": {
+      "extends": "development",
+      "ios": { "simulator": false, "buildConfiguration": "Debug" }
+    },
+
     "preview": {
+      "extends": "base",
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "ios": { "simulator": false }
+      "ios": { "simulator": false, "buildConfiguration": "Release" }
     },
+    "preview-pelanggan": {
+      "extends": "preview",
+      "env": { "APP": "pelanggan", "EXPO_PUBLIC_APP": "pelanggan" }
+    },
+    "preview-mitra": {
+      "extends": "preview",
+      "env": { "APP": "mitra", "EXPO_PUBLIC_APP": "mitra" }
+    },
+    "preview-simulator": {
+      "extends": "preview",
+      "ios": { "simulator": true }
+    },
+
     "production": {
+      "extends": "base",
       "autoIncrement": true,
-      "android": { "buildType": "app-bundle" }
+      "android": { "buildType": "app-bundle" },
+      "ios": { "simulator": false, "buildConfiguration": "Release" }
+    },
+    "production-pelanggan": {
+      "extends": "production",
+      "env": { "APP": "pelanggan", "EXPO_PUBLIC_APP": "pelanggan" }
+    },
+    "production-mitra": {
+      "extends": "production",
+      "env": { "APP": "mitra", "EXPO_PUBLIC_APP": "mitra" }
     }
   },
+
   "submit": {
     "production": {
-      "android": { "track": "internal" },
-      "ios": {}
+      "android": { "track": "internal", "releaseStatus": "draft" },
+      "ios": {
+        "appleId": "$EXPO_APPLE_ID",
+        "appleTeamId": "$EXPO_APPLE_TEAM_ID",
+        "ascAppId": "$EXPO_ASC_APP_ID"
+      }
+    },
+    "production-pelanggan": {
+      "android": { "track": "internal", "releaseStatus": "draft" },
+      "ios": {
+        "appleId": "$EXPO_APPLE_ID",
+        "appleTeamId": "$EXPO_APPLE_TEAM_ID",
+        "ascAppId": "$EXPO_ASC_APP_ID_PELANGGAN"
+      }
+    },
+    "production-mitra": {
+      "android": { "track": "internal", "releaseStatus": "draft" },
+      "ios": {
+        "appleId": "$EXPO_APPLE_ID",
+        "appleTeamId": "$EXPO_APPLE_TEAM_ID",
+        "ascAppId": "$EXPO_ASC_APP_ID_MITRA"
+      }
     }
   }
 }

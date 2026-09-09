@@ -1,11 +1,16 @@
-// Peta untuk Web: react-leaflet + tile CARTO (tanpa API key).
+// Peta untuk Web: react-leaflet.
+// URL ubin & atribusi datang dari server (map_public_config) — mengganti penyedia di
+// Panel Admin langsung mengubah URL ubin yang diminta peramban, tanpa build ulang.
 import React, { useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { MARKER_JS_BODY, TILE_ATTR, TILE_URL, type MapProps, type MarkerHtmlFn } from './shared';
+import { MARKER_JS_BODY, shouldRefit, type MapProps, type MarkerHtmlFn } from './shared';
+import { MapAttribution } from './Attribution';
+import { useMapConfig } from '@/lib/mapConfig';
 import { colors } from '@/lib/theme';
+import type { LatLng } from '@/lib/types';
 
 // eslint-disable-next-line @typescript-eslint/no-implied-eval
 const markerHtml = new Function('kind', 'heading', 'label', MARKER_JS_BODY) as MarkerHtmlFn;
@@ -21,7 +26,7 @@ function iconFor(kind: string, heading?: number | null, label?: string) {
   return ic;
 }
 
-function Controller({ center, zoom, fitTo, paddingBottom, onCenterChange, onPress, interactive }: MapProps) {
+function Controller({ center, zoom, fitTo, paddingBottom, onCenterChange, onPress, interactive, trackMaxZoom }: MapProps & { trackMaxZoom: number }) {
   const map = useMap();
   const programmatic = useRef(false);
   const lastCenter = useRef(center);
@@ -33,7 +38,9 @@ function Controller({ center, zoom, fitTo, paddingBottom, onCenterChange, onPres
       if (fitTo && fitTo.length > 0) {
         const b = L.latLngBounds(fitTo.map((p) => [p.lat, p.lng] as [number, number]));
         if (fitTo.length === 1) map.setView(b.getCenter(), zoom ?? 16);
-        else map.fitBounds(b, { paddingTopLeft: [40, 80], paddingBottomRight: [40, (paddingBottom ?? 0) + 40], maxZoom: 17 });
+        // maxZoom pelacakan dari map_config (bawaan 16, dulu 17): satu tingkat zoom lebih
+        // rendah memangkas jumlah set ubin berbeda yang harus diambil (hemat §5.5).
+        else map.fitBounds(b, { paddingTopLeft: [40, 80], paddingBottomRight: [40, (paddingBottom ?? 0) + 40], maxZoom: trackMaxZoom });
       }
       setTimeout(() => { programmatic.current = false; }, 300);
     };
@@ -44,7 +51,7 @@ function Controller({ center, zoom, fitTo, paddingBottom, onCenterChange, onPres
       setTimeout(() => { programmatic.current = false; }, 300);
     }
     lastCenter.current = center;
-  }, [map, center, zoom, fitTo, paddingBottom]);
+  }, [map, center, zoom, fitTo, paddingBottom, trackMaxZoom]);
 
   useEffect(() => {
     const on = interactive !== false;
@@ -105,18 +112,31 @@ function GlideMarker({ id, lat, lng, kind, heading, label }: { id: string; lat: 
 const GLIDE_KINDS = new Set(['motor', 'car', 'driver', 'me']);
 
 export default function MapView(props: MapProps) {
-  const { center, zoom = 15, markers = [], polyline, style } = props;
+  const { center, zoom = 15, markers = [], polyline, style, fitTo, paddingBottom = 0, attributionBottom } = props;
+  const cfg = useMapConfig();
   const initial = useMemo(() => [center.lat, center.lng] as [number, number], []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Hemat §5.5: hanya kirim fitTo baru bila ada titik yang bergeser > refit_min_meters (bawaan 150 m).
+  const lastFit = useRef<LatLng[] | null>(null);
+  const effectiveFit = useMemo(() => {
+    if (!fitTo || fitTo.length === 0) { lastFit.current = null; return null; }
+    if (shouldRefit(lastFit.current, fitTo, cfg.refit_min_meters)) { lastFit.current = fitTo; return fitTo; }
+    return lastFit.current;
+  }, [fitTo, cfg.refit_min_meters]);
+
   return (
     <View style={[styles.wrap, style]}>
-      <MapContainer center={initial} zoom={zoom} zoomControl={false} attributionControl style={{ width: '100%', height: '100%' }}>
-        <TileLayer url={TILE_URL} attribution={TILE_ATTR} maxZoom={19} />
-        <Controller {...props} />
+      <MapContainer center={initial} zoom={zoom} zoomControl={false} attributionControl={false} style={{ width: '100%', height: '100%' }}>
+        {/* key = URL ubin: mengganti penyedia di Panel Admin membuat React membuang lapisan
+            lama dan meminta ubin dari URL baru — inilah jalur "ganti penyedia tanpa rilis ulang". */}
+        <TileLayer key={cfg.tile_url} url={cfg.tile_url} attribution={cfg.tile_attribution} maxZoom={cfg.tile_max_zoom} keepBuffer={4} />
+        <Controller {...props} fitTo={effectiveFit} trackMaxZoom={cfg.track_max_zoom} />
         {polyline && polyline.length > 1 && <Polyline positions={polyline} pathOptions={{ color: colors.primary, weight: 5, opacity: 0.9, lineJoin: 'round' }} />}
         {markers.map((m) => GLIDE_KINDS.has(m.kind)
           ? <GlideMarker key={m.id} id={m.id} lat={m.lat} lng={m.lng} kind={m.kind} heading={m.heading} label={m.label} />
           : <Marker key={m.id} position={[m.lat, m.lng]} icon={iconFor(m.kind, m.heading, m.label)} interactive={false} />)}
       </MapContainer>
+      <MapAttribution html={cfg.tile_attribution} bottom={attributionBottom ?? paddingBottom} />
     </View>
   );
 }

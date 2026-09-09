@@ -137,7 +137,7 @@ export default function DriverHome() {
     <SelfieGate visible={selfie !== false} onDone={afterSelfie} onCancel={() => setSelfie(false)} />
     <RejectOrderSheet visible={!!rejecting} order={rejecting} onClose={() => setRejecting(null)} onConfirm={doReject} />
     <MapScreen
-      map={<MapView center={pos} zoom={14} markers={markers} fitTo={fitTo} paddingBottom={20} />}
+      map={<MapView center={pos} zoom={14} markers={markers} fitTo={fitTo} paddingBottom={20} attributionBottom={196} />}
       back={false}
       topLeft={topLeft}
       floatingRight={<View style={{ gap: 8 }}><FloatingButton icon="shield-checkmark" color={colors.danger} onPress={() => router.push('/safety' as never)} /><FloatingButton icon="locate" color={colors.primary} onPress={async () => { const fix = await refresh(); if (fix) setMyPos({ ...fix, heading: null }); }} /></View>}

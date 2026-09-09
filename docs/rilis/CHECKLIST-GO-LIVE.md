@@ -3,6 +3,8 @@
 Panduan langkah demi langkah untuk pemilik (Erza). Kerjakan berurutan; tandai `[x]` yang selesai.
 Referensi: `docs/rilis/PLAY-STORE-LISTING.md` (teks listing & jawaban form), `.github/workflows/release-aab.yml` (build AAB), `supabase/migrations/0023_hapus_akun.sql` (hapus akun).
 
+> **Sudah sampai mana sebenarnya?** Baca **`docs/rilis/DAFTAR-PERIKSA-FINAL.md`** — satu halaman berisi status ✅/⏳/❌ setiap butir kesiapan Android, diurutkan menurut apa yang memblokir rilis lebih dulu, lengkap dengan bukti dari kode (verifikasi ulang 9 Sep 2026).
+>
 > **Mau mengejar listing besok?** Baca **`docs/rilis/RUNBOOK-LISTING-BESOK.md`** lebih dulu — di sana ada urutan langkah dengan estimasi waktu, titik-titik tunggu yang tidak bisa dipercepat, dan hitungan jujur berapa hari sampai aplikasi bisa diunduh publik (**± 18–30 hari**, bukan besok). Berkas ini tetap menjadi checklist lengkapnya.
 
 > **Jangan pernah** menyimpan keystore, kata sandi, atau file JSON service account di dalam repo. Semua lewat GitHub Secrets.
@@ -59,6 +61,7 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 - [ ] `app.config.ts` → `ANDROID_VERSION_CODE_OFFSET = 100`; versionCode = nomor run workflow + 100, otomatis naik. **Jangan diturunkan** setelah pernah diunggah ke Play.
 - [ ] Package id berbeda: `id.antarkita.app` (Pelanggan) dan `id.antarkita.mitra` (Mitra) — jangan diubah setelah rilis pertama.
 - [ ] Ikon 1024×1024 di `apps/pelanggan/assets/icon.png` dan `apps/mitra/assets/icon.png` sudah final (Play menolak ikon placeholder).
+- [x] **Ikon notifikasi** `apps/<app>/assets/notification-icon.png` (96×96 putih transparan) sudah ada dan terdaftar di plugin `expo-notifications` (`app.config.ts`). Diverifikasi 9 Sep 2026 dari hasil `expo prebuild`: `res/drawable-*/notification_icon.png` (24/36/48/72/96 px) + `meta-data … default_notification_icon` di manifest. Tanpa ini Android memakai ikon aplikasi dan notifikasi tampil sebagai kotak putih.
 
 ---
 
@@ -98,6 +101,7 @@ Ulangi C1–C3 untuk **AntarKita** (Pelanggan) dan **AntarKita Mitra**.
 ### C3. Isi Store listing & App content (sebelum bisa ke produksi)
 Semua jawaban ada di `PLAY-STORE-LISTING.md`:
 - [ ] **Main store listing**: nama, deskripsi singkat, deskripsi lengkap, ikon 512×512, feature graphic 1024×500, ≥2 screenshot ponsel, kategori, tag, email kontak, situs web.
+  - Semua aset grafis sudah jadi di `docs/rilis/aset/` — ikon & feature graphic **final**; **screenshot berstatus DRAF** (dibuat dari build web, bukan HP asli — lihat peringatan di `PLAY-STORE-LISTING.md` §7). Boleh dipakai untuk Internal testing; ganti dengan tangkapan HP asli sebelum produksi.
 - [ ] **App content → Privacy policy**: `https://erzamadana-ui.github.io/antarkita/privacy/`.
 - [ ] **App content → App access**: akun uji reviewer (buat khusus di Supabase produksi; untuk Mitra pakai driver yang sudah *approved*).
 - [ ] **App content → Ads**: Tidak ada iklan.
@@ -109,7 +113,8 @@ Semua jawaban ada di `PLAY-STORE-LISTING.md`:
 - [ ] **App content → Advertising ID**: tidak dipakai.
 - [ ] **App content → Health / Government**: tidak berlaku.
 - [ ] **Store settings**: kategori & tag; **Countries**: Indonesia.
-- [ ] **App content → User generated content / Safety**: AntarKita punya chat, panggilan suara, ulasan, dan foto merchant → kebijakan UGC berlaku penuh. Kebijakan mewajibkan **pelaporan di dalam aplikasi** *dan* **fungsi memblokir pengguna**; **fungsi blokir belum ada** di kode. Baca `PLAY-STORE-LISTING.md` §4.11 sebelum menjawab. Aman untuk Internal testing; **perbaiki sebelum mengajukan akses produksi**.
+- [ ] **App content → User generated content / Safety**: AntarKita punya chat, panggilan suara, ulasan, dan foto merchant → kebijakan UGC berlaku penuh. Kebijakan mewajibkan **pelaporan di dalam aplikasi** *dan* **fungsi memblokir pengguna** — **keduanya sekarang ADA** (migrasi `supabase/migrations/0050_moderasi_ugc_lapor_blokir.sql`: `report_content()`, `block_user()`, `unblock_user()`, `my_blocks()`, tabel `content_reports` & `user_blocks`; UI `src/components/moderation/`, layar `src/screens/account/blocks.tsx`, antrean admin `src/screens/admin/reports.tsx`). Jawab **"Yes"** pada pertanyaan pelaporan dan pemblokiran, lalu salin jalur menu dari `PLAY-STORE-LISTING.md` §4.11. Bukti tangkapan layar: `docs/rilis/aset/screenshot/bukti-ugc-blokir.png`.
+  - Prasyarat: migrasi `0050` **harus sudah diterapkan di Supabase produksi** — bila belum, tombol Laporkan/Blokir error dan jawaban "Yes" menjadi salah. Verifikasi: `select proname from pg_proc where proname in ('report_content','block_user');` (harus mengembalikan 2 baris).
 - [ ] Dasbor menunjukkan semua tugas "App content" ✔ tanpa peringatan merah.
 
 ### C4. (Opsional) Unggah otomatis dari GitHub ke track internal

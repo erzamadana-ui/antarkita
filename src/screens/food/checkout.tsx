@@ -14,7 +14,7 @@ import { useCart } from '@/store/cart';
 import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
-import { getRoute, reverseGeocode, type RouteResult } from '@/lib/geo';
+import { getRoute, reverseGeocode, finalizeRoute, type RouteResult } from '@/lib/geo';
 import { rpc } from '@/lib/supabase';
 import { colors, font, radius, glass } from '@/lib/theme';
 import { rupiah, km, minutes } from '@/lib/format';
@@ -69,9 +69,12 @@ export default function Checkout() {
   const order = async () => {
     if (!dropoff || !fare || blocked) return;
     try {
+      // Hemat §5.3: rute sungguhan (GEOMETRI saja) baru diambil DI SINI. Jarak/durasi
+      // tetap angka pratinjau yang menjadi dasar harga yang ditampilkan.
+      const fin = await finalizeRoute({ lat: m.lat!, lng: m.lng! }, dropoff, route);
       const o = await rpc<Order>('create_order', { p: {
         service: 'food', merchant_id: m.id, dropoff: { lat: dropoff.lat, lng: dropoff.lng, address: dropoff.address },
-        route_km: route?.distance_km, duration_min: route?.duration_min, route_geometry: route?.coords, payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null, notes: notes || null,
+        route_km: fin.route_km, duration_min: fin.duration_min, route_geometry: fin.coords, payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null, notes: notes || null,
         items: cart.lines.map((l) => ({ menu_item_id: l.item.id, qty: l.qty, notes: l.notes || null })),
         driver_code: driverCode,
       } });

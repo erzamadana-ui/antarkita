@@ -13,7 +13,8 @@ import { FloatingButton } from '@/components/MapScreen';
 import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
-import { searchPlaces, reverseGeocode } from '@/lib/geo';
+import { searchPlaces, reverseGeocode, newSearchSession, endSearchSession } from '@/lib/geo';
+import { useMapConfig } from '@/lib/mapConfig';
 import { supabase } from '@/lib/supabase';
 import { colors, font, radius, shadow, glass, motion } from '@/lib/theme';
 import type { LatLng, Place, SavedPlace } from '@/lib/types';
@@ -37,20 +38,35 @@ export default function PlacePicker() {
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initial = useRef<LatLng>((target === 'pickup' && booking.pickup) || (target === 'dropoff' && booking.dropoff) || location);
   const [mapCenter, setMapCenter] = useState<LatLng>(initial.current);
+  // Tuning hemat dari server (map_config): bisa disetel pemilik tanpa rilis ulang.
+  const mapCfg = useMapConfig();
+  const minChars = mapCfg.autocomplete_min_chars;   // bawaan 4 (dulu 3)
+  const debounceMs = mapCfg.autocomplete_debounce_ms; // bawaan 700 ms (dulu 400 ms)
 
   useEffect(() => { if (target) booking.openPicker(target as never); }, [target]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (uid) supabase.from('saved_places').select('*').eq('user_id', uid).then(({ data }) => setSaved((data as SavedPlace[]) ?? [])); }, [uid]);
 
+  // Satu sesi pencarian per pembukaan layar. Penyedia yang menagih per SESI
+  // (Mapbox Search Box; Google Autocomplete Session Usage = $0) menghitung seluruh
+  // ketikan + satu pilihan sebagai satu unit tagihan, bukan per ketikan.
+  useEffect(() => { newSearchSession(); return () => { endSearchSession(); }; }, []);
+
   useEffect(() => {
     if (debounce.current) clearTimeout(debounce.current);
-    if (q.trim().length < 3) { setResults([]); return; }
+    if (q.trim().length < minChars) { setResults([]); return; }
+    // Hemat §5.2 (perkiraan −65% permintaan autocomplete):
+    //  • debounce 400 → 700 ms: query 12 karakter yang tadinya memicu ~3 permintaan
+    //    turun ke ~1,5 (−45%);
+    //  • minimum 3 → 4 karakter: query 3 huruf di Indonesia hampir selalu terlalu
+    //    umum ("jal", "pas") dan hasilnya dibuang pengguna (−10% tambahan);
+    //  • session token untuk penyedia yang menagih per sesi (lihat efek di atas).
     debounce.current = setTimeout(async () => {
       setSearching(true);
       try { setResults(await searchPlaces(q, location)); } catch { setResults([]); }
       setSearching(false);
-    }, 400);
+    }, debounceMs);
     return () => { if (debounce.current) clearTimeout(debounce.current); };
-  }, [q, location]);
+  }, [q, location, minChars, debounceMs]);
 
   const onCenterChange = async (c: LatLng) => {
     setCenter(c); setResolving(true);
@@ -59,7 +75,9 @@ export default function PlacePicker() {
   };
   useEffect(() => { if (mode === 'map' && !address) onCenterChange(initial.current); }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const choose = (p: Place) => { booking.resolvePicker(p); router.back(); };
+  // Sesi pencarian ditutup saat pengguna memilih hasil — inilah "akhir sesi" yang
+  // ditagih penyedia berbasis sesi.
+  const choose = (p: Place) => { endSearchSession(); booking.resolvePicker(p); router.back(); };
   const useMyLocation = async () => {
     const p = (await refresh()) ?? location;
     const a = await reverseGeocode(p);
@@ -94,8 +112,9 @@ export default function PlacePicker() {
               {searching && results.length === 0 && [0, 1, 2].map((i) => <View key={i} style={[s.row, { gap: 12 }]}><Skeleton width={38} height={38} radius={19} /><View style={{ flex: 1, gap: 6 }}><Skeleton width="60%" height={14} /><Skeleton width="90%" height={11} /></View></View>)}
               {results.length > 0 && <Text style={[font.label, { marginTop: 8 }]}>Hasil pencarian</Text>}
               {results.map((r, i) => <Animated.View key={`${r.lat},${r.lng}`} entering={FadeInDown.delay(i * 40).duration(motion.base)} layout={LinearTransition}><PlaceRow icon="location-outline" color={colors.danger} title={r.name ?? r.address} subtitle={r.address} onPress={() => choose(r)} /></Animated.View>)}
-              {q.length >= 3 && !searching && results.length === 0 && <Text style={[font.small, { padding: 8 }]}>Tidak ditemukan. Coba kata lain atau pilih di peta.</Text>}
-              {saved.length > 0 && q.length < 3 && (<>
+              {q.length >= minChars && !searching && results.length === 0 && <Text style={[font.small, { padding: 8 }]}>Tidak ditemukan. Coba kata lain atau pilih di peta.</Text>}
+              {q.length > 0 && q.length < minChars && <Text style={[font.small, { padding: 8 }]}>Ketik minimal {minChars} huruf untuk mencari.</Text>}
+              {saved.length > 0 && q.length < minChars && (<>
                 <Text style={[font.label, { marginTop: 8 }]}>Alamat tersimpan</Text>
                 {saved.map((sp, i) => <Entrance key={sp.id} index={2 + i}><PlaceRow icon={sp.label.toLowerCase().includes('rumah') ? 'home' : sp.label.toLowerCase().includes('kantor') ? 'business' : 'bookmark'} color={colors.accent} title={sp.label} subtitle={sp.address} onPress={() => choose({ lat: sp.lat, lng: sp.lng, address: sp.address, name: sp.label })} /></Entrance>)}
               </>)}
@@ -103,7 +122,9 @@ export default function PlacePicker() {
           </Animated.View>
         ) : (
           <Animated.View entering={FadeIn.duration(motion.base)} exiting={FadeOut} style={{ flex: 1 }}>
-            <MapView center={mapCenter} zoom={16} onCenterChange={onCenterChange} />
+            {/* paddingBottom = tinggi sheet "Lokasi terpilih" supaya atribusi peta
+                (wajib menurut lisensi penyedia) tidak tertutup sheet. */}
+            <MapView center={mapCenter} zoom={16} onCenterChange={onCenterChange} paddingBottom={210} />
             <AnimatedPin lifted={resolving} />
             <View style={{ position: 'absolute', right: 16, top: 16 }}>
               <FloatingButton icon="locate" color={colors.info} onPress={async () => { const p = (await refresh()) ?? location; setMapCenter({ ...p }); onCenterChange(p); }} />

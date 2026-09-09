@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Harness uji infrastruktur peta — AntarKita</title>
+<style>
+  body { font: 13px system-ui, sans-serif; margin: 0; padding: 12px; }
+  #peta { width: 420px; height: 300px; border: 1px solid #ccc; }
+  #atribusi { font-size: 10px; background: rgba(255,255,255,.85); padding: 2px 5px; display: inline-block; }
+  pre { background: #f4f6f7; padding: 8px; max-width: 900px; white-space: pre-wrap; }
+  button { margin-right: 6px; }
+</style>
+</head>
+<body>
+<h1>Harness peta</h1>
+<p>Halaman ini menjalankan modul <b>asli</b> aplikasi: <code>src/lib/mapConfig.ts</code>,
+<code>src/lib/geo.ts</code>, dan <code>src/components/map/shared.ts</code>.</p>
+
+<div>
+  <button id="btn-muat">Muat konfigurasi</button>
+  <button id="btn-render">Render peta</button>
+  <button id="btn-cari">Cari tempat</button>
+  <button id="btn-rute">Ambil rute</button>
+  <button id="btn-reverse">Reverse geocode</button>
+</div>
+
+<p>Penyedia aktif: <b id="provider">—</b></p>
+<iframe id="peta" data-testid="peta"></iframe>
+<p><span id="atribusi" data-testid="map-attribution"></span></p>
+<pre id="log"></pre>
+
+<!-- Shim lingkungan Expo (dievaluasi SEBELUM modul di bawah). -->
+<script>
+  globalThis.process = globalThis.process ?? { env: {} };
+  globalThis.__DEV__ = false;
+</script>
+<script type="module">
+import { useMapConfigStore, getMapConfig, attributionText, normalizeMapConfig, DEFAULT_MAP_CONFIG } from './build/lib/mapConfig.js';
+import { searchPlaces, reverseGeocode, getRoute, finalizeRoute, estimateRoute } from './build/lib/geo.js';
+import { buildMapHtml, shouldRefit } from './build/map/shared.js';
+
+globalThis.__DEV__ = false;
+const log = (...a) => { document.getElementById('log').textContent += a.map((x) => typeof x === 'string' ? x : JSON.stringify(x)).join(' ') + '\n'; };
+const hasil = {};                       // dibaca Playwright lewat window.__hasil
+globalThis.__hasil = hasil;
+
+const leaflet = { js: null, css: null };
+async function leafletBundle() {
+  if (!leaflet.js) {
+    leaflet.js = await (await fetch('./build/leaflet.js.txt')).text();
+    leaflet.css = await (await fetch('./build/leaflet.css.txt')).text();
+  }
+  return leaflet;
+}
+
+async function muat() {
+  await useMapConfigStore.getState().load(true);
+  const cfg = getMapConfig();
+  document.getElementById('provider').textContent = cfg.tile_provider;
+  document.getElementById('atribusi').textContent = attributionText(cfg.tile_attribution);
+  hasil.config = cfg;
+  log('konfigurasi:', cfg.tile_provider, cfg.tile_url);
+  return cfg;
+}
+
+/** Render peta persis seperti MapView native: HTML dari buildMapHtml() ke dalam iframe. */
+async function render() {
+  const cfg = getMapConfig();
+  const lf = await leafletBundle();
+  const html = buildMapHtml(lf.js, lf.css, { lat: 0.5071, lng: 101.4478 }, 14,
+    { url: cfg.tile_url, attribution: cfg.tile_attribution, maxZoom: cfg.tile_max_zoom }, cfg.track_max_zoom);
+  const f = document.getElementById('peta');
+  await new Promise((r) => { f.onload = r; f.srcdoc = html; });
+  await new Promise((r) => setTimeout(r, 600));
+  hasil.rendered = !!f.contentWindow.document.querySelector('.leaflet-tile-container');
+  log('peta dirender:', hasil.rendered);
+}
+
+/** Ganti penyedia dari "Panel Admin", lalu tukar lapisan ubin tanpa memuat ulang peta —
+ *  sama persis dengan yang dilakukan MapView.tsx lewat window.__setTile. */
+globalThis.__gantiPenyedia = async (provider) => {
+  await fetch('/mock/admin/set', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ provider }) });
+  const cfg = await muat();
+  const f = document.getElementById('peta');
+  f.contentWindow.__setTile(cfg.tile_url, cfg.tile_attribution, cfg.tile_max_zoom, cfg.track_max_zoom);
+  await new Promise((r) => setTimeout(r, 700));
+  return cfg.tile_url;
+};
+
+globalThis.__cari = async (q) => { const r = await searchPlaces(q, { lat: 0.5071, lng: 101.4478 }); hasil.cari = r; log('hasil cari', q, '=', r.length); return r; };
+globalThis.__reverse = async (lat, lng) => { const a = await reverseGeocode({ lat, lng }); log('reverse', lat, lng, '=', a); return a; };
+globalThis.__rute = async (final) => { const r = await getRoute({ lat: 0.5071, lng: 101.4478 }, { lat: 0.5171, lng: 101.4578 }, final ? { final: true } : undefined); hasil.rute = r; log('rute estimated=', r.estimated, 'km=', r.distance_km, 'titik=', r.coords.length); return r; };
+globalThis.__estimasi = () => estimateRoute({ lat: 0.5071, lng: 101.4478 }, { lat: 0.5171, lng: 101.4578 });
+globalThis.__shouldRefit = (a, b, m) => shouldRefit(a, b, m);
+globalThis.__normalize = (raw) => normalizeMapConfig(raw);
+globalThis.__defaults = () => DEFAULT_MAP_CONFIG;
+globalThis.__muat = muat;
+globalThis.__render = render;
+globalThis.__polyline = () => {
+  const f = document.getElementById('peta');
+  return f.contentWindow.document.querySelectorAll('path.leaflet-interactive').length;
+};
+globalThis.__update = (st) => document.getElementById('peta').contentWindow.__update(st);
+
+document.getElementById('btn-muat').onclick = muat;
+document.getElementById('btn-render').onclick = render;
+document.getElementById('btn-cari').onclick = () => globalThis.__cari('jalan sudirman');
+document.getElementById('btn-rute').onclick = () => globalThis.__rute(true);
+document.getElementById('btn-reverse').onclick = () => globalThis.__reverse(0.5071, 101.4478);
+
+globalThis.__siap = true;
+log('harness siap');
+</script>
+</body>
+</html>

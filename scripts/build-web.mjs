@@ -26,12 +26,15 @@ fs.writeFileSync('dist/.nojekyll', '');
 // Halaman statis hukum untuk Play Store / App Store (URL wajib publik):
 //   docs/rilis/privacy.html → dist/privacy/index.html → https://<pages>/antarkita/privacy/
 //   docs/rilis/terms.html   → dist/terms/index.html   → https://<pages>/antarkita/terms/
+//   docs/rilis/hapus-akun.html → dist/hapus-akun/index.html → https://<pages>/antarkita/hapus-akun/
+//     (URL hapus akun WAJIB Google Play; sebelumnya hanya diterbitkan oleh workflow CI sehingga
+//      build lokal diam-diam kehilangan halaman ini)
 // Berkas ini ada secara fisik di dist/, sehingga GitHub Pages melayaninya langsung; 404.html di atas hanya
 // dijalankan untuk path yang TIDAK ada (SPA fallback) dan tidak menyentuh /privacy/ maupun /terms/.
-for (const [src, dir] of [['docs/rilis/privacy.html', 'privacy'], ['docs/rilis/terms.html', 'terms']]) {
+for (const [src, dir] of [['docs/rilis/privacy.html', 'privacy'], ['docs/rilis/terms.html', 'terms'], ['docs/rilis/hapus-akun.html', 'hapus-akun']]) {
   if (!fs.existsSync(src)) { console.warn(`⚠ ${src} tidak ditemukan — halaman /${dir}/ dilewati`); continue; }
   fs.mkdirSync(`dist/${dir}`, { recursive: true });
   fs.copyFileSync(src, `dist/${dir}/index.html`);
   console.log(`• ${src} → dist/${dir}/index.html (${site}/${dir}/)`);
 }
-console.log('\n✔ dist/ siap: pelanggan, mitra, admin + 404.html + privacy/ + terms/');
+console.log('\n✔ dist/ siap: pelanggan, mitra, admin + 404.html + privacy/ + terms/ + hapus-akun/');

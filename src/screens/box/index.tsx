@@ -17,7 +17,7 @@ import { usePayPrefs } from '@/store/payprefs';
 import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
-import { getRoute, reverseGeocode, type RouteResult } from '@/lib/geo';
+import { getRoute, reverseGeocode, finalizeRoute, type RouteResult } from '@/lib/geo';
 import { rpc } from '@/lib/supabase';
 import { colors, font, radius, motion, glass } from '@/lib/theme';
 import { rupiah, km, minutes } from '@/lib/format';
@@ -85,9 +85,12 @@ export default function BoxScreen() {
     if (!pickup || !dropoff || !chosen || blocked || serviceOff) return;
     setOrdering(true);
     try {
+      // Hemat §5.3: rute sungguhan (GEOMETRI saja) baru diambil DI SINI. Jarak/durasi
+      // tetap angka pratinjau yang menjadi dasar harga yang ditampilkan.
+      const fin = await finalizeRoute(pickup, dropoff, route);
       const o = await rpc<Order>('create_order', { p: {
         service: 'box', pickup: { lat: pickup.lat, lng: pickup.lng, address: pickup.address }, dropoff: { lat: dropoff.lat, lng: dropoff.lng, address: dropoff.address },
-        route_km: route?.distance_km, duration_min: route?.duration_min, route_geometry: route?.coords, payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null,
+        route_km: fin.route_km, duration_min: fin.duration_min, route_geometry: fin.coords, payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null,
         notes: [items ? `Barang: ${items}` : '', notes].filter(Boolean).join(' · ') || null, vehicle_class: chosen.code, helpers, purpose, scheduled_at: when ? when.toISOString() : null,
         package_details: { type: PURPOSES.find((p) => p.key === purpose)?.label, description: items },
         driver_code: driverCode,

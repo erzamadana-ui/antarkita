@@ -1,5 +1,6 @@
 import type { LatLng } from '@/lib/types';
 import type { ViewStyle } from 'react-native';
+import { distanceMeters } from '@/lib/geo';
 
 export type MarkerKind = 'pickup' | 'dropoff' | 'me' | 'motor' | 'car' | 'merchant' | 'driver';
 
@@ -15,12 +16,46 @@ export interface MapProps {
   onPress?: (p: LatLng) => void;
   interactive?: boolean;
   style?: ViewStyle;
-  paddingBottom?: number;            // ruang untuk sheet di bawah agar fitBounds tidak tertutup
+  paddingBottom?: number;            // ruang untuk sheet di bawah agar fitBounds & atribusi tidak tertutup
+  /** Ruang bawah KHUSUS badge atribusi (bila sheet menutup peta tapi fitBounds tidak perlu diubah). */
+  attributionBottom?: number;
 }
 
-// Tile OpenStreetMap standar (gratis, tanpa API key; patuhi tile usage policy — untuk trafik besar pindah ke MapTiler/Google).
+/**
+ * ⚠️ NILAI BAWAAN DARURAT — BUKAN LAGI SUMBER KEBENARAN.
+ *
+ * URL ubin yang sesungguhnya datang dari server lewat `map_public_config()`
+ * (src/lib/mapConfig.ts, migrasi 0061). Konstanta di bawah hanya dipakai bila
+ * konfigurasi server belum/tidak bisa dimuat, supaya peta tidak pernah kosong.
+ *
+ * Kebijakan OSMF melarang meng-hardcode URL ubin justru karena kasus ini:
+ * "Avoid hard-coding the tile URL; allow switching without needing a software update".
+ * Sejak migrasi 0061 pemilik bisa mengganti penyedia dari Panel Admin → Peta
+ * tanpa membangun ulang aplikasi.
+ */
 export const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 export const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+/** Konfigurasi ubin yang dipakai satu instans peta. */
+export interface TileConfig { url: string; attribution: string; maxZoom: number }
+
+/**
+ * Penjaga gambar-ulang peta (hemat §5.5, perkiraan −70% panggilan fitBounds → −55% permintaan ubin).
+ *
+ * `fitTo` dihitung ulang tiap kali posisi driver berubah — dengan polling 6 detik plus
+ * Realtime, itu sampai ~10×/menit per layar pelacakan, dan setiap `fitBounds` yang
+ * mengubah tingkat zoom memaksa Leaflet mengambil satu set ubin baru.
+ * Sekarang peta hanya di-fit ulang bila ada titik yang bergeser lebih dari
+ * `minMeters` (bawaan 150 m dari `map_config.refit_min_meters`) atau jumlah titiknya berubah.
+ * Marker tetap bergerak halus setiap saat lewat `glide()` — yang berhenti melompat
+ * hanyalah bingkai petanya, dan itu justru perbaikan pengalaman.
+ */
+export function shouldRefit(prev: LatLng[] | null | undefined, next: LatLng[] | null | undefined, minMeters: number): boolean {
+  if (!next || next.length === 0) return false;
+  if (!prev || prev.length !== next.length) return true;
+  if (minMeters <= 0) return true;
+  return next.some((p, i) => distanceMeters(prev[i], p) > minMeters);
+}
 
 export const MARKER_COLORS: Record<MarkerKind, string> = {
   pickup: '#0E7C7B', dropoff: '#E5484D', me: '#2F80ED', motor: '#00A86B', car: '#2F80ED', merchant: '#EB5757', driver: '#00A86B',
@@ -59,20 +94,42 @@ export const MARKER_JS_BODY = `
 export type MarkerSpec = { html: string; size: [number, number]; anchor: [number, number] };
 export type MarkerHtmlFn = (kind: MarkerKind, heading?: number | null, label?: string) => MarkerSpec;
 
-/** HTML lengkap untuk WebView (native). */
-export function buildMapHtml(leafletJs: string, leafletCss: string, center: LatLng, zoom: number): string {
+const jsStr = (s: string) => JSON.stringify(String(s));
+
+/**
+ * HTML lengkap untuk WebView (native).
+ *
+ * URL ubin TIDAK lagi ditanam sebagai konstanta modul: ia datang dari `tile`
+ * (hasil `map_public_config()`), dan lapisan ubin dapat DIGANTI SAAT BERJALAN lewat
+ * `window.__setTile(url, attribution, maxZoom)` — jadi peralihan penyedia dari Panel
+ * Admin terasa tanpa memuat ulang WebView, apalagi merilis ulang aplikasi.
+ *
+ * Kontrol atribusi bawaan Leaflet dimatikan; atribusi ditampilkan oleh komponen
+ * React di atas peta (lihat MapAttribution) agar tidak pernah tertutup sheet/kartu.
+ */
+export function buildMapHtml(leafletJs: string, leafletCss: string, center: LatLng, zoom: number, tile: TileConfig, trackMaxZoom = 17): string {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <style>${leafletCss}
 html,body,#map{margin:0;padding:0;height:100%;width:100%;background:#e8ecef;overflow:hidden}
 .leaflet-div-icon{background:transparent;border:0}
-.leaflet-control-attribution{font-size:9px;opacity:.75}
 </style></head><body><div id="map"></div>
 <script>${leafletJs}</script>
 <script>
 (function(){
-  var TILE='${TILE_URL}';
-  var map=L.map('map',{zoomControl:false,attributionControl:true,tap:false}).setView([${center.lat},${center.lng}],${zoom});
-  L.tileLayer(TILE,{maxZoom:19,attribution:'${TILE_ATTR.replace(/'/g, "\\'")}'}).addTo(map);
+  var TILE=${jsStr(tile.url)}, ATTR=${jsStr(tile.attribution)}, MAXZ=${Math.round(tile.maxZoom)}, TRACKZ=${Math.round(trackMaxZoom)};
+  var map=L.map('map',{zoomControl:false,attributionControl:false,tap:false}).setView([${center.lat},${center.lng}],${zoom});
+  /* keepBuffer 4 (bawaan 2): geseran kecil memakai ubin yang sudah ada — hemat §5.5 */
+  var layer=L.tileLayer(TILE,{maxZoom:MAXZ,keepBuffer:4,attribution:ATTR}).addTo(map);
+  /* Ganti penyedia ubin tanpa memuat ulang WebView (konfigurasi dari Panel Admin). */
+  window.__setTile=function(url,attr,maxZoom,trackZoom){
+    try{
+      if(typeof trackZoom==='number'&&trackZoom>0){TRACKZ=trackZoom;}
+      if(!url||url===TILE){return;}
+      TILE=url;ATTR=attr||ATTR;MAXZ=maxZoom||MAXZ;
+      if(layer){map.removeLayer(layer);}
+      layer=L.tileLayer(TILE,{maxZoom:MAXZ,keepBuffer:4,attribution:ATTR}).addTo(map);
+    }catch(e){post({type:'error',message:String(e)});}
+  };
   var markers={},line=null,programmatic=false;
   var markerHtml=function(kind,heading,label){${MARKER_JS_BODY}};
   /* Geser marker halus (≈900ms, ease-out) agar posisi driver tidak melompat. */
@@ -105,9 +162,10 @@ html,body,#map{margin:0;padding:0;height:100%;width:100%;background:#e8ecef;over
       if(line){map.removeLayer(line);line=null;}
       if(st.polyline&&st.polyline.length>1){line=L.polyline(st.polyline,{color:'#0E7C7B',weight:5,opacity:.9,lineJoin:'round'}).addTo(map);}
       programmatic=true;
+      /* fitTo hanya dikirim ulang oleh React bila memang perlu (penjaga jarak 150 m, §5.5) */
       if(st.fitTo&&st.fitTo.length>0){
         var b=L.latLngBounds(st.fitTo.map(function(p){return [p.lat,p.lng];}));
-        if(st.fitTo.length===1){map.setView(b.getCenter(),st.zoom||16);} else {map.fitBounds(b,{paddingTopLeft:[40,80],paddingBottomRight:[40,(st.paddingBottom||0)+40],maxZoom:17});}
+        if(st.fitTo.length===1){map.setView(b.getCenter(),st.zoom||16);} else {map.fitBounds(b,{paddingTopLeft:[40,80],paddingBottomRight:[40,(st.paddingBottom||0)+40],maxZoom:TRACKZ});}
       } else if(st.center&&st.moveCenter){ map.setView([st.center.lat,st.center.lng],st.zoom||map.getZoom()); }
       setTimeout(function(){programmatic=false;},300);
     }catch(e){post({type:'error',message:String(e)});}

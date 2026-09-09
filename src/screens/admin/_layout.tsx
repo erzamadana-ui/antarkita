@@ -70,6 +70,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/(admin)/automation', label: 'Otomasi', icon: 'flash-outline', iconActive: 'flash' },
       { href: '/(admin)/security', label: 'Pusat Keamanan', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
       { href: '/(admin)/activity', label: 'Log Aktivitas', icon: 'time-outline', iconActive: 'time' },
+      { href: '/(admin)/map', label: 'Peta', icon: 'globe-outline', iconActive: 'globe' },
       { href: '/(admin)/settings', label: 'Pengaturan', icon: 'settings-outline', iconActive: 'settings' },
     ],
   },

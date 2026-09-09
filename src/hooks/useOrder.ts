@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, realtimeChannel } from '@/lib/supabase';
+import { getMapConfig } from '@/lib/mapConfig';
 import type { Driver, Order, OrderEvent, OrderMessage, Profile } from '@/lib/types';
 
 const ORDER_SELECT = '*, order_items(*), merchant:merchants(id,name,address,image_url,lat,lng,rating_avg,prep_minutes,owner_id)';
@@ -56,10 +57,15 @@ export function useOrder(orderId: string | undefined) {
         setDriver((d) => (d ? { ...d, ...(payload.new as Partial<Driver>) } : d));
       })
       .subscribe();
+    // Hemat §5.5: polling posisi driver 6 dtk → 10 dtk (map_config.driver_poll_ms).
+    // Setiap pembaruan posisi memicu `fitTo` baru di layar pelacakan, dan tiap
+    // `fitBounds` yang mengubah zoom memaksa Leaflet mengambil satu set ubin baru.
+    // Realtime `postgres_changes` di atas sudah memberi pembaruan seketika — polling
+    // ini hanya jaring pengaman bila koneksi realtime putus, jadi jedanya boleh longgar.
     const t = setInterval(async () => {
       const { data } = await supabase.from('drivers').select('lat,lng,heading,last_seen_at').eq('id', driverId).maybeSingle();
       if (data) setDriver((d) => (d ? { ...d, ...(data as Partial<Driver>) } : d));
-    }, 6000);
+    }, getMapConfig().driver_poll_ms);
     return () => { supabase.removeChannel(ch); clearInterval(t); };
   }, [driverId]);
 

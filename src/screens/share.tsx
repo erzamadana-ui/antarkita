@@ -78,7 +78,7 @@ export default function SharedTrip() {
 
   return (
     <MapScreen
-      map={<MapView center={{ lat: data.pickup_lat, lng: data.pickup_lng }} markers={markers} polyline={data.route_geometry} fitTo={fitTo} paddingBottom={20} />}
+      map={<MapView center={{ lat: data.pickup_lat, lng: data.pickup_lng }} markers={markers} polyline={data.route_geometry} fitTo={fitTo} paddingBottom={20} attributionBottom={196} />}
       back={false}
       topLeft={<View style={s.brand}><LogoLockup size={26} /></View>}
       header={header}

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Switch, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AdminPage, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, AdminCard as Card } from '@/components/admin';
 import { Input, Button, Row, Badge, toast } from '@/components/ui';
@@ -39,6 +40,7 @@ const DEFAULT_SEND: Record<SendVehicle, { max_kg: number; max_cm: number }> = {
 };
 
 export default function AdminSettings() {
+  const router = useRouter();
   const [bank, setBank] = useState({ bank: '', number: '', name: '' });
   const [support, setSupport] = useState('');
   const [radiusKm, setRadiusKm] = useState('5');
@@ -253,9 +255,13 @@ export default function AdminSettings() {
         </Card>
       </Entrance>
       <Entrance index={6}>
-        <Card style={{ maxWidth: 560 }}>
+        <Card style={{ maxWidth: 560, gap: 8 }}>
           <Text style={font.label}>Integrasi (opsional)</Text>
-          <Text style={font.small}>Google Maps: isi EXPO_PUBLIC_GOOGLE_MAPS_KEY di .env lalu build ulang — pencarian & rute otomatis beralih ke Google.{'\n'}Pembayaran otomatis (Midtrans/Xendit): lihat docs/INTEGRASI.md di repositori.</Text>
+          <Text style={font.small}>
+            <Text style={{ fontWeight: '700' }}>Peta (ubin, pencarian alamat, rute)</Text>: pindah ke menu <Text style={{ fontWeight: '700' }}>Sistem → Peta</Text>. Penyedia dan kuncinya disimpan di server sejak migrasi 0061, jadi berpindah penyedia TIDAK lagi memerlukan build ulang — cukup beberapa menit dari panel ini.{'\n'}
+            Pembayaran otomatis (Midtrans/Xendit): lihat docs/INTEGRASI.md di repositori.
+          </Text>
+          <Button title="Buka pengaturan Peta" variant="secondary" icon="globe-outline" onPress={() => router.push('/(admin)/map' as never)} />
         </Card>
       </Entrance>
     </AdminPage>

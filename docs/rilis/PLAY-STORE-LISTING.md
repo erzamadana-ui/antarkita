@@ -226,7 +226,7 @@ Hasil yang diharapkan: **Rated for 3+ / Everyone** (Play) — tetap set target u
 | **Audio → Voice or sound recordings** | Tidak disimpan | — | — | — | Panggilan real-time WebRTC, tidak direkam — jawab **tidak dikumpulkan** |
 | **Files and docs** | Ya (mitra) | Tidak | Wajib untuk mitra | App functionality, Compliance | Dokumen usaha (NPWP, izin, halal) |
 | **App activity → App interactions** | Ya | Tidak | Wajib | Analytics, Fraud prevention | Log aktivitas & audit |
-| **App activity → Other user-generated content** | Ya | Tidak | Opsional | App functionality | Ulasan/rating |
+| **App activity → Other user-generated content** | Ya | Tidak | Opsional | App functionality, Fraud prevention & security | Ulasan/rating; **laporan moderasi** yang ditulis pengguna (kategori + keterangan bebas, tabel `content_reports`) dan **daftar blokir** (`user_blocks`) — keduanya dari migrasi `0050`. Hanya dibaca admin moderasi; pihak yang dilaporkan/diblokir tidak diberi tahu siapa pelapornya |
 | **App info and performance → Crash logs / Diagnostics** | Ya | Tidak | Wajib | Analytics | Log kesalahan server |
 | **Device or other IDs** | Ya | Tidak | Wajib | App functionality | Token notifikasi push |
 | Contacts, Calendar, Health, Web browsing, SMS, Installed apps | **Tidak** | — | — | — | |
@@ -386,13 +386,40 @@ Sudah dibuat di `docs/rilis/aset/` (skrip pembuatnya: `docs/rilis/aset/buat-aset
 | `ikon-512-mitra.png` | 512×512 RGB, tanpa alfa | App icon — AntarKita Mitra |
 | `feature-graphic-pelanggan.png` | 1024×500 RGB | Feature graphic — AntarKita |
 | `feature-graphic-mitra.png` | 1024×500 RGB | Feature graphic — AntarKita Mitra |
+| `notification-icon.png` (di `apps/<app>/assets/`) | 96×96 RGBA, putih penuh + transparan | Bukan aset Play Console — ikon kecil notifikasi Android; skrip `docs/rilis/aset/buat-ikon-notifikasi.py` |
 
-**Screenshot BELUM ada dan tidak bisa dibuat di lingkungan CI/sandbox** (tidak ada peramban headless maupun emulator Android di sana, dan unduhan Android SDK/Chromium diblokir). Screenshot **wajib** minimal 2 per aplikasi. Cara tercepat bagi pemilik:
+### Screenshot — **SUDAH ADA, berstatus DRAF**
 
-1. Pasang APK dari workflow "Android APK" (`antarkita-pelanggan-*.apk`) di HP Android.
-2. Ambil screenshot bawaan HP (tombol Power + Volume Bawah). Resolusi HP modern (1080×2400) sudah memenuhi syarat 9:16.
-3. Alternatif tanpa HP: buka `https://erzamadana-ui.github.io/antarkita/` di Chrome desktop → `F12` → *Toggle device toolbar* → pilih **Pixel 7** → tombol ⋮ → **Capture screenshot**.
-4. Urutan yang disarankan ada di tabel §3.
+Delapan screenshot 1080×1920 (tepat 9:16) tersedia di `docs/rilis/aset/screenshot/`. Dibuat dengan
+`docs/rilis/aset/bingkai-screenshot.py` dari tangkapan mentah di `screenshot/mentah/`.
+
+| Berkas | Layar | Aplikasi |
+|---|---|---|
+| `pelanggan-1-beranda.png` | Beranda — 8 layanan, promo AntarTravel, pesanan berjalan | AntarKita |
+| `pelanggan-2-ride.png` | AntarRide — kelas kendaraan, titik jemput, tujuan sering dikunjungi | AntarKita |
+| `pelanggan-3-ride-peta.png` | Pilih titik jemput di peta | AntarKita |
+| `pelanggan-4-lacak.png` | Pelacakan driver — peta, kartu mitra, cocokkan plat, tip, bagikan perjalanan | AntarKita |
+| `pelanggan-5-pay.png` | AntarPay — saldo, tunai/saldo/e-wallet lewat Midtrans | AntarKita |
+| `mitra-1-beranda.png` | Beranda mitra — sakelar Online, peta, order tersedia | AntarKita Mitra |
+| `mitra-2-order.png` | Rincian order — pendapatan per trip, rute, potongan platform | AntarKita Mitra |
+| `mitra-3-account.png` | Akun mitra — rating, layanan yang bisa diambil, kode AntarNow | AntarKita Mitra |
+
+Tambahan (**bukan** untuk halaman listing): `bukti-ugc-blokir.png` — layar **Akun → Pengguna diblokir**,
+untuk dilampirkan bila formulir UGC/moderasi Play Console meminta bukti tangkapan layar (lihat §4.11).
+
+> ⚠️ **JUJUR SOAL KUALITASNYA — ini DRAF, bukan tangkapan perangkat asli.** Tangkapan mentahnya diambil
+> dari **build web** (`dist/`) di Chromium headless pada viewport ponsel dengan data tiruan, bukan dari HP
+> Android. Perbedaan yang tetap ada dan bisa dilihat orang yang teliti:
+> 1. **Tidak ada status bar Android** (jam, sinyal, baterai) — screenshot HP asli selalu punya.
+> 2. **Peta memakai basemap prosedural**, bukan peta Padang yang sebenarnya — tile OpenStreetMap
+>    diblokir di lingkungan build. Jalannya terlihat terlalu teratur bila diperhatikan.
+> 3. **Data tiruan**: nama "Budi Santoso"/"Ahmad Fauzi", saldo Rp250.000, plat BA 1234 AB.
+> 4. Rendering React Native Web berbeda tipis dari React Native di Android (jarak huruf, bayangan).
+>
+> **Cukup untuk Internal testing dan untuk mengisi listing hari ini** — Google tidak mewajibkan
+> screenshot berasal dari perangkat. Tetapi **ganti dengan tangkapan HP asli sebelum rilis produksi**:
+> pasang APK dari workflow "Android APK", jalankan alur yang sama, tekan Power + Volume Bawah, lalu
+> bingkai ulang dengan `bingkai-screenshot.py` (ganti isi `screenshot/mentah/`, jalankan skripnya).
 
 ---
 

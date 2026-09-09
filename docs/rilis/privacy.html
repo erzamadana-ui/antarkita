@@ -40,7 +40,7 @@
   <div class="in">
     <span class="brand">AntarKita · Kebijakan Privasi</span>
     <h1>Kebijakan Privasi AntarKita</h1>
-    <p>Berlaku untuk aplikasi <strong>AntarKita</strong> (Pelanggan), <strong>AntarKita Mitra</strong>, dan panel web AntarKita Admin.<br>Versi 1.0 — berlaku sejak 6 September 2026.</p>
+    <p>Berlaku untuk aplikasi <strong>AntarKita</strong> (Pelanggan), <strong>AntarKita Mitra</strong>, dan panel web AntarKita Admin.<br>Versi 1.1 — berlaku sejak 9 September 2026 (versi 1.0: 6 September 2026).<br><span class="muted">Perubahan pada versi 1.1: penambahan penjelasan data moderasi — laporan pengguna/konten dan daftar blokir.</span></p>
   </div>
 </header>
 
@@ -82,6 +82,7 @@
       <tr><td>AntarPay (dompet)</td><td>Saldo, mutasi top-up/pembayaran/penarikan, bukti transfer yang Anda unggah, nomor rekening bank tujuan pencairan (mitra).</td><td>Anda dan sistem</td></tr>
       <tr><td>Dokumen KYC (hanya mitra)</td><td>Foto KTP &amp; NIK, SIM, STNK, foto kendaraan, foto diri (selfie verifikasi), NPWP/izin usaha/sertifikat halal (merchant), kartu pedagang pasar.</td><td>Anda, saat mendaftar sebagai mitra</td></tr>
       <tr><td>Keamanan</td><td>Kontak darurat (nama &amp; nomor HP) yang Anda isi, laporan SOS/insiden, PIN transaksi (disimpan dalam bentuk hash).</td><td>Anda</td></tr>
+      <tr><td>Moderasi &amp; keamanan komunitas</td><td>Laporan yang Anda kirim tentang pengguna atau konten lain (kategori laporan, keterangan bebas yang Anda tulis, tautan ke pesanan/pesan/ulasan yang dilaporkan), daftar pengguna yang Anda blokir, serta hasil tinjauan admin atas laporan tersebut.</td><td>Anda, saat menekan “Laporkan”/“Blokir”; dan tim moderasi kami</td></tr>
       <tr><td>Data teknis</td><td>Jenis perangkat &amp; sistem operasi, token notifikasi, alamat IP, waktu akses, log kesalahan.</td><td>Otomatis dari perangkat</td></tr>
       <tr><td>Bantuan</td><td>Tiket aduan, pesan ke CS, penilaian layanan CS.</td><td>Anda</td></tr>
     </table>
@@ -121,6 +122,7 @@
       <tr><td>Memproses pembayaran, AntarPay, pencairan pendapatan mitra, penerbitan bukti transaksi</td><td>Pelaksanaan perjanjian; kewajiban hukum (pembukuan &amp; perpajakan)</td></tr>
       <tr><td>Verifikasi mitra (KYC), pencegahan penipuan, keamanan (SOS, verifikasi wajah, kontak darurat)</td><td>Kepentingan sah; kewajiban hukum; perlindungan kepentingan vital</td></tr>
       <tr><td>Layanan pelanggan, penanganan aduan &amp; sengketa</td><td>Pelaksanaan perjanjian; kepentingan sah</td></tr>
+      <tr><td>Moderasi konten &amp; perilaku pengguna: menindaklanjuti laporan, menegakkan blokir antar pengguna (tidak dipasangkan lagi pada pesanan, tidak bisa saling berkirim pesan atau menelepon), menangguhkan akun yang melanggar</td><td>Kepentingan sah (keselamatan pengguna &amp; penegakan Syarat &amp; Ketentuan); kewajiban hukum</td></tr>
       <tr><td>Notifikasi transaksi dan promo dalam aplikasi</td><td>Pelaksanaan perjanjian (transaksi); persetujuan (promo — dapat dimatikan di pengaturan notifikasi perangkat)</td></tr>
       <tr><td>Analitik agregat untuk memperbaiki layanan (tanpa profil individu untuk iklan)</td><td>Kepentingan sah</td></tr>
     </table>
@@ -134,6 +136,7 @@
       <li><strong>Pemroses pembayaran:</strong> Midtrans (lihat bagian 5).</li>
       <li><strong>Penyedia infrastruktur (pemroses data atas nama kami):</strong> Supabase (basis data, autentikasi, penyimpanan berkas — server di wilayah yang kami pilih dengan enkripsi saat transit dan saat disimpan), penyedia peta (OpenStreetMap/Leaflet untuk tampilan peta), penyedia notifikasi perangkat (Google/Apple), GitHub Pages (hosting web).</li>
       <li><strong>Kontak darurat Anda:</strong> saat Anda menekan SOS atau "Bagikan perjalanan", kami mengirim posisi &amp; detail perjalanan ke kontak yang Anda pilih.</li>
+      <li><strong>Tim moderasi kami:</strong> isi laporan yang Anda kirim (kategori dan keterangan) dibaca oleh admin yang menanganinya. Pengguna yang Anda laporkan atau blokir <strong>tidak diberi tahu</strong> siapa yang melaporkan atau memblokirnya; daftar blokir Anda bersifat pribadi dan tidak terlihat oleh pengguna lain.</li>
       <li><strong>Aparat penegak hukum / regulator:</strong> bila diwajibkan oleh hukum atau untuk melindungi keselamatan pengguna.</li>
       <li><strong>Tidak ada</strong> pihak ketiga lain (broker data, jaringan iklan) yang menerima data Anda.</li>
     </ul>
@@ -161,6 +164,8 @@
       <tr><td>Jejak lokasi perjalanan per pesanan</td><td>Mengikuti riwayat pesanan; koordinat rinci dihapus/diagregasi setelah 12 bulan kecuali sengketa berjalan.</td></tr>
       <tr><td>Chat &amp; log panggilan dalam pesanan</td><td>12 bulan setelah pesanan selesai.</td></tr>
       <tr><td>Tiket bantuan &amp; laporan keamanan (SOS, insiden)</td><td>24 bulan setelah ditutup.</td></tr>
+      <tr><td>Laporan konten/pengguna &amp; keputusan moderasi</td><td>24 bulan setelah laporan diselesaikan — diperlukan untuk menunjukkan riwayat penanganan bila ada laporan berulang atau permintaan aparat. Jejak keputusan admin tersimpan permanen dalam log audit dalam bentuk anonim setelah akun dihapus.</td></tr>
+      <tr><td>Daftar pengguna yang Anda blokir</td><td>Selama akun aktif atau sampai Anda membuka blokirnya sendiri.</td></tr>
       <tr><td>Log teknis &amp; audit</td><td>12 bulan.</td></tr>
       <tr><td>Notifikasi &amp; promo</td><td>90 hari.</td></tr>
     </table>
