@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown, FadeInUp, LinearTransition } from 'react-native-reanimated';
@@ -7,6 +7,7 @@ import { Screen, Row, Chip, toast, Avatar } from '@/components/ui';
 import { PressableScale } from '@/components/motion';
 import { BrandGradient } from '@/components/glass';
 import { OfflineNotice } from '@/components/call/OfflineNotice';
+import { ModerationMenu, ReportSheet } from '@/components/moderation';
 import { notify } from '@/lib/push';
 import { useOrderChat, useOrder } from '@/hooks/useOrder';
 import { useAuth } from '@/store/auth';
@@ -21,6 +22,7 @@ export default function OrderChat() {
   const { messages, send } = useOrderChat(id);
   const { order, driver, customer } = useOrder(id);
   const [text, setText] = useState('');
+  const [reportMsg, setReportMsg] = useState<number | null>(null);
   const scroll = useRef<ScrollView>(null);
   const isCustomer = order?.customer_id === uid;
   const other = isCustomer ? driver?.profile : customer;
@@ -44,6 +46,9 @@ export default function OrderChat() {
     try { await send(uid, t); setText(''); } catch (e) { toast.error((e as Error).message); }
   };
 
+  // Lawan bicara: driver (bila saya pelanggan) atau pelanggan (bila saya driver/mitra).
+  const otherId = isCustomer ? order?.driver_id ?? null : order?.customer_id ?? null;
+
   const title = (
     <Row gap={10} style={{ flex: 1 }}>
       <Avatar name={other?.full_name} url={other?.avatar_url} size={34} />
@@ -51,6 +56,8 @@ export default function OrderChat() {
         <Text style={[font.h3, { fontSize: 15 }]} numberOfLines={1}>{other?.full_name ?? 'Chat'}</Text>
         <Text style={font.tiny} numberOfLines={1}>{closed ? 'Chat ditutup' : 'Pesanan berlangsung'}</Text>
       </View>
+      {/* Wajib kebijakan UGC Google Play: lapor & blokir harus mudah ditemukan di layar chat. */}
+      {otherId && otherId !== uid ? <ModerationMenu userId={otherId} name={other?.full_name} kind="chat" targetId={id} size={34} /> : null}
     </Row>
   );
 
@@ -59,16 +66,23 @@ export default function OrderChat() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }} keyboardVerticalOffset={60}>
         <OfflineNotice />
         <ScrollView ref={scroll} contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
-          <Text style={[font.tiny, { textAlign: 'center', marginBottom: 8 }]}>Chat hanya tersedia selama pesanan berlangsung. Jaga sopan santun ya.</Text>
+          <Text style={[font.tiny, { textAlign: 'center', marginBottom: 8 }]}>
+            Chat hanya tersedia selama pesanan berlangsung. Jaga sopan santun ya.{'\n'}
+            Tekan lama sebuah pesan untuk melaporkannya, atau ketuk tombol ⋯ di atas untuk melaporkan/memblokir.
+          </Text>
           {messages.map((m, i) => {
             const mine = m.sender_id === uid;
             const last = i >= messages.length - 1;
-            return (
-              <Animated.View key={m.id} entering={last ? (mine ? FadeInUp : FadeInDown).springify().stiffness(280).damping(18) : undefined} layout={LinearTransition.springify().stiffness(280).damping(20)} style={[s.bubble, mine ? s.mine : s.theirs]}>
+            const bubble = (
+              <Animated.View entering={last ? (mine ? FadeInUp : FadeInDown).springify().stiffness(280).damping(18) : undefined} layout={LinearTransition.springify().stiffness(280).damping(20)} style={[s.bubble, mine ? s.mine : s.theirs]}>
                 {mine && <BrandGradient style={StyleSheet.absoluteFill} />}
                 <Text style={{ color: mine ? '#fff' : colors.text, fontSize: 15, lineHeight: 21 }}>{m.body}</Text>
                 <Text style={{ fontSize: 12, color: mine ? 'rgba(255,255,255,0.92)' : colors.textMuted, marginTop: 2, alignSelf: 'flex-end' }}>{formatTime(m.created_at)}</Text>
               </Animated.View>
+            );
+            // Pesan lawan bicara bisa dilaporkan langsung (tekan lama) — jalur pelaporan konten UGC.
+            return mine ? <View key={m.id}>{bubble}</View> : (
+              <Pressable key={m.id} onLongPress={() => setReportMsg(m.id)} delayLongPress={350} accessibilityHint="Tekan lama untuk melaporkan pesan ini">{bubble}</Pressable>
             );
           })}
         </ScrollView>
@@ -88,6 +102,7 @@ export default function OrderChat() {
         )}
         {closed && <Text style={[font.small, { textAlign: 'center', padding: 16 }]}>Chat ditutup.</Text>}
       </KeyboardAvoidingView>
+      <ReportSheet visible={reportMsg != null} onClose={() => setReportMsg(null)} kind="chat" targetId={reportMsg == null ? null : String(reportMsg)} targetUserId={otherId} targetName={other?.full_name} />
     </Screen>
   );
 }

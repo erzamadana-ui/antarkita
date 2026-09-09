@@ -8,8 +8,9 @@ import { Row, Badge, Input, Button } from '@/components/ui';
 import { LiveDot, PressableScale } from '@/components/motion';
 import { supabase, realtimeChannel } from '@/lib/supabase';
 import { colors, motion } from '@/lib/theme';
-import { formatDate, timeAgo, roleLabelId } from '@/lib/format';
+import { roleLabelId } from '@/lib/format';
 import type { AuditLog } from '@/lib/types';
+import { usePager, Pager, fmtDate, fmtAgo } from './_shared';
 
 const ENTITIES: { key: string; label: string; icon: string; color: string }[] = [
   { key: 'all', label: 'Semua', icon: 'list', color: colors.primary },
@@ -64,6 +65,8 @@ export default function AdminActivity() {
     alerts: rows.filter((r) => r.entity === 'sos_alerts' || (r.entity === 'tickets' && r.action === 'ticket.created')).length,
   }), [rows]);
 
+  const pg = usePager(shown);
+
   const exportCsv = () => {
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const csv = ['waktu,aktor,peran,aksi,entitas,id,ringkasan', ...shown.map((r) => [r.created_at, r.actor_name, r.actor_role, r.action, r.entity, r.entity_id, r.summary].map(esc).join(','))].join('\n');
@@ -91,7 +94,7 @@ export default function AdminActivity() {
       </Row>
       {shown.length === 0 && <Empty icon="time-outline" title="Belum ada aktivitas" subtitle="Ubah rentang waktu atau filter." />}
       <View style={{ gap: 6 }}>
-        {shown.map((r, i) => {
+        {pg.rows.map((r, i) => {
           const e = entityOf(r.entity);
           const danger = r.entity === 'sos_alerts' || r.action.endsWith('.rejected') || r.action.endsWith('.suspended') || r.action.endsWith('.cancelled') || r.action.endsWith('.deactivated');
           return (
@@ -101,7 +104,7 @@ export default function AdminActivity() {
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={font.bodyStrong} numberOfLines={open === r.id ? undefined : 1}>{r.summary ?? r.action}</Text>
                   <Row gap={6} style={{ flexWrap: 'wrap' }}>
-                    <Text style={font.tiny}>{timeAgo(r.created_at)} · {formatDate(r.created_at)}</Text>
+                    <Text style={font.tiny}>{fmtAgo(r.created_at)} · {fmtDate(r.created_at)}</Text>
                     <Badge text={r.action} color={e.color} />
                     <Text style={font.tiny}>{r.actor_name ?? 'Sistem'}{r.actor_role ? ` (${roleLabelId[r.actor_role]})` : ''}</Text>
                   </Row>
@@ -114,6 +117,7 @@ export default function AdminActivity() {
           );
         })}
       </View>
+      <Pager p={pg} noun="kejadian" hint="maks. 500 kejadian per rentang" />
     </AdminPage>
   );
 }

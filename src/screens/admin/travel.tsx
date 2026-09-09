@@ -10,8 +10,9 @@ import { rpc } from '@/lib/supabase';
 import { signedUrl } from '@/lib/upload';
 import { handleAdminError } from '@/store/adminSecurity';
 import { colors } from '@/lib/theme';
-import { formatDate, phoneDisplay, phoneMasked, rupiah } from '@/lib/format';
+import { phoneDisplay, phoneMasked, rupiah } from '@/lib/format';
 import type { ApprovalStatus, TravelPartner } from '@/lib/types';
+import { fmtDate, fmtAgo, WideTableHint } from './_shared';
 
 type PartnerRow = TravelPartner & { full_name: string | null; phone: string | null; email: string | null; base_city_name: string | null; trips: number; bookings: number; requests_done: number; offers: number; wallet: number | null };
 
@@ -102,7 +103,7 @@ export default function AdminTravelPartners() {
                       <Text style={font.tiny}>{open ? `${phoneDisplay(p.phone)} · ${p.email ?? '-'}` : `${phoneMasked(p.phone)} · ${emailMasked(p.email)}`}</Text>
                       {!open ? <Pressable onPress={() => reveal(p)} hitSlop={6}><Text style={st.link}>Tampilkan</Text></Pressable> : null}
                     </Row>
-                    <Row gap={6}><Ionicons name="location-outline" size={adminIcon.sm} color={adminTone.faint} /><Text style={font.tiny}>Kota basis: {p.base_city_name ?? '—'} · daftar {formatDate(p.created_at, false)}</Text></Row>
+                    <Row gap={6}><Ionicons name="location-outline" size={adminIcon.sm} color={adminTone.faint} /><Text style={font.tiny}>Kota basis: {p.base_city_name ?? '—'} · daftar {fmtDate(p.created_at, false)}</Text></Row>
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 4 }}>
                     <Stars value={Number(p.rating_avg) || 0} />
@@ -168,6 +169,7 @@ export default function AdminTravelPartners() {
             </Entrance>
           );
         })}
+      <WideTableHint />
     </AdminPage>
   );
 }

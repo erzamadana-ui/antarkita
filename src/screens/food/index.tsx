@@ -3,13 +3,13 @@ import { View, Text, StyleSheet, ScrollView, TextInput, useWindowDimensions } fr
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { LinearTransition } from 'react-native-reanimated';
-import { Screen, Chip, Row, Empty, type IconName } from '@/components/ui';
+import { Screen, Chip, Row, Empty, Button, type IconName } from '@/components/ui';
 import { CartBar } from '@/components/CartBar';
 import { DestinationCard } from '@/components/PromoCard';
 import { Entrance, PressableScale, Skeleton } from '@/components/motion';
 import { ServiceIllustration } from '@/components/ServiceArt';
 import { useCurrentLocation } from '@/hooks/useLocation';
-import { supabase } from '@/lib/supabase';
+import { supabase, friendlyError } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
 import type { Merchant } from '@/lib/types';
@@ -33,17 +33,23 @@ export default function FoodHome() {
   const [nonHalal, setNonHalal] = useState(false);
   const [list, setList] = useState<Merchant[]>([]);
   const [loading, setLoading] = useState(true);
+  // null = permintaan terakhir sukses; string = pesan gagal (mis. tanpa internet).
+  // Tanpa ini kegagalan jaringan tampil sebagai "Belum ada merchant" — pengguna dituduh
+  // tinggal di daerah tanpa merchant padahal ponselnya sedang offline.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
   const halal: 'all' | 'halal' | 'non' = filter === 'halal' ? 'halal' : nonHalal ? 'non' : 'all';
 
   useEffect(() => {
     const t = setTimeout(async () => {
       setLoading(true);
-      const { data } = await supabase.rpc('nearby_merchants', { p_lat: location.lat, p_lng: location.lng, p_radius_km: 30, p_q: q || null, p_halal: halal === 'all' ? null : halal === 'halal' });
+      const { data, error } = await supabase.rpc('nearby_merchants', { p_lat: location.lat, p_lng: location.lng, p_radius_km: 30, p_q: q || null, p_halal: halal === 'all' ? null : halal === 'halal' });
+      setLoadError(error ? friendlyError(error.message) : null);
       setList((data as Merchant[]) ?? []);
       setLoading(false);
     }, q ? 350 : 0);
     return () => clearTimeout(t);
-  }, [q, halal, location.lat, location.lng]);
+  }, [q, halal, location.lat, location.lng, reloadTick]);
 
   const shown = list
     .filter((m) => cat === 'Semua' || m.category === cat)
@@ -102,6 +108,8 @@ export default function FoodHome() {
             <View style={s.grid}>
               {[0, 1, 2, 3].map((i) => <Skeleton key={i} width={colW} height={200} radius={24} />)}
             </View>
+          ) : loadError ? (
+            <Empty icon="cloud-offline-outline" title="Gagal memuat merchant" subtitle={loadError} action={<Button title="Coba lagi" icon="refresh" onPress={() => setReloadTick((n) => n + 1)} />} />
           ) : shown.length === 0 ? (
             <Empty icon="restaurant-outline" title="Belum ada merchant" subtitle="Coba kata kunci lain atau perluas lokasi." />
           ) : (

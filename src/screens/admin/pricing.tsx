@@ -12,9 +12,18 @@ import { supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import { serviceLabel } from '@/lib/format';
 import type { Pricing, Promo, ServiceType } from '@/lib/types';
+import { WideTableHint } from './_shared';
 
 const numFields: (keyof Pricing)[] = ['base_fare', 'per_km', 'min_fare', 'platform_fee', 'commission_pct', 'merchant_commission_pct', 'surge_multiplier'];
 const labels: Record<string, string> = { base_fare: 'Tarif dasar', per_km: 'Per km', min_fare: 'Tarif minimal', platform_fee: 'Biaya layanan', commission_pct: 'Komisi driver %', merchant_commission_pct: 'Komisi merchant %', surge_multiplier: 'Pengali surge' };
+/**
+ * Batas komisi layanan roda dua (Perpres 27/2026, berlaku 1 Juli 2026): maksimal 8%.
+ * Server memasang trigger `t_guard_commission_cap` yang menolak nilai di atas batas —
+ * penjaga di sini hanya agar admin tahu SEBELUM menyimpan, bukan pengganti penjaga server.
+ */
+const TWO_WHEEL_SERVICES = ['ride_motor'];
+const COMMISSION_CAP_TWO_WHEEL = 8;
+
 const emptyPromo = { code: '', title: '', description: '', discount_type: 'fixed', value: '', max_discount: '', min_total: '0', service: '', quota: '', image_url: '' };
 
 export default function AdminPricing() {
@@ -32,7 +41,14 @@ export default function AdminPricing() {
 
   const savePricing = async (service: string) => {
     const v = pricing[service];
-    const payload = Object.fromEntries(numFields.map((k) => [k, Number(v[k])]));
+    const bad = numFields.find((k) => !Number.isFinite(Number(String(v[k] ?? '').replace(',', '.'))));
+    if (bad) return toast.error(`${labels[bad]} ${serviceLabel[service as ServiceType] ?? service} harus berupa angka`);
+    const comm = Number(String(v.commission_pct ?? '').replace(',', '.'));
+    if (TWO_WHEEL_SERVICES.includes(service) && comm > COMMISSION_CAP_TWO_WHEEL) {
+      return toast.error(`Komisi ${serviceLabel[service as ServiceType] ?? service} maksimal ${COMMISSION_CAP_TWO_WHEEL}% sesuai Perpres 27/2026 (angkutan sepeda motor berbasis aplikasi). Nilai ${comm}% ditolak.`);
+    }
+    if (numFields.some((k) => Number(String(v[k]).replace(',', '.')) < 0)) return toast.error('Nilai tarif tidak boleh negatif');
+    const payload = Object.fromEntries(numFields.map((k) => [k, Number(String(v[k]).replace(',', '.'))]));
     const { error } = await supabase.from('pricing').update({ ...payload, updated_at: new Date().toISOString() }).eq('service', service);
     if (error) return toast.error(error.message);
     toast.success(`Tarif ${serviceLabel[service as ServiceType]} disimpan`);
@@ -50,17 +66,23 @@ export default function AdminPricing() {
       <Card padded={false}>
         <View style={{ padding: 14 }}><Text style={font.label}>Tarif per layanan (baris) · kelas kendaraan memakai pengali: Hemat ×0,9 · Standar ×1 · Premium ×1,35 · Listrik ×1,1 · Listrik Premium ×1,45 · Pick Up ×1 · Box ×1,4</Text></View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={{ minWidth: 1060 }}>
+          <View style={{ minWidth: 900 }}>
             <Row gap={8} style={s.th}>
-              <Text style={[font.label, { width: 120 }]}>Layanan</Text>
-              {numFields.map((k) => <Text key={k} style={[font.label, { width: 104, textAlign: 'right' }]}>{labels[k]}</Text>)}
-              <Text style={[font.label, { width: 90 }]} />
+              <Text style={[font.label, { width: 108 }]}>Layanan</Text>
+              {numFields.map((k) => <Text key={k} style={[font.label, { width: 92, textAlign: 'right' }]} numberOfLines={2}>{labels[k]}</Text>)}
+              <Text style={[font.label, { width: 84 }]} />
             </Row>
             {Object.entries(pricing).map(([service, v], i) => (
               <Row key={service} gap={8} style={[s.tr, i % 2 ? s.trAlt : null]}>
-                <Text style={[font.bodyStrong, { width: 120 }]} numberOfLines={1}>{serviceLabel[service as ServiceType] ?? service}</Text>
-                {numFields.map((k) => <Input key={k} value={v[k]} keyboardType="decimal-pad" onChangeText={(t) => setPricing((p) => ({ ...p, [service]: { ...p[service], [k]: t } }))} containerStyle={{ width: 104 }} style={{ textAlign: 'right', paddingVertical: 6 }} />)}
-                <Button title="Simpan" size="sm" onPress={() => savePricing(service)} style={{ width: 90 }} />
+                <View style={{ width: 108 }}>
+                  <Text style={font.bodyStrong} numberOfLines={1}>{serviceLabel[service as ServiceType] ?? service}</Text>
+                  {TWO_WHEEL_SERVICES.includes(service) ? <Text style={font.tiny} numberOfLines={1}>komisi maks {COMMISSION_CAP_TWO_WHEEL}%</Text> : null}
+                </View>
+                {numFields.map((k) => {
+                  const over = k === 'commission_pct' && TWO_WHEEL_SERVICES.includes(service) && Number(String(v[k] ?? '').replace(',', '.')) > COMMISSION_CAP_TWO_WHEEL;
+                  return <Input key={k} value={v[k]} keyboardType="decimal-pad" error={over ? ' ' : undefined} onChangeText={(t) => setPricing((p) => ({ ...p, [service]: { ...p[service], [k]: t } }))} containerStyle={{ width: 92 }} style={{ textAlign: 'right', paddingVertical: 6, color: over ? colors.danger : undefined }} />;
+                })}
+                <Button title="Simpan" size="sm" onPress={() => savePricing(service)} style={{ width: 84 }} />
               </Row>
             ))}
           </View>
@@ -102,6 +124,7 @@ export default function AdminPricing() {
           <Button title="Simpan promo" onPress={savePromo} />
         </Card>
       </Entrance>
+      <WideTableHint />
     </AdminPage>
   );
 }

@@ -5,8 +5,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import {
-  AdminPage, Panel, DataTable, Toolbar, FilterBar, StatCard, Pill, AdminDialog, Truncate,
-  adminFont as font, adminTone, adminSpace, adminIcon,
+  AdminPage, Panel, DataTable, Toolbar, FilterBar, StatCard, Pill, AdminDialog, adminFont as font, adminTone, adminSpace, adminIcon,
 } from '@/components/admin';
 import {
   Breadcrumb, DateField, FootNote, LineItem, SplitBar, RANGE_PRESETS, presetRange, rangeError, rangeLabel, pctId, share,
@@ -16,8 +15,9 @@ import { Row, Button } from '@/components/ui';
 import { rpc } from '@/lib/supabase';
 import { adminExportCsv } from '@/lib/csv';
 import { handleAdminError } from '@/store/adminSecurity';
-import { formatDate, rupiah, serviceLabel, statusLabel, statusColor, paidViaLabel } from '@/lib/format';
+import { rupiah, serviceLabel, statusLabel, statusColor, paidViaLabel } from '@/lib/format';
 import type { OrderStatus, ServiceType } from '@/lib/types';
+import { fmtDate, fmtAgo, Trunc, WideTableHint } from './_shared';
 
 /* ───────────────────────── Bentuk data dari server ───────────────────────── */
 
@@ -163,7 +163,7 @@ export default function AdminFinanceReport() {
         <>
           <Panel
             title={level2 ? `Rincian per ${groupWord(subGroup)} — ${labelOf(group, key)}` : `Ringkasan per ${groupWord(group)}`}
-            subtitle={level2 ? 'Sebaran nilai pada dimensi lawan untuk kelompok yang dipilih' : 'Klik satu baris untuk membuka rincian & daftar pesanannya'}
+            subtitle={`${level2 ? 'Sebaran nilai pada dimensi lawan untuk kelompok yang dipilih' : 'Klik satu baris untuk membuka rincian & daftar pesanannya'} · 11 kolom nilai — geser tabel ke samping untuk melihat COGS & marjin`}
             icon={level2 ? 'git-branch-outline' : 'bar-chart-outline'} padded={false}
           >
             <DataTable keyField="key" rows={rows as unknown as Record<string, unknown>[]} columns={groupColumns}
@@ -172,22 +172,22 @@ export default function AdminFinanceReport() {
           </Panel>
 
           {level2 ? (
-            <Panel title="Rincian per pesanan" subtitle={`Maksimal 200 pesanan terbaru · ${rangeLabel(range)} · klik baris untuk melihat bagi hasil`} icon="receipt-outline" padded={false}>
+            <Panel title="Rincian per pesanan" subtitle={`Maksimal 200 pesanan terbaru · ${rangeLabel(range)} · klik baris untuk melihat bagi hasil · geser tabel ke samping untuk kolom lainnya`} icon="receipt-outline" padded={false}>
               <DataTable rows={orders as unknown as Record<string, unknown>[]} onRowPress={(r) => openSplit(String((r as unknown as CascadeOrder).id))}
                 emptyText="Tidak ada pesanan pada kelompok ini" emptyIcon="receipt-outline"
                 columns={[
-                  { key: 'code', label: 'Kode', width: 150, render: (r) => { const o = r as unknown as CascadeOrder; return <View style={{ minWidth: 0 }}><Truncate style={font.bodyStrong} title={o.code}>{o.code}</Truncate><Truncate style={font.tiny}>{formatDate(o.created_at)}</Truncate></View>; } },
-                  { key: 'service', label: 'Layanan', width: 118, render: (r) => <Text style={font.body} numberOfLines={1}>{serviceLabel[(r as unknown as CascadeOrder).service as ServiceType] ?? (r as unknown as CascadeOrder).service}</Text> },
-                  { key: 'city', label: 'Kota', width: 120, render: (r) => <Truncate style={font.body} title={(r as unknown as CascadeOrder).city ?? ''}>{(r as unknown as CascadeOrder).city || '—'}</Truncate> },
-                  num('total', 'Total', 120, (o: CascadeOrder) => o.total),
-                  num('platform_fee', 'Biaya platform', 128, (o: CascadeOrder) => o.platform_fee),
-                  num('service_fee', 'Jasa', 110, (o: CascadeOrder) => o.service_fee),
-                  num('driver_earning', 'Payout driver', 128, (o: CascadeOrder) => o.driver_earning, C.driver),
-                  num('merchant_earning', 'Payout merchant', 140, (o: CascadeOrder) => o.merchant_earning, C.merchant),
-                  num('discount', 'Diskon', 110, (o: CascadeOrder) => o.discount, C.promo),
-                  num('tip', 'Tip', 100, (o: CascadeOrder) => o.tip),
-                  { key: 'payment_method', label: 'Metode bayar', width: 130, render: (r) => <Text style={font.small} numberOfLines={1}>{paidViaLabel((r as unknown as CascadeOrder).payment_method)}</Text> },
-                  { key: 'status', label: 'Status', width: 155, render: (r) => { const o = r as unknown as CascadeOrder; return <Pill text={statusLabel(o.status as OrderStatus, o.service as ServiceType) || o.status} color={statusColor(o.status as OrderStatus)} />; } },
+                  { key: 'code', label: 'Kode', width: 130, render: (r) => { const o = r as unknown as CascadeOrder; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.bodyStrong} title={o.code}>{o.code}</Trunc><Trunc style={font.tiny}>{fmtDate(o.created_at)}</Trunc></View>; } },
+                  { key: 'service', label: 'Layanan', width: 100, render: (r) => <Text style={font.body} numberOfLines={1}>{serviceLabel[(r as unknown as CascadeOrder).service as ServiceType] ?? (r as unknown as CascadeOrder).service}</Text> },
+                  { key: 'city', label: 'Kota', width: 96, render: (r) => <Trunc style={font.body} title={(r as unknown as CascadeOrder).city ?? ''}>{(r as unknown as CascadeOrder).city || '—'}</Trunc> },
+                  num('total', 'Total', 100, (o: CascadeOrder) => o.total),
+                  num('platform_fee', 'Biaya platform', 104, (o: CascadeOrder) => o.platform_fee),
+                  num('service_fee', 'Jasa', 92, (o: CascadeOrder) => o.service_fee),
+                  num('driver_earning', 'Payout driver', 104, (o: CascadeOrder) => o.driver_earning, C.driver),
+                  num('merchant_earning', 'Payout merchant', 110, (o: CascadeOrder) => o.merchant_earning, C.merchant),
+                  num('discount', 'Diskon', 92, (o: CascadeOrder) => o.discount, C.promo),
+                  num('tip', 'Tip', 80, (o: CascadeOrder) => o.tip),
+                  { key: 'payment_method', label: 'Metode bayar', width: 110, render: (r) => <Text style={font.small} numberOfLines={1}>{paidViaLabel((r as unknown as CascadeOrder).payment_method)}</Text> },
+                  { key: 'status', label: 'Status', width: 128, render: (r) => { const o = r as unknown as CascadeOrder; return <Pill text={statusLabel(o.status as OrderStatus, o.service as ServiceType) || o.status} color={statusColor(o.status as OrderStatus)} />; } },
                 ]} />
             </Panel>
           ) : null}
@@ -208,6 +208,7 @@ export default function AdminFinanceReport() {
 
       <SplitDialog split={split} busy={splitBusy} onClose={() => setSplit(null)} />
       {splitBusy && !split ? <Text style={font.tiny}>Memuat bagi hasil pesanan…</Text> : null}
+      <WideTableHint />
     </AdminPage>
   );
 }
@@ -222,22 +223,22 @@ const num = (key: string, label: string, width: number, get: (o: never) => numbe
 function moneyColumns(g: GroupKind) {
   return [
     {
-      key: 'label', label: g === 'service' ? 'Layanan' : 'Kota', width: 170, render: (r: Record<string, unknown>) => {
+      key: 'label', label: g === 'service' ? 'Layanan' : 'Kota', width: 146, render: (r: Record<string, unknown>) => {
         const x = r as unknown as CascadeRow;
-        return <View style={{ minWidth: 0 }}><Truncate style={font.bodyStrong} title={labelOf(g, x.key)}>{labelOf(g, x.key)}</Truncate><Text style={font.tiny}>{x.completed.toLocaleString('id-ID')} selesai</Text></View>;
+        return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.bodyStrong} title={labelOf(g, x.key)}>{labelOf(g, x.key)}</Trunc><Text style={font.tiny}>{x.completed.toLocaleString('id-ID')} selesai</Text></View>;
       },
     },
-    { key: 'orders', label: 'Order', width: 84, align: 'right' as const, mono: true, render: (r: Record<string, unknown>) => <Text style={font.mono}>{(r as unknown as CascadeRow).orders.toLocaleString('id-ID')}</Text> },
-    num('gmv', 'GMV', 128, (x: CascadeRow) => x.gmv),
-    num('revenue', 'Pendapatan', 128, (x: CascadeRow) => x.revenue, C.revenue),
-    num('driver_payout', 'Payout driver', 128, (x: CascadeRow) => x.driver_payout, C.driver),
-    num('merchant_payout', 'Payout merchant', 140, (x: CascadeRow) => x.merchant_payout, C.merchant),
-    num('promo', 'Promo', 112, (x: CascadeRow) => x.promo, C.promo),
-    num('gateway_fee', 'Biaya gateway', 130, (x: CascadeRow) => x.gateway_fee, C.gateway),
-    num('cogs', 'COGS', 128, (x: CascadeRow) => x.cogs),
-    num('net_margin', 'Marjin bersih', 130, (x: CascadeRow) => x.net_margin, C.margin),
+    { key: 'orders', label: 'Order', width: 70, align: 'right' as const, mono: true, render: (r: Record<string, unknown>) => <Text style={font.mono}>{(r as unknown as CascadeRow).orders.toLocaleString('id-ID')}</Text> },
+    num('gmv', 'GMV', 106, (x: CascadeRow) => x.gmv),
+    num('revenue', 'Pendapatan', 106, (x: CascadeRow) => x.revenue, C.revenue),
+    num('driver_payout', 'Payout driver', 106, (x: CascadeRow) => x.driver_payout, C.driver),
+    num('merchant_payout', 'Payout merchant', 112, (x: CascadeRow) => x.merchant_payout, C.merchant),
+    num('promo', 'Promo', 92, (x: CascadeRow) => x.promo, C.promo),
+    num('gateway_fee', 'Gateway', 96, (x: CascadeRow) => x.gateway_fee, C.gateway),
+    num('cogs', 'COGS', 106, (x: CascadeRow) => x.cogs),
+    num('net_margin', 'Marjin bersih', 106, (x: CascadeRow) => x.net_margin, C.margin),
     {
-      key: 'margin_pct', label: '% marjin', width: 100, align: 'right' as const, mono: true,
+      key: 'margin_pct', label: '% marjin', width: 84, align: 'right' as const, mono: true,
       render: (r: Record<string, unknown>) => { const x = r as unknown as CascadeRow; return <Text style={[font.mono, { color: x.margin_pct >= 0 ? C.margin : adminTone.red }]}>{pctId(x.margin_pct)}</Text>; },
     },
   ];
@@ -252,7 +253,7 @@ function SplitDialog({ split, busy, onClose }: { split: OrderSplit | null; busy:
   const neg = adminTone.red;
   return (
     <AdminDialog visible onClose={onClose} width={640} title={`Bagi hasil order ${s.code}`}
-      subtitle={`${serviceLabel[s.service as ServiceType] ?? s.service} · ${s.city || 'tanpa kota'} · ${formatDate(s.created_at)} · ${paidViaLabel(s.payment_method)}`}>
+      subtitle={`${serviceLabel[s.service as ServiceType] ?? s.service} · ${s.city || 'tanpa kota'} · ${fmtDate(s.created_at)} · ${paidViaLabel(s.payment_method)}`}>
       {busy ? <ActivityIndicator color={adminTone.teal} /> : null}
       <Row gap={8} style={{ flexWrap: 'wrap' }}>
         <Pill text={statusLabel(s.status as OrderStatus, s.service as ServiceType) || s.status} color={statusColor(s.status as OrderStatus)} />

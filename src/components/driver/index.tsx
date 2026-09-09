@@ -215,7 +215,8 @@ export function VehicleServiceMatrix({ vehicle, defaultOpen = false }: { vehicle
           <View style={[s.icon, { backgroundColor: colors.primary + '14' }]}><Ionicons name="options-outline" size={20} color={colors.primary} /></View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={1}>Layanan yang bisa Anda ambil</Text>
-            <Text style={font.tiny} numberOfLines={1}>{VEHICLE_LABEL[v]} · {yes.length} dari {rows.length} layanan</Text>
+            {/* 2 baris: pada layar 360px teks ini terpotong beberapa piksel di ujung. */}
+            <Text style={font.tiny} numberOfLines={2}>{VEHICLE_LABEL[v]} · {yes.length} dari {rows.length} layanan</Text>
           </View>
           <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
         </Row>

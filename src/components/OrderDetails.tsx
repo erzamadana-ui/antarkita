@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Row, Avatar, Stars, Badge, Divider } from '@/components/ui';
 import { PressableScale } from '@/components/motion';
 import { CallButton } from '@/components/call/IncomingCall';
+import { ModerationMenu } from '@/components/moderation';
 import type { CallPeer } from '@/lib/call';
 import { PriceSummary } from '@/components/BookingSheet';
 import { colors, font, radius, glass, shadow } from '@/lib/theme';
@@ -14,7 +15,13 @@ import type { Driver, Order, OrderEvent, Profile, ShoppingItem } from '@/lib/typ
 
 /** Kartu driver (untuk customer) atau kartu customer (untuk driver). */
 /** phone tidak lagi ditampilkan/dipakai (UU PDP) — telepon lewat aplikasi via `callPeer`. */
-export function PersonCard({ name, subtitle, avatar, rating, ratingCount, onChat, badge, callPeer, orderId }: { name?: string | null; subtitle?: string; phone?: string | null; avatar?: string | null; rating?: number; ratingCount?: number; onChat?: () => void; badge?: string; callPeer?: CallPeer | null; orderId?: string | null }) {
+/**
+ * `moderationUserId` menampilkan tombol ⋯ berisi "Laporkan" & "Blokir" (wajib
+ * kebijakan UGC Google Play). Bila tidak diisi, jalur moderasi tetap muncul
+ * selama `callPeer` ada, sehingga kartu lama otomatis ikut terlindungi.
+ */
+export function PersonCard({ name, subtitle, avatar, rating, ratingCount, onChat, badge, callPeer, orderId, moderationUserId, moderation = true }: { name?: string | null; subtitle?: string; phone?: string | null; avatar?: string | null; rating?: number; ratingCount?: number; onChat?: () => void; badge?: string; callPeer?: CallPeer | null; orderId?: string | null; moderationUserId?: string | null; moderation?: boolean }) {
+  const modId = moderationUserId ?? callPeer?.id ?? null;
   return (
     <View style={s.person}>
       <Avatar name={name} url={avatar} size={50} />
@@ -25,8 +32,9 @@ export function PersonCard({ name, subtitle, avatar, rating, ratingCount, onChat
         {badge ? <Badge text={badge} style={{ marginTop: 4 }} /> : null}
       </View>
       <Row gap={8}>
-        {onChat && <PressableScale onPress={onChat} scaleTo={0.9} style={[s.circle, shadow.glow(colors.primary)]}><Ionicons name="chatbubble-ellipses" size={20} color="#fff" /></PressableScale>}
+        {onChat && <PressableScale onPress={onChat} scaleTo={0.9} accessibilityRole="button" accessibilityLabel="Buka chat" style={[s.circle, shadow.glow(colors.primary)]}><Ionicons name="chatbubble-ellipses" size={20} color="#fff" /></PressableScale>}
         {callPeer && <CallButton peer={callPeer} orderId={orderId} />}
+        {moderation && modId ? <ModerationMenu userId={modId} name={name} kind="user" targetId={orderId} size={44} /> : null}
       </Row>
     </View>
   );

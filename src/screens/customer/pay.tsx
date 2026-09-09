@@ -35,6 +35,6 @@ export default function CustomerPay() {
 
 const s = StyleSheet.create({
   inner: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 16 },
-  tab: { paddingHorizontal: 18, paddingVertical: 9, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff', ...shadow.soft },
+  tab: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 18, paddingVertical: 11, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff', ...shadow.soft },
   tabOn: { backgroundColor: colors.primary, borderColor: colors.primary },
 });

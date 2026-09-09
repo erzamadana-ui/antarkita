@@ -9,13 +9,16 @@ import { ServiceIllustration, type ArtKind } from '@/components/ServiceArt';
 import { useAuth } from '@/store/auth';
 import { colors, font, radius, shadow } from '@/lib/theme';
 
-const OPTIONS: { key: string; title: string; sub: string; art: ArtKind; color: string; href: string }[] = [
-  { key: 'driver', title: 'Driver motor / mobil', sub: 'AntarRide, AntarCar, AntarFood, AntarSend, AntarShop, AntarMarket', art: 'rider', color: colors.ride, href: '/account/become-driver' },
-  { key: 'box', title: 'Mobil box / pick up', sub: 'AntarBox: kirim barang, pindahan rumah/kost', art: 'box', color: colors.box, href: '/account/become-driver?vehicle=box' },
-  { key: 'travel', title: 'Mitra travel & sopir pribadi', sub: 'Kursi bersama, carter privat, atau sopir harian antar kota', art: 'travel', color: colors.travel, href: '/account/become-travel' },
-  { key: 'merchant', title: 'Merchant makanan & minuman', sub: 'Jual ke pelanggan AntarFood, badge halal', art: 'food', color: colors.food, href: '/account/become-merchant' },
-  { key: 'vendor', title: 'Pedagang pasar tradisional', sub: 'Daftarkan lapak & barang dagangan Anda di AntarMarket', art: 'market', color: colors.market, href: '/account/become-vendor' },
+// `short` dipakai untuk teks tombol footer: judul penuh ("Driver motor / mobil") membuat
+// "Lanjut daftar · …" terpotong pada layar 360px.
+const OPTIONS: { key: string; title: string; short: string; sub: string; art: ArtKind; color: string; href: string }[] = [
+  { key: 'driver', title: 'Driver motor / mobil', short: 'Driver', sub: 'AntarRide, AntarCar, AntarFood, AntarSend, AntarShop, AntarMarket', art: 'rider', color: colors.ride, href: '/account/become-driver' },
+  { key: 'box', title: 'Mobil box / pick up', short: 'Mobil box', sub: 'AntarBox: kirim barang, pindahan rumah/kost', art: 'box', color: colors.box, href: '/account/become-driver?vehicle=box' },
+  { key: 'travel', title: 'Mitra travel & sopir pribadi', short: 'Mitra travel', sub: 'Kursi bersama, carter privat, atau sopir harian antar kota', art: 'travel', color: colors.travel, href: '/account/become-travel' },
+  { key: 'merchant', title: 'Merchant makanan & minuman', short: 'Merchant', sub: 'Jual ke pelanggan AntarFood, badge halal', art: 'food', color: colors.food, href: '/account/become-merchant' },
+  { key: 'vendor', title: 'Pedagang pasar tradisional', short: 'Lapak pasar', sub: 'Daftarkan lapak & barang dagangan Anda di AntarMarket', art: 'market', color: colors.market, href: '/account/become-vendor' },
 ];
+const STATUS_LABEL: Record<string, string> = { pending: 'menunggu verifikasi', rejected: 'ditolak, kirim ulang', suspended: 'ditangguhkan' };
 const LINKS: { icon: IconName; color?: string; title: string; subtitle?: string; key: 'support' | 'logout'; danger?: boolean }[] = [
   { icon: 'chatbubbles-outline', color: colors.info, title: 'Bantuan & tiket aduan', key: 'support' },
   { icon: 'log-out-outline', title: 'Keluar', key: 'logout', danger: true },
@@ -25,7 +28,12 @@ export default function MitraOnboarding() {
   const router = useRouter();
   const { profile, driver, merchant, travelPartner, marketVendor, signOut } = useAuth();
   const [choice, setChoice] = useState(OPTIONS[0].key);
-  const pending = [driver && driver.status !== 'approved' ? `Driver: ${driver.status}` : null, merchant && merchant.status !== 'approved' ? `Merchant: ${merchant.status}` : null, travelPartner && travelPartner.status !== 'approved' ? `Travel: ${travelPartner.status}` : null, marketVendor && marketVendor.status !== 'approved' ? `Pedagang pasar: ${marketVendor.status}` : null].filter(Boolean) as string[];
+  // Badge status pengajuan: sebelumnya menampilkan kode mentah ("Driver: rejected").
+  const pending = ([
+    [driver?.status, 'Driver'], [merchant?.status, 'Merchant'], [travelPartner?.status, 'Travel'], [marketVendor?.status, 'Pedagang pasar'],
+  ] as [string | undefined, string][])
+    .filter(([st]) => st && st !== 'approved')
+    .map(([st, label]) => ({ text: `${label}: ${STATUS_LABEL[st as string] ?? st}`, danger: st !== 'pending' }));
   const confirmSignOut = () => {
     const doIt = async () => { await signOut(); router.replace('/(auth)/welcome'); };
     if (Platform.OS === 'web') { if (confirm('Keluar dari akun?')) doIt(); return; }
@@ -35,7 +43,7 @@ export default function MitraOnboarding() {
   const onLink = (k: typeof LINKS[number]['key']) => k === 'support' ? router.push('/support' as never) : confirmSignOut();
 
   return (
-    <Screen title="Jadi Mitra" footer={<Button title={`Lanjut daftar · ${selected.title}`} size="lg" icon="arrow-forward" onPress={() => router.push(selected.href as never)} />}>
+    <Screen title="Jadi Mitra" footer={<Button title={`Lanjut daftar · ${selected.short}`} size="lg" icon="arrow-forward" onPress={() => router.push(selected.href as never)} />}>
       {/* Ilustrasi dalam lingkaran tint + judul besar */}
       <Entrance index={0} from="zoom">
         <View style={{ alignItems: 'center', marginTop: 6 }}>
@@ -53,7 +61,7 @@ export default function MitraOnboarding() {
             <Text style={font.tiny}>Akun ini belum terdaftar sebagai mitra aktif.</Text>
           </View>
         </Row>
-        {pending.length > 0 && <Row gap={6} style={{ marginTop: 10, flexWrap: 'wrap' }}>{pending.map((p) => <Badge key={p} text={p} color={colors.warning} />)}</Row>}
+        {pending.length > 0 && <Row gap={6} style={{ marginTop: 10, flexWrap: 'wrap' }}>{pending.map((p) => <Badge key={p.text} text={p.text} color={p.danger ? colors.danger : colors.warning} />)}</Row>}
       </Entrance>
 
       {/* Kartu pilihan dengan radio bulat */}

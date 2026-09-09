@@ -3,13 +3,13 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  AdminPage, DataTable, Toolbar, Panel, Pill, ContactActions, RowActions, Truncate, Grid, Col,
-  adminFont as font, adminTone, adminSpace, adminTable,
+  AdminPage, DataTable, Toolbar, Panel, Pill, ContactActions, RowActions, Grid, Col, adminFont as font, adminTone, adminSpace, adminTable,
 } from '@/components/admin';
 import { Row, Button, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
-import { formatDate, rupiah, serviceLabel, statusLabel, statusColor } from '@/lib/format';
+import { rupiah, serviceLabel, statusLabel, statusColor } from '@/lib/format';
+import { usePager, Pager, fmtDate, fmtAgo, Trunc, WideTableHint } from './_shared';
 import type { Order, Profile } from '@/lib/types';
 
 type Row_ = Order & { customer_name?: string; driver_name?: string };
@@ -42,6 +42,7 @@ export default function AdminOrders() {
     Alert.alert('Batalkan order?', o.code, [{ text: 'Tidak' }, { text: 'Batalkan', style: 'destructive', onPress: run }]);
   };
   const shown = rows.filter((r) => !q || r.code.toLowerCase().includes(q.toLowerCase()) || (r.customer_name ?? '').toLowerCase().includes(q.toLowerCase()));
+  const pg = usePager(shown);
 
   return (
     <AdminPage title="Pesanan" subtitle="Pantau, hubungi pihak terkait, dan intervensi pesanan berjalan" onRefresh={load}>
@@ -50,7 +51,7 @@ export default function AdminOrders() {
         filter={filter} onFilter={setFilter} />
 
       {open ? (
-        <Panel title={`Detail pesanan ${open.code}`} subtitle={`${serviceLabel[open.service]} · ${formatDate(open.created_at)}`} icon="receipt-outline"
+        <Panel title={`Detail pesanan ${open.code}`} subtitle={`${serviceLabel[open.service]} · ${fmtDate(open.created_at)}`} icon="receipt-outline"
           right={<Row gap={6} style={{ flexWrap: 'wrap' }}>
             <Button size="sm" variant="outline" title="Buka halaman order" icon="open-outline" onPress={() => router.push(`/order/${open.id}` as never)} />
             <Button size="sm" variant="ghost" title="Tutup" onPress={() => setOpen(null)} />
@@ -66,8 +67,8 @@ export default function AdminOrders() {
             </Col>
             <Col span={5} min={260} style={{ gap: 6 }}>
               <Text style={font.label}>Rute</Text>
-              <Truncate style={font.body} title={open.merchant?.name ?? open.pickup_address} lines={2}>▲ {open.merchant?.name ?? open.pickup_address}</Truncate>
-              <Truncate style={font.body} title={open.dropoff_address} lines={2}>▼ {open.dropoff_address}</Truncate>
+              <Trunc style={font.body} title={open.merchant?.name ?? open.pickup_address} lines={2}>▲ {open.merchant?.name ?? open.pickup_address}</Trunc>
+              <Trunc style={font.body} title={open.dropoff_address} lines={2}>▼ {open.dropoff_address}</Trunc>
               <Text style={[font.label, { marginTop: 10 }]}>Status</Text>
               <Pill text={statusLabel(open.status, open.service, open.merchant_status)} color={statusColor(open.status)} />
             </Col>
@@ -83,40 +84,40 @@ export default function AdminOrders() {
         </Panel>
       ) : null}
 
-      <DataTable rows={shown as unknown as Record<string, unknown>[]} emptyText="Tidak ada pesanan pada filter ini" emptyIcon="receipt-outline"
+      <DataTable rows={pg.rows as unknown as Record<string, unknown>[]} emptyText="Tidak ada pesanan pada filter ini" emptyIcon="receipt-outline"
         onRowPress={(r) => setOpen(r as unknown as Row_)}
         columns={[
-          { key: 'code', label: 'Order', width: 160, render: (r) => { const o = r as unknown as Row_; return <View style={{ minWidth: 0 }}><Truncate style={font.bodyStrong} title={o.code}>{o.code}</Truncate><Truncate style={font.tiny}>{formatDate(o.created_at)}</Truncate></View>; } },
-          { key: 'service', label: 'Layanan', width: 110, render: (r) => <Text style={font.body} numberOfLines={1}>{serviceLabel[(r as unknown as Row_).service]}</Text> },
+          { key: 'code', label: 'Order', width: 124, render: (r) => { const o = r as unknown as Row_; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.bodyStrong} title={o.code}>{o.code}</Trunc><Trunc style={font.tiny}>{fmtDate(o.created_at)}</Trunc></View>; } },
+          { key: 'service', label: 'Layanan', width: 88, render: (r) => <Text style={font.body} numberOfLines={1}>{serviceLabel[(r as unknown as Row_).service]}</Text> },
           {
-            key: 'people', label: 'Pelanggan / Driver', width: 190, flex: 1, render: (r) => {
+            key: 'people', label: 'Pelanggan / Driver', width: 156, render: (r) => {
               const o = r as unknown as Row_;
               return (
-                <View style={{ gap: 2, minWidth: 0 }}>
-                  <Truncate style={font.body} title={o.customer_name ?? ''}>{o.customer_name ?? '—'}</Truncate>
-                  <Truncate style={font.tiny} title={o.driver_name ?? ''}>🛵 {o.driver_name ?? 'belum ada'}</Truncate>
+                <View style={{ gap: 2, minWidth: 0, alignSelf: 'stretch' }}>
+                  <Trunc style={font.body} title={o.customer_name ?? ''}>{o.customer_name ?? '—'}</Trunc>
+                  <Trunc style={font.tiny} title={o.driver_name ?? ''}>🛵 {o.driver_name ?? 'belum ada'}</Trunc>
                 </View>
               );
             },
           },
           {
-            key: 'route', label: 'Rute', width: 240, flex: 2, render: (r) => {
+            key: 'route', label: 'Rute', width: 166, render: (r) => {
               const o = r as unknown as Row_;
               return (
-                <View style={{ minWidth: 0 }}>
-                  <Truncate style={font.tiny} title={o.merchant?.name ?? o.pickup_address}>▲ {o.merchant?.name ?? o.pickup_address}</Truncate>
-                  <Truncate style={font.tiny} title={o.dropoff_address}>▼ {o.dropoff_address}</Truncate>
+                <View style={{ minWidth: 0, alignSelf: 'stretch' }}>
+                  <Trunc style={font.tiny} title={o.merchant?.name ?? o.pickup_address}>▲ {o.merchant?.name ?? o.pickup_address}</Trunc>
+                  <Trunc style={font.tiny} title={o.dropoff_address}>▼ {o.dropoff_address}</Trunc>
                 </View>
               );
             },
           },
           {
-            key: 'total', label: 'Total', width: 120, align: 'right', render: (r) => {
+            key: 'total', label: 'Total', width: 100, align: 'right', render: (r) => {
               const o = r as unknown as Row_;
               return <View style={{ alignItems: 'flex-end' }}><Text style={font.mono}>{rupiah(o.total)}</Text><Text style={font.tiny}>{o.payment_method === 'wallet' ? 'AntarPay' : 'Tunai'}</Text></View>;
             },
           },
-          { key: 'status', label: 'Status', width: 160, render: (r) => { const o = r as unknown as Row_; return <Pill text={statusLabel(o.status, o.service, o.merchant_status)} color={statusColor(o.status)} />; } },
+          { key: 'status', label: 'Status', width: 120, render: (r) => { const o = r as unknown as Row_; return <Pill text={statusLabel(o.status, o.service, o.merchant_status)} color={statusColor(o.status)} />; } },
           {
             // Aksi utama layar ini = Detail; kontak pelanggan/driver & pembatalan ada di kebab.
             key: 'actions', label: 'Aksi', width: adminTable.actionsWideW, align: 'right', render: (r) => {
@@ -136,6 +137,8 @@ export default function AdminOrders() {
             },
           },
         ]} />
+      <WideTableHint />
+      <Pager p={pg} noun="pesanan" />
 
       <Text style={[font.tiny, { color: adminTone.faint }]}>Klik baris untuk membuka detail. Nomor telepon pribadi tidak pernah ditampilkan — panggilan berjalan lewat modul suara dalam aplikasi.</Text>
     </AdminPage>

@@ -7,7 +7,7 @@ import { Entrance } from '@/components/motion';
 import { rpc, supabase } from '@/lib/supabase';
 import { useAppSettingsStore } from '@/hooks/useAppSettings';
 import { colors } from '@/lib/theme';
-import type { AppPublicSettings } from '@/lib/types';
+import type { AppPublicSettings, SendVehicle } from '@/lib/types';
 
 /** Layanan yang bisa dimatikan admin (kunci = nilai p_service di admin_set_service_enabled). */
 const SERVICES: { key: string; label: string; desc: string; color: string }[] = [
@@ -23,6 +23,20 @@ const SERVICES: { key: string; label: string; desc: string; color: string }[] = 
 /** Layanan yang punya batas jarak dalam kota (kunci app_settings max_km_<layanan>). */
 const LIMITED = SERVICES.filter((s) => s.key !== 'travel');
 const DEFAULT_KM: Record<string, number> = { ride_motor: 25, ride_car: 60, food: 15, send: 35, shop: 15, market: 15, box: 80 };
+/** Radius sebaran order ke mitra per layanan (app_settings.pickup_radius_km). */
+const DEFAULT_PICKUP: Record<string, number> = { ride_motor: 5, ride_car: 8, food: 5, send: 6, shop: 5, market: 5, box: 15, default: 5 };
+const PICKUP_KEYS = [...LIMITED.map((s) => s.key), 'default'];
+const PICKUP_LABEL = (k: string) => (k === 'default' ? 'Bawaan (layanan lain)' : SERVICES.find((s) => s.key === k)?.label ?? k);
+/** Batas berat & ukuran titipan per jenis kendaraan (app_settings.send_limits). */
+const SEND_VEHICLES: { key: SendVehicle; label: string; desc: string }[] = [
+  { key: 'motor', label: 'Motor', desc: 'AntarSend dalam kota dengan sepeda motor' },
+  { key: 'car', label: 'Mobil', desc: 'Paket besar / banyak, mobil penumpang' },
+  { key: 'box', label: 'Box / Pick up', desc: 'AntarBox, pindahan' },
+  { key: 'travel', label: 'Titipan travel', desc: 'Paket antar kota dititipkan ke mitra travel' },
+];
+const DEFAULT_SEND: Record<SendVehicle, { max_kg: number; max_cm: number }> = {
+  motor: { max_kg: 20, max_cm: 60 }, car: { max_kg: 150, max_cm: 160 }, box: { max_kg: 1000, max_cm: 300 }, travel: { max_kg: 30, max_cm: 120 },
+};
 
 export default function AdminSettings() {
   const [bank, setBank] = useState({ bank: '', number: '', name: '' });
@@ -32,6 +46,8 @@ export default function AdminSettings() {
   const [enabled, setEnabled] = useState<Record<string, boolean>>({});
   const [maxKm, setMaxKm] = useState<Record<string, string>>({});
   const [osm, setOsm] = useState({ enabled: true, radius: '5' });
+  const [pickup, setPickup] = useState<Record<string, string>>({});
+  const [sendLim, setSendLim] = useState<Record<string, { kg: string; cm: string }>>({});
   const [busyService, setBusyService] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -49,6 +65,11 @@ export default function AdminSettings() {
       setEnabled(Object.fromEntries(SERVICES.map((s) => [s.key, pub.services_enabled?.[s.key] !== false])));
       setMaxKm(Object.fromEntries(LIMITED.map((s) => [s.key, String(pub.max_km?.[s.key] ?? DEFAULT_KM[s.key])])));
       setOsm({ enabled: pub.osm_import_enabled !== false, radius: String(pub.osm_import_radius_km ?? 5) });
+      setPickup(Object.fromEntries(PICKUP_KEYS.map((k) => [k, String(pub.pickup_radius_km?.[k] ?? DEFAULT_PICKUP[k])])));
+      setSendLim(Object.fromEntries(SEND_VEHICLES.map((v) => {
+        const l = pub.send_limits?.[v.key] ?? DEFAULT_SEND[v.key];
+        return [v.key, { kg: String(l?.max_kg ?? DEFAULT_SEND[v.key].max_kg), cm: String(l?.max_cm ?? DEFAULT_SEND[v.key].max_cm) }];
+      })));
     }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -81,6 +102,32 @@ export default function AdminSettings() {
       p[`max_km_${s.key}`] = n;
     }
     try { await rpc('admin_set_settings', { p }); toast.success('Batas jarak dalam kota disimpan'); refreshPublic(); load(); }
+    catch (e) { toast.error((e as Error).message); }
+  };
+  const num = (v: string) => Number(String(v ?? '').replace(',', '.'));
+  const savePickup = async () => {
+    const p: Record<string, number> = {};
+    for (const k of PICKUP_KEYS) {
+      const n = num(pickup[k]);
+      if (!Number.isFinite(n) || n <= 0 || n > 100) return toast.error(`Radius ${PICKUP_LABEL(k)} harus antara 0,1 dan 100 km`);
+      p[k] = n;
+    }
+    try { await rpc('admin_set_settings', { p: { pickup_radius_km: p } }); toast.success('Radius terima order disimpan — berlaku untuk order baru'); refreshPublic(); load(); }
+    catch (e) { toast.error((e as Error).message); }
+  };
+  const saveSendLimits = async () => {
+    const p: Partial<Record<SendVehicle, { max_kg: number; max_cm: number }>> = {};
+    for (const v of SEND_VEHICLES) {
+      const kg = num(sendLim[v.key]?.kg), cm = num(sendLim[v.key]?.cm);
+      if (!Number.isFinite(kg) || kg <= 0) return toast.error(`Batas berat ${v.label} harus angka lebih dari 0`);
+      if (!Number.isFinite(cm) || cm <= 0) return toast.error(`Batas ukuran ${v.label} harus angka lebih dari 0`);
+      p[v.key] = { max_kg: kg, max_cm: cm };
+    }
+    const order = SEND_VEHICLES.map((v) => v.key);
+    for (let i = 1; i < order.length - 1; i++) {
+      if ((p[order[i]]?.max_kg ?? 0) < (p[order[i - 1]]?.max_kg ?? 0)) return toast.error(`Batas berat ${SEND_VEHICLES[i].label} tidak boleh lebih kecil dari ${SEND_VEHICLES[i - 1].label} — pemilihan kendaraan otomatis akan salah`);
+    }
+    try { await rpc('admin_set_settings', { p: { send_limits: p } }); toast.success('Batas berat & ukuran disimpan'); refreshPublic(); load(); }
     catch (e) { toast.error((e as Error).message); }
   };
   const saveOsm = async (patch: Partial<typeof osm>) => {
@@ -138,6 +185,45 @@ export default function AdminSettings() {
 
       <Entrance index={2}>
         <Card style={{ gap: 12 }}>
+          <Text style={font.h2}>Radius terima order per layanan (km)</Text>
+          <Text style={font.small}>Jarak maksimum antara mitra dan titik jemput agar order ikut disebar ke mitra tersebut. Terlalu kecil = order lama tidak dapat driver; terlalu besar = driver jauh ikut ditawari.</Text>
+          <View style={st.grid}>
+            {PICKUP_KEYS.map((k) => (
+              <Input key={k} label={PICKUP_LABEL(k)} value={pickup[k] ?? ''} onChangeText={(v) => setPickup((m) => ({ ...m, [k]: v.replace(/[^\d.,]/g, '') }))} keyboardType="decimal-pad" placeholder={String(DEFAULT_PICKUP[k])} containerStyle={{ flexGrow: 1, minWidth: 150, flexBasis: '30%' }} right={<Text style={font.tiny}>km</Text>} />
+            ))}
+          </View>
+          <Row between style={{ flexWrap: 'wrap', gap: 8 }}>
+            <Text style={font.tiny}>Bawaan: motor 5 · mobil 8 · food 5 · send 6 · shop 5 · market 5 · box 15 km.</Text>
+            <Button title="Simpan radius terima order" icon="save-outline" onPress={savePickup} />
+          </Row>
+        </Card>
+      </Entrance>
+
+      <Entrance index={3}>
+        <Card style={{ gap: 12 }}>
+          <Text style={font.h2}>Batas berat & ukuran titipan</Text>
+          <Text style={font.small}>Dipakai server untuk memilih kendaraan AntarSend secara otomatis dan menolak paket yang terlalu besar. Urutkan menaik: motor ≤ mobil ≤ box.</Text>
+          <View style={st.grid}>
+            {SEND_VEHICLES.map((v) => (
+              <View key={v.key} style={st.limitCard}>
+                <Text style={font.bodyStrong} numberOfLines={1}>{v.label}</Text>
+                <Text style={font.tiny} numberOfLines={2}>{v.desc}</Text>
+                <Row gap={8} style={{ marginTop: 6 }}>
+                  <Input label="Berat maks." value={sendLim[v.key]?.kg ?? ''} onChangeText={(x) => setSendLim((m) => ({ ...m, [v.key]: { kg: x.replace(/[^\d.,]/g, ''), cm: m[v.key]?.cm ?? '' } }))} keyboardType="decimal-pad" placeholder={String(DEFAULT_SEND[v.key].max_kg)} containerStyle={{ flex: 1 }} right={<Text style={font.tiny}>kg</Text>} />
+                  <Input label="Sisi terpanjang" value={sendLim[v.key]?.cm ?? ''} onChangeText={(x) => setSendLim((m) => ({ ...m, [v.key]: { kg: m[v.key]?.kg ?? '', cm: x.replace(/[^\d.,]/g, '') } }))} keyboardType="decimal-pad" placeholder={String(DEFAULT_SEND[v.key].max_cm)} containerStyle={{ flex: 1 }} right={<Text style={font.tiny}>cm</Text>} />
+                </Row>
+              </View>
+            ))}
+          </View>
+          <Row between style={{ flexWrap: 'wrap', gap: 8 }}>
+            <Text style={font.tiny}>Bawaan: motor 20 kg/60 cm · mobil 150 kg/160 cm · box 1.000 kg/300 cm · travel 30 kg/120 cm.</Text>
+            <Button title="Simpan batas berat & ukuran" icon="save-outline" onPress={saveSendLimits} />
+          </Row>
+        </Card>
+      </Entrance>
+
+      <Entrance index={4}>
+        <Card style={{ gap: 12 }}>
           <Row between style={{ flexWrap: 'wrap', gap: 8 }}>
             <View style={{ flex: 1, minWidth: 240 }}>
               <Text style={font.h2}>Impor tempat dari peta</Text>
@@ -153,7 +239,7 @@ export default function AdminSettings() {
         </Card>
       </Entrance>
 
-      <Entrance index={3}>
+      <Entrance index={5}>
         <Card style={{ gap: 12, maxWidth: 560 }}>
           <Text style={font.label}>Rekening top up</Text>
           <Input label="Bank" value={bank.bank} onChangeText={(v) => setBank({ ...bank, bank: v })} />
@@ -166,7 +252,7 @@ export default function AdminSettings() {
           <Button title="Simpan pengaturan" onPress={save} />
         </Card>
       </Entrance>
-      <Entrance index={4}>
+      <Entrance index={6}>
         <Card style={{ maxWidth: 560 }}>
           <Text style={font.label}>Integrasi (opsional)</Text>
           <Text style={font.small}>Google Maps: isi EXPO_PUBLIC_GOOGLE_MAPS_KEY di .env lalu build ulang — pencarian & rute otomatis beralih ke Google.{'\n'}Pembayaran otomatis (Midtrans/Xendit): lihat docs/INTEGRASI.md di repositori.</Text>
@@ -180,4 +266,5 @@ const st = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: adminSpace.md },
   service: { flexDirection: 'row', alignItems: 'center', gap: 10, flexGrow: 1, flexBasis: '45%', minWidth: 240, minHeight: 56, padding: adminSpace.md, borderRadius: adminRadius.card, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border },
   dot: { width: 10, height: 10, borderRadius: 5 },
+  limitCard: { flexGrow: 1, flexBasis: '45%', minWidth: 260, padding: adminSpace.md, borderRadius: adminRadius.card, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border },
 });

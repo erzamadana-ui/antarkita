@@ -51,7 +51,13 @@ export default function TravelPartnerHome() {
     catch (e) { toast.error((e as Error).message); } finally { setCreating(false); }
   };
   const setStatus = (t: TravelTrip, st: 'departed' | 'arrived' | 'cancelled') => {
-    const msg = st === 'departed' ? 'Tandai berangkat? Pastikan semua penumpang sudah dijemput.' : st === 'arrived' ? 'Tandai tiba? Pendapatan akan masuk ke AntarPay.' : 'Batalkan jadwal? Penumpang akan di-refund & diberi tahu.';
+    // Pembatalan sepihak menjelang keberangkatan merugikan penumpang & menurunkan rating mitra:
+    // konfirmasinya harus menyebut berapa penumpang yang terdampak dan seberapa dekat jam berangkatnya.
+    const minsLeft = Math.round((new Date(t.depart_at).getTime() - Date.now()) / 60000);
+    const soonTxt = minsLeft <= 0 ? 'Jadwal ini sudah lewat jam berangkat.' : minsLeft < 120 ? `Berangkat ${minsLeft < 60 ? `${minsLeft} menit` : `${Math.round(minsLeft / 60)} jam`} lagi — pembatalan mendadak menurunkan rating & prioritas Anda.` : '';
+    const msg = st === 'departed' ? 'Tandai berangkat? Pastikan semua penumpang sudah dijemput.'
+      : st === 'arrived' ? 'Tandai tiba? Pendapatan akan masuk ke AntarPay.'
+      : `Batalkan jadwal ini? ${t.seats_booked > 0 ? `${t.seats_booked} kursi sudah dipesan — penumpang akan di-refund & diberi tahu. ` : ''}${soonTxt}`.trim();
     const doIt = async () => { try { await rpc('travel_trip_set_status', { p_trip: t.id, p_status: st, p_note: st === 'cancelled' ? 'Dibatalkan mitra travel' : null }); toast.success('Status diperbarui'); reload(); } catch (e) { toast.error((e as Error).message); } };
     if (Platform.OS === 'web') { if (confirm(msg)) doIt(); return; }
     Alert.alert('Konfirmasi', msg, [{ text: 'Batal' }, { text: 'Ya', onPress: doIt }]);
@@ -59,7 +65,25 @@ export default function TravelPartnerHome() {
 
   if (me === undefined) return <Screen title="Mitra Travel" back><Text style={font.small}>Memuat…</Text></Screen>;
   if (!me) return <Screen title="Mitra Travel" back><Empty icon="bus-outline" title="Belum terdaftar" subtitle="Daftar sebagai mitra AntarTravel dengan mobil kapasitas besar." action={<Button title="Daftar Mitra Travel" onPress={() => router.push('/account/become-travel' as never)} />} /></Screen>;
-  if (me.status !== 'approved') return <Screen title="Mitra Travel" back><Empty icon="hourglass-outline" title={me.status === 'pending' ? 'Menunggu verifikasi admin' : 'Akun mitra ' + me.status} subtitle={me.status_reason ?? 'Data Anda sedang diperiksa.'} action={<Button title="Lihat / ubah data" variant="secondary" onPress={() => router.push('/account/become-travel' as never)} />} /></Screen>;
+  if (me.status !== 'approved') {
+    // Sebelumnya judulnya "Akun mitra suspended" / "Akun mitra rejected" — kode status mentah
+    // berbahasa Inggris, dan subjudulnya selalu "Data Anda sedang diperiksa" walau sudah ditolak.
+    const rejectedTp = me.status === 'rejected';
+    const suspendedTp = me.status === 'suspended';
+    return (
+      <Screen title="Mitra Travel" back>
+        <Empty icon={rejectedTp ? 'refresh-circle-outline' : suspendedTp ? 'lock-closed-outline' : 'hourglass-outline'}
+          title={suspendedTp ? 'Akun mitra ditangguhkan' : rejectedTp ? 'Pengajuan ditolak' : 'Menunggu verifikasi admin'}
+          subtitle={me.status_reason ? `Catatan admin: ${me.status_reason}` : suspendedTp ? 'Jadwal & titipan Anda disembunyikan sementara. Hubungi CS AntarKita untuk peninjauan.' : rejectedTp ? 'Perbaiki data kendaraan & dokumen Anda lalu kirim ulang pengajuan.' : 'Data Anda sedang diperiksa. Biasanya kurang dari 1×24 jam.'}
+          action={
+            <View style={{ gap: 10, width: '100%' }}>
+              <Button title={rejectedTp ? 'Perbaiki & kirim ulang' : 'Lihat / ubah data'} variant={rejectedTp ? 'primary' : 'secondary'} icon="create-outline" onPress={() => router.push('/account/become-travel' as never)} />
+              <Button title="Hubungi CS AntarKita" variant="ghost" icon="chatbubbles-outline" color={colors.textSecondary} onPress={() => router.push('/support' as never)} />
+            </View>
+          } />
+      </Screen>
+    );
+  }
 
   const upcoming = trips.filter((t) => ['open', 'confirmed', 'full', 'departed'].includes(t.status));
   const past = trips.filter((t) => ['arrived', 'cancelled'].includes(t.status));
@@ -181,6 +205,8 @@ export default function TravelPartnerHome() {
 const reqStatusColor = (st: TravelOpenRequest['status']) => st === 'completed' ? colors.success : st === 'cancelled' || st === 'expired' ? colors.danger : st === 'ongoing' ? colors.info : st === 'offered' ? colors.accent : colors.primary;
 const REQ_PROGRESS: Partial<Record<TravelOpenRequest['status'], number>> = { open: 0.15, offered: 0.35, accepted: 0.55, paid: 0.7, ongoing: 0.85, completed: 1 };
 const num = (v: string) => Number(v.replace(/\D/g, '')) || 0;
+// Status penawaran dalam Bahasa Indonesia (sebelumnya 'rejected'/'withdrawn' tampil apa adanya)
+const OFFER_STATUS: Record<string, string> = { offered: 'menunggu keputusan pelanggan', accepted: 'diterima pelanggan', rejected: 'tidak dipilih pelanggan', withdrawn: 'ditarik kembali' };
 
 function RequestsTab({ me }: { me: TravelPartner | null }) {
   const [rows, setRows] = useState<TravelOpenRequest[] | null>(null);
@@ -309,7 +335,7 @@ function RequestCard({ r, me, open, onToggle, onDone }: { r: TravelOpenRequest; 
               <Text style={font.tiny}>Komisi platform dipotong dari harga setelah perjalanan selesai. Pelanggan bebas memilih penawaran.</Text>
             </View>
           )}
-          {r.my_offer && !active && <Text style={font.small}>Tawaran Anda {rupiah(r.my_offer.price)} · {r.my_offer.status === 'offered' ? 'menunggu keputusan pelanggan' : r.my_offer.status}</Text>}
+          {r.my_offer && !active && <Text style={font.small}>Tawaran Anda {rupiah(r.my_offer.price)} · {OFFER_STATUS[r.my_offer.status] ?? r.my_offer.status}</Text>}
         </Animated.View>
       )}
     </Animated.View>
@@ -342,6 +368,15 @@ function SendParcelTab({ uid }: { uid?: string | null }) {
     const ch = realtimeChannel('tp-titipan').on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, load).subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [load]);
+
+  // Batas muatan mitra travel (app_settings.send_limits.travel). Baris yang MELEBIHI batas ditandai merah
+  // dan tombol ambilnya dikunci — sebelumnya paket 48 kg / 190 cm bisa diambil tanpa peringatan apa pun.
+  const overLimit = (r: { weight_kg: number | null; size_cm: number | null }) => {
+    const over: string[] = [];
+    if (lim?.max_kg && r.weight_kg != null && Number(r.weight_kg) > Number(lim.max_kg)) over.push(`${numId(r.weight_kg)} kg > batas ${numId(lim.max_kg)} kg`);
+    if (lim?.max_cm && r.size_cm != null && Number(r.size_cm) > Number(lim.max_cm)) over.push(`sisi ${numId(r.size_cm)} cm > batas ${numId(lim.max_cm)} cm`);
+    return over;
+  };
 
   const act = async (id: string, fn: 'travel_accept_send' | 'travel_pickup_send' | 'travel_complete_send', ok: string) => {
     setBusy(id);
@@ -394,16 +429,18 @@ function SendParcelTab({ uid }: { uid?: string | null }) {
       <Text style={font.label}>Titipan tersedia ({rows?.length ?? 0})</Text>
       {rows === null && <Text style={font.small}>Memuat titipan…</Text>}
       {rows?.length === 0 && <Text style={font.small}>Belum ada titipan antar kota yang menunggu. Titipan baru muncul otomatis di sini.</Text>}
-      {(rows ?? []).map((r) => (
-        <Animated.View key={r.id} entering={FadeInDown.duration(motion.base)} layout={LinearTransition.springify().stiffness(300).damping(22)} style={s.trip}>
+      {(rows ?? []).map((r) => {
+        const over = overLimit(r);
+        return (
+        <Animated.View key={r.id} entering={FadeInDown.duration(motion.base)} layout={LinearTransition.springify().stiffness(300).damping(22)} style={[s.trip, over.length > 0 && { borderColor: colors.danger, backgroundColor: colors.dangerLight }]}>
           <Row gap={12} style={{ alignItems: 'flex-start' }}>
             <View style={s.thumb}><ServiceIllustration kind="send" size={30} /></View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[font.h3, { fontSize: 16 }]} numberOfLines={1}>{r.city ?? '—'} → {r.dest_city ?? '—'}</Text>
               <Text style={font.tiny} numberOfLines={1}>{r.code} · penerima {r.recipient_name ?? '—'}</Text>
               <Row gap={6} style={{ marginTop: 6, flexWrap: 'wrap' }}>
-                {r.weight_kg != null && <Badge text={`${numId(r.weight_kg)} kg`} color={colors.textSecondary} />}
-                {r.size_cm != null && <Badge text={`sisi ${numId(r.size_cm)} cm`} color={colors.textSecondary} />}
+                {r.weight_kg != null && <Badge text={`${numId(r.weight_kg)} kg`} color={over.length ? colors.danger : colors.textSecondary} />}
+                {r.size_cm != null && <Badge text={`sisi ${numId(r.size_cm)} cm`} color={over.length ? colors.danger : colors.textSecondary} />}
                 <Badge text={r.payment_method === 'cash' ? `Tunai ${rupiah(r.total)}` : 'Dibayar AntarPay'} color={r.payment_method === 'cash' ? colors.accent : colors.success} />
               </Row>
             </View>
@@ -416,10 +453,17 @@ function SendParcelTab({ uid }: { uid?: string | null }) {
             <Text style={font.tiny}>Pendapatan Anda</Text>
             <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 17 }}>{rupiah(r.partner_earning)}</Text>
           </Row>
-          <Button title="Ambil titipan" icon="download-outline" style={{ marginTop: 10 }} loading={busy === r.id}
+          {over.length > 0 && (
+            <Row gap={6} style={{ marginTop: 10, alignItems: 'flex-start' }}>
+              <Ionicons name="alert-circle" size={14} color={colors.danger} />
+              <Text style={[font.tiny, { flex: 1, color: colors.danger, fontWeight: '700' }]}>Melebihi batas muatan mitra travel ({over.join(' · ')}). Titipan ini harus dibawa mobil box — jangan diambil.</Text>
+            </Row>
+          )}
+          <Button title={over.length > 0 ? 'Melebihi batas muatan' : 'Ambil titipan'} icon={over.length > 0 ? 'close-circle-outline' : 'download-outline'} style={{ marginTop: 10 }} loading={busy === r.id} disabled={over.length > 0}
             onPress={() => confirmThen(`Ambil titipan ${r.code}? Anda bertanggung jawab mengantarnya sampai tujuan.`, () => act(r.id, 'travel_accept_send', 'Titipan diambil'))} />
         </Animated.View>
-      ))}
+        );
+      })}
     </View>
   );
 }

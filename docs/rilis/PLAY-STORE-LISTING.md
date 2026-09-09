@@ -11,10 +11,13 @@ Dua aplikasi Android terpisah dari satu basis kode:
 
 URL wajib (dari deploy GitHub Pages, lihat `scripts/build-web.mjs`):
 
-- Kebijakan Privasi: `https://erzamadana-ui.github.io/antarkita/privacy/`
-- Syarat & Ketentuan: `https://erzamadana-ui.github.io/antarkita/terms/`
+- Kebijakan Privasi: `https://erzamadana-ui.github.io/antarkita/privacy/` — **terverifikasi hidup (HTTP 200) 9 Sep 2026**
+- Syarat & Ketentuan: `https://erzamadana-ui.github.io/antarkita/terms/` — **terverifikasi hidup (HTTP 200) 9 Sep 2026**
+- **Permintaan hapus akun (URL wajib Play): `https://erzamadana-ui.github.io/antarkita/hapus-akun/`** — halaman berdiri sendiri (`docs/rilis/hapus-akun.html`), diterbitkan oleh `.github/workflows/web.yml`. **Baru; belum hidup sampai push berikutnya ke `main`.**
 - Situs web aplikasi: `https://erzamadana-ui.github.io/antarkita/` (Mitra: `/mitra/`)
 - Email kontak developer: `erzamadana@gmail.com`
+
+> **Kenapa bukan `.../privacy/#hapus`?** Kebijakan Play menuntut halaman web tempat penghapusan akun dapat *diminta*, dengan jalur permintaan yang **menonjol dan mudah ditemukan di halaman itu**, serta menyebut nama aplikasi/pengembang. Sebuah *anchor* di tengah kebijakan privasi sering dinilai tidak memenuhi "prominently featured". Halaman `/hapus-akun/` dibuat khusus untuk itu.
 
 > Batas Play Console: nama aplikasi ≤ 30 karakter, deskripsi singkat ≤ 80, deskripsi lengkap ≤ 4000. Semua teks di bawah sudah dihitung.
 
@@ -187,7 +190,7 @@ Jawab untuk **kedua aplikasi**:
 | Interaksi antar pengguna (chat) | **Ya** — chat & panggilan dalam pesanan, dimoderasi/dibatasi pada konteks pesanan |
 | Berbagi lokasi pengguna dengan pengguna lain | **Ya** — lokasi dibagikan ke mitra/pelanggan selama pesanan berjalan |
 | Pembelian barang/jasa digital | Tidak (pembelian barang/jasa fisik, bukan produk digital) |
-| Konten buatan pengguna | Ya (ulasan, foto produk merchant) — dimoderasi |
+| Konten buatan pengguna | Ya (chat pesanan, panggilan suara, ulasan, foto produk merchant) — ada pelaporan & blokir dalam aplikasi, dimoderasi admin (§4.11) |
 | Apakah aplikasi memfasilitasi transaksi keuangan | Ya (dompet tertutup & pembayaran layanan) |
 
 Hasil yang diharapkan: **Rated for 3+ / Everyone** (Play) — tetap set target usia 18+ di bagian Target audience.
@@ -232,7 +235,8 @@ Pertanyaan lain di form:
 - *Is all of the user data collected by your app encrypted in transit?* → **Ya**.
 - *Do you provide a way for users to request that their data is deleted?* → **Ya** (Akun → Lainnya → Hapus akun, atau email erzamadana@gmail.com).
 - *Data collected is processed ephemerally?* → Tidak (kecuali audio panggilan yang tidak dikumpulkan).
-- *Account deletion URL* (di bagian Data safety → "Account deletion"): `https://erzamadana-ui.github.io/antarkita/privacy/#hapus`
+- *Account deletion URL* (di bagian Data safety → "Account deletion"): **`https://erzamadana-ui.github.io/antarkita/hapus-akun/`**
+  *(jangan pakai `.../privacy/#hapus` — lihat catatan di bagian "URL wajib" di atas)*
 
 ### 4.8 Government apps / Financial features declaration
 Bagian **Financial features**:
@@ -244,7 +248,15 @@ Bagian **Financial features**:
 - Bila Play meminta dokumen lisensi: lampirkan bukti kemitraan/akun Midtrans (screenshot dashboard merchant produksi) dan tautan ke Kebijakan Privasi bagian 5. Untuk saldo closed-loop yang hanya berlaku di satu penyelenggara, BI tidak mewajibkan izin uang elektronik (PBI 23/6/2021 — pengecualian *closed loop* dengan floating fund < Rp1 miliar); jika saldo mengambang melampaui batas itu, konsultasikan perizinan.
 
 ### 4.9 Permissions declaration (Sensitive/High-risk)
-Manifest saat ini (hasil `app.config.ts`): `ACCESS_COARSE_LOCATION`, `ACCESS_FINE_LOCATION`, `CAMERA`, `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, `INTERNET`, `ACCESS_NETWORK_STATE`, `VIBRATE`, `WAKE_LOCK`, `READ/WRITE_EXTERNAL_STORAGE (maxSdk 32)`, `BLUETOOTH` (WebRTC audio routing). **Tidak ada** `ACCESS_BACKGROUND_LOCATION`, `FOREGROUND_SERVICE*`, `SYSTEM_ALERT_WINDOW`, `READ_MEDIA_IMAGES` (diblokir eksplisit).
+**Terverifikasi 9 Sep 2026** dengan menjalankan `APP=pelanggan npx expo prebuild --platform android` lalu membaca `android/app/src/main/AndroidManifest.xml` yang dihasilkan. Ini daftar nyata, bukan perkiraan:
+
+| Izin aktif (13) | Izin diblokir — ada di manifest dengan `tools:node="remove"` sehingga **hilang** setelah manifest merger (7) |
+|---|---|
+| `ACCESS_COARSE_LOCATION`, `ACCESS_FINE_LOCATION`, `CAMERA`, `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, `INTERNET`, `ACCESS_NETWORK_STATE`, `VIBRATE`, `WAKE_LOCK`, `POST_NOTIFICATIONS`, `BLUETOOTH`, `READ_EXTERNAL_STORAGE` (maxSdk 32), `WRITE_EXTERNAL_STORAGE` (maxSdk 32) | `ACCESS_BACKGROUND_LOCATION`, `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`, `SYSTEM_ALERT_WINDOW`, `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, `com.google.android.gms.permission.AD_ID` |
+
+> **Jangan panik bila melihat izin yang "diblokir" di log build.** Expo menuliskannya ke manifest sumber lengkap dengan atribut `tools:node="remove"`; Android manifest merger membuangnya saat menyusun APK/AAB. Langkah "Verifikasi package id & versi" di `release-aab.yml` sekarang memisahkan kedua daftar ini secara eksplisit dan **menggagalkan build** bila salah satu izin berisiko tinggi ternyata aktif tanpa penanda `remove`.
+
+> **`targetSdkVersion` terverifikasi = 36** (Android 16), diambil dari `node_modules/react-native/gradle/libs.versions.toml` yang dipakai `expoAutolinking.useExpoVersionCatalog()`. Memenuhi syarat Play untuk aplikasi baru sejak 31 Agustus 2026. Workflow AAB sekarang menggagalkan build bila nilai ini turun di bawah 36.
 
 - **Aplikasi Pelanggan — lokasi latar belakang:** **TIDAK diperlukan dan tidak dideklarasikan.** Lokasi hanya saat aplikasi dibuka (foreground). Jawab "No" pada pertanyaan background location.
 - **Aplikasi Mitra — lokasi latar belakang:** rilis ini juga **foreground-only** (`useLocation.ts` memakai `requestForegroundPermissionsAsync` + `watchPositionAsync`; pelacakan berhenti saat aplikasi ditutup/ke latar). Jawab "No". Sampaikan ke driver di onboarding: "Biarkan aplikasi terbuka saat Online".
@@ -262,3 +274,139 @@ Manifest saat ini (hasil `app.config.ts`): `ACCESS_COARSE_LOCATION`, `ACCESS_FIN
 - **Store settings → App category:** Pelanggan: Maps & Navigation; Mitra: Business.
 - **Countries/regions:** Indonesia saja (harga & S&K berbasis IDR dan hukum Indonesia).
 - **Pricing:** Gratis. **In-app purchases:** tidak ada (pembelian barang/jasa fisik — tidak lewat Google Play Billing; ini diperbolehkan karena bukan produk digital).
+
+### 4.11 User Generated Content (UGC) — **SUDAH LENGKAP, SIAP DIJAWAB DI PLAY CONSOLE**
+
+AntarKita memuat UGC dan interaksi langsung antar pengguna: **chat dalam pesanan**, **panggilan suara WebRTC**, **ulasan & rating**, **foto produk merchant**, dan **foto bukti pengiriman**. Karena itu kebijakan *User Generated Content* Google Play berlaku penuh — termasuk kalimat kuncinya: *"providing an in-app system for reporting and blocking objectionable UGC and users, and taking action against UGC or users where appropriate"*.
+
+Yang diwajibkan kebijakan vs keadaan kode saat ini:
+
+| Kewajiban Play | Status AntarKita | Bukti |
+|---|---|---|
+| Pengguna menyetujui S&K sebelum membuat/mengunggah UGC | **Sudah** | Pendaftaran menautkan S&K (`/terms/`); S&K memuat larangan konten |
+| Definisi konten terlarang di S&K / kebijakan pengguna | **Sudah** | `docs/rilis/terms.html` |
+| Moderasi UGC yang wajar sesuai jenis konten | **Sudah** | Panel Admin → **Pengguna & Dukungan → Laporan Pengguna** (`src/screens/admin/reports.tsx`): antrean laporan berstatus `open` / `reviewed` / `actioned` / `rejected`, tenggat tinjauan 48 jam, aksi tandai-ditinjau / tangguhkan / tolak — semuanya tercatat di Log Aktivitas (`moderation.report`, `moderation.resolve_report`, `moderation.block`) |
+| **Sistem PELAPORAN di dalam aplikasi** untuk konten & pengguna bermasalah | **Sudah** | RPC `report_content()` + tabel `content_reports` (migrasi `0050`), UI `src/components/moderation/` — enam kategori jelas + kolom keterangan + layar konfirmasi "Laporan Anda terkirim" |
+| **Fungsi MEMBLOKIR pengguna di dalam aplikasi** (wajib untuk aplikasi dengan interaksi langsung antar pengguna) | **Sudah** | RPC `block_user()` / `unblock_user()` / `my_blocks()` + tabel `user_blocks` (migrasi `0050`), UI dialog konsekuensi + layar **Akun → Pengguna diblokir** |
+| Tindakan nyata terhadap pengguna bermasalah | **Sudah** | Aksi "Tangguhkan pengguna" di halaman Laporan Pengguna menonaktifkan akun (`profiles.is_active = false`) dengan alasan wajib yang tersimpan di audit |
+
+#### Di mana persis tombolnya (isi ini di formulir "Where can users report content?")
+
+Google menguji jalur ini secara manual, jadi tuliskan apa adanya:
+
+| Fitur | Jalur menu persis |
+|---|---|
+| Laporkan / blokir **mitra driver** (aplikasi Pelanggan) | Beranda → **Pesanan** → buka pesanan → kartu mitra di bawah peta → tombol **⋯** → **Laporkan** / **Blokir**. Kartu "Ada masalah dengan mitra ini?" di bagian bawah halaman pesanan menyediakan tombol ⋯ yang sama, juga setelah pesanan selesai |
+| Laporkan / blokir **pelanggan** (aplikasi Mitra) | Beranda mitra → buka pesanan berjalan → kartu pelanggan → tombol **⋯** → **Laporkan** / **Blokir** |
+| Laporkan / blokir dari **layar chat** (kedua aplikasi) | Halaman pesanan → ikon chat → tombol **⋯** di kanan atas judul chat → **Laporkan** / **Blokir** |
+| Laporkan **satu pesan chat** tertentu | Di layar chat, **tekan lama** gelembung pesan lawan bicara → lembar pelaporan terbuka dengan pesan itu sebagai sasaran |
+| Laporkan **ulasan / rating merchant** | Beranda → **AntarFood** → buka merchant → tab **Ulasan** → **Laporkan ulasan atau rating di halaman ini** |
+| Laporkan **foto / keterangan merchant** | Beranda → **AntarFood** → buka merchant → tab **Info** → **Laporkan foto atau keterangan merchant** |
+| Daftar & pengelolaan blokir | **Akun** → **Pengguna diblokir** (ada di aplikasi Pelanggan maupun Mitra) → tombol **Buka blokir** per baris |
+| Antrean moderasi admin | Panel Admin → **Pengguna & Dukungan** → **Laporan Pengguna** |
+
+Kategori pelaporan yang ditawarkan: **pelecehan atau perundungan · penipuan · konten seksual · kekerasan atau ancaman · spam atau promosi · lainnya**, masing-masing dengan kolom keterangan bebas.
+
+#### Blokir bukan kosmetik — penegakannya di sisi basis data
+
+Ini yang membedakan implementasi AntarKita dari sekadar "tabel blokir". Semua penegakan ada di migrasi `supabase/migrations/0050_moderasi_ugc_lapor_blokir.sql`:
+
+- `driver_can_take(d, o)` — satu-satunya predikat kecocokan yang dipakai **`driver_available_orders()`** (daftar order yang dilihat driver) **dan** `driver_accept_order()` (saat driver menekan "Ambil") — menolak pasangan yang saling memblokir. Jadi order pelanggan yang memblokir tidak muncul, dan tidak bisa diambil walau id ordernya ditebak.
+- Trigger `t_orders_blokir` pada `orders` — order AntarNow (pesan driver tertentu lewat kode) ke pihak terblokir ditolak saat dibuat.
+- Trigger `t_order_messages_blokir` pada `order_messages` — pesan chat dari pihak terblokir **ditolak basis data**, bukan sekadar disembunyikan di aplikasi.
+- Trigger `t_call_logs_blokir` pada `call_logs` — panggilan suara WebRTC antar pihak terblokir ditolak.
+- `nearby_drivers()` — driver terblokir tidak lagi muncul sebagai titik di peta pelanggan.
+- `report_content()` dibatasi **20 laporan/jam per pengguna** supaya pelaporan tidak jadi alat serangan; `block_user()` dibatasi 30/jam.
+
+Bukti uji otomatis: `supabase/tests/uji_moderasi.sql` (uji bergaya ROLLBACK — data nyata tidak berubah) memverifikasi bahwa order pelanggan yang memblokir hilang dari pencocokan, penerimaan order ditolak, pesan chat ditolak, order AntarNow ditolak, panggilan ditolak, laporan tercatat lalu diselesaikan admin dengan jejak audit, dan RLS `user_blocks` tidak membocorkan siapa memblokir siapa.
+
+#### Jawaban singkat untuk pertanyaan moderasi konten di Play Console
+
+Salin-tempel jawaban berikut (bahasa Inggris di formulir; versi Indonesia disediakan untuk arsip internal).
+
+**T: Does your app contain user-generated content?**
+Ya. Chat teks 1:1 dan panggilan suara antara pelanggan dan mitra dalam satu pesanan, ulasan & rating pasca-pesanan, serta foto/keterangan yang diunggah merchant. Tidak ada umpan publik, tidak ada profil publik, tidak ada pesan antar pengguna yang tidak terhubung pesanan.
+
+**T: How do users report inappropriate content or other users?**
+Setiap layar yang memuat UGC punya tombol **⋯ → Laporkan**: kartu mitra/pelanggan di halaman pesanan, judul layar chat, tekan-lama pada gelembung pesan, tab Ulasan dan tab Info pada halaman merchant. Pelapor memilih satu dari enam kategori (pelecehan, penipuan, konten seksual, kekerasan, spam, lainnya), boleh menambahkan keterangan, lalu menerima konfirmasi bahwa laporan diterima. Laporan tersimpan di tabel `content_reports`. Jalur menu lengkap ada di tabel "Di mana persis tombolnya" di atas.
+
+**T: How do users block other users?**
+Tombol **⋯ → Blokir** pada layar yang sama. Dialog konfirmasi menjelaskan akibatnya sebelum blokir berlaku: tidak akan dipasangkan lagi pada pesanan berikutnya, tidak bisa saling berkirim pesan maupun menelepon, dan pihak yang diblokir tidak diberi tahu. Pengguna mengelola daftarnya di **Akun → Pengguna diblokir** dan bisa membuka blokir kapan saja. Blokir ditegakkan di sisi server (pencocokan driver, chat, panggilan), bukan hanya disembunyikan di aplikasi.
+
+**T: How do you moderate UGC and act on reports?**
+Laporan masuk ke antrean **Panel Admin → Laporan Pengguna** dan langsung memicu notifikasi ke seluruh admin aktif. Setiap laporan punya tenggat tinjauan **48 jam** yang ditandai otomatis bila terlampaui. Admin dapat menandai laporan **ditinjau**, **menangguhkan** akun yang dilaporkan (alasan wajib, akun langsung dinonaktifkan), atau **menolak** laporan. Pelapor menerima notifikasi hasil tinjauan. Semua tindakan tercatat permanen di log audit (`audit_logs`) sehingga riwayat penanganan dapat ditunjukkan kapan saja.
+
+**T: What content is prohibited?**
+Tercantum di Syarat & Ketentuan (`docs/rilis/terms.html`) yang wajib disetujui saat pendaftaran: pelecehan dan ujaran kebencian, ancaman kekerasan, konten seksual, penipuan dan permintaan transaksi di luar aplikasi, spam, serta konten ilegal menurut hukum Indonesia.
+
+**Catatan pengisian Play Console:** jawab kuesioner UGC dengan **"Yes"** pada pertanyaan pelaporan dan pemblokiran dalam aplikasi, lalu tempel jalur menu di tabel atas pada kolom deskripsi. Sertakan tangkapan layar tombol ⋯ (kartu mitra + layar chat) dan layar **Akun → Pengguna diblokir** bila formulir meminta bukti.
+
+---
+
+## 5. Kata kunci & ASO (Play tidak punya kolom keyword; kata kunci ditanam di judul + deskripsi)
+
+Play Store mengindeks **nama aplikasi**, **deskripsi singkat**, dan **deskripsi lengkap**. Tidak ada kolom "keywords" tersembunyi. Kata kunci prioritas — pastikan semuanya muncul minimal sekali di teks di atas (sudah dicek):
+
+| Prioritas | Kata kunci | Muncul di |
+|---|---|---|
+| 1 | ojek, ojek online, ojol | judul + deskripsi lengkap |
+| 1 | antar makanan, pesan makanan | deskripsi singkat + lengkap |
+| 1 | kirim barang, kirim paket | deskripsi singkat + lengkap |
+| 2 | belanja pasar, sayur, sembako | deskripsi lengkap (AntarMarket) |
+| 2 | travel antar kota | deskripsi singkat + lengkap |
+| 2 | mobil box, pindahan, angkut barang | deskripsi lengkap (AntarBox) |
+| 3 | dompet digital, top up, QRIS | deskripsi lengkap (AntarPay) |
+| 3 | driver, mitra, penghasilan tambahan | aplikasi Mitra |
+
+Aturan yang **tidak boleh** dilanggar (Metadata policy): tanpa "terbaik/#1/nomor satu", tanpa emoji atau simbol dekoratif di judul, tanpa menyebut merek pesaing (Gojek/Grab/Maxim), tanpa "gratis" berulang, tanpa harga, tanpa klaim peringkat, tanpa kata "unduh sekarang" di judul.
+
+---
+
+## 6. Contact details (Store listing → Store settings → Contact details)
+
+| Kolom | Isi |
+|---|---|
+| Email | `erzamadana@gmail.com` **(wajib; akan tampil publik di halaman Play Store)** |
+| Telepon | Opsional — kosongkan bila tidak ingin nomor pribadi tampil publik |
+| Situs web | Pelanggan: `https://erzamadana-ui.github.io/antarkita/` · Mitra: `https://erzamadana-ui.github.io/antarkita/mitra/` |
+| Alamat eksternal (External marketing) | Tidak diisi |
+| Nama developer publik | `AntarKita` |
+
+> Untuk **akun perorangan**, Google mewajibkan **alamat fisik developer** ditampilkan di halaman Play Store (Developer contact). Alamat rumah akan terlihat publik. Bila itu masalah, pertimbangkan akun **organisasi** (butuh badan usaha + D‑U‑N‑S) sejak awal — memindahkan aplikasi dari akun perorangan ke organisasi setelah rilis merepotkan.
+
+---
+
+## 7. Aset grafis siap pakai
+
+Sudah dibuat di `docs/rilis/aset/` (skrip pembuatnya: `docs/rilis/aset/buat-aset.py`, jalankan `python3 docs/rilis/aset/buat-aset.py` untuk membuat ulang):
+
+| Berkas | Ukuran | Dipakai di Play Console |
+|---|---|---|
+| `ikon-512-pelanggan.png` | 512×512 RGB, tanpa alfa | App icon — AntarKita |
+| `ikon-512-mitra.png` | 512×512 RGB, tanpa alfa | App icon — AntarKita Mitra |
+| `feature-graphic-pelanggan.png` | 1024×500 RGB | Feature graphic — AntarKita |
+| `feature-graphic-mitra.png` | 1024×500 RGB | Feature graphic — AntarKita Mitra |
+
+**Screenshot BELUM ada dan tidak bisa dibuat di lingkungan CI/sandbox** (tidak ada peramban headless maupun emulator Android di sana, dan unduhan Android SDK/Chromium diblokir). Screenshot **wajib** minimal 2 per aplikasi. Cara tercepat bagi pemilik:
+
+1. Pasang APK dari workflow "Android APK" (`antarkita-pelanggan-*.apk`) di HP Android.
+2. Ambil screenshot bawaan HP (tombol Power + Volume Bawah). Resolusi HP modern (1080×2400) sudah memenuhi syarat 9:16.
+3. Alternatif tanpa HP: buka `https://erzamadana-ui.github.io/antarkita/` di Chrome desktop → `F12` → *Toggle device toolbar* → pilih **Pixel 7** → tombol ⋮ → **Capture screenshot**.
+4. Urutan yang disarankan ada di tabel §3.
+
+---
+
+## 8. Sumber kebijakan Google Play + tanggal akses
+
+Semua diverifikasi ulang lewat dokumen resmi Google, **diakses 9 September 2026**:
+
+| Syarat | Ketentuan terverifikasi | Sumber |
+|---|---|---|
+| Target API level | Aplikasi **baru** dan pembaruan wajib **API 36 (Android 16)** sejak **31 Agustus 2026**; perpanjangan bisa diminta sampai **1 November 2026** | https://developer.android.com/google/play/requirements/target-sdk |
+| Produksi untuk akun perorangan baru | **≥12 penguji ter-*opt-in* terus-menerus selama 14 hari berturut-turut** sebelum boleh mengajukan akses produksi; berlaku untuk akun perorangan yang dibuat **setelah 13 November 2023** | https://support.google.com/googleplay/android-developer/answer/14151465 |
+| Hapus akun | Wajib **dua-duanya**: jalur hapus akun **di dalam aplikasi** **dan** **tautan web** untuk meminta penghapusan; tautan harus dapat dibuka tanpa error, menonjol, dan menyebut nama aplikasi/pengembang | https://support.google.com/googleplay/android-developer/answer/13327111 |
+| Ukuran aplikasi | Batas dihitung dari **ukuran unduhan terkompresi**: modul dasar **500 MB**, aset pack 1,5 GB, total keseluruhan 34 GB | https://support.google.com/googleplay/android-developer/answer/9859372 |
+| User Generated Content | Wajib: persetujuan S&K sebelum unggah, definisi konten terlarang, moderasi wajar, **sistem pelaporan di dalam aplikasi**, dan **fungsi memblokir pengguna** bagi aplikasi dengan interaksi langsung antar pengguna — **semuanya sudah ada**, lihat §4.11 | https://support.google.com/googleplay/android-developer/answer/9876937 |
+| Financial features | Deklarasi *Financial features* wajib diisi untuk aplikasi berfitur keuangan (termasuk dompet) | https://support.google.com/googleplay/android-developer/answer/13849271 |
+| Foto & video | Aplikasi wajib memakai **Android Photo Picker** kecuali punya alasan inti; `READ_MEDIA_IMAGES`/`READ_MEDIA_VIDEO` termasuk izin dengan alternatif berlingkup minimal | https://support.google.com/googleplay/android-developer/answer/15800983 |
+| Lokasi latar belakang | Butuh deklarasi + video demo; **tidak berlaku** untuk AntarKita karena `ACCESS_BACKGROUND_LOCATION` diblokir | https://support.google.com/googleplay/android-developer/answer/9799150 |

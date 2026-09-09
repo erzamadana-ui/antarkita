@@ -61,6 +61,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/(admin)/users', label: 'Pengguna', icon: 'people-outline', iconActive: 'people' },
       { href: '/(admin)/cs', label: 'CS & Tiket', icon: 'chatbubbles-outline', iconActive: 'chatbubbles' },
+      { href: '/(admin)/reports', label: 'Laporan Pengguna', icon: 'flag-outline', iconActive: 'flag' },
     ],
   },
   {

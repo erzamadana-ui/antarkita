@@ -9,8 +9,9 @@ import { rpc } from '@/lib/supabase';
 import { useAdminSecurity, handleAdminError } from '@/store/adminSecurity';
 import { useAuth } from '@/store/auth';
 import { colors } from '@/lib/theme';
-import { formatDate, rupiah, roleLabelId } from '@/lib/format';
+import { rupiah, roleLabelId } from '@/lib/format';
 import type { FraudFlag, SecurityEvent } from '@/lib/types';
+import { fmtDate, fmtAgo, WideTableHint } from './_shared';
 
 type FraudSummary = { open: number; open_high: number; auto_suspended: number; last_7d: number; by_kind: Record<string, number>; coef: { min: number; max: number; hard: number; budget: number; cancel_limit: number; gps_speed: number; auto_suspend: boolean } };
 type Overview = { pin: { has_pin: boolean; unlocked: boolean; unlocked_until: string | null; locked_until: string | null; session_minutes: number } | null; events: SecurityEvent[]; counts_7d: Record<string, number>; admins: { id: string; name: string; has_pin: boolean; unlocked: boolean }[]; fraud: FraudSummary; auto_verified_30d: number; auto_payout_30d: number; bank_verified: number };
@@ -183,14 +184,14 @@ export default function AdminSecurity() {
                 <Badge text={FRAUD_KIND_LABEL[f.kind] ?? f.kind} color={colors.text} />
                 {f.auto_action === 'suspended' ? <Badge text="Ditangguhkan otomatis" color={colors.danger} /> : null}
                 {f.status !== 'open' ? <Badge text={f.status === 'confirmed' ? 'Dikonfirmasi' : 'Diabaikan'} color={f.status === 'confirmed' ? colors.danger : colors.success} /> : null}
-                <Text style={[font.tiny, { marginLeft: 'auto' }]}>{formatDate(f.created_at)}</Text>
+                <Text style={[font.tiny, { marginLeft: 'auto' }]}>{fmtDate(f.created_at)}</Text>
               </Row>
               <Text style={[font.small, { color: colors.text }]}>{fraudDetailText(f)}</Text>
               <Row gap={12} style={{ flexWrap: 'wrap' }}>
                 <Row gap={4}><Ionicons name="person-outline" size={adminIcon.sm} color={adminTone.faint} /><Text style={font.tiny}>{f.subject_name ?? 'Akun tidak diketahui'}{f.subject_role ? ` · ${roleLabelId[f.subject_role] ?? f.subject_role}` : ''}{f.driver_status ? ` · driver ${f.driver_status}` : ''}</Text></Row>
                 {f.order_code ? <Row gap={4}><Ionicons name="receipt-outline" size={adminIcon.sm} color={adminTone.faint} /><Text style={font.tiny}>Order {f.order_code}</Text></Row> : null}
               </Row>
-              {f.review_note ? <Text style={font.tiny}>Catatan: {f.review_note}{f.reviewed_at ? ` (${formatDate(f.reviewed_at)})` : ''}</Text> : null}
+              {f.review_note ? <Text style={font.tiny}>Catatan: {f.review_note}{f.reviewed_at ? ` (${fmtDate(f.reviewed_at)})` : ''}</Text> : null}
               {f.status === 'open' ? (
                 <RowActions
                   primary={[{ key: 'ignore', label: 'Abaikan', icon: 'checkmark-done-outline', variant: 'soft' as const, onPress: () => setAsk({ f, status: 'dismissed', reinstate: false }) }]}
@@ -213,10 +214,10 @@ export default function AdminSecurity() {
               <Row gap={6} style={{ flexWrap: 'wrap' }}>{Object.entries(ov?.counts_7d ?? {}).map(([k, n]) => <Badge key={k} text={`${EVENT_LABEL[k] ?? k}: ${n}`} color={EVENT_COLOR[k] ?? colors.textMuted} />)}{!ov || Object.keys(ov.counts_7d ?? {}).length === 0 ? <Text style={font.tiny}>Tidak ada kejadian 7 hari terakhir.</Text> : null}</Row>
             </View>
             <Table rows={(ov?.events ?? []) as unknown as Record<string, unknown>[]} emptyText="Belum ada kejadian" columns={[
-              { key: 'created_at', label: 'Waktu', width: 140, render: (r) => <Text style={font.tiny}>{formatDate(String(r.created_at))}</Text> },
-              { key: 'kind', label: 'Kejadian', width: 180, render: (r) => <Badge text={EVENT_LABEL[String(r.kind)] ?? String(r.kind)} color={EVENT_COLOR[String(r.kind)] ?? colors.textMuted} /> },
-              { key: 'user_name', label: 'Pengguna', width: 160, render: (r) => <Text style={font.small} numberOfLines={1}>{String(r.user_name ?? '-')}</Text> },
-              { key: 'detail', label: 'Detail', width: 260, render: (r) => <Text style={font.tiny} numberOfLines={2}>{eventDetailText(r as unknown as SecurityEvent)}</Text> },
+              { key: 'created_at', label: 'Waktu', width: 118, render: (r) => <Text style={font.tiny}>{fmtDate(String(r.created_at))}</Text> },
+              { key: 'kind', label: 'Kejadian', width: 156, render: (r) => <Badge text={EVENT_LABEL[String(r.kind)] ?? String(r.kind)} color={EVENT_COLOR[String(r.kind)] ?? colors.textMuted} /> },
+              { key: 'user_name', label: 'Pengguna', width: 126, render: (r) => <Text style={font.small} numberOfLines={1}>{String(r.user_name ?? '-')}</Text> },
+              { key: 'detail', label: 'Detail', width: 190, render: (r) => <Text style={font.tiny} numberOfLines={2}>{eventDetailText(r as unknown as SecurityEvent)}</Text> },
             ]} />
           </Card>
         </Entrance>
@@ -238,6 +239,7 @@ export default function AdminSecurity() {
           </Card>
         </Entrance>
       </Row>
+      <WideTableHint />
     </AdminPage>
   );
 }

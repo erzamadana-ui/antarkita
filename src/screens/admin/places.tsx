@@ -7,8 +7,9 @@ import { Row, Button, Badge, IconCircle, Input, toast } from '@/components/ui';
 import { Entrance, Skeleton } from '@/components/motion';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
-import { cityName, formatDate, storeBrandLabel, storeCategoryLabel } from '@/lib/format';
+import { cityName, storeBrandLabel, storeCategoryLabel } from '@/lib/format';
 import type { City, Market, PlaceSuggestion, ShopStore } from '@/lib/types';
+import { fmtDate, fmtAgo, WideTableHint } from './_shared';
 
 const TABS = [{ key: 'pending', label: 'Menunggu' }, { key: 'approved', label: 'Aktif' }, { key: 'rejected', label: 'Ditolak' }, { key: 'all', label: 'Semua' }];
 const STATUS_LABEL: Record<string, string> = { pending: 'Menunggu', approved: 'Aktif', rejected: 'Ditolak', merged: 'Digabung' };
@@ -26,6 +27,7 @@ export default function AdminPlaces() {
     <AdminPage title="Data Tempat" subtitle="Toko & pasar yang dipakai AntarShop / AntarMarket: data admin, usulan pengguna, dan hasil impor peta (OpenStreetMap)">
       <FilterBar value={main} onChange={(v) => setMain(v as never)} options={[{ key: 'places', label: 'Toko & pasar terdaftar' }, { key: 'suggest', label: 'Usulan pengguna' }]} />
       {main === 'places' ? <RegisteredPlaces /> : <Suggestions />}
+      <WideTableHint />
     </AdminPage>
   );
 }
@@ -93,13 +95,13 @@ function RegisteredPlaces() {
     </Entrance>
     {rows === null ? <Skeleton height={240} radius={20} /> : (
       <Table rows={shown as unknown as Record<string, unknown>[]} keyField="id" emptyText="Tidak ada tempat pada filter ini" columns={[
-        { key: 'name', label: 'Tempat', width: 260, render: (r) => { const p = r as unknown as PlaceRow; return <View style={{ minWidth: 0 }}><Text style={font.bodyStrong} numberOfLines={1}>{p.name}</Text><Text style={font.tiny} numberOfLines={2}>{p.address ?? '—'}</Text></View>; } },
-        { key: 'kind', label: 'Jenis', width: 150, render: (r) => { const p = r as unknown as PlaceRow; return <View style={{ gap: 2 }}><Badge text={p.kind === 'store' ? 'Toko' : 'Pasar'} color={p.kind === 'store' ? colors.shop : colors.market} /><Text style={font.tiny} numberOfLines={1}>{p.sub}</Text></View>; } },
-        { key: 'source', label: 'Sumber', width: 120, render: (r) => { const p = r as unknown as PlaceRow; return <Badge text={SOURCE_LABEL[p.source]} color={SOURCE_COLOR[p.source]} />; } },
-        { key: 'city', label: 'Kota', width: 120, render: (r) => { const p = r as unknown as PlaceRow; return <Text style={font.small}>{p.city_id ? cityName(cities, p.city_id) : '—'}</Text>; } },
-        { key: 'open_hours', label: 'Jam buka', width: 110, render: (r) => <Text style={font.tiny}>{String(r.open_hours ?? '—')}</Text> },
-        { key: 'map', label: 'Peta', width: 150, render: (r) => { const p = r as unknown as PlaceRow; return <Pressable onPress={() => Linking.openURL(p.osm_id && /^(node|way|relation)\//.test(p.osm_id) ? `https://www.openstreetmap.org/${p.osm_id}` : osm(p.lat, p.lng))} hitSlop={4}><Row gap={4}><Ionicons name="navigate-outline" size={adminIcon.sm} color={colors.primary} /><Text style={[font.tiny, { color: colors.primary, fontWeight: '700' }]}>{p.osm_id ? 'Buka di OSM' : `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`}</Text></Row></Pressable>; } },
-        { key: 'active', label: 'Aktif', width: 80, render: (r) => { const p = r as unknown as PlaceRow; return <Switch value={p.active} onValueChange={() => toggleActive(p)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />; } },
+        { key: 'name', label: 'Tempat', width: 250, render: (r) => { const p = r as unknown as PlaceRow; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Text style={font.bodyStrong} numberOfLines={1}>{p.name}</Text><Text style={font.tiny} numberOfLines={2}>{p.address ?? '—'}</Text></View>; } },
+        { key: 'kind', label: 'Jenis', width: 130, render: (r) => { const p = r as unknown as PlaceRow; return <View style={{ gap: 2 }}><Badge text={p.kind === 'store' ? 'Toko' : 'Pasar'} color={p.kind === 'store' ? colors.shop : colors.market} /><Text style={font.tiny} numberOfLines={1}>{p.sub}</Text></View>; } },
+        { key: 'source', label: 'Sumber', width: 108, render: (r) => { const p = r as unknown as PlaceRow; return <Badge text={SOURCE_LABEL[p.source]} color={SOURCE_COLOR[p.source]} />; } },
+        { key: 'city', label: 'Kota', width: 108, render: (r) => { const p = r as unknown as PlaceRow; return <Text style={font.small}>{p.city_id ? cityName(cities, p.city_id) : '—'}</Text>; } },
+        { key: 'open_hours', label: 'Jam buka', width: 96, render: (r) => <Text style={font.tiny}>{String(r.open_hours ?? '—')}</Text> },
+        { key: 'map', label: 'Peta', width: 130, render: (r) => { const p = r as unknown as PlaceRow; return <Pressable onPress={() => Linking.openURL(p.osm_id && /^(node|way|relation)\//.test(p.osm_id) ? `https://www.openstreetmap.org/${p.osm_id}` : osm(p.lat, p.lng))} hitSlop={4}><Row gap={4}><Ionicons name="navigate-outline" size={adminIcon.sm} color={colors.primary} /><Text style={[font.tiny, { color: colors.primary, fontWeight: '700' }]}>{p.osm_id ? 'Buka di OSM' : `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`}</Text></Row></Pressable>; } },
+        { key: 'active', label: 'Aktif', width: 66, render: (r) => { const p = r as unknown as PlaceRow; return <Switch value={p.active} onValueChange={() => toggleActive(p)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />; } },
       ]} />
     )}
   </>);
@@ -177,7 +179,7 @@ function Suggestions() {
                   <Pressable onPress={() => Linking.openURL(osm(s.lat, s.lng))}><Row gap={4}><Ionicons name="navigate-outline" size={adminIcon.sm} color={colors.primary} /><Text style={[font.tiny, { color: colors.primary, fontWeight: '700' }]}>{s.lat.toFixed(5)}, {s.lng.toFixed(5)} · buka peta</Text></Row></Pressable>
                 </Row>
                 {s.notes ? <Text style={[font.tiny, { fontStyle: 'italic' }]}>"{s.notes}"</Text> : null}
-                <Text style={font.tiny}>Pengusul {s.submitter ?? '-'} · {formatDate(s.created_at)}{s.reviewed_at ? ` · ditinjau ${formatDate(s.reviewed_at)}` : ''}{s.review_note ? ` · ${s.review_note}` : ''}</Text>
+                <Text style={font.tiny}>Pengusul {s.submitter ?? '-'} · {fmtDate(s.created_at)}{s.reviewed_at ? ` · ditinjau ${fmtDate(s.reviewed_at)}` : ''}{s.review_note ? ` · ${s.review_note}` : ''}</Text>
                 {(s.nearby_conflicts ?? 0) > 0 ? (
                   <View style={st.warn}><Ionicons name="warning-outline" size={adminIcon.md} color={colors.warning} /><Text style={[font.small, { color: colors.warning, fontWeight: '700', flex: 1 }]}>{s.nearby_conflicts} usulan lain dengan nama berbeda dalam radius {rule.radius} m — periksa duplikat sebelum menyetujui.</Text></View>
                 ) : null}

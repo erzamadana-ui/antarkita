@@ -80,12 +80,23 @@ export default function DriverHome() {
   };
 
   if (driver && driver.status !== 'approved') {
+    // Ditolak: mitra HARUS bisa memperbaiki dokumen & mengirim ulang dari sini (sebelumnya jalan buntu).
+    const rejected = driver.status === 'rejected';
+    const suspended = driver.status === 'suspended';
+    const note = driver.status_reason?.trim();
     return (
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
         <SafeAreaView style={{ flex: 1 }}>
-          <Empty icon="hourglass-outline" title={driver.status === 'pending' ? 'Menunggu verifikasi admin' : driver.status === 'suspended' ? 'Akun mitra ditangguhkan' : 'Pendaftaran ditolak'}
-            subtitle={driver.status === 'pending' ? 'Data Anda sedang diperiksa. Biasanya kurang dari 1×24 jam.' : 'Hubungi CS AntarKita untuk informasi lebih lanjut.'}
-            action={<Button title="Lihat akun & status pengajuan" variant="secondary" icon="person-outline" onPress={() => router.push('/(driver)/account' as never)} />} />
+          <Empty icon={rejected ? 'refresh-circle-outline' : suspended ? 'lock-closed-outline' : 'hourglass-outline'}
+            title={suspended ? 'Akun mitra ditangguhkan' : rejected ? 'Pendaftaran ditolak' : 'Menunggu verifikasi admin'}
+            subtitle={note ? `Catatan admin: ${note}` : suspended ? 'Hubungi CS AntarKita untuk peninjauan akun Anda.' : rejected ? 'Perbaiki data & dokumen Anda lalu kirim ulang pengajuan.' : 'Data Anda sedang diperiksa. Biasanya kurang dari 1×24 jam.'}
+            action={
+              <View style={{ gap: 10, width: '100%' }}>
+                {rejected && <Button title="Perbaiki & kirim ulang" icon="create-outline" onPress={() => router.push('/account/become-driver' as never)} />}
+                <Button title="Lihat akun & status pengajuan" variant="secondary" icon="person-outline" onPress={() => router.push('/(driver)/account' as never)} />
+                <Button title="Hubungi CS AntarKita" variant="ghost" icon="chatbubbles-outline" color={colors.textSecondary} onPress={() => router.push('/support' as never)} />
+              </View>
+            } />
         </SafeAreaView>
       </View>
     );
@@ -212,8 +223,10 @@ export default function DriverHome() {
                       <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={1}>{serviceLabel[o.service]}{o.vehicle_class ? ` · ${vehicleClassLabel[o.vehicle_class] ?? ''}` : ''}</Text>
                       <Row gap={4}><Ionicons name="location-outline" size={12} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>{o.merchant_name ?? o.pickup_address}</Text></Row>
                       {/* Dua baris: pada layar 390px satu baris membuat metode pembayaran terpotong hilang,
-                          padahal itu yang dipakai driver untuk memutuskan menerima order. */}
-                      <Text style={font.tiny} numberOfLines={1}>{km(o.distance_to_pickup_km)} dari Anda · {km(o.distance_km)} · {o.scheduled_at ? `Jadwal ${formatSchedule(o.scheduled_at)}` : timeAgo(o.created_at)}</Text>
+                          padahal itu yang dipakai driver untuk memutuskan menerima order.
+                          Jarak & waktu/jadwal juga dipisah 2 baris: pada 360px satu baris masih terpotong. */}
+                      <Text style={font.tiny} numberOfLines={1}>Jemput {km(o.distance_to_pickup_km)} · Antar {km(o.distance_km)}</Text>
+                      <Text style={font.tiny} numberOfLines={1}>{o.scheduled_at ? `Jadwal ${formatSchedule(o.scheduled_at)}` : timeAgo(o.created_at)}</Text>
                       <Row gap={4}><Ionicons name={o.payment_method === 'cash' ? 'cash-outline' : 'wallet-outline'} size={12} color={o.payment_method === 'cash' ? colors.warning : colors.primary} /><Text style={[font.tiny, { fontWeight: '700', color: o.payment_method === 'cash' ? colors.warning : colors.primary }]} numberOfLines={1}>{o.payment_method === 'cash' ? 'Tunai' : 'AntarPay'}</Text></Row>
                       <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 15 }}>{rupiah(o.driver_earning)}</Text>
                     </View>

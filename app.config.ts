@@ -86,11 +86,17 @@ const config: ExpoConfig = {
       'android.permission.POST_NOTIFICATIONS',
     ],
     // Izin yang ditambahkan template/pustaka tetapi tidak dipakai — diblokir agar tidak muncul di manifest & review Play.
+    // Diverifikasi 9 Sep 2026 pada hasil `expo prebuild`: keenam izin di bawah muncul di AndroidManifest.xml
+    // dengan atribut `tools:node="remove"` sehingga HILANG dari manifest akhir setelah manifest merger.
+    // AD_ID (com.google.android.gms.permission.AD_ID) diblokir supaya konsisten dengan jawaban Play Console
+    // "Advertising ID → No" (Data safety). Tanpa ini, pustaka Google Play services mana pun yang kelak masuk
+    // sebagai dependensi transitif dapat menyisipkannya diam-diam dan membuat deklarasi kita menjadi salah.
     blockedPermissions: [
       'android.permission.ACCESS_BACKGROUND_LOCATION',
       'android.permission.FOREGROUND_SERVICE', 'android.permission.FOREGROUND_SERVICE_LOCATION',
       'android.permission.SYSTEM_ALERT_WINDOW',
       'android.permission.READ_MEDIA_IMAGES', 'android.permission.READ_MEDIA_VIDEO',
+      'com.google.android.gms.permission.AD_ID',
     ],
   },
   web: {

@@ -4,14 +4,14 @@ import { View, Text, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import {
-  AdminPage, StatCard, MiniBars, TrendChart, CITY_COLORS, Panel, Grid, Col, Pill, EmptyState,
-  adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, FilterBar, Truncate,
+  AdminPage, StatCard, MiniBars, TrendChart, CITY_COLORS, Panel, Grid, Col, Pill, EmptyState, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, FilterBar,
 } from '@/components/admin';
 import { Row } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors, fam } from '@/lib/theme';
-import { rupiah, timeAgo, serviceLabel, statusLabel, statusColor } from '@/lib/format';
+import { rupiah, serviceLabel, statusLabel, statusColor } from '@/lib/format';
 import type { Order, TrafficStats, AuditLog } from '@/lib/types';
+import { fmtDate, fmtAgo, Trunc } from './_shared';
 
 interface Stats {
   users: number; drivers_total: number; drivers_pending: number; drivers_online: number;
@@ -21,6 +21,13 @@ interface Stats {
 }
 type CsStats = { open: number; in_progress: number; urgent: number };
 type SecOverview = { fraud?: { open?: number; open_high?: number } };
+
+/** Label hari untuk grafik — tanggal kosong/rusak tidak boleh tampil sebagai "Invalid Date". */
+const dayLabel = (d?: string | null) => {
+  if (!d) return '—';
+  const t = new Date(d);
+  return Number.isNaN(t.getTime()) ? '—' : t.toLocaleDateString('id-ID', { weekday: 'short' });
+};
 
 const pct = (now: number, prev: number) => (prev > 0 ? ((now - prev) / prev) * 100 : null);
 
@@ -125,7 +132,7 @@ export default function AdminDashboard() {
           <Grid gap={adminSpace.lg}>
             <Col span={6} min={280}>
               <Panel title="Pesanan 7 hari terakhir" icon="calendar-outline" iconColor={adminTone.blue}>
-                <MiniBars data={(st?.orders_last7 ?? []).map((d) => ({ label: new Date(d.day).toLocaleDateString('id-ID', { weekday: 'short' }), value: d.count }))} color={adminTone.blue} />
+                <MiniBars data={(st?.orders_last7 ?? []).map((d) => ({ label: dayLabel(d.day), value: Number(d.count) || 0 }))} color={adminTone.blue} />
               </Panel>
             </Col>
             <Col span={6} min={280}>
@@ -168,8 +175,8 @@ export default function AdminDashboard() {
               : live.map((o) => (
                 <View key={o.id} style={rowStyle}>
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Truncate style={font.bodyStrong} title={`${o.code} · ${serviceLabel[o.service]}`}>{o.code} · {serviceLabel[o.service]}</Truncate>
-                    <Truncate style={font.tiny} title={o.dropoff_address}>{timeAgo(o.created_at)} · {o.dropoff_address}</Truncate>
+                    <Trunc style={font.bodyStrong} title={`${o.code} · ${serviceLabel[o.service]}`}>{o.code} · {serviceLabel[o.service]}</Trunc>
+                    <Trunc style={font.tiny} title={o.dropoff_address}>{fmtAgo(o.created_at)} · {o.dropoff_address}</Trunc>
                   </View>
                   <Pill text={statusLabel(o.status, o.service, o.merchant_status)} color={statusColor(o.status)} />
                 </View>
@@ -183,8 +190,8 @@ export default function AdminDashboard() {
               : logs.map((l) => (
                 <View key={l.id} style={rowStyle}>
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Truncate style={font.body} title={l.summary ?? l.action}>{l.summary ?? l.action}</Truncate>
-                    <Truncate style={font.tiny}>{timeAgo(l.created_at)} · {l.actor_name ?? 'Sistem'}</Truncate>
+                    <Trunc style={font.body} title={l.summary ?? l.action}>{l.summary ?? l.action}</Trunc>
+                    <Trunc style={font.tiny}>{fmtAgo(l.created_at)} · {l.actor_name ?? 'Sistem'}</Trunc>
                   </View>
                 </View>
               ))}

@@ -121,7 +121,9 @@ export const statusTone = (s?: string | null): ToneKey => {
 /** Teks 1 baris dengan tooltip `title` di web (RN Web tidak meneruskan prop `title` ke DOM). */
 export function Truncate({ children, title, style, lines = 1 }: { children: React.ReactNode; title?: string; style?: StyleProp<TextStyle>; lines?: number }) {
   const t = <Text numberOfLines={lines} style={style}>{children}</Text>;
-  if (Platform.OS === 'web' && title) return React.createElement('div', { title, style: { minWidth: 0, maxWidth: '100%' } }, t);
+  // display:flex + overflow:hidden wajib: tanpa itu <Text> RN-Web bersifat inline sehingga maxWidth
+  // diabaikan dan teks panjang meluber menutupi kolom di sebelahnya (termasuk tombol aksi).
+  if (Platform.OS === 'web' && title) return React.createElement('div', { title, style: { display: 'flex', minWidth: 0, maxWidth: '100%', overflow: 'hidden' } }, t);
   return t;
 }
 
@@ -318,7 +320,7 @@ export function DataTable({ columns, rows, keyField = 'id', emptyText = 'Tidak a
   const cellStyle = (c: Column): ViewStyle => ({
     width: c.flex ? undefined : c.width ?? 140,
     flexGrow: c.flex ?? 0, flexBasis: c.flex ? (c.width ?? 140) : undefined, flexShrink: 0,
-    minWidth: 0, justifyContent: 'center', paddingRight: 12,
+    minWidth: 0, justifyContent: 'center', paddingRight: 12, overflow: 'hidden',
     alignItems: c.align === 'right' || c.mono ? 'flex-end' : c.align === 'center' ? 'center' : 'flex-start',
   });
   const body = (
@@ -938,7 +940,7 @@ const s = StyleSheet.create({
   // Tinggi baris seragam: cukup untuk dua baris teks (nama + meta) tanpa tombol yang membungkus.
   td: { paddingVertical: 10, minHeight: adminTable.rowHeight, borderBottomWidth: 1, borderBottomColor: adminTone.border },
 
-  backdrop: { flex: 1, backgroundColor: 'rgba(15,29,32,0.42)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(15,29,32,0.42)', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 100, elevation: 100 },
   dialog: { backgroundColor: adminTone.surface, borderRadius: adminRadius.lg, borderWidth: 1, borderColor: adminTone.border, padding: adminSpace.xl, gap: adminSpace.md, ...adminShadow.pop },
   close: { width: 30, height: 30, borderRadius: 10, backgroundColor: adminTone.surfaceAlt, borderWidth: 1, borderColor: adminTone.border, alignItems: 'center', justifyContent: 'center' },
 

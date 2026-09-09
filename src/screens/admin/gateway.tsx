@@ -6,9 +6,10 @@ import { AdminPage, Table, StatCard, adminFont as font, adminTone, adminSpace, a
 import { Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
-import { rupiah, formatDate } from '@/lib/format';
+import { rupiah } from '@/lib/format';
 import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import type { GatewayStatus } from '@/lib/types';
+import { fmtDate, fmtAgo, WideTableHint } from './_shared';
 
 const WEBHOOK_URL = 'https://qwltshvzrsykxdvhbxcv.supabase.co/functions/v1/midtrans-webhook';
 const METHODS: { key: string; label: string }[] = [
@@ -93,8 +94,8 @@ export default function AdminGateway() {
             ['Server key', st?.server_key_masked ?? 'Belum diisi'], ['Client key', st?.client_key ?? '-'], ['Merchant ID', st?.merchant_id ?? '-'],
             ['Metode aktif', (st?.methods ?? []).map((m) => METHODS.find((x) => x.key === m)?.label ?? m).join(', ') || '-'],
             ['Batas top up', st ? `${rupiah(st.topup_min)} - ${rupiah(st.topup_max)}` : '-'],
-            ['Diperbarui', st?.updated_at ? `${formatDate(st.updated_at)}${st.updated_by ? ` oleh ${st.updated_by}` : ''}` : '-'],
-            ['Webhook terakhir', st?.last_webhook_at ? formatDate(String(st.last_webhook_at).replace(/"/g, '')) : 'Belum pernah diterima'],
+            ['Diperbarui', st?.updated_at ? `${fmtDate(st.updated_at)}${st.updated_by ? ` oleh ${st.updated_by}` : ''}` : '-'],
+            ['Webhook terakhir', st?.last_webhook_at ? fmtDate(String(st.last_webhook_at).replace(/"/g, '')) : 'Belum pernah diterima'],
           ].map(([k, v]) => <Row key={k} between style={{ gap: 12 }}><Text style={font.tiny}>{k}</Text><Text style={[font.small, { color: adminTone.ink, flex: 1, textAlign: 'right' }]} numberOfLines={2}>{v}</Text></Row>)}
           <Button title="Uji koneksi ke Midtrans" variant="outline" icon="pulse-outline" loading={testing} onPress={testConn} />
           {test ? <View style={[s.note, { backgroundColor: (test.ok ? colors.success : colors.danger) + '14', borderColor: (test.ok ? colors.success : colors.danger) + '50' }]}><Text style={[font.small, { color: test.ok ? colors.success : colors.danger }]}>{test.text}</Text></View> : null}
@@ -134,7 +135,7 @@ export default function AdminGateway() {
       <Card padded={false}>
         <View style={{ padding: 14 }}><Text style={font.label}>Pembayaran terbaru</Text></View>
         <Table rows={(st?.recent ?? []) as unknown as Record<string, unknown>[]} emptyText="Belum ada transaksi" columns={[
-          { key: 'created_at', label: 'Waktu', width: 130, render: (r) => <Text style={font.tiny}>{formatDate(String(r.created_at))}</Text> },
+          { key: 'created_at', label: 'Waktu', width: 130, render: (r) => <Text style={font.tiny}>{fmtDate(String(r.created_at))}</Text> },
           { key: 'external_id', label: 'ID transaksi', width: 200, render: (r) => <Text style={font.tiny} numberOfLines={1}>{String(r.external_id ?? r.id)}</Text> },
           { key: 'user', label: 'Pengguna', width: 150, render: (r) => <Text style={font.small}>{String(r.user ?? '-')}</Text> },
           { key: 'purpose', label: 'Tujuan', width: 90, render: (r) => <Text style={font.small}>{r.purpose === 'topup' ? 'Top up' : 'Pesanan'}</Text> },
@@ -143,6 +144,7 @@ export default function AdminGateway() {
           { key: 'status', label: 'Status', width: 110, render: (r) => <Badge text={STATUS_LABEL[String(r.status)] ?? String(r.status)} color={STATUS_COLOR[String(r.status)] ?? colors.textMuted} /> },
         ]} />
       </Card>
+      <WideTableHint />
     </AdminPage>
   );
 }

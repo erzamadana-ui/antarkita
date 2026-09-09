@@ -10,6 +10,7 @@ import { supabase, rpc } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import { serviceLabel, rupiah } from '@/lib/format';
 import type { CompetitorPrice, PricingSession, ServiceType } from '@/lib/types';
+import { WideTableHint } from './_shared';
 
 type Suggestion = { service: ServiceType; level: 'low' | 'middle' | 'high'; km: number; our_fare: number; competitor_avg: number | null; competitor_n: number; suggested_fare: number; suggested_multiplier: number; driver_earning: number; platform_revenue: number; driver_now: number; platform_now: number };
 const LEVELS = [{ key: 'high', label: 'High (sibuk)', color: colors.danger }, { key: 'middle', label: 'Middle (normal)', color: colors.info }, { key: 'low', label: 'Low (sepi)', color: colors.success }] as const;
@@ -174,6 +175,7 @@ export default function PricingIntel() {
           <Button title="Simpan harga kompetitor" size="sm" color={colors.accent} onPress={addComp} />
         </View>
       </Card></Entrance>
+      <WideTableHint />
     </AdminPage>
   );
 }

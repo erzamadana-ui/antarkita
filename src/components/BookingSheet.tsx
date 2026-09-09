@@ -47,7 +47,10 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
     const { data, error } = await supabase.rpc('apply_promo', { p_code: promo.trim(), p_service: service, p_subtotal: subtotal });
     setChecking(false);
     if (error) { onDiscount(0); setPromoMsg({ ok: false, text: error.message.replace(/^.*?:\s*/, '') }); return; }
-    onDiscount(Number(data)); setPromoMsg({ ok: true, text: `Hemat ${rupiah(Number(data))}` }); toast.success('Promo diterapkan');
+    // Penjaga NaN: bila server membalas bentuk tak terduga, jangan rusak seluruh perhitungan total.
+    const d = Number(data);
+    if (!Number.isFinite(d) || d < 0) { onDiscount(0); setPromoMsg({ ok: false, text: 'Promo tidak bisa diterapkan saat ini' }); return; }
+    onDiscount(d); setPromoMsg({ ok: true, text: `Hemat ${rupiah(d)}` }); toast.success('Promo diterapkan');
   };
 
   return (

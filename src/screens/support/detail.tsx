@@ -34,10 +34,18 @@ export default function TicketDetail() {
       {ticket.priority !== 'normal' && <Badge text={ticketPriorityLabel[ticket.priority]} color={ticketPriorityColor(ticket.priority)} />}
     </Row>
   );
-  const footer = canClose && ticket.status !== 'open' ? (
+  // Pelanggan harus selalu bisa menutup tiketnya sendiri — termasuk tiket yang baru dibuat
+  // (status 'open', CS belum membalas). Sebelumnya tombol hanya muncul setelah CS membalas,
+  // sehingga tiket salah kirim tidak bisa ditutup pemiliknya.
+  const footer = canClose ? (
     <View style={s.closeBox}>
-      <Row between>
-        <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text, fontSize: 13 }}>Sudah terbantu?</Text><Row gap={6}><Stars value={rating} size={18} onChange={setRating} /><Text style={font.tiny}>{rating ? `${rating}/5` : 'beri nilai CS'}</Text></Row></View>
+      <Row between gap={10}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ fontWeight: '700', color: colors.text, fontSize: 13 }} numberOfLines={1}>{ticket.status === 'open' ? 'Tidak jadi bertanya?' : 'Sudah terbantu?'}</Text>
+          {ticket.status === 'open'
+            ? <Text style={font.tiny} numberOfLines={2}>Tiket bisa Anda tutup sendiri kapan saja.</Text>
+            : <Row gap={6}><Stars value={rating} size={18} onChange={setRating} /><Text style={font.tiny}>{rating ? `${rating}/5` : 'beri nilai CS'}</Text></Row>}
+        </View>
         <Button size="sm" title="Tutup tiket" variant="outline" color={colors.success} icon="checkmark-done" loading={closing} onPress={confirmClose} />
       </Row>
     </View>

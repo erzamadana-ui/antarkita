@@ -1,6 +1,6 @@
 // Gerbang PIN panel admin: banner "atur PIN" bila belum ada PIN, overlay PIN 6 digit bila sesi terkunci
-import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Modal, StyleSheet, Pressable } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, TextInput, Modal, StyleSheet, Pressable, Platform } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated from 'react-native-reanimated';
@@ -46,6 +46,23 @@ export function AdminUnlockGate({ children }: { children: React.ReactNode }) {
   const showModal = loaded && (needPin || modal) && !!status?.has_pin;
   const showBanner = loaded && !!status && !status.has_pin && !onSecurity;
 
+  // Gerbang PIN HARUS berada di atas dialog apa pun. Di web, setiap <Modal> RN-Web membuat <div>
+  // portalnya sendiri lalu menempelkannya ke <body> SAAT KOMPONEN DIPASANG — bukan saat terlihat.
+  // Modal gerbang ini dipasang sejak awal, sedangkan dialog seperti "Hapus mitra" dipasang belakangan,
+  // sehingga div dialog berada SETELAHNYA di DOM dan — karena keduanya z-index auto — tergambar DI ATAS
+  // gerbang PIN (terbukti: titik tengah tombol "Buka kunci" ternyata milik dialog hapus, PIN tak bisa
+  // diketik). zIndex pada backdrop DI DALAM modal tidak menolong: ia tidak bisa mengangkat div portal
+  // induknya. Jadi div portal itu sendiri yang dijadikan konteks penumpukan tertinggi.
+  const boxRef = useRef<View>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !showModal) return;
+    const node = boxRef.current as unknown as HTMLElement | null;
+    if (!node || typeof document === 'undefined') return;
+    let el: HTMLElement | null = node;
+    while (el && el.parentElement && el.parentElement !== document.body) el = el.parentElement;
+    if (el && el.parentElement === document.body) { el.style.position = 'relative'; el.style.zIndex = '2147483000'; }
+  }, [showModal]);
+
   const submit = async () => {
     if (pin.length < 6) return doShake();
     setBusy(true);
@@ -66,8 +83,11 @@ export function AdminUnlockGate({ children }: { children: React.ReactNode }) {
         </View>
       ) : null}
       {children}
-      <Modal visible={showModal} transparent animationType="fade" onRequestClose={() => { if (!needPin) closeModal(); }}>
-        <View style={s.backdrop}>
+      {/* Gerbang PIN harus selalu berada di atas dialog apa pun. Portal RN-Web menumpuk menurut urutan
+          mount, jadi tanpa zIndex eksplisit modal ini bisa tertimbun dialog yang dibuka lebih dulu
+          (mis. "Hapus mitra") dan tombol "Buka kunci" tidak bisa diklik. */}
+      <Modal visible={showModal} transparent animationType="fade" statusBarTranslucent onRequestClose={() => { if (!needPin) closeModal(); }}>
+        <View ref={boxRef} style={s.backdrop}>
           <Animated.View style={[s.box, shadow.card, shake]}>
             <BrandLogo size={52} />
             <Text style={[font.h2, { marginTop: 6 }]}>Buka kunci panel</Text>
@@ -89,7 +109,7 @@ export function AdminUnlockGate({ children }: { children: React.ReactNode }) {
 
 const s = StyleSheet.create({
   banner: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.lg, backgroundColor: colors.accentLight, borderWidth: 1, borderColor: colors.warning + '55', maxWidth: 1100, width: '100%', alignSelf: 'center' },
-  backdrop: { flex: 1, backgroundColor: colors.overlay, alignItems: 'center', justifyContent: 'center', padding: 20 },
+  backdrop: { flex: 1, backgroundColor: colors.overlay, alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 9999, elevation: 9999 },
   box: { alignItems: 'center', gap: 12, padding: 24, borderRadius: radius.xl, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, maxWidth: 400, width: '100%' },
   pin: { fontSize: 30, fontWeight: '800', letterSpacing: 14, textAlign: 'center', color: colors.text, borderBottomWidth: 2, borderBottomColor: colors.primary, paddingVertical: 8, width: 220 },
   locked: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: colors.dangerLight },

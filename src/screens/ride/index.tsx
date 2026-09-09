@@ -103,7 +103,7 @@ export default function RideScreen() {
 
   const ready = !!(pickup && dropoff);
   return (
-    <Screen title={def.label} subtitle={def.id === 'ride_car' ? 'Mobil · 1–4 penumpang · Hemat, Standar, Premium, Listrik' : 'Ojek motor · cepat & hemat'} band={def.color} back maxWidth={640} footer={ready && chosen && !serviceOff ? (
+    <Screen title={def.label} subtitle={def.id === 'ride_car' ? 'Mobil · 1–4 penumpang' : 'Ojek motor · cepat & hemat'} band={def.color} back maxWidth={640} footer={ready && chosen && !serviceOff ? (
       <View style={{ gap: 10 }}>
         <LimitNotice limit={opts?.limit} actionTitle="Buka AntarTravel" actionIcon="bus-outline" onAction={() => router.push('/travel' as never)} />
         <Button title={blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label} · ${rupiah(total)}`} size="lg" color={accent} loading={ordering} disabled={loading || blocked} onPress={order} />

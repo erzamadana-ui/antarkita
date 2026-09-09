@@ -10,6 +10,10 @@ import { useAuth } from '@/store/auth';
 import { useMode } from '@/store/mode';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { FUEL_LABEL } from '@/lib/vehicles';
+import { vehicleClassLabel } from '@/lib/format';
+
+// Status pengajuan dalam Bahasa Indonesia (sebelumnya kode mentah 'pending'/'rejected'/'suspended' bocor ke layar)
+const STATUS_LABEL: Record<string, string> = { pending: 'Menunggu verifikasi', approved: 'Mitra aktif', rejected: 'Pendaftaran ditolak', suspended: 'Ditangguhkan' };
 
 type Item = { icon: IconName; color?: string; title: string; subtitle?: string; onPress: () => void; danger?: boolean };
 
@@ -22,12 +26,14 @@ export default function DriverAccount() {
   const groups: { title: string; items: Item[] }[] = [
     { title: 'Akun & kendaraan', items: [
       { icon: 'person-outline', title: 'Edit profil', subtitle: 'Nama, nomor HP, foto', onPress: () => router.push('/account/edit') },
-      { icon: 'car-outline', title: 'Data kendaraan & dokumen', subtitle: [driver?.vehicle_class ? `Kelas: ${driver.vehicle_class}` : null, [driver?.vehicle_brand, driver?.vehicle_model].filter(Boolean).join(' ') || null, driver?.vehicle_year ? String(driver.vehicle_year) : null].filter(Boolean).join(' · ') || 'SIM, STNK, foto kendaraan', onPress: () => router.push('/account/become-driver') },
+      { icon: 'car-outline', title: 'Data kendaraan & dokumen', subtitle: [driver?.vehicle_class ? `Kelas: ${vehicleClassLabel[driver.vehicle_class] ?? driver.vehicle_class}` : null, [driver?.vehicle_brand, driver?.vehicle_model].filter(Boolean).join(' ') || null, driver?.vehicle_year ? String(driver.vehicle_year) : null].filter(Boolean).join(' · ') || 'SIM, STNK, foto kendaraan', onPress: () => router.push('/account/become-driver') },
       { icon: 'flash-outline', title: 'Kode AntarNow saya', subtitle: 'Kode 6 karakter agar pelanggan memesan Anda langsung', onPress: () => router.push('/driver/code' as never) },
       { icon: 'bus-outline', color: colors.travel, title: 'Mitra AntarTravel', subtitle: 'Jadwal travel antar kota, manifest penumpang', onPress: () => router.push('/driver/travel' as never) },
     ] },
     { title: 'Lainnya', items: [
       { icon: 'shield-checkmark-outline', color: colors.danger, title: 'Pusat Keamanan', subtitle: 'SOS, verifikasi wajah, kontak darurat, laporan insiden', onPress: () => router.push('/safety' as never) },
+      // Wajib kebijakan UGC Google Play: mitra juga harus bisa memblokir & mengelola blokirnya.
+      { icon: 'ban-outline', color: colors.danger, title: 'Pengguna diblokir', subtitle: 'Kelola daftar blokir & laporan konten', onPress: () => router.push('/account/blocks' as never) },
       { icon: 'chatbubbles-outline', color: colors.info, title: 'Bantuan & tiket aduan', subtitle: 'CS online', onPress: () => router.push('/support' as never) },
       { icon: 'language-outline', title: 'Bahasa / Language', onPress: () => router.push('/account/language') },
       { icon: 'key-outline', title: 'Ganti kata sandi', subtitle: 'Perbarui kata sandi akun Anda', onPress: () => router.push('/account/password' as never) },
@@ -43,7 +49,7 @@ export default function DriverAccount() {
           <View style={s.avatarRing}><Avatar name={profile?.full_name} url={profile?.avatar_url} size={96} /></View>
           <Text style={[font.h1, { marginTop: 12, textAlign: 'center' }]}>{profile?.full_name}</Text>
           <Text style={[font.small, { textAlign: 'center' }]}>{[[driver?.vehicle_brand, driver?.vehicle_model].filter(Boolean).join(' '), driver?.fuel_type ? FUEL_LABEL[driver.fuel_type] : null, driver?.vehicle_plate].filter(Boolean).join(' · ')}</Text>
-          <Badge text={approved ? 'Mitra aktif' : `Status: ${driver?.status ?? '-'}`} color={approved ? colors.success : colors.warning} style={{ marginTop: 8 }} />
+          <Badge text={approved ? 'Mitra aktif' : (STATUS_LABEL[driver?.status ?? ''] ?? 'Belum terdaftar')} color={approved ? colors.success : driver?.status === 'pending' ? colors.warning : colors.danger} style={{ marginTop: 8 }} />
         </View>
       </Entrance>
       {/* 3 statistik: rating / ulasan / trip */}
@@ -92,6 +98,7 @@ export default function DriverAccount() {
       ))}
 
       <Entrance index={4} style={{ marginTop: 22, gap: 10 }}>
+        {driver?.status === 'rejected' ? <Button title="Perbaiki & kirim ulang pengajuan" icon="create-outline" onPress={() => router.push('/account/become-driver' as never)} /> : null}
         {merchant ? <Button title="Beralih ke Mode Merchant" variant="secondary" icon="storefront-outline" onPress={async () => { await setMode('merchant'); router.replace('/(merchant)'); }} /> : null}
         {marketVendor ? <Button title="Beralih ke Lapak Pasar" variant="secondary" icon="basket-outline" onPress={() => router.replace('/(vendor)' as never)} /> : null}
         <Button title="Keluar" variant="outline" color={colors.danger} icon="log-out-outline" onPress={async () => { await signOut(); router.replace('/(auth)/welcome'); }} />

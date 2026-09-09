@@ -1,6 +1,6 @@
 // AntarMarket — belanja ke pasar tradisional: harga acuan hari ini, driver kirim foto nota & harga riil; pelanggan bayar harga riil + jasa belanja.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, Image, ActivityIndicator, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Card, Row, Button, Badge, Input, Chip, Empty, Stepper, toast } from '@/components/ui';
@@ -15,7 +15,7 @@ import { useAppSettings } from '@/hooks/useAppSettings';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
 import { getRoute, reverseGeocode, type RouteResult } from '@/lib/geo';
 import { importOsmPlaces } from '@/lib/osm';
-import { rpc } from '@/lib/supabase';
+import { rpc, friendlyError } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { ServiceIllustration } from '@/components/ServiceArt';
 import { rupiah, km, minutes, marketCategoryLabel } from '@/lib/format';
@@ -53,6 +53,8 @@ export default function MarketScreen() {
   const [marketsTick, setMarketsTick] = useState(0);
   const [importing, setImporting] = useState(false);
   const [market, setMarket] = useState<Market | null>(null);
+  // Kegagalan jaringan dulu tampil sebagai daftar pasar kosong tanpa penjelasan.
+  const [marketsError, setMarketsError] = useState<string | null>(null);
   const [items, setItems] = useState<MarketItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [vendors, setVendors] = useState<VendorCatalogEntry[]>([]);
@@ -93,11 +95,11 @@ export default function MarketScreen() {
     rpc<Market[]>('nearby_markets', { p_lat: location.lat, p_lng: location.lng, p_radius_km: 25 })
       .then((r) => {
         if (cancelled) return;
-        const list = r ?? []; setMarkets(list); setMarket((m) => m ?? list[0] ?? null);
+        const list = r ?? []; setMarkets(list); setMarketsError(null); setMarket((m) => m ?? list[0] ?? null);
         const key = locKey(location.lat, location.lng);
         if (list.length < 5 && settings?.osm_import_enabled !== false && !autoImported.has(key)) { autoImported.add(key); importFromMap(true); }
       })
-      .catch(() => { if (!cancelled) setMarkets([]); })
+      .catch((e: Error) => { if (!cancelled) { setMarkets([]); setMarketsError(friendlyError(e.message)); } })
       .finally(() => { if (!cancelled) setLoadingMarkets(false); });
     return () => { cancelled = true; };
   }, [location.lat, location.lng, marketsTick]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -134,6 +136,15 @@ export default function MarketScreen() {
   const chosenVendor = vendorItems.filter((i) => (lines[i.id]?.qty ?? 0) > 0);
   const chosenCount = chosen.length + chosenVendor.length;
   const subtotal = chosen.reduce((a, i) => a + i.price * (lines[i.id]?.qty ?? 0), 0) + chosenVendor.reduce((a, i) => a + i.price * (lines[i.id]?.qty ?? 0), 0);
+  /** Ganti pasar. Daftar belanja terikat pada katalog pasar, jadi harus dikosongkan —
+   *  konfirmasi dulu bila pengguna sudah memilih bahan agar tidak hilang tanpa sengaja. */
+  const changeMarket = () => {
+    const reset = () => { setMarket(null); setLines({}); setCat('all'); setNoteOpen(null); };
+    if (Object.keys(lines).length === 0) return reset();
+    if (Platform.OS === 'web') { if (window.confirm('Ganti pasar? Daftar belanja yang sudah dipilih akan dikosongkan.')) reset(); return; }
+    Alert.alert('Ganti pasar?', 'Daftar belanja yang sudah dipilih akan dikosongkan.', [{ text: 'Batal', style: 'cancel' }, { text: 'Ganti', style: 'destructive', onPress: reset }]);
+  };
+
   const setQty = (id: string, qty: number) => setLines((l) => {
     const v = Math.max(0, Math.min(50, Math.round(qty * 2) / 2));
     if (v <= 0) { const { [id]: _drop, ...rest } = l; return rest; }
@@ -193,12 +204,12 @@ export default function MarketScreen() {
   const footer = serviceOff ? undefined : (
     <View style={{ gap: 8 }}>
       <LimitNotice limit={est?.limit} />
-      <Row between>
+      <Row between gap={10}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={font.tiny}>Perkiraan total · disesuaikan nota</Text>
-          <Text style={[font.h1, { color: colors.primary }]}>{ready && !estimating ? rupiah(total) : chosenCount ? 'Menghitung…' : rupiah(0)}</Text>
+          <Text style={font.tiny} numberOfLines={2}>Perkiraan total · disesuaikan nota</Text>
+          <Text style={[font.h1, { color: colors.primary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{ready && !estimating ? rupiah(total) : chosenCount ? 'Menghitung…' : rupiah(0)}</Text>
         </View>
-        <Badge text="Dana ditahan · sisa dikembalikan" color={colors.primary} />
+        <Badge text="Dana ditahan · sisa kembali" color={colors.primary} style={{ flexShrink: 0 }} />
       </Row>
       <Button title={blocked ? 'Pasar di luar jangkauan' : chosenCount === 0 ? 'Pilih bahan belanja dulu' : 'Pesan ke pasar'} size="lg" disabled={!ready || ordering} loading={ordering} onPress={order} />
     </View>
@@ -223,20 +234,21 @@ export default function MarketScreen() {
               )}
             </Row>
             {loadingMarkets ? [0, 1].map((i) => <View key={i} style={s.marketRow}><Skeleton width={64} height={64} radius={16} /><View style={{ flex: 1, gap: 6 }}><Skeleton width="60%" height={14} /><Skeleton width="40%" height={12} /></View></View>)
+              : marketsError ? <Empty icon="cloud-offline-outline" title="Gagal memuat pasar" subtitle={marketsError} action={<Button title="Coba lagi" size="sm" icon="refresh" onPress={() => setMarketsTick((n) => n + 1)} />} />
               : markets.length === 0 ? <Text style={font.small}>{importing ? 'Mencari pasar dari peta di sekitar Anda…' : 'Belum ada pasar mitra di sekitar lokasi Anda.'}</Text>
               : (market ? [market] : markets).map((m, i) => {
                 const active = market?.id === m.id;
                 return (
                   <Entrance key={m.id} index={i}>
-                    <PressableScale onPress={() => { if (active) { setMarket(null); setLines({}); setCat('all'); } else { setMarket(m); setLines({}); setCat('all'); } }} scaleTo={0.985} haptic={false} style={[s.marketRow, active && { borderColor: colors.primary }]}>
+                    <PressableScale onPress={() => { if (!active) { setMarket(m); setLines({}); setCat('all'); } }} scaleTo={active ? 1 : 0.985} haptic={false} accessibilityRole="button" accessibilityLabel={active ? `Pasar terpilih: ${m.name}` : `Pilih ${m.name}`} style={[s.marketRow, active && { borderColor: colors.primary }]}>
                       {m.image_url ? <Image source={{ uri: m.image_url }} style={s.marketImg} /> : <View style={[s.marketImg, { alignItems: 'center', justifyContent: 'center' }]}><ServiceIllustration kind="market" size={40} /></View>}
                       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                        <Row gap={6}><Text style={[font.body, { fontWeight: '700', flexShrink: 1 }]} numberOfLines={1}>{m.name}</Text><Badge text={m.is_open_now === false ? 'Tutup' : 'Buka'} color={m.is_open_now === false ? colors.danger : colors.success} /></Row>
-                        <Row gap={4}><Ionicons name="location-outline" size={12} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>{km(m.distance_km)}{m.address ? ` · ${m.address}` : ''}</Text></Row>
+                        <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={2}>{m.name}</Text>
+                        <Row gap={4}><Badge text={m.is_open_now === false ? 'Tutup' : 'Buka'} color={m.is_open_now === false ? colors.danger : colors.success} /><Text style={[font.tiny, { flex: 1 }]} numberOfLines={1}>{km(m.distance_km)}{m.address ? ` · ${m.address}` : ''}</Text></Row>
                         {active ? <Text style={font.tiny} numberOfLines={1}>{m.open_hours ? `${m.open_hours}` : 'Jam buka menyesuaikan pasar'}{route ? ` · ${minutes(route.duration_min)} ke alamat` : ''}</Text> : null}
                         {isFromMap(m) && <Badge text="Dari peta" color={colors.primary} />}
                       </View>
-                      {active ? <Button title="Ganti" size="sm" variant="secondary" onPress={() => { setMarket(null); setLines({}); setCat('all'); }} /> : <View style={s.rowArrow}><Ionicons name="arrow-forward" size={16} color={colors.primary} /></View>}
+                      {active ? <Button title="Ganti" size="sm" variant="secondary" onPress={changeMarket} /> : <View style={s.rowArrow}><Ionicons name="arrow-forward" size={16} color={colors.primary} /></View>}
                     </PressableScale>
                   </Entrance>
                 );
@@ -282,17 +294,17 @@ export default function MarketScreen() {
                     <View style={{ paddingHorizontal: 4, gap: 2 }}>
                       <Text style={[font.small, { color: colors.text, fontWeight: '700', minHeight: 36 }]} numberOfLines={2}>{it.name}</Text>
                       <Text style={font.tiny} numberOfLines={1}>per {it.unit} · {priceSourceLabel(it.price_source, it.samples)}</Text>
-                      <Row between style={{ marginTop: 4 }}>
-                        <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 15, flexShrink: 1 }} numberOfLines={1}>±{rupiah(it.price)}</Text>
-                        {qty === 0 && <PressableScale haptic={false} onPress={() => setQty(it.id, qty + 1)} scaleTo={0.88} style={s.addBtn} accessibilityRole="button" accessibilityLabel="Tambah"><Ionicons name="add" size={20} color="#fff" /></PressableScale>}
+                      <Row between style={{ marginTop: 4, flexWrap: 'wrap', rowGap: 6 }}>
+                        <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 15 }} numberOfLines={1}>±{rupiah(it.price)}</Text>
+                        {qty === 0 && <PressableScale haptic={false} onPress={() => setQty(it.id, qty + 1)} scaleTo={0.88} hitSlop={8} style={s.addBtn} accessibilityRole="button" accessibilityLabel="Tambah"><Ionicons name="add" size={20} color="#fff" /></PressableScale>}
                       </Row>
                       {qty > 0 && (
-                        <Row between style={{ marginTop: 6 }}>
-                          <Row gap={6}>
-                            <PressableScale haptic={false} onPress={() => setQty(it.id, qty - 1)} style={s.miniBtn}><Ionicons name="remove" size={14} color={colors.primary} /></PressableScale>
+                        <Row between style={{ marginTop: 6, flexWrap: 'wrap', rowGap: 6 }}>
+                          <Row gap={6} style={{ flexShrink: 1 }}>
+                            <PressableScale haptic={false} hitSlop={10} accessibilityRole="button" accessibilityLabel="Kurangi satu" onPress={() => setQty(it.id, qty - 1)} style={s.miniBtn}><Ionicons name="remove" size={14} color={colors.primary} /></PressableScale>
                             <Text style={{ fontWeight: '800', color: colors.text, minWidth: 24, textAlign: 'center', fontSize: 13 }}>{fmtQty(qty)}</Text>
-                            <PressableScale haptic={false} onPress={() => setQty(it.id, qty + 1)} style={[s.miniBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]} accessibilityRole="button" accessibilityLabel="Tambah satu"><Ionicons name="add" size={14} color="#fff" /></PressableScale>
-                            {isKg && <PressableScale haptic={false} onPress={() => setQty(it.id, qty + 0.5)} style={s.halfBtn}><Text style={{ fontWeight: '800', color: colors.primary, fontSize: 12 }}>+½</Text></PressableScale>}
+                            <PressableScale haptic={false} hitSlop={10} onPress={() => setQty(it.id, qty + 1)} style={[s.miniBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]} accessibilityRole="button" accessibilityLabel="Tambah satu"><Ionicons name="add" size={14} color="#fff" /></PressableScale>
+                            {isKg && <PressableScale haptic={false} hitSlop={10} accessibilityRole="button" accessibilityLabel="Tambah setengah" onPress={() => setQty(it.id, qty + 0.5)} style={s.halfBtn}><Text style={{ fontWeight: '800', color: colors.primary, fontSize: 12 }}>+½</Text></PressableScale>}
                           </Row>
                           <PressableScale haptic={false} hitSlop={6} onPress={() => setNoteOpen((n) => (n === it.id ? null : it.id))}><Ionicons name={line?.note ? 'chatbox-ellipses' : 'chatbox-ellipses-outline'} size={18} color={line?.note ? colors.primary : colors.textMuted} /></PressableScale>
                         </Row>
@@ -354,7 +366,7 @@ export default function MarketScreen() {
                                     </Row>
                                   </View>
                                   {out ? null : qty > 0 ? <Stepper value={qty} onChange={(n) => setQty(it.id, n)} min={0} max={50} />
-                                    : <PressableScale haptic={false} onPress={() => setQty(it.id, 1)} scaleTo={0.88} style={s.addBtn} accessibilityRole="button" accessibilityLabel="Tambah ke daftar belanja"><Ionicons name="add" size={20} color="#fff" /></PressableScale>}
+                                    : <PressableScale haptic={false} hitSlop={8} onPress={() => setQty(it.id, 1)} scaleTo={0.88} style={s.addBtn} accessibilityRole="button" accessibilityLabel="Tambah ke daftar belanja"><Ionicons name="add" size={20} color="#fff" /></PressableScale>}
                                 </Row>
                                 {qty > 0 && (
                                   <Row between style={{ marginTop: 6 }}>

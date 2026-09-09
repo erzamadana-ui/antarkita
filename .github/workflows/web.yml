@@ -38,6 +38,25 @@ jobs:
           EXPO_NO_TELEMETRY: 1
           CI: 1
         run: node scripts/build-web.mjs
+
+      # Halaman permintaan hapus akun — WAJIB Google Play: selain jalur di dalam aplikasi, harus ada
+      # tautan web publik tempat pengguna (termasuk yang sudah meng-uninstal) bisa meminta penghapusan
+      # akun, dengan jalur permintaan yang menonjol dan menyebut nama aplikasi/pengembang.
+      # (scripts/build-web.mjs hanya menyalin privacy.html & terms.html; halaman ini ditambahkan di sini.)
+      - name: Terbitkan halaman hapus akun → /hapus-akun/
+        run: |
+          test -f docs/rilis/hapus-akun.html || { echo "::error::docs/rilis/hapus-akun.html tidak ada — URL hapus akun di Play Console akan 404."; exit 1; }
+          mkdir -p dist/hapus-akun
+          cp docs/rilis/hapus-akun.html dist/hapus-akun/index.html
+          echo "• docs/rilis/hapus-akun.html → dist/hapus-akun/index.html"
+
+      - name: Pastikan halaman hukum wajib benar-benar ada di dist/
+        run: |
+          for p in privacy terms hapus-akun; do
+            test -s "dist/$p/index.html" || { echo "::error::dist/$p/index.html hilang — URL wajib Play Store akan 404."; exit 1; }
+            echo "✔ /$p/ ($(wc -c < "dist/$p/index.html") byte)"
+          done
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

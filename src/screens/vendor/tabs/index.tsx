@@ -95,7 +95,8 @@ export default function VendorHome() {
                   <Ionicons name={p.got >= p.max ? 'checkmark-circle' : 'ellipse-outline'} size={18} color={p.got >= p.max ? colors.success : colors.textMuted} />
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[font.small, { color: colors.text, fontWeight: '600' }]}>{p.label}</Text>
-                    <Text style={font.tiny} numberOfLines={1}>{p.hint}</Text>
+                    {/* 2 baris: pada 360px petunjuk seperti "Unggah kartu pedagang / bukti sewa lapak" terpotong */}
+                    <Text style={font.tiny} numberOfLines={2}>{p.hint}</Text>
                   </View>
                   <Text style={[font.small, { fontWeight: '800', color: p.got >= p.max ? colors.success : colors.text }]}>{p.got}/{p.max}</Text>
                 </Row>

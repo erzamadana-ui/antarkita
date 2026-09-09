@@ -8,8 +8,9 @@ import { Entrance, Skeleton, ProgressBar } from '@/components/motion';
 import { rpc, supabase } from '@/lib/supabase';
 import { signedUrl } from '@/lib/upload';
 import { colors } from '@/lib/theme';
-import { formatDate, marketCategoryLabel, phoneDisplay } from '@/lib/format';
+import { marketCategoryLabel, phoneDisplay } from '@/lib/format';
 import type { MarketVendor, ApprovalStatus } from '@/lib/types';
+import { fmtDate, fmtAgo, WideTableHint } from './_shared';
 
 const TABS = [{ key: 'pending', label: 'Menunggu' }, { key: 'approved', label: 'Aktif' }, { key: 'suspended', label: 'Ditangguhkan' }, { key: 'rejected', label: 'Ditolak' }, { key: 'all', label: 'Semua' }];
 const STATUS_LABEL: Record<string, string> = { pending: 'Menunggu', approved: 'Aktif', rejected: 'Ditolak', suspended: 'Ditangguhkan' };
@@ -92,7 +93,7 @@ export default function AdminVendors() {
                     <Row gap={14} style={{ flexWrap: 'wrap' }}>
                       <Text style={font.tiny}>{v.items ?? 0} barang · {v.items_photo ?? 0} berfoto</Text>
                       <Text style={font.tiny}>{v.total_orders} pesanan · rating {v.rating_count > 0 ? `${Number(v.rating_avg).toFixed(1)} (${v.rating_count})` : '-'}</Text>
-                      <Text style={font.tiny}>Daftar {formatDate(v.created_at, false)}</Text>
+                      <Text style={font.tiny}>Daftar {fmtDate(v.created_at, false)}</Text>
                     </Row>
                     <Row gap={8} style={{ flexWrap: 'wrap' }}>
                       <DocLink label="Foto lapak" ok={!!v.photo_url} onPress={() => v.photo_url && Linking.openURL(v.photo_url)} />
@@ -120,6 +121,7 @@ export default function AdminVendors() {
             </Entrance>
           );
         })}
+      <WideTableHint />
     </AdminPage>
   );
 }

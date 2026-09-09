@@ -648,9 +648,17 @@ begin
     o := travel_complete_send(o.id);
     select balance into b1 from wallets where user_id = drv2;
     select count(*) into n from notifications where user_id = cust and (data->>'order_id')::uuid = o.id;
-    log := log || format('S26e %s travel_complete_send → status=%s pembayaran=%s saldo mitra travel %s→%s (+%s, seharusnya %s) notifikasi pelanggan=%s',
-      case when o.status = 'completed' and b1 - b0 = round(o.intercity_fare * setting_num('travel_send_partner_pct', 80) / 100.0)::bigint and n >= 3 then 'OK' else 'BUG' end,
-      o.status, o.payment_status, b0, b1, b1 - b0, round(o.intercity_fare * setting_num('travel_send_partner_pct', 80) / 100.0)::bigint, n) || E'\n';
+    -- titipan ini dibayar TUNAI: mitra memegang seluruh uang pelanggan, jadi yang benar adalah mitra MENYETOR
+    -- selisihnya ke platform (lihat migrasi 0036). Pada pembayaran dompet barulah mitra dikredit bagiannya.
+    log := log || format('S26e %s travel_complete_send → status=%s pembayaran=%s metode=%s saldo mitra travel %s→%s (Δ%s, seharusnya %s) bagian mitra=%s notifikasi pelanggan=%s',
+      case when o.status = 'completed' and n >= 3 and b1 - b0 =
+             case when o.payment_method = 'cash' then -(o.total - round(o.intercity_fare * setting_num('travel_send_partner_pct', 80) / 100.0)::bigint)
+                  else round(o.intercity_fare * setting_num('travel_send_partner_pct', 80) / 100.0)::bigint end
+           then 'OK' else 'BUG' end,
+      o.status, o.payment_status, o.payment_method, b0, b1, b1 - b0,
+      case when o.payment_method = 'cash' then -(o.total - round(o.intercity_fare * setting_num('travel_send_partner_pct', 80) / 100.0)::bigint)
+           else round(o.intercity_fare * setting_num('travel_send_partner_pct', 80) / 100.0)::bigint end,
+      round(o.intercity_fare * setting_num('travel_send_partner_pct', 80) / 100.0)::bigint, n) || E'\n';
     perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
     perform cancel_order(o2.id, 'uji kontrol selesai');
     begin
@@ -1184,6 +1192,1053 @@ begin
     log := log || format('S37d %s layanan non-roda-dua tidak terpengaruh: ride_car = %s%% (keputusan food/send menunggu opini hukum)',
       case when num1 = 20 then 'OK' else 'BUG' end, num1) || E'\n';
   exception when others then log := log || 'S37 BUG batas komisi: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S38 QC UANG — identitas bagi hasil tiap layanan (bayar AntarPay/dompet) =====
+  -- Aturan uji: total yang dipotong dari pelanggan HARUS persis = kredit driver + kredit merchant + sisa platform,
+  -- dan sisa platform tidak boleh negatif. Semua angka nyata dicetak agar bisa diperiksa manual.
+  begin
+    declare
+      c0 bigint; c1 bigint; dr0 bigint; dr1 bigint; mo0 bigint; mo1 bigint;
+      plat bigint; de0 bigint; komisi numeric; dbal bigint;
+    begin
+      -- rapikan sisa skenario sebelumnya (semua tetap ikut rollback)
+      update orders set status = 'cancelled' where customer_id = cust and status in ('scheduled','searching','accepted','arrived','in_progress');
+      update orders set status = 'cancelled' where driver_id in (drv, drv2, dbox) and status in ('accepted','arrived','in_progress');
+      perform set_config('antaraja.bypass', 'on', true);
+      update drivers set status = 'approved', status_reason = null where id in (drv, drv2, dbox);
+      update profiles set is_active = true, deletion_requested_at = null, status_reason = null where id in (drv, drv2, dbox, cust, mown);
+      perform set_config('antaraja.bypass', 'off', true);
+      delete from order_rejections where driver_id in (drv, drv2, dbox);
+      -- skenario lama (S27) mengubah wallets.balance langsung sebagai alat bantu uji; catat koreksinya di buku besar
+      -- agar invarian global S53 benar-benar menguji kode aplikasi, bukan bekas alat bantu uji.
+      insert into wallet_transactions (user_id, type, amount, balance_after, order_id, note)
+      select wl.user_id, 'adjustment', wl.balance - coalesce(bb.jml, 0), wl.balance, null, 'Koreksi alat bantu uji QC (S27 mengubah saldo langsung)'
+      from wallets wl left join (select wt.user_id as uid, sum(wt.amount) as jml from wallet_transactions wt group by wt.user_id) bb on bb.uid = wl.user_id
+      where wl.balance <> coalesce(bb.jml, 0);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      tp := request_topup(10000000, 'bank_transfer', 'https://x/bukti.jpg', 'saldo uji S38');
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      perform admin_review_topup(tp.id, true, 'saldo uji S38');
+
+      -- (a) AntarRide motor
+      select commission_pct into komisi from pricing where service = 'ride_motor';
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_selfie_check('https://x/selfie.jpg'); perform driver_set_online(true, 0.4810, 101.4349);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into dr0 from wallets where user_id = drv;
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy',
+        'pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S38 Jemput'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S38 Tujuan'), 'paid_via','wallet'));
+      de0 := o.driver_earning;
+      select pin into v_pin from order_pins where order_id = o.id;
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := driver_update_order_status(o.id, 'in_progress', v_pin); o := driver_update_order_status(o.id, 'completed', null);
+      select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
+      plat := o.total - (dr1 - dr0);
+      log := log || format('S38a %s ride_motor dompet %s: total=%s | pelanggan %s→%s (Δ%s, harus -%s) | driver Δ%s (harus %s) | platform=%s | komisi dasar %s%% dari fare %s → driver_awal %s (batas Perpres %s%%)',
+        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning and plat >= 0
+               and de0 = o.fare_delivery - floor(o.fare_delivery * komisi / 100.0) and komisi <= commission_cap_two_wheel() then 'OK' else 'BUG' end,
+        o.code, o.total, c0, c1, c1 - c0, o.total, dr1 - dr0, o.driver_earning, plat, komisi, o.fare_delivery, de0, commission_cap_two_wheel()) || E'\n';
+
+      -- (b) AntarRide mobil
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      perform driver_selfie_check('https://x/selfie.jpg'); perform driver_set_online(true, 0.4946, 101.4314);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into dr0 from wallets where user_id = drv2;
+      o := create_order(jsonb_build_object('service','ride_car','vehicle_class','car_economy',
+        'pickup', jsonb_build_object('lat',0.4946,'lng',101.4314,'address','S38b Jemput'),
+        'dropoff', jsonb_build_object('lat',0.52,'lng',101.45,'address','S38b Tujuan'), 'paid_via','wallet'));
+      select pin into v_pin from order_pins where order_id = o.id;
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := driver_update_order_status(o.id, 'in_progress', v_pin); o := driver_update_order_status(o.id, 'completed', null);
+      select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv2;
+      plat := o.total - (dr1 - dr0);
+      log := log || format('S38b %s ride_car dompet %s: total=%s pelanggan Δ%s (harus -%s) driver Δ%s (harus %s) platform=%s (fare=%s biaya jasa aplikasi=%s)',
+        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning and plat = o.total - o.driver_earning and plat >= 0 then 'OK' else 'BUG' end,
+        o.code, o.total, c1 - c0, o.total, dr1 - dr0, o.driver_earning, plat, o.fare_delivery, o.platform_fee) || E'\n';
+
+      -- (c) AntarFood: pelanggan = driver + merchant + platform
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, -0.9405, 100.3625);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into dr0 from wallets where user_id = drv; select balance into mo0 from wallets where user_id = mown;
+      o := create_order(jsonb_build_object('service','food','merchant_id', merch,
+        'items', jsonb_build_array(jsonb_build_object('menu_item_id', menu1, 'qty', 2)),
+        'dropoff', jsonb_build_object('lat',-0.945,'lng',100.36,'address','S38c Kos'), 'paid_via','wallet'));
+      perform set_config('request.jwt.claims', json_build_object('sub', mown, 'role', 'authenticated')::text, true);
+      begin o := merchant_update_order(o.id, 'accepted'); exception when others then null; end;
+      o := merchant_update_order(o.id, 'ready');
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := driver_update_order_status(o.id, 'in_progress', null); o := driver_update_order_status(o.id, 'completed', null);
+      select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv; select balance into mo1 from wallets where user_id = mown;
+      plat := o.total - (dr1 - dr0) - (mo1 - mo0);
+      log := log || format('S38c %s food dompet %s: total=%s (ongkir %s + jasa %s + makanan %s) | pelanggan Δ%s | driver Δ%s (harus %s) | merchant Δ%s (harus %s = %s - komisi merchant) | platform=%s',
+        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning and mo1 - mo0 = o.merchant_earning and plat >= 0
+               and o.total = (dr1 - dr0) + (mo1 - mo0) + plat then 'OK' else 'BUG' end,
+        o.code, o.total, o.fare_delivery, o.platform_fee, o.items_subtotal, c1 - c0, dr1 - dr0, o.driver_earning, mo1 - mo0, o.merchant_earning, o.items_subtotal, plat) || E'\n';
+
+      -- (d) AntarSend dalam kota
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, 0.4810, 101.4349);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into dr0 from wallets where user_id = drv;
+      o := create_order(jsonb_build_object('service','send','weight_kg',3,'size_cm',30,
+        'pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S38d Toko'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S38d Rumah'),
+        'recipient_name','Sari','recipient_phone','0811','paid_via','wallet'));
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := driver_update_order_status(o.id, 'in_progress', null); o := driver_update_order_status(o.id, 'completed', null);
+      select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
+      plat := o.total - (dr1 - dr0);
+      log := log || format('S38d %s send dompet %s: total=%s pelanggan Δ%s driver Δ%s (harus %s) platform=%s',
+        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning and plat >= 0 then 'OK' else 'BUG' end,
+        o.code, o.total, c1 - c0, dr1 - dr0, o.driver_earning, plat) || E'\n';
+
+      -- (e) AntarBox (driver box + helper)
+      perform set_config('request.jwt.claims', json_build_object('sub', dbox, 'role', 'authenticated')::text, true);
+      perform driver_selfie_check('https://x/selfie.jpg'); perform driver_set_online(true, 0.4950, 101.4320);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into dr0 from wallets where user_id = dbox;
+      o := create_order(jsonb_build_object('service','box','helpers',2,'purpose','pindahan',
+        'pickup', jsonb_build_object('lat',0.4950,'lng',101.4320,'address','S38e Kos lama'),
+        'dropoff', jsonb_build_object('lat',0.5100,'lng',101.4450,'address','S38e Kos baru'), 'paid_via','wallet'));
+      select pin into v_pin from order_pins where order_id = o.id;
+      perform set_config('request.jwt.claims', json_build_object('sub', dbox, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := driver_update_order_status(o.id, 'in_progress', v_pin); o := driver_update_order_status(o.id, 'completed', null);
+      select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = dbox;
+      plat := o.total - (dr1 - dr0);
+      log := log || format('S38e %s box dompet %s: total=%s (fare %s termasuk 2 helper) pelanggan Δ%s driver Δ%s (harus %s) platform=%s',
+        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning and plat >= 0 then 'OK' else 'BUG' end,
+        o.code, o.total, o.fare_delivery, c1 - c0, dr1 - dr0, o.driver_earning, plat) || E'\n';
+
+      -- (f) AntarShop: driver harus menerima penggantian belanja + jasa belanja
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, 0.5168, 101.4463);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into dr0 from wallets where user_id = drv;
+      o := create_order(jsonb_build_object('service','shop','shop_store_id', store1, 'shop_vehicle','motor',
+        'shopping_list', jsonb_build_array(jsonb_build_object('product_id', prod1, 'qty', 2)),
+        'dropoff', jsonb_build_object('lat',0.52,'lng',101.45,'address','S38f Rumah'), 'paid_via','wallet'));
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := set_shopping_actual(o.id, 149000, 'https://x/nota.jpg', null);
+      o := driver_update_order_status(o.id, 'in_progress', null); o := driver_update_order_status(o.id, 'completed', null);
+      select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
+      plat := o.total - (dr1 - dr0);
+      log := log || format('S38f %s shop dompet %s: anggaran=%s belanja riil=%s jasa belanja=%s (bagian driver %s) total=%s | pelanggan Δ%s (harus -%s) | driver Δ%s (harus %s = pendapatan %s + ganti belanja %s) | platform=%s',
+        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning + o.items_subtotal and plat >= 0 then 'OK' else 'BUG' end,
+        o.code, o.est_budget, o.items_subtotal, o.service_fee, o.driver_service_share, o.total, c1 - c0, o.total,
+        dr1 - dr0, o.driver_earning + o.items_subtotal, o.driver_earning, o.items_subtotal, plat) || E'\n';
+
+      -- (g) AntarMarket
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, 0.5345, 101.4407);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into dr0 from wallets where user_id = drv;
+      o := create_order(jsonb_build_object('service','market','market_id', mk, 'shop_vehicle','motor',
+        'shopping_list', jsonb_build_array(jsonb_build_object('item_id', item1, 'qty', 2)),
+        'dropoff', jsonb_build_object('lat',0.52,'lng',101.45,'address','S38g Rumah'), 'paid_via','wallet'));
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := set_shopping_actual(o.id, 29000, 'https://x/nota.jpg', jsonb_build_array(jsonb_build_object('item_id', item1, 'price', 14500, 'qty', 2)));
+      o := driver_update_order_status(o.id, 'in_progress', null); o := driver_update_order_status(o.id, 'completed', null);
+      select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
+      plat := o.total - (dr1 - dr0);
+      log := log || format('S38g %s market dompet %s: belanja riil=%s jasa=%s total=%s pelanggan Δ%s driver Δ%s (harus %s) platform=%s',
+        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning + o.items_subtotal and plat >= 0 then 'OK' else 'BUG' end,
+        o.code, o.items_subtotal, o.service_fee, o.total, c1 - c0, dr1 - dr0, o.driver_earning + o.items_subtotal, plat) || E'\n';
+    end;
+  exception when others then log := log || 'S38 BUG identitas bagi hasil dompet: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S39 QC UANG — order TUNAI: uang tunai yang dipegang driver harus persis pendapatannya =====
+  -- Invarian: total tunai yang diterima driver - penggantian barang - potongan wallet = driver_earning.
+  begin
+    declare c0 bigint; c1 bigint; dr0 bigint; dr1 bigint; sisa bigint; harus bigint;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, 0.4810, 101.4349);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into dr0 from wallets where user_id = drv;
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy',
+        'pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S39a Jemput'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S39a Tujuan'), 'paid_via','cash'));
+      select pin into v_pin from order_pins where order_id = o.id;
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := driver_update_order_status(o.id, 'in_progress', v_pin); o := driver_update_order_status(o.id, 'completed', null);
+      select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
+      sisa := o.total + (dr1 - dr0);
+      log := log || format('S39a %s ride_motor tunai %s: pelanggan bayar tunai %s (saldo pelanggan Δ%s harus 0) | potongan wallet driver Δ%s | sisa di tangan driver=%s (harus = pendapatan %s)',
+        case when c1 = c0 and sisa = o.driver_earning then 'OK' else 'BUG' end,
+        o.code, o.total, c1 - c0, dr1 - dr0, sisa, o.driver_earning) || E'\n';
+
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into dr0 from wallets where user_id = drv;
+      o := create_order(jsonb_build_object('service','send','weight_kg',3,'size_cm',30,
+        'pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S39b Toko'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S39b Rumah'),
+        'recipient_name','Sari','recipient_phone','0811','paid_via','cash'));
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := driver_update_order_status(o.id, 'in_progress', null); o := driver_update_order_status(o.id, 'completed', null);
+      select balance into dr1 from wallets where user_id = drv;
+      sisa := o.total + (dr1 - dr0);
+      log := log || format('S39b %s send tunai %s: tunai %s potongan wallet Δ%s sisa=%s (harus %s)',
+        case when sisa = o.driver_earning then 'OK' else 'BUG' end, o.code, o.total, dr1 - dr0, sisa, o.driver_earning) || E'\n';
+
+      -- (c) AntarShop tunai: driver menalangi belanja, harus balik modal persis
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, 0.5168, 101.4463);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into dr0 from wallets where user_id = drv;
+      o := create_order(jsonb_build_object('service','shop','shop_store_id', store1, 'shop_vehicle','motor',
+        'shopping_list', jsonb_build_array(jsonb_build_object('product_id', prod1, 'qty', 1)),
+        'dropoff', jsonb_build_object('lat',0.52,'lng',101.45,'address','S39c Rumah'), 'paid_via','cash'));
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := set_shopping_actual(o.id, 74500, 'https://x/nota.jpg', null);
+      o := driver_update_order_status(o.id, 'in_progress', null); o := driver_update_order_status(o.id, 'completed', null);
+      select balance into dr1 from wallets where user_id = drv;
+      sisa := o.total - o.items_subtotal + (dr1 - dr0);
+      log := log || format('S39c %s shop tunai %s: tunai diterima %s - modal belanja %s + potongan wallet %s = %s (harus = pendapatan %s)',
+        case when sisa = o.driver_earning then 'OK' else 'BUG' end, o.code, o.total, o.items_subtotal, dr1 - dr0, sisa, o.driver_earning) || E'\n';
+    end;
+  exception when others then log := log || 'S39 BUG order tunai: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S40 QC UANG — siapa yang menanggung diskon promo pada order TUNAI =====
+  begin
+    declare dr0 bigint; dr1 bigint; sisa bigint;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      insert into promos (code, description, discount_type, value, max_discount, min_total, service, quota, is_active, valid_from, valid_to)
+      values ('QCTUNAI40', 'Uji QC diskon order tunai', 'fixed', 3000, null, 0, null, 50, true, now() - interval '1 day', now() + interval '1 day')
+      on conflict (code) do update set is_active = true, value = 3000, quota = 50, used_count = 0, valid_to = now() + interval '1 day';
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, 0.4810, 101.4349);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into dr0 from wallets where user_id = drv;
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy',
+        'pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S40 Jemput'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S40 Tujuan'),
+        'paid_via','cash','promo_code','QCTUNAI40'));
+      select pin into v_pin from order_pins where order_id = o.id;
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := driver_update_order_status(o.id, 'in_progress', v_pin); o := driver_update_order_status(o.id, 'completed', null);
+      select balance into dr1 from wallets where user_id = drv;
+      sisa := o.total + (dr1 - dr0);
+      log := log || format('S40 %s promo pada order TUNAI %s: diskon=%s total tunai=%s potongan platform=%s sisa driver=%s (harus %s). Selisih=%s → %s',
+        case when sisa = o.driver_earning then 'OK' else 'BUG' end, o.code, o.discount, o.total, dr1 - dr0, sisa, o.driver_earning,
+        o.driver_earning - sisa,
+        case when sisa = o.driver_earning then 'diskon ditanggung platform' else 'diskon dipotong dari pendapatan driver' end) || E'\n';
+    end;
+  exception when others then log := log || 'S40 BUG promo tunai: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S41 QC UANG — AntarSend antar kota TUNAI: ongkir antar kota harus disetor ke platform =====
+  begin
+    declare dr0 bigint; dr1 bigint; sisa bigint;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, -0.9405, 100.3625);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into dr0 from wallets where user_id = drv;
+      o := create_order(jsonb_build_object('service','send','send_scope','intercity','dest_city_id', city_bkt, 'warehouse_id', wh_dest,
+        'weight_kg', 3, 'size_cm', 40,
+        'pickup', jsonb_build_object('lat',-0.9405,'lng',100.3625,'address','S41 Toko'),
+        'dropoff', jsonb_build_object('lat',-0.3,'lng',100.37,'address','S41 Bukittinggi'),
+        'recipient_name','Andi','recipient_phone','0812','paid_via','cash'));
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := driver_update_order_status(o.id, 'in_progress', null); o := driver_update_order_status(o.id, 'completed', null);
+      select balance into dr1 from wallets where user_id = drv;
+      sisa := o.total + (dr1 - dr0);
+      log := log || format('S41 %s send antar kota TUNAI %s: ongkir kota=%s + jasa=%s + ongkir antar kota=%s → tunai %s | potongan platform=%s | sisa driver=%s (harus %s) | selisih=%s',
+        case when sisa = o.driver_earning then 'OK' else 'BUG' end, o.code, o.fare_delivery, o.platform_fee, o.intercity_fare, o.total,
+        dr1 - dr0, sisa, o.driver_earning, sisa - o.driver_earning) || E'\n';
+      log := log || format('S41b catatan: ongkir antar kota %s dipakai membayar mitra travel/gudang di sisi platform; bila tidak ditagih ke driver order tunai, platform membayar tanpa pernah menerima.', o.intercity_fare) || E'\n';
+    end;
+  exception when others then log := log || 'S41 BUG send antar kota tunai: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S42 QC UANG — AntarFood TUNAI: bagian merchant =====
+  begin
+    declare dr0 bigint; dr1 bigint; mo0 bigint; mo1 bigint; sisa bigint;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, -0.9405, 100.3625);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into dr0 from wallets where user_id = drv; select balance into mo0 from wallets where user_id = mown;
+      o := create_order(jsonb_build_object('service','food','merchant_id', merch,
+        'items', jsonb_build_array(jsonb_build_object('menu_item_id', menu1, 'qty', 2)),
+        'dropoff', jsonb_build_object('lat',-0.945,'lng',100.36,'address','S42 Kos'), 'paid_via','cash'));
+      perform set_config('request.jwt.claims', json_build_object('sub', mown, 'role', 'authenticated')::text, true);
+      begin o := merchant_update_order(o.id, 'accepted'); exception when others then null; end;
+      o := merchant_update_order(o.id, 'ready');
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := driver_update_order_status(o.id, 'in_progress', null); o := driver_update_order_status(o.id, 'completed', null);
+      select balance into dr1 from wallets where user_id = drv; select balance into mo1 from wallets where user_id = mown;
+      sisa := o.total - o.merchant_earning + (dr1 - dr0);
+      log := log || format('S42 %s food TUNAI %s: tunai %s (makanan %s) | driver bayar merchant tunai %s | potongan platform=%s | sisa driver=%s (harus %s) | saldo merchant Δ%s (tunai: wajar 0)',
+        case when sisa = o.driver_earning then 'OK' else 'BUG' end, o.code, o.total, o.items_subtotal, o.merchant_earning,
+        dr1 - dr0, sisa, o.driver_earning, mo1 - mo0) || E'\n';
+    end;
+  exception when others then log := log || 'S42 BUG food tunai: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S43 QC UANG — aturan promo: kedaluwarsa, kuota habis, dipakai 2x orang yang sama, diskon > subtotal =====
+  begin
+    declare d1x bigint; d2x bigint; kuota int; pakai int;
+    begin
+      perform set_config('antaraja.bypass', 'on', true);
+      insert into promos (code, description, discount_type, value, max_discount, min_total, service, quota, used_count, is_active, valid_from, valid_to)
+      values ('QCEXP43', 'Uji QC promo kedaluwarsa', 'fixed', 5000, null, 0, null, 100, 0, true, now() - interval '10 days', now() - interval '1 day'),
+             ('QCKUOTA43', 'Uji QC kuota habis', 'fixed', 2000, null, 0, null, 1, 0, true, now() - interval '1 day', now() + interval '1 day'),
+             ('QCDUA43', 'Uji QC dipakai dua kali orang sama', 'fixed', 2000, null, 0, null, 50, 0, true, now() - interval '1 day', now() + interval '1 day'),
+             ('QCBESAR43', 'Uji QC diskon melebihi subtotal', 'fixed', 99999999, null, 0, null, 50, 0, true, now() - interval '1 day', now() + interval '1 day')
+      on conflict (code) do update set is_active = true, used_count = 0, quota = excluded.quota, value = excluded.value,
+        valid_from = excluded.valid_from, valid_to = excluded.valid_to;
+      perform set_config('antaraja.bypass', 'off', true);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      update orders set status = 'cancelled' where customer_id = cust and status in ('scheduled','searching','accepted','arrived','in_progress');
+
+      -- (a) kode kedaluwarsa harus ditolak
+      begin
+        o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','A'),
+          'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','B'), 'paid_via','cash','promo_code','QCEXP43'));
+        log := log || format('S43a BUG kode kedaluwarsa QCEXP43 diterima (order %s diskon %s)', o.code, o.discount) || E'\n';
+        perform cancel_order(o.id, 'uji');
+      exception when others then
+        log := log || format('S43a %s kode kedaluwarsa ditolak: %s', case when sqlerrm ilike '%promo%' then 'OK' else 'BUG' end, left(sqlerrm, 70)) || E'\n';
+      end;
+
+      -- (b) kuota habis: pemakaian ke-2 harus ditolak
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','A'),
+        'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','B1'), 'paid_via','cash','promo_code','QCKUOTA43'));
+      d1x := o.discount; ordid := o.id;
+      select quota, used_count into kuota, pakai from promos where code = 'QCKUOTA43';
+      begin
+        o2 := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','A'),
+          'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','B2'), 'paid_via','cash','promo_code','QCKUOTA43'));
+        log := log || format('S43b BUG kuota habis tidak ditegakkan: order ke-2 %s tetap dapat diskon %s (kuota=%s terpakai=%s)', o2.code, o2.discount, kuota, pakai) || E'\n';
+        perform cancel_order(o2.id, 'uji');
+      exception when others then
+        log := log || format('S43b %s kuota habis (kuota=%s terpakai=%s) → pemakaian ke-2 ditolak: %s',
+          case when sqlerrm ilike '%promo%' then 'OK' else 'BUG' end, kuota, pakai, left(sqlerrm, 60)) || E'\n';
+      end;
+      perform cancel_order(ordid, 'uji');
+
+      -- (c) orang yang sama memakai kode yang sama dua kali
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','A'),
+        'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','C1'), 'paid_via','cash','promo_code','QCDUA43'));
+      d1x := o.discount; ordid := o.id;
+      begin
+        o2 := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','A'),
+          'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','C2'), 'paid_via','cash','promo_code','QCDUA43'));
+        d2x := o2.discount;
+        log := log || format('S43c BUG pelanggan yang sama memakai QCDUA43 dua kali: order 1 diskon=%s, order 2 %s diskon=%s (tidak ada batas per pengguna)', d1x, o2.code, d2x) || E'\n';
+        perform cancel_order(o2.id, 'uji');
+      exception when others then
+        log := log || format('S43c OK pemakaian kedua oleh orang yang sama ditolak (diskon pertama %s): %s', d1x, left(sqlerrm, 70)) || E'\n';
+      end;
+      perform cancel_order(ordid, 'uji');
+
+      -- (d) diskon jauh lebih besar dari subtotal → total tidak boleh negatif / gratis berlebihan
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','A'),
+        'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','D'), 'paid_via','cash','promo_code','QCBESAR43'));
+      log := log || format('S43d %s diskon Rp99.999.999 pada ongkir %s: diskon tercatat=%s total=%s (harus >= 0 dan diskon <= ongkir)',
+        case when o.discount <= o.fare_delivery and o.total >= 0 then 'OK' else 'BUG' end, o.fare_delivery, o.discount, o.total) || E'\n';
+      perform cancel_order(o.id, 'uji');
+
+      -- (e) pembatalan mengembalikan kuota promo
+      select used_count into pakai from promos where code = 'QCBESAR43';
+      log := log || format('S43e %s pembatalan mengembalikan kuota promo QCBESAR43 → used_count=%s (harus 0)', case when pakai = 0 then 'OK' else 'BUG' end, pakai) || E'\n';
+    end;
+  exception when others then log := log || 'S43 BUG aturan promo: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S44 QC UANG — pembatalan di tiap tahap: dana kembali utuh, tidak ada uang tercipta/menguap =====
+  begin
+    declare c0 bigint; c1 bigint; dr0 bigint; dr1 bigint; tot bigint;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, 0.4810, 101.4349);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      update orders set status = 'cancelled' where customer_id = cust and status in ('scheduled','searching','accepted','arrived','in_progress');
+
+      -- (a) batal saat masih mencari driver
+      select balance into c0 from wallets where user_id = cust;
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S44a'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S44a2'), 'paid_via','wallet'));
+      tot := o.total; o := cancel_order(o.id, 'uji batal searching');
+      select balance into c1 from wallets where user_id = cust;
+      log := log || format('S44a %s batal saat SEARCHING: dipotong %s lalu dikembalikan, saldo %s→%s (Δ%s harus 0) status=%s bayar=%s',
+        case when c1 = c0 and o.status = 'cancelled' and o.payment_status = 'refunded' then 'OK' else 'BUG' end, tot, c0, c1, c1 - c0, o.status, o.payment_status) || E'\n';
+
+      -- (b) batal setelah driver menerima
+      select balance into c0 from wallets where user_id = cust; select balance into dr0 from wallets where user_id = drv;
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S44b'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S44b2'), 'paid_via','wallet'));
+      tot := o.total;
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      o := cancel_order(o.id, 'uji batal accepted');
+      select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
+      log := log || format('S44b %s batal saat ACCEPTED: total=%s pelanggan Δ%s (harus 0) driver Δ%s (harus 0 — tidak ada biaya pembatalan yang ditagihkan) status=%s',
+        case when c1 = c0 and dr1 = dr0 and o.status = 'cancelled' then 'OK' else 'BUG' end, tot, c1 - c0, dr1 - dr0, o.status) || E'\n';
+
+      -- (c) batal setelah driver tiba
+      select balance into c0 from wallets where user_id = cust; select balance into dr0 from wallets where user_id = drv;
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S44c'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S44c2'), 'paid_via','wallet'));
+      tot := o.total;
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      o := cancel_order(o.id, 'uji batal arrived');
+      select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
+      log := log || format('S44c %s batal saat ARRIVED: total=%s pelanggan Δ%s (harus 0) driver Δ%s (harus 0) status=%s',
+        case when c1 = c0 and dr1 = dr0 and o.status = 'cancelled' then 'OK' else 'BUG' end, tot, c1 - c0, dr1 - dr0, o.status) || E'\n';
+
+      -- (d) batal saat perjalanan berlangsung harus DITOLAK untuk pelanggan
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S44d'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S44d2'), 'paid_via','wallet'));
+      select pin into v_pin from order_pins where order_id = o.id; ordid := o.id;
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null); o := driver_update_order_status(o.id, 'in_progress', v_pin);
+      begin
+        perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+        perform cancel_order(ordid, 'driver batal saat jalan');
+        log := log || 'S44d BUG driver bisa membatalkan order yang sedang berjalan' || E'\n';
+      exception when others then log := log || format('S44d OK driver tidak bisa membatalkan saat IN_PROGRESS: %s', left(sqlerrm, 60)) || E'\n'; end;
+      begin
+        perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+        perform cancel_order(ordid, 'pelanggan batal saat jalan');
+        log := log || 'S44e BUG pelanggan bisa membatalkan order yang sedang berjalan' || E'\n';
+      exception when others then log := log || format('S44e OK pelanggan tidak bisa membatalkan saat IN_PROGRESS: %s', left(sqlerrm, 60)) || E'\n'; end;
+
+      -- (f) TIP yang sudah dibayar sebelum order batal
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, 0.4946, 101.4314);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into dr0 from wallets where user_id = drv2;
+      o2 := create_order(jsonb_build_object('service','ride_car','vehicle_class','car_economy',
+        'pickup', jsonb_build_object('lat',0.4946,'lng',101.4314,'address','S44f'),
+        'dropoff', jsonb_build_object('lat',0.52,'lng',101.45,'address','S44f2'), 'paid_via','wallet'));
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      o2 := driver_accept_order(o2.id);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      o2 := add_tip(o2.id, 20000);
+      o2 := cancel_order(o2.id, 'uji tip lalu batal');
+      select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv2;
+      log := log || format('S44f %s tip Rp20.000 dibayar saat ACCEPTED lalu order dibatalkan: pelanggan Δ%s (harus 0) driver Δ%s (harus 0) tip tercatat=%s → uang %s',
+        case when c1 = c0 and dr1 = dr0 then 'OK' else 'BUG' end, c1 - c0, dr1 - dr0, o2.tip,
+        case when c1 = c0 and dr1 = dr0 then 'kembali utuh' else format('MENGUAP Rp%s (dipotong dari pelanggan, tidak masuk ke siapa pun)', c0 - c1) end) || E'\n';
+
+      -- (g) merchant menolak pesanan food yang sudah dibayar
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust;
+      o := create_order(jsonb_build_object('service','food','merchant_id', merch,
+        'items', jsonb_build_array(jsonb_build_object('menu_item_id', menu1, 'qty', 1)),
+        'dropoff', jsonb_build_object('lat',-0.945,'lng',100.36,'address','S44g'), 'paid_via','wallet','promo_code','QCDUA43'));
+      tot := o.total; d0 := o.discount;
+      perform set_config('request.jwt.claims', json_build_object('sub', mown, 'role', 'authenticated')::text, true);
+      o := merchant_update_order(o.id, 'rejected');
+      select balance into c1 from wallets where user_id = cust;
+      select used_count into n from promos where code = 'QCDUA43';
+      log := log || format('S44g %s merchant menolak order dibayar (total=%s diskon=%s): pelanggan Δ%s (harus 0) status=%s bayar=%s | kuota promo QCDUA43 terpakai=%s (harus dikembalikan seperti cancel_order)',
+        case when c1 = c0 and o.status = 'cancelled' and o.payment_status = 'refunded' then 'OK' else 'BUG' end,
+        tot, d0, c1 - c0, o.status, o.payment_status, n) || E'\n';
+    end;
+  exception when others then log := log || 'S44 BUG pembatalan bertahap: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S45 QC UANG — pembatalan sepihak & refund oleh admin =====
+  begin
+    declare c0 bigint; c1 bigint; dr0 bigint; dr1 bigint; tot bigint; adj bigint;
+    begin
+      -- tutup sisa order aktif dari S44 (satu order sengaja ditinggalkan IN_PROGRESS untuk menguji penolakan pembatalan)
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      for ordid in select id from orders where status in ('scheduled','searching','accepted','arrived','in_progress') and (customer_id = cust or driver_id in (drv, drv2, dbox)) loop
+        perform cancel_order(ordid, 'bersih sisa uji S44 (dana dikembalikan lewat cancel_order)');
+      end loop;
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, 0.4810, 101.4349);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into dr0 from wallets where user_id = drv;
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S45'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S45b'), 'paid_via','wallet'));
+      tot := o.total;
+      select pin into v_pin from order_pins where order_id = o.id;
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null); o := driver_update_order_status(o.id, 'in_progress', v_pin);
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      o := cancel_order(o.id, 'Pembatalan sepihak admin (uji QC)');
+      select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
+      log := log || format('S45a %s admin membatalkan order IN_PROGRESS: total=%s pelanggan Δ%s (harus 0, dana kembali utuh) driver Δ%s (harus 0) status=%s bayar=%s dibatalkan_oleh=%s',
+        case when c1 = c0 and dr1 = dr0 and o.status = 'cancelled' and o.payment_status = 'refunded' then 'OK' else 'BUG' end,
+        tot, c1 - c0, dr1 - dr0, o.status, o.payment_status, case when o.cancelled_by = adm then 'admin' else o.cancelled_by::text end) || E'\n';
+
+      -- refund manual admin lewat penyesuaian saldo (butuh buka kunci PIN)
+      update admin_security set pin_hash = extensions.crypt('123456', extensions.gen_salt('bf')), failed = 0, locked_until = null where user_id = adm;
+      perform admin_lock();
+      begin
+        perform admin_adjust_wallet(cust, 25000, 'Uji refund manual admin tanpa PIN');
+        log := log || 'S45b BUG penyesuaian saldo admin diterima tanpa buka kunci PIN' || E'\n';
+      exception when others then log := log || format('S45b OK penyesuaian saldo butuh PIN admin: %s', left(sqlerrm, 55)) || E'\n'; end;
+      perform admin_unlock('123456');
+      select balance into c0 from wallets where user_id = cust;
+      adj := admin_adjust_wallet(cust, 25000, 'Uji refund manual admin (QC)');
+      select balance into c1 from wallets where user_id = cust;
+      select count(*) into n from wallet_transactions where user_id = cust and type = 'adjustment' and amount = 25000 and created_at >= transaction_timestamp();
+      log := log || format('S45c %s refund manual admin +25.000: saldo %s→%s (Δ%s) baris mutasi adjustment=%s',
+        case when c1 - c0 = 25000 and n = 1 then 'OK' else 'BUG' end, c0, c1, c1 - c0, n) || E'\n';
+      -- tarik kembali agar saldo kembali seperti semula
+      perform admin_adjust_wallet(cust, -25000, 'Uji QC: kembalikan penyesuaian');
+    end;
+  exception when others then log := log || 'S45 BUG pembatalan/refund admin: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S46 QC UANG — top up: manual, ditolak, webhook Midtrans (mode simulasi) & webhook ganda =====
+  begin
+    declare c0 bigint; c1 bigint; c2 bigint; ext text; pay payments; jum int;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      -- (a) top up manual ditolak admin → saldo tidak berubah
+      select balance into c0 from wallets where user_id = cust;
+      tp := request_topup(150000, 'bank_transfer', 'https://x/bukti.jpg', 'uji tolak');
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      tp := admin_review_topup(tp.id, false, 'bukti tidak jelas');
+      select balance into c1 from wallets where user_id = cust;
+      log := log || format('S46a %s top up manual DITOLAK: status=%s saldo %s→%s (Δ%s harus 0)',
+        case when c1 = c0 and tp.status = 'rejected' then 'OK' else 'BUG' end, tp.status, c0, c1, c1 - c0) || E'\n';
+
+      -- (b) top up manual disetujui dua kali → hanya satu kredit
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      tp := request_topup(150000, 'bank_transfer', 'https://x/bukti.jpg', 'uji setujui');
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      tp := admin_review_topup(tp.id, true, 'ok');
+      select balance into c1 from wallets where user_id = cust;
+      begin
+        perform admin_review_topup(tp.id, true, 'ok lagi');
+        select balance into c2 from wallets where user_id = cust;
+        log := log || format('S46b BUG persetujuan top up kedua diterima: saldo %s→%s (dobel Rp%s)', c1, c2, c2 - c1) || E'\n';
+      exception when others then
+        select balance into c2 from wallets where user_id = cust;
+        log := log || format('S46b %s top up +150.000 sekali (%s→%s), persetujuan ulang ditolak: %s',
+          case when c1 - c0 = 150000 and c2 = c1 then 'OK' else 'BUG' end, c0, c1, left(sqlerrm, 45)) || E'\n';
+      end;
+
+      -- (c) webhook Midtrans mode simulasi: settlement dikirim DUA KALI dengan id sama → hanya satu kredit
+      ext := 'AKPAY-QC-' || left(gen_random_uuid()::text, 8);
+      insert into payments (user_id, order_id, purpose, amount, method, provider, status, external_id)
+      values (cust, null, 'topup', 275000, 'qris', 'simulated', 'pending', ext) returning * into pay;
+      select balance into c0 from wallets where user_id = cust;
+      pay := payment_settle(ext, 'settlement', jsonb_build_object('uji', 'webhook-1'));
+      select balance into c1 from wallets where user_id = cust;
+      pay := payment_settle(ext, 'settlement', jsonb_build_object('uji', 'webhook-2-duplikat'));
+      select balance into c2 from wallets where user_id = cust;
+      select count(*) into jum from wallet_transactions where ref = ext;
+      log := log || format('S46c %s webhook settlement dikirim 2x (external_id=%s): saldo %s→%s→%s | kredit pertama=%s (harus 275000) kredit kedua=%s (harus 0) | baris mutasi ber-ref sama=%s (harus 1) status=%s',
+        case when c1 - c0 = 275000 and c2 = c1 and jum = 1 then 'OK' else 'BUG' end, ext, c0, c1, c2, c1 - c0, c2 - c1, jum, pay.status) || E'\n';
+
+      -- (d) webhook gagal/kedaluwarsa tidak menambah saldo
+      ext := 'AKPAY-QC-' || left(gen_random_uuid()::text, 8);
+      insert into payments (user_id, order_id, purpose, amount, method, provider, status, external_id)
+      values (cust, null, 'topup', 99000, 'qris', 'simulated', 'pending', ext);
+      select balance into c0 from wallets where user_id = cust;
+      pay := payment_settle(ext, 'expire', null);
+      select balance into c1 from wallets where user_id = cust;
+      select count(*) into jum from wallet_transactions where ref = ext;
+      log := log || format('S46d %s webhook status "expire": saldo Δ%s (harus 0) baris mutasi=%s (harus 0) status pembayaran=%s',
+        case when c1 = c0 and jum = 0 then 'OK' else 'BUG' end, c1 - c0, jum, pay.status) || E'\n';
+
+      -- (e) external_id yang tidak dikenal harus ditolak (bukan diam-diam membuat saldo)
+      begin
+        pay := payment_settle('AKPAY-TIDAK-ADA-QC', 'settlement', null);
+        log := log || 'S46e BUG webhook dengan external_id tak dikenal diterima' || E'\n';
+      exception when others then log := log || format('S46e OK webhook external_id tak dikenal ditolak: %s', left(sqlerrm, 50)) || E'\n'; end;
+    end;
+  exception when others then log := log || 'S46 BUG top up: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S47 QC UANG — penarikan dana: saldo kurang, melebihi saldo, penarikan ganda, ditolak → refund =====
+  begin
+    declare b_awal bigint; b1x bigint; b2x bigint; w2 withdrawal_requests;
+    begin
+      -- pakai pemilik merchant sebagai penguji agar tidak mengganggu saldo driver di skenario lain
+      perform set_config('antaraja.bypass', 'on', true);
+      insert into bank_accounts (user_id, bank_name, account_no, holder, verified)
+      values (mown, 'BCA', '900900', 'Uji Tarik', true)
+      on conflict (user_id) do update set verified = true, bank_name = 'BCA', account_no = '900900', holder = 'Uji Tarik';
+      perform set_config('antaraja.bypass', 'off', true);
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      insert into admin_security (user_id, pin_hash) select adm, extensions.crypt('123456', extensions.gen_salt('bf')) where not exists (select 1 from admin_security where user_id = adm);
+      update admin_security set pin_hash = extensions.crypt('123456', extensions.gen_salt('bf')), failed = 0, locked_until = null where user_id = adm;
+      perform admin_unlock('123456');
+      for f in select * from fraud_flags where subject_id = mown and status = 'open' loop perform admin_review_fraud(f.id, 'dismissed', 'uji QC', false); end loop;
+      -- setel saldo uji tepat 100.000 lewat penyesuaian resmi (tercatat di buku besar)
+      select balance into b_awal from wallets where user_id = mown;
+      perform admin_adjust_wallet(mown, 100000 - b_awal, 'Uji QC S47: setel saldo penguji ke Rp100.000');
+      select balance into b_awal from wallets where user_id = mown;
+
+      perform set_config('request.jwt.claims', json_build_object('sub', mown, 'role', 'authenticated')::text, true);
+      -- (a) di bawah minimum
+      begin perform request_withdrawal(5000, 'BCA', '900900', 'Uji Tarik');
+        log := log || 'S47a BUG penarikan Rp5.000 (di bawah minimum) diterima' || E'\n';
+      exception when others then log := log || format('S47a OK penarikan di bawah minimum ditolak: %s', left(sqlerrm, 50)) || E'\n'; end;
+
+      -- (b) nominal negatif
+      begin perform request_withdrawal(-50000, 'BCA', '900900', 'Uji Tarik');
+        select balance into b1x from wallets where user_id = mown;
+        log := log || format('S47b BUG penarikan nominal NEGATIF diterima → saldo %s→%s', b_awal, b1x) || E'\n';
+      exception when others then log := log || format('S47b OK penarikan nominal negatif ditolak: %s', left(sqlerrm, 50)) || E'\n'; end;
+
+      -- (c) melebihi saldo
+      begin perform request_withdrawal(b_awal + 1, 'BCA', '900900', 'Uji Tarik');
+        select balance into b1x from wallets where user_id = mown;
+        log := log || format('S47c BUG penarikan melebihi saldo (%s > %s) diterima → saldo jadi %s', b_awal + 1, b_awal, b1x) || E'\n';
+      exception when others then log := log || format('S47c OK penarikan melebihi saldo (%s > %s) ditolak: %s', b_awal + 1, b_awal, left(sqlerrm, 45)) || E'\n'; end;
+
+      -- (d) penarikan ganda (double-spend): dua kali tarik seluruh saldo
+      w := request_withdrawal(b_awal, 'BCA', '900900', 'Uji Tarik');
+      select balance into b1x from wallets where user_id = mown;
+      begin
+        w2 := request_withdrawal(b_awal, 'BCA', '900900', 'Uji Tarik');
+        select balance into b2x from wallets where user_id = mown;
+        log := log || format('S47d BUG double-spend penarikan: dua permintaan Rp%s masing-masing berhasil, saldo %s→%s→%s (minus %s)', b_awal, b_awal, b1x, b2x, -b2x) || E'\n';
+      exception when others then
+        select balance into b2x from wallets where user_id = mown;
+        log := log || format('S47d %s penarikan kedua atas saldo yang sama ditolak: saldo %s→%s (harus 0) permintaan ke-2 gagal: %s',
+          case when b1x = 0 and b2x = 0 then 'OK' else 'BUG' end, b_awal, b2x, left(sqlerrm, 40)) || E'\n';
+      end;
+
+      -- (e) admin menolak penarikan → saldo kembali utuh
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      perform admin_unlock('123456');
+      if w.status = 'pending' then
+        w := admin_review_withdrawal(w.id, false, 'uji tolak QC');
+      else
+        -- penarikan disetujui otomatis; buat satu lagi yang manual untuk menguji jalur penolakan
+        perform admin_adjust_wallet(mown, 60000, 'Uji QC S47e: modal uji penolakan');
+        perform set_config('request.jwt.claims', json_build_object('sub', mown, 'role', 'authenticated')::text, true);
+        perform set_config('antaraja.bypass', 'on', true);
+        update bank_accounts set verified = false where user_id = mown;
+        perform set_config('antaraja.bypass', 'off', true);
+        w := request_withdrawal(60000, 'BNI', '900901', 'Uji Tarik');
+        perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+        perform admin_unlock('123456');
+        w := admin_review_withdrawal(w.id, false, 'uji tolak QC');
+      end if;
+      select balance into b2x from wallets where user_id = mown;
+      log := log || format('S47e %s penarikan Rp%s ditolak admin → saldo dikembalikan menjadi %s (harus = nominal yang ditolak) status=%s auto=%s',
+        case when b2x = w.amount and w.status = 'rejected' then 'OK' else 'BUG' end, w.amount, b2x, w.status, w.auto) || E'\n';
+
+      -- (f) tidak ada saldo negatif akibat penarikan
+      select count(*) into n from wallets where user_id = mown and balance < 0;
+      log := log || format('S47f %s saldo penguji tidak pernah minus setelah semua percobaan penarikan (%s baris minus, saldo akhir %s)',
+        case when n = 0 then 'OK' else 'BUG' end, n, b2x) || E'\n';
+    end;
+  exception when others then log := log || 'S47 BUG penarikan dana: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S48 QC UANG — konkurensi & idempotensi: satu order satu driver, order kembar =====
+  begin
+    declare c0 bigint; c1 bigint; tot bigint; id1 uuid; id2 uuid; siapa uuid;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      update orders set status = 'cancelled' where customer_id = cust and status in ('scheduled','searching','accepted','arrived','in_progress');
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, 0.4950, 101.4320);
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, 0.4950, 101.4320);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      o := create_order(jsonb_build_object('service','send','weight_kg',3,'size_cm',30,
+        'pickup', jsonb_build_object('lat',0.4950,'lng',101.4320,'address','S48 Toko'),
+        'dropoff', jsonb_build_object('lat',0.5000,'lng',101.4400,'address','S48 Rumah'),
+        'recipient_name','Sari','recipient_phone','0811','paid_via','cash'));
+      ordid := o.id;
+      -- dua driver berebut order yang sama
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(ordid);
+      siapa := o.driver_id;
+      begin
+        perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+        o2 := driver_accept_order(ordid);
+        log := log || format('S48a BUG dua driver memegang order yang sama: driver_id akhir=%s', o2.driver_id) || E'\n';
+      exception when others then
+        select driver_id into siapa from orders where id = ordid;
+        select count(*) into n from order_events where order_id = ordid and status = 'accepted';
+        log := log || format('S48a %s dua driver berebut order %s: pemenang=%s, driver kedua ditolak (%s); baris peristiwa "accepted"=%s (harus 1)',
+          case when siapa = drv2 and n = 1 then 'OK' else 'BUG' end, o.code, case when siapa = drv2 then 'driver-2' else siapa::text end, left(sqlerrm, 45), n) || E'\n';
+      end;
+      -- driver melepas order → driver lain baru boleh mengambil
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      perform cancel_order(ordid, 'lepas order untuk uji');
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(ordid);
+      log := log || format('S48b %s setelah driver-2 melepas, driver-1 boleh mengambil: status=%s driver=%s',
+        case when o.driver_id = drv and o.status = 'accepted' then 'OK' else 'BUG' end, o.status, case when o.driver_id = drv then 'driver-1' else o.driver_id::text end) || E'\n';
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      perform cancel_order(ordid, 'bersih');
+
+      -- create_order dipanggil dua kali cepat (double tap): pastikan tidak ada saldo ganda tersembunyi
+      select balance into c0 from wallets where user_id = cust;
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy',
+        'pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S48c'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S48c2'), 'paid_via','wallet'));
+      id1 := o.id; tot := o.total;
+      begin
+        o2 := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy',
+          'pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S48c'),
+          'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S48c2'), 'paid_via','wallet'));
+        id2 := o2.id;
+      exception when others then id2 := null; k1 := sqlerrm; end;
+      select balance into c1 from wallets where user_id = cust;
+      if id2 is null then
+        log := log || format('S48c OK panggilan create_order kedua (double tap) ditolak: %s; saldo dipotong sekali Rp%s', left(k1, 60), c0 - c1) || E'\n';
+      else
+        log := log || format('S48c CATATAN double tap menghasilkan 2 order (%s & %s) dan 2 pemotongan Rp%s+Rp%s=Rp%s; tidak ada uang tercipta/hilang, tetapi tidak ada kunci idempotensi di create_order — pelanggan wajib membatalkan order kembar untuk dapat refund',
+          o.code, o2.code, tot, o2.total, c0 - c1) || E'\n';
+        perform cancel_order(id2, 'batal order kembar');
+      end if;
+      select balance into c1 from wallets where user_id = cust;
+      perform cancel_order(id1, 'bersih');
+      select balance into c1 from wallets where user_id = cust;
+      log := log || format('S48d %s setelah semua order kembar dibatalkan, saldo kembali ke nilai semula (%s, Δ%s harus 0)',
+        case when c1 = c0 then 'OK' else 'BUG' end, c1, c1 - c0) || E'\n';
+    end;
+  exception when others then log := log || 'S48 BUG konkurensi: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S49 QC UANG — pembatalan AntarShop setelah driver terlanjur belanja =====
+  begin
+    declare c0 bigint; c1 bigint; dr0 bigint; dr1 bigint; belanja bigint; tot bigint;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, 0.5168, 101.4463);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into dr0 from wallets where user_id = drv;
+      o := create_order(jsonb_build_object('service','shop','shop_store_id', store1, 'shop_vehicle','motor',
+        'shopping_list', jsonb_build_array(jsonb_build_object('product_id', prod1, 'qty', 2)),
+        'dropoff', jsonb_build_object('lat',0.52,'lng',101.45,'address','S49 Rumah'), 'paid_via','wallet'));
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := set_shopping_actual(o.id, 149000, 'https://x/nota.jpg', null);
+      belanja := o.items_subtotal; tot := o.total; ordid := o.id;
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      begin
+        o := cancel_order(ordid, 'uji batal setelah driver belanja');
+        select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
+        log := log || format('S49 %s pelanggan membatalkan SETELAH driver membayar belanja Rp%s di toko: pelanggan Δ%s (refund penuh Rp%s) driver Δ%s (harus dapat ganti Rp%s) → %s',
+          case when dr1 - dr0 >= belanja then 'OK' else 'BUG' end, belanja, c1 - c0, tot, dr1 - dr0, belanja,
+          case when dr1 - dr0 >= belanja then 'driver diganti' else format('driver menombok Rp%s, uang belanja hilang dari sistem', belanja - (dr1 - dr0)) end) || E'\n';
+      exception when others then
+        select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
+        log := log || format('S49 OK pembatalan ditolak setelah driver membayar belanja Rp%s (pelanggan Δ%s driver Δ%s): %s',
+          belanja, c1 - c0, dr1 - dr0, left(sqlerrm, 90)) || E'\n';
+        perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+        o := driver_update_order_status(ordid, 'in_progress', null); o := driver_update_order_status(ordid, 'completed', null);
+      end;
+    end;
+  exception when others then log := log || 'S49 BUG batal setelah belanja: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S50 QC UANG — bagi hasil travel: kursi bersama, carter, titipan antar kota (dompet & tunai) =====
+  begin
+    declare c0 bigint; c1 bigint; p0 bigint; p1 bigint; plat bigint; tunai bigint;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      update orders set status = 'cancelled' where customer_id = cust and status in ('scheduled','searching','accepted','arrived','in_progress');
+
+      -- (a) kursi bersama dibayar dompet
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '2 days')::text, 'seats_total', 6, 'seat_price', 150000, 'allow_private', false));
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into p0 from wallets where user_id = drv2;
+      tb := travel_book(jsonb_build_object('trip_id', tt.id, 'pax', 2, 'pickup_address', 'S50a Jemput', 'pickup_lat', 0.5, 'pickup_lng', 101.44,
+        'passengers', jsonb_build_array(jsonb_build_object('name','A'), jsonb_build_object('name','B')), 'paid_via', 'wallet'));
+      select balance into c1 from wallets where user_id = cust;
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      perform travel_trip_set_status(tt.id, 'departed', null);
+      perform travel_trip_set_status(tt.id, 'arrived', null);
+      select balance into p1 from wallets where user_id = drv2;
+      plat := tb.price - (p1 - p0);
+      log := log || format('S50a %s travel kursi bersama DOMPET %s: harga tagihan=%s (2 kursi @150.000 + biaya aplikasi %s) | pelanggan Δ%s (harus -%s) | mitra Δ%s (harus %s) | platform=%s',
+        case when c1 - c0 = -tb.price and p1 - p0 = tb.partner_earning and plat >= 0 then 'OK' else 'BUG' end,
+        tb.code, tb.price, tb.platform_fee, c1 - c0, tb.price, p1 - p0, tb.partner_earning, plat) || E'\n';
+
+      -- (b) kursi bersama dibayar TUNAI: mitra menerima tunai, platform harus menagih komisinya
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '3 days')::text, 'seats_total', 6, 'seat_price', 150000, 'allow_private', false));
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into p0 from wallets where user_id = drv2;
+      tb := travel_book(jsonb_build_object('trip_id', tt.id, 'pax', 1, 'pickup_address', 'S50b Jemput', 'pickup_lat', 0.5, 'pickup_lng', 101.44,
+        'passengers', jsonb_build_array(jsonb_build_object('name','C')), 'paid_via', 'cash'));
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      perform travel_trip_set_status(tt.id, 'departed', null);
+      perform travel_trip_set_status(tt.id, 'arrived', null);
+      select balance into c1 from wallets where user_id = cust; select balance into p1 from wallets where user_id = drv2;
+      tunai := tb.price + (p1 - p0);
+      log := log || format('S50b %s travel kursi bersama TUNAI %s: tunai diterima mitra=%s | saldo pelanggan Δ%s (harus 0) | potongan platform ke mitra Δ%s | sisa mitra=%s (harus %s)',
+        case when c1 = c0 and tunai = tb.partner_earning then 'OK' else 'BUG' end,
+        tb.code, tb.price, c1 - c0, p1 - p0, tunai, tb.partner_earning) || E'\n';
+
+      -- (c) pembatalan booking travel → dana kembali utuh
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '4 days')::text, 'seats_total', 6, 'seat_price', 150000, 'allow_private', false));
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust;
+      tb := travel_book(jsonb_build_object('trip_id', tt.id, 'pax', 1, 'pickup_address', 'S50c Jemput', 'pickup_lat', 0.5, 'pickup_lng', 101.44,
+        'passengers', jsonb_build_array(jsonb_build_object('name','D')), 'paid_via', 'wallet'));
+      tb := travel_booking_cancel(tb.id, 'uji batal');
+      select balance into c1 from wallets where user_id = cust;
+      log := log || format('S50c %s batal booking travel %s: dipotong %s lalu dikembalikan, saldo Δ%s (harus 0) status=%s bayar=%s',
+        case when c1 = c0 and tb.status = 'cancelled' and tb.payment_status = 'refunded' then 'OK' else 'BUG' end,
+        tb.code, tb.price, c1 - c0, tb.status, tb.payment_status) || E'\n';
+
+      -- (d) carter (permintaan → tawaran → selesai) dibayar dompet
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      tr := travel_request_create(jsonb_build_object('kind','charter','depart_at', (now() + interval '5 days')::text,
+        'pickup_address','S50d Pekanbaru','pickup_lat',0.5,'pickup_lng',101.44,'dropoff_address','Bukittinggi','pax',4,
+        'accommodation','customer','fuel','partner','budget',600000,'paid_via','wallet'));
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      tofr := travel_offer_create(tr.id, 500000, jsonb_build_object('base', 500000), 'Innova 2021');
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into p0 from wallets where user_id = drv2;
+      tr := travel_offer_accept(tofr.id);
+      select balance into c1 from wallets where user_id = cust;
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      perform travel_request_set_status(tr.id, 'ongoing', null);
+      tr := travel_request_set_status(tr.id, 'completed', null);
+      select balance into p1 from wallets where user_id = drv2;
+      plat := tr.price - (p1 - p0);
+      log := log || format('S50d %s travel carter DOMPET %s: harga=%s | pelanggan Δ%s (harus -%s) | mitra Δ%s (harus %s) | biaya platform tercatat=%s | platform nyata=%s',
+        case when c1 - c0 = -tr.price and p1 - p0 = tr.partner_earning and plat = tr.platform_fee then 'OK' else 'BUG' end,
+        tr.code, tr.price, c1 - c0, tr.price, p1 - p0, tr.partner_earning, tr.platform_fee, plat) || E'\n';
+
+      -- (e) carter dibatalkan mendadak (< 12 jam) → potongan 30%
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      tr := travel_request_create(jsonb_build_object('kind','charter','depart_at', (now() + interval '4 hours')::text,
+        'pickup_address','S50e Pekanbaru','pickup_lat',0.5,'pickup_lng',101.44,'dropoff_address','Bukittinggi','pax',4,
+        'accommodation','customer','fuel','partner','budget',400000,'paid_via','wallet'));
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      tofr := travel_offer_create(tr.id, 400000, jsonb_build_object('base', 400000), 'Innova 2021');
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust;
+      tr := travel_offer_accept(tofr.id);
+      tr := travel_request_set_status(tr.id, 'cancelled', 'uji batal mendadak');
+      select balance into c1 from wallets where user_id = cust;
+      log := log || format('S50e %s carter dibatalkan < 12 jam sebelum berangkat: harga=%s saldo Δ%s (harus -%s = potongan 30%%) status bayar=%s',
+        case when c1 - c0 = -(tr.price - floor(tr.price * 0.7)::bigint) and tr.payment_status = 'refunded' then 'OK' else 'BUG' end,
+        tr.price, c1 - c0, tr.price - floor(tr.price * 0.7)::bigint, tr.payment_status) || E'\n';
+
+      -- (f) titipan AntarSend antar kota lewat mitra travel — DIBAYAR DOMPET
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into p0 from wallets where user_id = drv2;
+      o := create_order(jsonb_build_object('service','send','send_scope','intercity','via','travel','dest_city_id', city_bkt, 'warehouse_id', wh_dest,
+        'weight_kg', 5, 'size_cm', 40, 'pickup', jsonb_build_object('lat',-0.9405,'lng',100.3625,'address','S50f Toko'),
+        'dropoff', jsonb_build_object('lat',-0.3,'lng',100.37,'address','S50f Bukittinggi'),
+        'recipient_name','Andi','recipient_phone','0812','paid_via','wallet'));
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      o := travel_accept_send(o.id); o := travel_pickup_send(o.id); o := travel_complete_send(o.id);
+      select balance into c1 from wallets where user_id = cust; select balance into p1 from wallets where user_id = drv2;
+      plat := o.total - (p1 - p0);
+      log := log || format('S50f %s titipan travel DOMPET %s: total=%s (ongkir antar kota %s) pelanggan Δ%s (harus -%s) mitra Δ%s (harus %s%% x %s) platform=%s',
+        case when c1 - c0 = -o.total and p1 - p0 = round(o.intercity_fare * setting_num('travel_send_partner_pct', 80) / 100.0)::bigint and plat >= 0 then 'OK' else 'BUG' end,
+        o.code, o.total, o.intercity_fare, c1 - c0, o.total, p1 - p0, setting_num('travel_send_partner_pct', 80), o.intercity_fare, plat) || E'\n';
+
+      -- (g) titipan AntarSend antar kota lewat mitra travel — DIBAYAR TUNAI
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      select balance into c0 from wallets where user_id = cust; select balance into p0 from wallets where user_id = drv2;
+      o := create_order(jsonb_build_object('service','send','send_scope','intercity','via','travel','dest_city_id', city_bkt, 'warehouse_id', wh_dest,
+        'weight_kg', 5, 'size_cm', 40, 'pickup', jsonb_build_object('lat',-0.9405,'lng',100.3625,'address','S50g Toko'),
+        'dropoff', jsonb_build_object('lat',-0.3,'lng',100.37,'address','S50g Bukittinggi'),
+        'recipient_name','Andi','recipient_phone','0812','paid_via','cash'));
+      perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+      o := travel_accept_send(o.id); o := travel_pickup_send(o.id); o := travel_complete_send(o.id);
+      select balance into c1 from wallets where user_id = cust; select balance into p1 from wallets where user_id = drv2;
+      tunai := o.total + (p1 - p0);
+      log := log || format('S50g %s titipan travel TUNAI %s: tunai diterima mitra=%s | saldo pelanggan Δ%s (harus 0) | saldo mitra Δ%s | sisa di tangan mitra=%s (harus %s = bagian mitra) | selisih=%s',
+        case when c1 = c0 and tunai = round(o.intercity_fare * setting_num('travel_send_partner_pct', 80) / 100.0)::bigint then 'OK' else 'BUG' end,
+        o.code, o.total, c1 - c0, p1 - p0, tunai, round(o.intercity_fare * setting_num('travel_send_partner_pct', 80) / 100.0)::bigint,
+        tunai - round(o.intercity_fare * setting_num('travel_send_partner_pct', 80) / 100.0)::bigint) || E'\n';
+    end;
+  exception when others then log := log || 'S50 BUG bagi hasil travel: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S51 QC UANG — tip, harga dinamis (surge), dan pesanan terjadwal =====
+  begin
+    declare c0 bigint; c1 bigint; dr0 bigint; dr1 bigint; f1 bigint; f2 bigint; de1 bigint; de2 bigint; tot bigint;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, 0.4810, 101.4349);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      update orders set status = 'cancelled' where customer_id = cust and status in ('scheduled','searching','accepted','arrived','in_progress');
+
+      -- (a) tip SESUDAH order selesai: pelanggan berkurang persis, driver bertambah persis
+      select balance into c0 from wallets where user_id = cust; select balance into dr0 from wallets where user_id = drv;
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy',
+        'pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S51a'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S51a2'), 'paid_via','wallet'));
+      select pin into v_pin from order_pins where order_id = o.id;
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := driver_update_order_status(o.id, 'in_progress', v_pin); o := driver_update_order_status(o.id, 'completed', null);
+      tot := o.total;
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      o := add_tip(o.id, 7000);
+      select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
+      log := log || format('S51a %s tip Rp7.000 setelah selesai: pelanggan Δ%s (harus -%s) driver Δ%s (harus %s) tip di order=%s pendapatan driver=%s',
+        case when c1 - c0 = -(tot + 7000) and dr1 - dr0 = o.driver_earning and o.tip = 7000 then 'OK' else 'BUG' end,
+        c1 - c0, tot + 7000, dr1 - dr0, o.driver_earning, o.tip, o.driver_earning) || E'\n';
+
+      -- (b) tip melebihi saldo harus ditolak, tidak boleh membuat saldo minus
+      select balance into c0 from wallets where user_id = cust;
+      begin
+        perform add_tip(o.id, 500000000);
+        log := log || 'S51b BUG tip di atas batas diterima' || E'\n';
+      exception when others then
+        select balance into c1 from wallets where user_id = cust;
+        log := log || format('S51b %s tip di luar batas ditolak dan saldo tidak berubah (Δ%s): %s',
+          case when c1 = c0 then 'OK' else 'BUG' end, c1 - c0, left(sqlerrm, 55)) || E'\n';
+      end;
+
+      -- (c) surge: komisi tetap proporsional, driver ikut menikmati kenaikan
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      j := estimate_fare('ride_motor', 0.4810, 101.4349, 0.50, 101.44, null);
+      f1 := (j->>'fare')::bigint;
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy',
+        'pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S51c'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S51c2'), 'paid_via','cash'));
+      de1 := o.driver_earning; f2 := o.fare_delivery; ordid := o.id;
+      r := estimate_fare('ride_motor', 0.4810, 101.4349, 0.50, 101.44, null);
+      log := log || format('S51c %s harga dinamis: tarif dasar=%s pengali permintaan=%s tarif order=%s bagian driver=%s (%s%% dari tarif) — porsi driver tidak berubah oleh surge',
+        case when f2 > 0 and de1 > 0 and abs(round(de1 * 100.0 / f2, 1) - round((f2 - floor(f2 * (select commission_pct from pricing where service='ride_motor') / 100.0)) * 100.0 / f2, 1)) < 0.2 then 'OK' else 'BUG' end,
+        f1, coalesce(r->'demand'->>'multiplier', '1.00'), f2, de1, round(de1 * 100.0 / nullif(f2,0), 1)) || E'\n';
+      perform cancel_order(ordid, 'bersih');
+
+      -- (d) pesanan terjadwal: dana ditahan saat pemesanan, kembali utuh bila dibatalkan, tanpa biaya jadwal tersembunyi
+      select balance into c0 from wallets where user_id = cust;
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','scheduled_at', (now() + interval '45 minutes')::text,
+        'pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S51d'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S51d2'), 'paid_via','wallet'));
+      select balance into c1 from wallets where user_id = cust;
+      tot := o.total;
+      log := log || format('S51d %s pesanan terjadwal: status=%s total=%s (ongkir %s + jasa aplikasi %s, tanpa biaya jadwal tambahan) dana ditahan Δ%s',
+        case when o.status = 'scheduled' and c1 - c0 = -o.total and o.total = o.fare_delivery + o.platform_fee then 'OK' else 'BUG' end,
+        o.status, o.total, o.fare_delivery, o.platform_fee, c1 - c0) || E'\n';
+      o := cancel_order(o.id, 'uji batal terjadwal');
+      select balance into c1 from wallets where user_id = cust;
+      log := log || format('S51e %s pembatalan pesanan terjadwal mengembalikan dana utuh: saldo Δ%s (harus 0) status=%s',
+        case when c1 = c0 and o.status = 'cancelled' then 'OK' else 'BUG' end, c1 - c0, o.status) || E'\n';
+    end;
+  exception when others then log := log || 'S51 BUG tip/surge/jadwal: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S52 QC UANG — deposit/saldo minus driver untuk order tunai =====
+  begin
+    declare dr0 bigint; dr1 bigint; batas bigint := -500000;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      perform admin_unlock('123456');
+      select balance into dr0 from wallets where user_id = drv;
+      -- turunkan saldo driver tepat ke ambang agar bisa diuji (tercatat sebagai mutasi resmi)
+      perform admin_adjust_wallet(drv, -(dr0 - 1000), 'Uji QC S52: setel saldo driver ke Rp1.000');
+      select balance into dr0 from wallets where user_id = drv;
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_set_online(true, 0.4810, 101.4349);
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy',
+        'pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S52'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S52b'), 'paid_via','cash'));
+      select pin into v_pin from order_pins where order_id = o.id;
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
+      o := driver_update_order_status(o.id, 'in_progress', v_pin); o := driver_update_order_status(o.id, 'completed', null);
+      select balance into dr1 from wallets where user_id = drv;
+      log := log || format('S52a %s order TUNAI dengan saldo driver Rp%s: potongan platform Rp%s membuat saldo menjadi %s (boleh minus sebagai utang deposit)',
+        case when dr1 = dr0 - (o.total - o.driver_earning) then 'OK' else 'BUG' end, dr0, o.total - o.driver_earning, dr1) || E'\n';
+
+      -- ambang -500.000: driver tidak boleh menerima order baru
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      perform admin_adjust_wallet(drv, batas - dr1 - 1, 'Uji QC S52: dorong saldo driver melewati ambang minus');
+      select balance into dr1 from wallets where user_id = drv;
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy',
+        'pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','S52c'),
+        'dropoff', jsonb_build_object('lat',0.50,'lng',101.44,'address','S52c2'), 'paid_via','cash'));
+      ordid := o.id;
+      begin
+        perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+        perform driver_accept_order(ordid);
+        log := log || format('S52b BUG driver bersaldo %s (di bawah ambang %s) masih bisa menerima order tunai', dr1, batas) || E'\n';
+      exception when others then
+        log := log || format('S52b %s driver bersaldo %s (di bawah ambang %s) ditolak menerima order: %s',
+          case when sqlerrm ilike '%minus%' or sqlerrm ilike '%top up%' then 'OK' else 'BUG' end, dr1, batas, left(sqlerrm, 60)) || E'\n';
+      end;
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      perform cancel_order(ordid, 'bersih');
+      -- kembalikan saldo driver
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      perform admin_adjust_wallet(drv, 600000, 'Uji QC S52: kembalikan saldo driver');
+      select balance into dr1 from wallets where user_id = drv;
+      log := log || format('S52c %s hanya dompet DRIVER yang boleh minus; setelah dipulihkan saldo driver=%s dan tidak ada dompet pelanggan/merchant minus (%s baris)',
+        case when (select count(*) from wallets wl join profiles pr on pr.id = wl.user_id where wl.balance < 0 and pr.role <> 'driver') = 0 then 'OK' else 'BUG' end,
+        dr1, (select count(*) from wallets wl join profiles pr on pr.id = wl.user_id where wl.balance < 0 and pr.role <> 'driver')) || E'\n';
+    end;
+  exception when others then log := log || 'S52 BUG deposit driver: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S53 QC UANG — INVARIAN GLOBAL di akhir seluruh simulasi =====
+  begin
+    declare rusak int; minus int; tanpa_bagi int; rincian text;
+    begin
+      -- (a) jumlah seluruh mutasi wallet_transactions per pengguna = wallets.balance
+      with bb as (select wt.user_id as uid, sum(wt.amount) as jml from wallet_transactions wt group by wt.user_id)
+      select count(*), coalesce(string_agg(wl.user_id::text || ' selisih ' || (wl.balance - coalesce(bb.jml,0)), '; '), '')
+        into rusak, rincian
+        from wallets wl left join bb on bb.uid = wl.user_id
+        where wl.balance <> coalesce(bb.jml, 0);
+      log := log || format('S53a %s buku besar cocok: dompet yang saldonya tidak sama dengan jumlah mutasinya = %s baris%s',
+        case when rusak = 0 then 'OK' else 'BUG' end, rusak, case when rusak = 0 then '' else ' → ' || left(rincian, 200) end) || E'\n';
+
+      -- (b) tidak ada order selesai tanpa baris pembagian uang
+      select count(*), coalesce(string_agg(od.code || '/' || od.service || '/' || od.paid_via, ', '), '')
+        into tanpa_bagi, rincian
+        from orders od where od.status = 'completed'
+          and not exists (select 1 from wallet_transactions wt where wt.order_id = od.id);
+      log := log || format('S53b %s order berstatus selesai tanpa satu pun baris pembagian uang = %s%s',
+        case when tanpa_bagi = 0 then 'OK' else 'BUG' end, tanpa_bagi, case when tanpa_bagi = 0 then '' else ' → ' || left(rincian, 200) end) || E'\n';
+
+      -- (c) saldo negatif hanya boleh pada dompet driver (utang deposit order tunai)
+      select count(*), coalesce(string_agg(coalesce(pr.role::text,'?') || ' ' || wl.balance, ', '), '')
+        into minus, rincian
+        from wallets wl left join profiles pr on pr.id = wl.user_id
+        where wl.balance < 0 and not exists (select 1 from drivers dd where dd.id = wl.user_id);
+      log := log || format('S53c %s dompet bersaldo negatif di luar driver = %s%s | saldo pelanggan uji=%s merchant uji=%s (dua-duanya harus >= 0)',
+        case when minus = 0 and (select balance from wallets where user_id = cust) >= 0 and (select balance from wallets where user_id = mown) >= 0 then 'OK' else 'BUG' end,
+        minus, case when minus = 0 then '' else ' → ' || left(rincian, 200) end,
+        (select balance from wallets where user_id = cust), (select balance from wallets where user_id = mown)) || E'\n';
+
+      -- (d) tiap order selesai berbayar dompet: potongan pelanggan = total order
+      select count(*), coalesce(string_agg(x.code || ' bayar ' || x.dibayar || ' vs total+tip ' || (x.total + x.tip), ', '), '')
+        into rusak, rincian
+        from (select od.code, od.total,
+                     od.tip,
+                     -coalesce((select sum(wt.amount) from wallet_transactions wt where wt.order_id = od.id and wt.user_id = od.customer_id and wt.type in ('payment','refund')), 0) as dibayar
+              from orders od where od.status = 'completed' and od.payment_method = 'wallet' and od.completed_at >= transaction_timestamp()) x
+        where x.dibayar <> x.total + x.tip;
+      log := log || format('S53d %s order dompet selesai yang potongan pelanggannya tidak sama dengan total order + tip = %s%s',
+        case when rusak = 0 then 'OK' else 'BUG' end, rusak, case when rusak = 0 then '' else ' → ' || left(rincian, 240) end) || E'\n';
+
+      -- (e) uang keluar platform per pesanan tidak boleh melebihi promo yang memang ia berikan.
+      --     jumlah seluruh mutasi dompet yang menempel pada satu order = diskon - bagian kotor platform,
+      --     jadi nilainya harus <= diskon pesanan itu. Lebih dari itu berarti platform membayar tanpa menerima.
+      select count(*), coalesce(string_agg(z.code || ' (' || z.service || '/' || z.paid_via || ') keluar ' || z.jml || ' > diskon ' || z.diskon, ', '), '')
+        into rusak, rincian
+        from (select od.code, od.service::text as service, od.paid_via, coalesce(od.discount, 0) as diskon,
+                     coalesce((select sum(wt.amount) from wallet_transactions wt where wt.order_id = od.id), 0) as jml
+              from orders od where od.created_at >= transaction_timestamp()) z
+        where z.jml > z.diskon;
+      log := log || format('S53e %s order yang membuat platform membayar lebih besar dari yang diterimanya (jumlah mutasi dompet per order > diskon) = %s%s',
+        case when rusak = 0 then 'OK' else 'BUG' end, rusak, case when rusak = 0 then '' else ' → ' || left(rincian, 240) end) || E'\n';
+    end;
+  exception when others then log := log || 'S53 BUG invarian global: ' || sqlerrm || E'\n'; end;
 
   raise exception using message = 'SIMULASI_SELESAI' || log;
 end $sim$;

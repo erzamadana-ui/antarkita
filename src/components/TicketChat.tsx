@@ -82,9 +82,10 @@ export function TicketChat({ ticket, messages, onSend, asCs, footer, style }: {
             {(asCs ? QUICK_CS : QUICK_USER).map((q) => <Chip key={q} label={q} onPress={() => submit(q)} color={asCs ? colors.info : colors.primary} />)}
           </ScrollView>
           <Row gap={8}>
-            <PressableScale onPress={attach} scaleTo={0.9} style={s.attachBtn}><Ionicons name="attach" size={20} color={colors.textSecondary} /></PressableScale>
-            <TextInput value={text} onChangeText={setText} placeholder={internal ? 'Catatan internal…' : 'Tulis pesan ke CS…'} placeholderTextColor={colors.textMuted} style={s.input} onSubmitEditing={() => submit(text)} blurOnSubmit={false} editable={!busy} />
-            <PressableScale onPress={() => submit(text)} scaleTo={0.88} style={[s.send, shadow.glow(asCs ? colors.info : colors.primary)]} disabled={!text.trim() || busy}>
+            <PressableScale onPress={attach} scaleTo={0.9} style={s.attachBtn} accessibilityRole="button" accessibilityLabel="Lampirkan berkas"><Ionicons name="attach" size={20} color={colors.textSecondary} /></PressableScale>
+            {/* Placeholder mengikuti siapa yang mengetik: CS/admin tidak sedang "menulis pesan ke CS". */}
+            <TextInput value={text} onChangeText={setText} placeholder={internal ? 'Catatan internal…' : asCs ? 'Tulis balasan ke pengguna…' : 'Tulis pesan ke CS…'} placeholderTextColor={colors.textMuted} style={s.input} onSubmitEditing={() => submit(text)} blurOnSubmit={false} editable={!busy} />
+            <PressableScale onPress={() => submit(text)} scaleTo={0.88} style={[s.send, shadow.glow(asCs ? colors.info : colors.primary)]} disabled={!text.trim() || busy} accessibilityRole="button" accessibilityLabel="Kirim pesan">
               <BrandGradient colors={asCs ? [colors.info, '#1D4ED8'] : undefined} style={StyleSheet.absoluteFill} />
               <Ionicons name="send" size={18} color="#fff" />
             </PressableScale>

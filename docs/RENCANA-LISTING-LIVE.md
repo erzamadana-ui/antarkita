@@ -1,5 +1,15 @@
 # Rencana Listing & Go-Live AntarKita — pembagian kerja (per 6 September 2026)
 
+> ## ⚠️ KOREKSI 9 September 2026 — baca ini sebelum jadwal di bawah
+>
+> Jadwal "Selasa–Rabu listing & rilis" di bagian B **terlalu optimistis** dan perlu dibaca ulang. Audit kesiapan Play Store tanggal 9 Sep 2026 menemukan:
+>
+> 1. **Aplikasi tidak bisa diunduh publik dalam hitungan hari.** Akun developer **perorangan** wajib menjalankan uji tertutup dengan **12 penguji ter-*opt-in* terus-menerus selama 14 hari berturut-turut** sebelum boleh *mengajukan* akses produksi. Paling cepat publik bisa mengunduh **± 18 hari**, realistis **3–4 minggu**. Yang **bisa** dikejar dalam sehari adalah **listing + Internal testing**. Hitungan lengkap: **`docs/rilis/RUNBOOK-LISTING-BESOK.md`**.
+> 2. **Klaim "Migrasi 0001–0024 diterapkan" bertentangan** dengan `docs/rilis/CHECKLIST-GO-LIVE.md` yang menandai `0023_hapus_akun.sql` belum diterapkan. **Wajib diverifikasi ke database produksi** (`select proname from pg_proc where proname = 'request_account_deletion';`) — bila kosong, tombol hapus akun error dan Google hampir pasti menolak.
+> 3. **Baris "Kewajiban Google Play — Siap dari sisi produk" belum sepenuhnya benar.** Dua celah nyata: (a) tidak ada **fungsi memblokir pengguna** padahal aplikasi punya chat + panggilan suara antar pengguna (kebijakan UGC mewajibkannya); (b) URL hapus akun sebelumnya menunjuk *anchor* di dalam kebijakan privasi, bukan halaman tersendiri — sudah diperbaiki dengan `docs/rilis/hapus-akun.html` → `/hapus-akun/`.
+> 4. **Build AAB tidak memuat `google-services.json`** sehingga notifikasi push mati di rilis Play. Sudah diperbaiki di `.github/workflows/release-aab.yml` lewat secret opsional `GOOGLE_SERVICES_JSON_BASE64`.
+> 5. Yang **sudah terbukti benar**: `/privacy/` dan `/terms/` hidup (HTTP 200), `targetSdkVersion = 36` (memenuhi syarat Play sejak 31 Agustus 2026), izin sensitif benar-benar terblokir di manifest, dan skrip signing AAB berjalan sebagaimana mestinya.
+
 Peran: Direktur (AI) mengeksekusi semua pekerjaan teknis; Komisaris (Erza) mengeksekusi hal yang **secara hukum/akun hanya bisa dilakukan pemilik**: akun Google Play, akun Midtrans, keystore, dan uji di HP nyata. Semua yang bisa dikerjakan tanpa akun pemilik **sudah selesai** di commit ini.
 
 ## A. Status kesiapan (ringkas)

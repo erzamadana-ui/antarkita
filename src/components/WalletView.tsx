@@ -82,7 +82,9 @@ export function WalletView({ allowWithdraw, bottomSpace = 40 }: { allowWithdraw?
       ) : txs.length === 0 ? <Empty icon="wallet-outline" title="Belum ada transaksi" /> : (
         <Entrance index={3}><Card padded={false}>
           {txs.map((t, i) => {
-            const m = txMeta[t.type];
+            // Cadangan wajib: satu nilai enum baru di database (mis. 'tip') tanpa ini akan melempar
+            // TypeError dan membuat SELURUH layar AntarPay gagal dirender.
+            const m = txMeta[t.type] ?? txMeta.adjustment;
             return (
               <Animated.View key={t.id} layout={LinearTransition}>
                 <Row gap={12} style={{ padding: 14, borderTopWidth: i ? 1 : 0, borderTopColor: 'rgba(11,31,42,0.07)' }}>

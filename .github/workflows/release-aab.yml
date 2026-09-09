@@ -9,6 +9,10 @@ name: Play Store AAB (rilis bertanda tangan)
 #   ANDROID_KEY_ALIAS           alias key (mis. antarkita-upload)
 #   ANDROID_KEY_PASSWORD        kata sandi key (bisa sama dengan kata sandi keystore)
 #   PLAY_SERVICE_ACCOUNT_JSON   (opsional) JSON service account Google Play Developer API → unggah otomatis ke track internal
+#   GOOGLE_SERVICES_JSON_BASE64 (opsional TAPI WAJIB agar push notification hidup di build Play)
+#                               isi google-services.json dari Firebase Console, di-base64.
+#                               Tanpa secret ini AAB tetap terbangun, tetapi aplikasi TIDAK bisa
+#                               mendaftar token FCM → semua notifikasi push mati di rilis Play.
 #
 # versionCode = github.run_number + ANDROID_VERSION_CODE_OFFSET (dibaca dari app.config.ts, fallback 100) — selalu naik.
 # versionName = "version" di package.json.
@@ -106,6 +110,33 @@ jobs:
 
       - run: npm ci
 
+      # google-services.json TIDAK ada di repo (.gitignore). Tanpa berkas ini expo-notifications tidak
+      # bisa mendaftarkan token FCM sehingga push mati total di build Play — build tetap SUKSES, jadi
+      # kegagalannya senyap. Langkah ini menulis berkasnya bila secret tersedia dan memberi peringatan
+      # keras (bukan error) bila tidak, supaya keputusannya sadar.
+      - name: Tulis google-services.json (push notification)
+        id: gsj
+        env:
+          GSJ: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          WANT: ${{ matrix.app == 'mitra' && 'id.antarkita.mitra' || 'id.antarkita.app' }}
+        run: |
+          if [ -z "$GSJ" ]; then
+            echo "::warning::Secret GOOGLE_SERVICES_JSON_BASE64 kosong — AAB dibangun TANPA Firebase. Notifikasi push tidak akan berfungsi di rilis Play Store."
+            echo "path=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf '%s' "$GSJ" | tr -d '\n\r ' | base64 -d > google-services.json
+          node -e "
+            const j = require('./google-services.json');
+            const ids = (j.client || []).map((c) => c.client_info.android_client_info.package_name);
+            console.log('package_name di google-services.json:', ids.join(', '));
+            if (!ids.includes(process.env.WANT)) {
+              console.log('::error::google-services.json tidak memuat ' + process.env.WANT + ' — tambahkan aplikasi Android itu di Firebase Console lalu unduh ulang berkasnya.');
+              process.exit(1);
+            }
+          "
+          echo "path=./google-services.json" >> "$GITHUB_OUTPUT"
+
       - name: Hitung versionCode & versionName
         id: ver
         run: |
@@ -120,6 +151,8 @@ jobs:
       - name: Prebuild proyek Android (Expo) — ${{ matrix.app }}
         env:
           ANDROID_VERSION_CODE: ${{ steps.ver.outputs.code }}
+          # Dibaca app.config.ts → android.googleServicesFile. Kosong = tanpa Firebase (push mati).
+          GOOGLE_SERVICES_JSON: ${{ steps.gsj.outputs.path }}
         run: npx expo prebuild --platform android --clean --no-install
 
       - name: Verifikasi package id & versi hasil prebuild
@@ -130,7 +163,35 @@ jobs:
           [ "$APPID" = "$EXPECTED" ] || { echo "::error::applicationId $APPID ≠ $EXPECTED — periksa META di app.config.ts"; exit 1; }
           grep -E 'versionCode +${{ steps.ver.outputs.code }}\b' android/app/build.gradle || { echo "::error::versionCode tidak sesuai"; exit 1; }
           grep -E 'versionName +"${{ steps.ver.outputs.name }}"' android/app/build.gradle || { echo "::error::versionName tidak sesuai"; exit 1; }
-          echo "Izin di manifest:"; grep -oE 'android:name="android.permission.[A-Z_]+"' android/app/src/main/AndroidManifest.xml | sort -u
+
+          # --- Target API level (kebijakan Google Play) ---------------------------------
+          # Sejak 31 Agustus 2026 aplikasi BARU dan pembaruan wajib targetSdk >= 36 (Android 16).
+          # Nilainya datang dari rootProject.ext.targetSdkVersion (katalog versi react-native),
+          # jadi bisa turun diam-diam saat menaikkan/menurunkan versi Expo/RN. Dikunci di sini.
+          TARGET=$(grep -oE 'targetSdk *= *"[0-9]+"' node_modules/react-native/gradle/libs.versions.toml | grep -oE '[0-9]+' || true)
+          echo "targetSdkVersion=$TARGET (minimum Play untuk aplikasi baru: 36)"
+          [ -n "$TARGET" ] && [ "$TARGET" -ge 36 ] || { echo "::error::targetSdkVersion=$TARGET < 36 — Play menolak unggahan sejak 31 Agustus 2026."; exit 1; }
+
+          # --- Izin (Data safety & Permissions declaration) -----------------------------
+          MF=android/app/src/main/AndroidManifest.xml
+          echo "Izin yang BENAR-BENAR diminta:"
+          grep -oE '<uses-permission android:name="[^"]+"[^>]*>' "$MF" | grep -v 'tools:node="remove"' \
+            | grep -oE 'android:name="[^"]+"' | sed 's/.*="//;s/"//' | sort -u | sed 's/^/  • /' || true
+          echo "Izin yang DIBLOKIR (tools:node=\"remove\" → hilang setelah manifest merger):"
+          grep -oE '<uses-permission android:name="[^"]+"[^>]*tools:node="remove"' "$MF" \
+            | grep -oE 'android:name="[^"]+"' | sed 's/.*="//;s/"//' | sort -u | sed 's/^/  • /' || true
+
+          # Izin berisiko tinggi tidak boleh muncul TANPA penanda remove — bila muncul, Play meminta
+          # deklarasi + video demo, dan jawaban "No" pada form App content jadi salah (alasan penolakan).
+          for P in ACCESS_BACKGROUND_LOCATION FOREGROUND_SERVICE FOREGROUND_SERVICE_LOCATION SYSTEM_ALERT_WINDOW READ_MEDIA_IMAGES READ_MEDIA_VIDEO; do
+            if grep -E "android.permission.$P\"" "$MF" | grep -qv 'tools:node="remove"'; then
+              echo "::error::Izin $P aktif di manifest tetapi form App content menjawab \"No\" — perbarui app.config.ts atau jawaban Play Console."; exit 1
+            fi
+          done
+          # Advertising ID: jawaban Data safety adalah "tidak memakai" — pastikan tidak ada pustaka yang menyisipkannya.
+          if grep -E 'com.google.android.gms.permission.AD_ID' "$MF" | grep -qv 'tools:node="remove"'; then
+            echo "::error::AD_ID aktif di manifest — bertentangan dengan jawaban Advertising ID \"No\" di Play Console."; exit 1
+          fi
 
       - name: Pasang upload keystore & konfigurasi signing
         env:
@@ -157,16 +218,25 @@ jobs:
           [ -f "$OUT" ] || { echo "::error::AAB tidak ditemukan"; exit 1; }
           cp "$OUT" "../antarkita-${{ matrix.app }}-v${{ steps.ver.outputs.name }}-${{ steps.ver.outputs.code }}.aab"
 
-      - name: Verifikasi tanda tangan AAB (bukan debug key)
+      - name: Verifikasi tanda tangan & ukuran AAB
         run: |
           AAB=$(ls antarkita-${{ matrix.app }}-*.aab)
           keytool -printcert -jarfile "$AAB" | tee cert.txt
           if grep -qi 'CN=Android Debug' cert.txt; then echo "::error::AAB masih ditandatangani debug key!"; exit 1; fi
           rm -f cert.txt
+          # Batas Google Play: ukuran unduhan TERKOMPRESI modul dasar maks. 500 MB (dihitung Play Console
+          # saat unggah). Ukuran berkas .aab bukan angka yang dinilai Play, tetapi kalau .aab saja sudah
+          # ratusan MB, ukuran unduhan hampir pasti bermasalah — jadi diberi peringatan dini di sini.
+          BYTES=$(stat -c%s "$AAB")
+          echo "| ${{ matrix.app }} | \`$AAB\` | $(numfmt --to=iec --suffix=B "$BYTES") |" >> "$GITHUB_STEP_SUMMARY"
+          echo "Ukuran $AAB = $(numfmt --to=iec --suffix=B "$BYTES")"
+          [ "$BYTES" -lt 209715200 ] || echo "::warning::AAB > 200 MB — periksa Play Console → App bundle explorer untuk ukuran unduhan terkompresi (batas modul dasar 500 MB)."
 
-      - name: Bersihkan keystore dari runner
+      - name: Bersihkan rahasia dari runner
         if: always()
-        run: rm -f android/app/release.keystore; sed -i '/^ANTARKITA_UPLOAD_/d' android/gradle.properties 2>/dev/null || true
+        run: |
+          rm -f android/app/release.keystore google-services.json android/app/google-services.json
+          sed -i '/^ANTARKITA_UPLOAD_/d' android/gradle.properties 2>/dev/null || true
 
       - uses: actions/upload-artifact@v4
         with:

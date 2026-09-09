@@ -6,8 +6,9 @@ import { Row, Input, Button, Badge, toast } from '@/components/ui';
 import { DocUpload } from '@/components/DocUpload';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
-import { rupiah, formatDate, cityName, marketCategoryLabel } from '@/lib/format';
+import { rupiah, cityName, marketCategoryLabel } from '@/lib/format';
 import type { Market, MarketItem, MarketPriceStat, City } from '@/lib/types';
+import { fmtDate, fmtAgo, WideTableHint } from './_shared';
 
 const CATS = Object.keys(marketCategoryLabel);
 const SETTING_KEYS = ['market_service_pct', 'market_service_min', 'market_driver_share_pct', 'shop_budget_buffer_pct'];
@@ -123,12 +124,12 @@ export default function AdminMarket() {
             <Row between><Text style={font.small}>Aktif (tampil untuk pelanggan)</Text><Switch value={mf.active} onValueChange={(v) => setMf({ ...mf, active: v })} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" /></Row>
             <Button title={mf.id ? 'Simpan perubahan' : 'Tambah pasar'} loading={busy} onPress={saveMarket} />
           </Card>
-          <View style={{ flex: 1.4, minWidth: 360, gap: adminSpace.sm }}>
+          <View style={{ flexGrow: 1, flexBasis: '100%', minWidth: 320, gap: adminSpace.sm }}>
             <Row gap={adminSpace.sm} style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <AdminSelect icon="location-outline" placeholder="Semua kota" width={200} value={cityFilter} options={cityOptions} onChange={setCityFilter} clearable clearLabel="Semua kota" />
             </Row>
             <Table rows={shownMarkets as unknown as Record<string, unknown>[]} emptyText="Belum ada pasar pada kota ini" columns={[
-              { key: 'name', label: 'Pasar', width: 220, render: (r) => { const m = r as unknown as Market; return <View style={{ minWidth: 0 }}><Text style={font.bodyStrong} numberOfLines={1}>{m.name}</Text><Text style={font.tiny} numberOfLines={1}>{m.address ?? '-'}</Text></View>; } },
+              { key: 'name', label: 'Pasar', width: 210, render: (r) => { const m = r as unknown as Market; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Text style={font.bodyStrong} numberOfLines={1}>{m.name}</Text><Text style={font.tiny} numberOfLines={1}>{m.address ?? '-'}</Text></View>; } },
               { key: 'city', label: 'Kota', width: 100, render: (r) => <Text style={font.small}>{cityName(cities, String(r.city_id ?? ''))}</Text> },
               { key: 'open_hours', label: 'Jam', width: 100, render: (r) => <Text style={font.tiny}>{String(r.open_hours ?? '-')}</Text> },
               { key: 'notes', label: 'Catatan', width: 180, render: (r) => <Text style={font.tiny} numberOfLines={2}>{String(r.notes ?? '-')}</Text> },
@@ -152,12 +153,12 @@ export default function AdminMarket() {
           </Card>
           <View style={{ flex: 1.6, minWidth: 380 }}>
             <Table rows={items as unknown as Record<string, unknown>[]} emptyText="Belum ada bahan" columns={[
-              { key: 'name', label: 'Bahan', width: 200, render: (r) => <Text style={font.bodyStrong} numberOfLines={1}>{String(r.name)}</Text> },
+              { key: 'name', label: 'Bahan', width: 190, render: (r) => <Text style={font.bodyStrong} numberOfLines={1}>{String(r.name)}</Text> },
               { key: 'category', label: 'Kategori', width: 110, render: (r) => <Badge text={marketCategoryLabel[String(r.category)] ?? String(r.category)} color={colors.market} /> },
               { key: 'unit', label: 'Satuan', width: 70 },
               { key: 'ref_price', label: 'Harga acuan', width: 110, render: (r) => <Text style={font.small}>{rupiah(Number(r.ref_price))}</Text> },
               { key: 'price_source', label: 'Sumber', width: 100, render: (r) => <Badge text={SOURCE_LABEL[String(r.price_source)] ?? String(r.price_source)} color={colors.info} /> },
-              { key: 'price_updated_at', label: 'Diperbarui', width: 130, render: (r) => <Text style={font.tiny}>{r.price_updated_at ? formatDate(String(r.price_updated_at)) : '-'}</Text> },
+              { key: 'price_updated_at', label: 'Diperbarui', width: 112, render: (r) => <Text style={font.tiny}>{r.price_updated_at ? fmtDate(String(r.price_updated_at)) : '-'}</Text> },
               { key: 'active', label: 'Aktif', width: 70, render: (r) => { const i = r as unknown as MarketItem; return <Switch value={i.active !== false} onValueChange={() => toggleItem(i)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />; } },
               { key: 'actions', label: 'Aksi', width: 90, align: 'right', render: (r) => <Button size="sm" variant="outline" title="Ubah" onPress={() => editItem(r as unknown as MarketItem)} /> },
             ]} />
@@ -180,7 +181,7 @@ export default function AdminMarket() {
               { key: 'name', label: 'Bahan', width: 200, render: (r) => <Text style={font.bodyStrong} numberOfLines={1}>{String(r.name)} <Text style={font.tiny}>/ {String(r.unit)}</Text></Text> },
               { key: 'ref_price', label: 'Acuan umum', width: 110, render: (r) => <Text style={font.small}>{rupiah(Number(r.ref_price))}</Text> },
               { key: 'market_price', label: 'Harga pasar ini', width: 140, render: (r) => <Input value={prices[String(r.id)] ?? ''} placeholder="Rp" keyboardType="number-pad" onChangeText={(v) => setPrices((p) => ({ ...p, [String(r.id)]: v }))} containerStyle={{ width: 120 }} /> },
-              { key: 'updated', label: 'Terakhir', width: 130, render: (r) => <Text style={font.tiny}>{priceMeta[String(r.id)] ? formatDate(priceMeta[String(r.id)]) : '-'}</Text> },
+              { key: 'updated', label: 'Terakhir', width: 130, render: (r) => <Text style={font.tiny}>{priceMeta[String(r.id)] ? fmtDate(priceMeta[String(r.id)]) : '-'}</Text> },
             ]} />
             <Row gap={8}>
               <Button title="Simpan harga survei" loading={busy} onPress={saveMarketPrices} />
@@ -198,11 +199,12 @@ export default function AdminMarket() {
             { key: 'ref_price', label: 'Acuan', width: 110, render: (r) => <Text style={font.small}>{rupiah(Number(r.ref_price))}</Text> },
             { key: 'driver_median', label: 'Median nota', width: 130, render: (r) => { const s = r as unknown as MarketPriceStat; if (!s.driver_median) return <Text style={font.tiny}>-</Text>; const diff = s.ref_price ? Math.round(((s.driver_median - s.ref_price) / s.ref_price) * 100) : 0; return <View><Text style={font.small}>{rupiah(s.driver_median)}</Text><Text style={[font.tiny, { color: Math.abs(diff) >= 15 ? adminTone.red : adminTone.faint }]}>{diff > 0 ? '+' : ''}{diff}% vs acuan</Text></View>; } },
             { key: 'driver_samples', label: 'Sampel', width: 80, render: (r) => <Badge text={String(r.driver_samples ?? 0)} color={Number(r.driver_samples) >= 3 ? colors.success : colors.textMuted} /> },
-            { key: 'last_seen', label: 'Terakhir', width: 130, render: (r) => <Text style={font.tiny}>{r.last_seen ? formatDate(String(r.last_seen)) : '-'}</Text> },
-            { key: 'actions', label: 'Aksi', width: 200, align: 'right', render: (r) => { const s = r as unknown as MarketPriceStat; return <Button size="sm" variant="outline" title="Pakai median sebagai acuan" disabled={!s.driver_median || s.driver_median === s.ref_price} onPress={() => applyMedian(s)} />; } },
+            { key: 'last_seen', label: 'Terakhir', width: 130, render: (r) => <Text style={font.tiny}>{r.last_seen ? fmtDate(String(r.last_seen)) : '-'}</Text> },
+            { key: 'actions', label: 'Aksi', width: 180, align: 'right', render: (r) => { const s = r as unknown as MarketPriceStat; return <Button size="sm" variant="outline" title="Pakai median sebagai acuan" disabled={!s.driver_median || s.driver_median === s.ref_price} onPress={() => applyMedian(s)} />; } },
           ]} keyField="item_id" />
         </Card>
       )}
+      <WideTableHint />
     </AdminPage>
   );
 }

@@ -338,7 +338,7 @@ function ScopeBtn({ active, onPress, icon, title, sub }: { active: boolean; onPr
   return (
     <PressableScale onPress={onPress} scaleTo={0.97} style={[s.scope, active && { borderColor: colors.send, backgroundColor: colors.send + '12' }]}>
       <Ionicons name={icon as never} size={20} color={active ? colors.send : colors.textSecondary} />
-      <View style={{ flex: 1, minWidth: 0 }}><Text style={{ fontWeight: '800', color: colors.text, fontSize: 14 }}>{title}</Text><Text style={font.tiny} numberOfLines={1}>{sub}</Text></View>
+      <View style={{ flex: 1, minWidth: 0 }}><Text style={{ fontWeight: '800', color: colors.text, fontSize: 14 }} numberOfLines={1}>{title}</Text><Text style={font.tiny} numberOfLines={2}>{sub}</Text></View>
     </PressableScale>
   );
 }

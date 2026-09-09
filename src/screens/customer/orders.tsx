@@ -65,7 +65,7 @@ const s = StyleSheet.create({
   inner: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 6 },
   stats: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: radius.lg, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   vDivider: { width: 1, height: 36, backgroundColor: colors.border, marginHorizontal: 12 },
-  tab: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff', ...shadow.soft },
+  tab: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 11, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff', ...shadow.soft },
   tabOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   skel: { marginBottom: 12, gap: 10, padding: 14, backgroundColor: '#fff', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border },
 });

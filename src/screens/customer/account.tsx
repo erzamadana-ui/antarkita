@@ -43,6 +43,8 @@ export default function Account() {
       ...(hasExec ? [{ icon: 'shield-half-outline' as IconName, color: colors.primaryDeep, title: 'Portal Eksekutif', subtitle: 'Laporan manajemen & pemegang saham (di aplikasi Admin)', onPress: () => openApp('admin') }] : []),
       ...(profile?.role === 'admin' ? [{ icon: 'shield-checkmark-outline' as IconName, color: colors.info, title: t('admin_panel'), subtitle: APP_URL.admin, onPress: () => openApp('admin') }] : []),
       { icon: 'shield-checkmark-outline', color: colors.danger, title: 'Pusat Keamanan', subtitle: 'Kontak darurat, bagikan perjalanan, SOS', onPress: () => router.push('/safety' as never) },
+      // Wajib kebijakan UGC Google Play: pengguna harus bisa mengelola blokirnya sendiri di aplikasi.
+      { icon: 'ban-outline', color: colors.danger, title: 'Pengguna diblokir', subtitle: 'Kelola daftar blokir & laporan konten', onPress: () => router.push('/account/blocks' as never) },
       { icon: 'chatbubbles-outline', color: colors.info, title: t('help'), subtitle: t('help_sub'), onPress: () => router.push('/support' as never) },
       { icon: 'log-out-outline', title: t('logout'), danger: true, onPress: confirmSignOut },
       { icon: 'key-outline', title: 'Ganti kata sandi', subtitle: 'Perbarui kata sandi akun Anda', onPress: () => router.push('/account/password' as never) },

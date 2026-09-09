@@ -57,8 +57,11 @@ export default function ForgotPassword() {
             <Tip icon="phone-portrait-outline" text="Tautan membuka halaman web AntarKita untuk membuat kata sandi baru. Setelah tersimpan, masuk lagi di aplikasi dengan kata sandi baru." />
             <Tip icon="shield-checkmark-outline" text="Demi keamanan, kami tidak memberi tahu apakah email terdaftar atau tidak." />
           </View>
+          {/* Jalur kedua: sebagian email pemulihan memuat kode 6 digit, bukan tautan yang bisa diketuk.
+              Tanpa tombol ini layar /(auth)/reset tidak bisa dijangkau sama sekali dari dalam aplikasi. */}
+          <Button title="Saya punya kode dari email" size="lg" icon="keypad-outline" onPress={() => router.push({ pathname: '/(auth)/reset', params: { email: sent } } as never)} />
           <Button title={left > 0 ? `Kirim ulang (${left} dtk)` : 'Kirim ulang tautan'} variant="outline" disabled={left > 0} loading={busy} onPress={submit} />
-          <Button title={t('back_to_login')} size="lg" icon="log-in-outline" onPress={() => router.replace('/(auth)/login' as never)} />
+          <Button title={t('back_to_login')} variant="ghost" icon="log-in-outline" onPress={() => router.replace('/(auth)/login' as never)} />
         </View></Entrance>
       ) : (
         <Entrance index={1}><View style={s.card}>

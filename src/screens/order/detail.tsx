@@ -11,6 +11,7 @@ import { MapScreen } from '@/components/MapScreen';
 import { Radar, ProgressBar, LiveDot, PressableScale } from '@/components/motion';
 import { AmbientBackground } from '@/components/glass';
 import { PersonCard, RouteBlock, OrderExtras, PriceBlock, Timeline, driverSubtitle } from '@/components/OrderDetails';
+import { ModerationMenu } from '@/components/moderation';
 import { TipCard, ExtrasApproval } from '@/components/TipExtras';
 import { PinCard, SafetyRow, DriverVerifyCard } from '@/components/Safety';
 import { MerchantAds } from '@/components/BookingExtras';
@@ -114,10 +115,10 @@ export default function OrderTracking() {
           {searching ? <LiveDot color={colors.warning} size={12} /> : <Ionicons name={(order.status === 'completed' ? 'checkmark-circle' : order.status === 'cancelled' ? 'close-circle' : def.icon) as never} size={24} color={sc} />}
         </Animated.View>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Animated.Text key={`t-${order.status}-${order.merchant_status ?? ''}`} entering={FadeIn.duration(motion.base)} style={font.h3} numberOfLines={1}>{statusLabel(order.status, order.service, order.merchant_status)}</Animated.Text>
-          <Text style={font.tiny} numberOfLines={1}>{serviceLabel[order.service]} · {subtitle(order)}</Text>
+          <Animated.Text key={`t-${order.status}-${order.merchant_status ?? ''}`} entering={FadeIn.duration(motion.base)} style={font.h3} numberOfLines={2}>{statusLabel(order.status, order.service, order.merchant_status)}</Animated.Text>
+          <Text style={font.tiny} numberOfLines={2}>{serviceLabel[order.service]} · {subtitle(order)}</Text>
         </View>
-        <Text style={{ fontWeight: '800', fontSize: 16, color: colors.primary }}>{rupiah(order.total)}</Text>
+        <Text style={{ fontWeight: '800', fontSize: 16, color: colors.primary, flexShrink: 0 }} numberOfLines={1}>{rupiah(order.total)}</Text>
       </Row>
       {order.status !== 'cancelled' && <StatusStepper status={order.status} color={sc} />}
     </View>
@@ -164,7 +165,8 @@ export default function OrderTracking() {
           <Animated.View entering={FadeInDown.springify().stiffness(280).damping(16)} exiting={FadeOut}>
             <PersonCard name={driver.profile?.full_name} subtitle={driverSubtitle(driver)} avatar={driver.profile?.avatar_url} rating={driver.rating_avg} ratingCount={driver.rating_count}
               onChat={() => router.push(`/order/${id}/chat` as never)}
-              callPeer={driver.profile ? { id: driver.id, name: driver.profile.full_name, avatar: driver.profile.avatar_url, role: 'driver' } : null} orderId={order.id} />
+              callPeer={driver.profile ? { id: driver.id, name: driver.profile.full_name, avatar: driver.profile.avatar_url, role: 'driver' } : null} orderId={order.id}
+              moderationUserId={driver.id} />
           </Animated.View>
         )}
         {driver && active && <DriverVerifyCard plate={driver.vehicle_plate} vehicle={`${driver.vehicle_type === 'car' ? 'Mobil' : 'Motor'} ${driver.vehicle_brand ?? ''}${driver.vehicle_color ? ' ' + driver.vehicle_color : ''}`} name={driver.profile?.full_name ?? 'Driver'} selfieAt={driver.last_selfie_at} />}
@@ -191,6 +193,18 @@ export default function OrderTracking() {
         </View>
         {['ride_motor', 'ride_car', 'send', 'box'].includes(order.service) && <MerchantAds near={{ lat: order.dropoff_lat, lng: order.dropoff_lng }} title={active ? 'Lapar sesampainya? Merchant dekat tujuan' : 'Merchant dekat tujuan'} max={5} />}
         <View style={s.block}><Timeline events={events} /></View>
+        {/* Moderasi UGC (wajib Google Play): laporkan / blokir mitra tetap tersedia setelah pesanan selesai. */}
+        {driver && (
+          <View style={s.block}>
+            <Row gap={12}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={font.h3}>Ada masalah dengan mitra ini?</Text>
+                <Text style={font.tiny}>Laporkan perilaku yang melanggar, atau blokir agar Anda tidak dipasangkan lagi dengannya.</Text>
+              </View>
+              <ModerationMenu userId={driver.id} name={driver.profile?.full_name} kind="user" targetId={order.id} />
+            </Row>
+          </View>
+        )}
         {active && <Button title="Laporkan masalah pesanan" variant="ghost" color={colors.textSecondary} icon="flag-outline" onPress={() => router.push({ pathname: '/support/new', params: { order_id: order.id, category: 'order' } } as never)} />}
         {canCancel && <Button title="Batalkan pesanan" variant="outline" color={colors.danger} onPress={cancel} />}
         {!active && <Button title="Ada kendala dengan pesanan ini?" variant="ghost" color={colors.textSecondary} icon="help-circle-outline" onPress={() => router.push({ pathname: '/support/new', params: { order_id: order.id, category: 'order' } } as never)} />}

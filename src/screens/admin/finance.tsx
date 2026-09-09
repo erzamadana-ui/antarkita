@@ -4,8 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, Linking, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  AdminPage, Panel, DataTable, Toolbar, FilterBar, StatCard, Pill, RowActions, Truncate,
-  statusTone, adminFont as font, adminTone, adminSpace, adminTable,
+  AdminPage, Panel, DataTable, Toolbar, FilterBar, StatCard, Pill, RowActions, statusTone, adminFont as font, adminTone, adminSpace, adminTable,
 } from '@/components/admin';
 import { Row, Button, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
@@ -13,8 +12,9 @@ import { signedUrl } from '@/lib/upload';
 import { adminExportCsv } from '@/lib/csv';
 import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import { colors } from '@/lib/theme';
-import { formatDate, rupiah } from '@/lib/format';
+import { rupiah } from '@/lib/format';
 import type { Profile, TopupRequest, WithdrawalRequest } from '@/lib/types';
+import { usePager, Pager, fmtDate, fmtAgo, Trunc, WideTableHint } from './_shared';
 
 type T = TopupRequest & { user?: Profile | null };
 type W = WithdrawalRequest & { user?: Profile | null; auto?: boolean; bank_verified?: boolean };
@@ -58,6 +58,7 @@ export default function AdminFinance() {
   const f = <X extends { status: string }>(xs: X[]) => xs.filter((x) => filter === 'all' || x.status === filter);
 
   const shownTopups = f(topups), shownWds = f(wds);
+  const pgT = usePager(shownTopups, 25), pgW = usePager(shownWds, 25);
   const kpi = useMemo(() => {
     const pt = topups.filter((x) => x.status === 'pending'), pw = wds.filter((x) => x.status === 'pending');
     return {
@@ -69,13 +70,13 @@ export default function AdminFinance() {
   }, [topups, wds]);
 
   const user = (x: T | W) => (
-    <View style={{ minWidth: 0 }}>
-      <Truncate style={font.bodyStrong} title={x.user?.full_name ?? ''}>{x.user?.full_name ?? '—'}</Truncate>
-      <Truncate style={font.tiny} title={x.user?.email ?? ''}>{x.user?.email ?? '—'}</Truncate>
+    <View style={{ minWidth: 0, alignSelf: 'stretch' }}>
+      <Trunc style={font.bodyStrong} title={x.user?.full_name ?? ''}>{x.user?.full_name ?? '—'}</Trunc>
+      <Trunc style={font.tiny} title={x.user?.email ?? ''}>{x.user?.email ?? '—'}</Trunc>
     </View>
   );
   const money = (n: number) => <Text style={font.mono}>{rupiah(Number(n))}</Text>;
-  const when = (iso: string) => <Text style={font.tiny}>{formatDate(iso)}</Text>;
+  const when = (iso: string) => <Text style={font.tiny}>{fmtDate(iso)}</Text>;
   const status = (s: string) => <Pill text={sl[s] ?? s} tone={statusTone(s)} />;
 
   return (
@@ -97,16 +98,16 @@ export default function AdminFinance() {
       </Toolbar>
 
       <Panel title={`Top up (${shownTopups.length})`} subtitle="Saldo ditambahkan setelah bukti transfer diverifikasi" icon="arrow-down-circle-outline" iconColor={adminTone.blue} padded={false}>
-        <DataTable rows={shownTopups as unknown as Record<string, unknown>[]} emptyText="Tidak ada permintaan top up pada filter ini" emptyIcon="arrow-down-circle-outline"
+        <DataTable rows={pgT.rows as unknown as Record<string, unknown>[]} emptyText="Tidak ada permintaan top up pada filter ini" emptyIcon="arrow-down-circle-outline"
           columns={[
-            { key: 'user', label: 'Pengguna', width: 210, flex: 1, render: (r) => user(r as unknown as T) },
-            { key: 'amount', label: 'Nominal', width: 130, align: 'right', mono: true, render: (r) => money(Number(r.amount)) },
+            { key: 'user', label: 'Pengguna', width: 196, render: (r) => user(r as unknown as T) },
+            { key: 'amount', label: 'Nominal', width: 118, align: 'right', mono: true, render: (r) => money(Number(r.amount)) },
             {
-              key: 'note', label: 'Catatan / bukti', width: 240, flex: 1, render: (r) => {
+              key: 'note', label: 'Catatan / bukti', width: 204, render: (r) => {
                 const x = r as unknown as T;
                 return (
-                  <View style={{ minWidth: 0, gap: 2 }}>
-                    <Truncate style={font.small} title={x.sender_note ?? ''}>{x.sender_note || 'Tanpa catatan'}</Truncate>
+                  <View style={{ minWidth: 0, gap: 2, alignSelf: 'stretch' }}>
+                    <Trunc style={font.small} title={x.sender_note ?? ''}>{x.sender_note || 'Tanpa catatan'}</Trunc>
                     {x.proof_url
                       ? <Pressable onPress={() => openProof(x.proof_url)} hitSlop={4}><Text style={[font.tiny, { color: adminTone.teal, fontWeight: '700' }]}>Lihat bukti transfer</Text></Pressable>
                       : <Text style={[font.tiny, { color: adminTone.red }]}>Tanpa bukti</Text>}
@@ -114,8 +115,8 @@ export default function AdminFinance() {
                 );
               },
             },
-            { key: 'created_at', label: 'Waktu', width: 150, render: (r) => when(String(r.created_at)) },
-            { key: 'status', label: 'Status', width: 110, render: (r) => status(String(r.status)) },
+            { key: 'created_at', label: 'Waktu', width: 134, render: (r) => when(String(r.created_at)) },
+            { key: 'status', label: 'Status', width: 102, render: (r) => status(String(r.status)) },
             {
               // Aksi utama = Setujui; penolakan (berbahaya) ada di menu kebab.
               key: 'actions', label: 'Aksi', width: adminTable.actionsWideW, align: 'right', render: (r) => r.status === 'pending'
@@ -128,31 +129,32 @@ export default function AdminFinance() {
                     ]}
                   />
                 )
-                : <Truncate style={font.tiny} title={String(r.review_note ?? '')}>{String(r.review_note ?? '—')}</Truncate>,
+                : <Trunc style={font.tiny} title={String(r.review_note ?? '')}>{String(r.review_note ?? '—')}</Trunc>,
             },
           ]} />
+        <View style={{ padding: adminSpace.md, gap: 6 }}><WideTableHint /><Pager p={pgT} noun="permintaan top up" /></View>
       </Panel>
 
       <Panel title={`Penarikan saldo (${shownWds.length})`} subtitle="Transfer manual ke rekening mitra; rekening terverifikasi memungkinkan pencairan otomatis" icon="arrow-up-circle-outline" iconColor={adminTone.amber} padded={false}>
-        <DataTable rows={shownWds as unknown as Record<string, unknown>[]} emptyText="Tidak ada permintaan penarikan pada filter ini" emptyIcon="arrow-up-circle-outline"
+        <DataTable rows={pgW.rows as unknown as Record<string, unknown>[]} emptyText="Tidak ada permintaan penarikan pada filter ini" emptyIcon="arrow-up-circle-outline"
           columns={[
-            { key: 'user', label: 'Pengguna', width: 210, flex: 1, render: (r) => user(r as unknown as W) },
-            { key: 'amount', label: 'Nominal', width: 130, align: 'right', mono: true, render: (r) => money(Number(r.amount)) },
+            { key: 'user', label: 'Pengguna', width: 180, render: (r) => user(r as unknown as W) },
+            { key: 'amount', label: 'Nominal', width: 118, align: 'right', mono: true, render: (r) => money(Number(r.amount)) },
             {
-              key: 'bank', label: 'Rekening tujuan', width: 290, flex: 1, render: (r) => {
+              key: 'bank', label: 'Rekening tujuan', width: 214, render: (r) => {
                 const x = r as unknown as W;
                 return (
-                  <View style={{ gap: 4, minWidth: 0 }}>
-                    <Truncate style={font.small} title={`${x.bank_name} ${x.bank_account}`}>{x.bank_name} · {x.bank_account}</Truncate>
-                    <Truncate style={font.tiny} title={x.account_name}>a.n. {x.account_name}</Truncate>
+                  <View style={{ gap: 4, minWidth: 0, alignSelf: 'stretch' }}>
+                    <Trunc style={font.small} title={`${x.bank_name} ${x.bank_account}`}>{x.bank_name} · {x.bank_account}</Trunc>
+                    <Trunc style={font.tiny} title={x.account_name}>a.n. {x.account_name}</Trunc>
                     <Pill text={x.bank_verified ? 'Rekening terverifikasi' : 'Rekening belum terverifikasi'} tone={x.bank_verified ? 'ok' : 'off'} />
                   </View>
                 );
               },
             },
-            { key: 'created_at', label: 'Waktu', width: 150, render: (r) => when(String(r.created_at)) },
+            { key: 'created_at', label: 'Waktu', width: 118, render: (r) => when(String(r.created_at)) },
             {
-              key: 'status', label: 'Status', width: 130, render: (r) => (
+              key: 'status', label: 'Status', width: 104, render: (r) => (
                 <View style={{ gap: 4, alignItems: 'flex-start' }}>
                   {status(String(r.status))}
                   {r.auto ? <Pill text="Otomatis" tone="info" /> : null}
@@ -161,7 +163,7 @@ export default function AdminFinance() {
             },
             {
               // Aksi utama = tandai sudah ditransfer (butuh PIN); verifikasi rekening & penolakan di kebab.
-              key: 'actions', label: 'Aksi', width: 250, align: 'right', render: (r) => {
+              key: 'actions', label: 'Aksi', width: 220, align: 'right', render: (r) => {
                 const x = r as unknown as W;
                 return x.status === 'pending'
                   ? (
@@ -173,10 +175,11 @@ export default function AdminFinance() {
                       ]}
                     />
                   )
-                  : <Truncate style={font.tiny} title={String(r.review_note ?? '')}>{String(r.review_note ?? '—')}</Truncate>;
+                  : <Trunc style={font.tiny} title={String(r.review_note ?? '')}>{String(r.review_note ?? '—')}</Trunc>;
               },
             },
           ]} />
+        <View style={{ padding: adminSpace.md, gap: 6 }}><WideTableHint /><Pager p={pgW} noun="permintaan penarikan" /></View>
       </Panel>
 
       <Text style={font.tiny}>Halaman ini hanya menangani arus kas dompet (top up & penarikan). Untuk GMV, pendapatan, bagi hasil mitra, dan marjin per layanan/kota, buka <Text style={[font.tiny, { color: adminTone.teal, fontWeight: '700' }]} onPress={() => router.push('/(admin)/finance-report' as never)}>Laporan Keuangan</Text>.</Text>

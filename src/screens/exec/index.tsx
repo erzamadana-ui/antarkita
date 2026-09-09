@@ -47,6 +47,13 @@ const PRIO: Record<Recommendation['priority'], { color: string; label: string; i
 };
 const PNL_C = { revenue: adminTone.teal, cogs: adminTone.orange, margin: adminTone.green, take: adminTone.blue };
 const svcName = (s: string) => serviceLabel[s as ServiceType] ?? s;
+/** Tanggal aman: nilai kosong/rusak dari server tidak boleh tampil sebagai "Invalid Date". */
+const fmtDate = (iso?: string | null, withTime = true, fallback = '—') => {
+  if (iso == null || iso === '' || iso === 'null' || iso === 'undefined') return fallback;
+  return Number.isNaN(new Date(iso).getTime()) ? fallback : formatDate(iso, withTime);
+};
+/** "Sep 26" aman: bulan kosong/tidak berformat YYYY-MM tidak boleh jadi "undefined". */
+const fmtMonth = (m?: string | null) => (m && /^\d{4}-\d{2}$/.test(String(m)) ? shortMonth(String(m)) : '—');
 
 let SESSION: { token: string; level: string; expires_at: string } | null = null;   // hanya di memori (tidak disimpan di perangkat)
 
@@ -96,7 +103,7 @@ export default function ExecPortal() {
           <Text style={[font.small, { textAlign: 'center' }]}>{profile?.full_name} · {execLevelLabel[access.level]}. Masukkan PIN eksekutif (6 digit) — bukan kata sandi akun.</Text>
           <TextInput value={pin} onChangeText={(v) => setPin(v.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" secureTextEntry maxLength={6} autoFocus style={s.pin} placeholder="••••••" placeholderTextColor={colors.textMuted} onSubmitEditing={login} />
           <Button title="Masuk portal" size="lg" color="#0B1F2A" loading={busy} disabled={pin.length < 6} onPress={login} style={{ alignSelf: 'stretch' }} />
-          <Text style={font.tiny}>Sesi berlaku 30 menit. Setiap percobaan login dicatat di log keamanan.{access.last_login_at ? ` Login terakhir ${formatDate(access.last_login_at)}.` : ''}</Text>
+          <Text style={font.tiny}>Sesi berlaku 30 menit. Setiap percobaan login dicatat di log keamanan.{access.last_login_at ? ` Login terakhir ${fmtDate(access.last_login_at)}.` : ''}</Text>
         </Animated.View>
       </Entrance>
     </Screen>
@@ -119,7 +126,7 @@ export default function ExecPortal() {
             <View style={{ flexShrink: 1, minWidth: 260, gap: 3 }}>
               <Text style={s.heroKicker} numberOfLines={2}>LAPORAN MANAJEMEN & PEMEGANG SAHAM · {execLevelLabel[sess.level].toUpperCase()}</Text>
               <Text style={s.heroTitle} numberOfLines={2}>AntarKita — {months} bulan terakhir</Text>
-              <Text style={s.heroSub} numberOfLines={2}>Dibuat {r ? formatDate(r.generated_at) : '…'} · sesi berlaku s.d. {new Date(sess.expires_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</Text>
+              <Text style={s.heroSub} numberOfLines={2}>Dibuat {r ? fmtDate(r.generated_at) : '…'} · sesi berlaku s.d. {new Date(sess.expires_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</Text>
             </View>
             <Row gap={6} style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               {[3, 6, 12].map((m) => <Chip key={m} label={`${m} bln`} active={months === m} onPress={() => setMonths(m)} color={colors.accent} />)}
@@ -158,7 +165,7 @@ export default function ExecPortal() {
                 <Panel title="Laba rugi per bulan" subtitle="Batang bertumpuk: COGS + marjin kotor = pendapatan" icon="calendar-outline" iconColor={PNL_C.revenue}>
                   <StackedBars height={140} format={rupiahShort}
                     legend={[{ label: 'COGS (payout, promo, gateway)', color: PNL_C.cogs }, { label: 'Marjin kotor', color: PNL_C.margin }]}
-                    data={pnl.by_month.map((m) => ({ label: shortMonth(m.month), segments: [{ value: m.gross_margin, color: PNL_C.margin }, { value: m.cogs, color: PNL_C.cogs }] }))} />
+                    data={pnl.by_month.map((m) => ({ label: fmtMonth(m.month), segments: [{ value: m.gross_margin, color: PNL_C.margin }, { value: m.cogs, color: PNL_C.cogs }] }))} />
                 </Panel>
 
                 <Panel title="Rincian bulanan (P&L)" icon="grid-outline" iconColor={PNL_C.revenue} padded={false}
@@ -166,7 +173,7 @@ export default function ExecPortal() {
                   <DataTable keyField="month" rows={pnl.by_month as unknown as Record<string, unknown>[]}
                     emptyText="Belum ada pesanan selesai pada periode ini" emptyIcon="calendar-outline"
                     columns={[
-                      { key: 'month', label: 'Bulan', width: 96, render: (x) => <Text style={af.bodyStrong}>{shortMonth(String(x.month))}</Text> },
+                      { key: 'month', label: 'Bulan', width: 96, render: (x) => <Text style={af.bodyStrong}>{fmtMonth(String(x.month))}</Text> },
                       count('orders', 'Pesanan', 92),
                       money('gmv', 'GMV', 128),
                       money('revenue', 'Pendapatan', 132, PNL_C.revenue),
@@ -234,7 +241,7 @@ export default function ExecPortal() {
               <Panel title="Arus kas dompet & promo per bulan" subtitle="Pendapatan = biaya layanan + komisi · top up & penarikan = arus kas dompet AntarPay" icon="swap-vertical-outline" iconColor={adminTone.blue} padded={false}>
                 <DataTable keyField="month" rows={r.monthly as unknown as Record<string, unknown>[]} emptyText="Belum ada data bulanan"
                   columns={[
-                    { key: 'month', label: 'Bulan', width: 96, render: (x) => <Text style={af.bodyStrong}>{shortMonth(String(x.month))}</Text> },
+                    { key: 'month', label: 'Bulan', width: 96, render: (x) => <Text style={af.bodyStrong}>{fmtMonth(String(x.month))}</Text> },
                     money('gmv', 'GMV', 128),
                     money('revenue', 'Pendapatan', 132, adminTone.green),
                     money('promo', 'Promo', 118, adminTone.red),
@@ -390,7 +397,7 @@ export default function ExecPortal() {
                     <AdminCard key={x.id} style={{ width: 300 }}>
                       <Row between style={{ gap: 8 }}>
                         <Pill text={x.period} tone="info" />
-                        <Text style={af.tiny}>{formatDate(x.created_at, false)}</Text>
+                        <Text style={af.tiny}>{fmtDate(x.created_at, false)}</Text>
                       </Row>
                       <Text style={[af.h3, { marginTop: 8 }]} numberOfLines={1}>{x.name}</Text>
                       <View style={{ marginTop: 4 }}>
@@ -414,7 +421,7 @@ export default function ExecPortal() {
             <Panel title="Rincian bulanan" subtitle="Angka operasional dasar per bulan" icon="calendar-outline" iconColor={adminTone.slate} padded={false}>
               <DataTable keyField="month" rows={r.monthly as unknown as Record<string, unknown>[]} emptyText="Belum ada data bulanan"
                 columns={[
-                  { key: 'month', label: 'Bulan', width: 96, render: (x) => <Text style={af.bodyStrong}>{shortMonth(String(x.month))}</Text> },
+                  { key: 'month', label: 'Bulan', width: 96, render: (x) => <Text style={af.bodyStrong}>{fmtMonth(String(x.month))}</Text> },
                   money('gmv', 'GMV', 132),
                   count('orders', 'Pesanan', 100),
                   count('completed', 'Selesai', 100),

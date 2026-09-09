@@ -78,7 +78,9 @@ export function Input({ label, error, icon, right, containerStyle, style, ...res
       {label ? <Text style={s.label}>{label}</Text> : null}
       <Animated.View style={[s.inputWrap, a, error ? { borderColor: colors.danger } : null]}>
         {icon && <Ionicons name={icon} size={18} color={focus ? colors.primary : colors.textMuted} style={{ marginRight: 8 }} />}
-        <TextInput placeholderTextColor={colors.textMuted} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} style={[s.input, rest.multiline && { minHeight: 64, textAlignVertical: 'top' }, style]} {...rest}
+        {/* inputMode diturunkan dari keyboardType: RN-Web tidak memetakannya sendiri, sehingga di
+            peramban seluler papan ketik angka tidak pernah muncul untuk kolom nominal/telepon. */}
+        <TextInput placeholderTextColor={colors.textMuted} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} style={[s.input, rest.multiline && { minHeight: 64, textAlignVertical: 'top' }, style]} inputMode={webInputMode(rest.keyboardType)} {...rest}
           value={rest.value == null ? rest.value : String(rest.value)} />
         {right}
       </Animated.View>
@@ -171,10 +173,25 @@ export function Avatar({ name, url, size = 44 }: { name?: string | null; url?: s
     </BrandGradient>
   );
 }
+/** Padanan `keyboardType` RN ke `inputMode` HTML supaya papan ketik yang benar muncul di web seluler. */
+function webInputMode(k: TextInputProps['keyboardType']): TextInputProps['inputMode'] {
+  if (Platform.OS !== 'web' || !k) return undefined;
+  switch (k) {
+    case 'number-pad': case 'numeric': return 'numeric';
+    case 'decimal-pad': return 'decimal';
+    case 'phone-pad': return 'tel';
+    case 'email-address': return 'email';
+    case 'url': return 'url';
+    default: return undefined;
+  }
+}
+
 /** Tombol bulat bergaris (kit): ikon di lingkaran putih 40px dengan border tipis; `filled` → teal penuh. */
-export function CircleButton({ icon, onPress, size = 40, color = colors.text, filled, badge, style }: { icon: IconName; onPress?: () => void; size?: number; color?: string; filled?: boolean; badge?: number; style?: StyleProp<ViewStyle> }) {
+export function CircleButton({ icon, onPress, size = 40, color = colors.text, filled, badge, style, label }: { icon: IconName; onPress?: () => void; size?: number; color?: string; filled?: boolean; badge?: number; style?: StyleProp<ViewStyle>; label?: string }) {
+  // hitSlop melebarkan area sentuh ke >=44px tanpa mengubah tampilan lingkarannya.
+  const pad = Math.max(0, Math.ceil((44 - size) / 2));
   return (
-    <PressableScale onPress={onPress} scaleTo={0.9} style={[{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: filled ? colors.primary : '#fff', borderWidth: filled ? 0 : 1, borderColor: colors.border }, style]}>
+    <PressableScale onPress={onPress} scaleTo={0.9} hitSlop={pad} accessibilityRole="button" accessibilityLabel={label} style={[{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: filled ? colors.primary : '#fff', borderWidth: filled ? 0 : 1, borderColor: colors.border }, style]}>
       <Ionicons name={icon} size={Math.round(size * 0.48)} color={filled ? '#fff' : color} />
       {badge ? <View style={{ position: 'absolute', top: -2, right: -2, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 }}><Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>{badge > 9 ? '9+' : badge}</Text></View> : null}
     </PressableScale>
@@ -323,7 +340,8 @@ const s = StyleSheet.create({
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border },
   footer: { overflow: 'hidden', paddingHorizontal: spacing.lg, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(11,31,42,0.08)', backgroundColor: Platform.OS === 'android' ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.9)' },
   listItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 4 },
-  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#FFFFFF', ...shadow.soft },
+  // minHeight 44: pedoman target sentuh. Tinggi sebelumnya 35px terlalu kecil dan Chip dipakai di 12 layar.
+  chip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#FFFFFF', ...shadow.soft },
   stepBtn: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF' },
   toast: { position: 'absolute', left: 20, right: 20, alignItems: 'center', zIndex: 1000 },
   sheet: { backgroundColor: Platform.OS === 'android' ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.92)', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, overflow: 'hidden', borderTopWidth: 1, borderColor: glass.border, ...shadow.sheet },

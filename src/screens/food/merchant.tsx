@@ -15,6 +15,7 @@ import { colors, font, radius, shadow, motion } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
 import type { Merchant, MenuItem } from '@/lib/types';
 import { HalalBadge } from '@/components/MerchantStatus';
+import { ReportContentButton } from '@/components/moderation';
 
 type Tab = 'menu' | 'info' | 'ulasan';
 const TABS: { key: Tab; label: string }[] = [{ key: 'menu', label: 'Menu' }, { key: 'info', label: 'Info' }, { key: 'ulasan', label: 'Ulasan' }];
@@ -141,7 +142,7 @@ export default function MerchantScreen() {
                           </View>
                           <View style={{ justifyContent: 'center' }}>
                             {!item.is_available ? <Badge text="Habis" color={colors.textMuted} /> : q === 0 ? (
-                              <PressableScale onPress={() => add(item)} scaleTo={0.88} style={s.addBtn}><Ionicons name="add" size={22} color="#fff" /></PressableScale>
+                              <PressableScale onPress={() => add(item)} scaleTo={0.88} style={s.addBtn} accessibilityRole="button" accessibilityLabel={`Tambah ${item.name} ke keranjang`}><Ionicons name="add" size={22} color="#fff" /></PressableScale>
                             ) : <Stepper value={q} onChange={(v) => (v > q ? add(item) : cart.setQty(item.id, v))} />}
                           </View>
                         </Animated.View>
@@ -164,6 +165,8 @@ export default function MerchantScreen() {
                 {infoRow('bicycle-outline', 'Ongkir', merchant.delivery_fee == null ? null : merchant.delivery_fee === 0 ? 'Gratis' : rupiah(merchant.delivery_fee))}
                 {infoRow('shield-checkmark-outline', 'Status halal', merchant.is_halal ? (merchant.halal_verified ? 'Halal, sertifikat terverifikasi' : 'Halal (pernyataan merchant)') : 'Non-halal')}
               </View>
+              {/* Foto & keterangan merchant adalah konten buatan pengguna — sediakan jalur pelaporan. */}
+              <ReportContentButton kind="merchant_photo" targetId={String(id)} targetUserId={merchant.owner_id ?? null} name={merchant.name} title="Laporkan foto atau keterangan merchant" />
             </Entrance>
           )}
 
@@ -175,6 +178,8 @@ export default function MerchantScreen() {
                 <Text style={font.small}>{merchant.rating_count} ulasan pelanggan</Text>
                 <Text style={[font.tiny, { textAlign: 'center', marginTop: 6 }]}>Ulasan diberikan pelanggan setelah pesanan selesai. Rating merchant diperbarui otomatis.</Text>
               </View>
+              {/* Moderasi UGC (wajib Google Play): ulasan & foto merchant harus bisa dilaporkan. */}
+              <ReportContentButton kind="review" targetId={String(id)} targetUserId={merchant.owner_id ?? null} name={merchant.name} title="Laporkan ulasan atau rating di halaman ini" />
             </Entrance>
           )}
         </View>
@@ -200,11 +205,11 @@ const s = StyleSheet.create({
   sheet: { backgroundColor: '#fff', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, marginTop: -28, padding: 20, paddingTop: 12, borderWidth: 1, borderBottomWidth: 0, borderColor: colors.border, ...shadow.card },
   handle: { width: 44, height: 5, borderRadius: 3, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 14 },
   ratingPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentLight, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 6, marginLeft: 8 },
-  tab: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff' },
+  tab: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 11, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff' },
   tabOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: radius.lg, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   thumb: { width: 72, height: 72, borderRadius: radius.md, backgroundColor: colors.tint },
-  addBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', ...shadow.soft },
+  addBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', ...shadow.soft },
   infoCard: { backgroundColor: '#fff', borderRadius: radius.lg, padding: 16, borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   closed: { position: 'absolute', left: 16, backgroundColor: 'rgba(16,31,33,0.72)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.full },
   overlayBtn: { position: 'absolute' },

@@ -15,7 +15,7 @@ import { useAppSettings } from '@/hooks/useAppSettings';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
 import { getRoute, reverseGeocode, type RouteResult } from '@/lib/geo';
 import { importOsmPlaces } from '@/lib/osm';
-import { rpc } from '@/lib/supabase';
+import { rpc, friendlyError } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { ServiceIllustration } from '@/components/ServiceArt';
 import { rupiah, km, minutes, storeCategoryLabel, productCategoryLabel } from '@/lib/format';
@@ -49,6 +49,8 @@ export default function ShopScreen() {
   const [stores, setStores] = useState<ShopStore[]>([]);
   const [loadingStores, setLoadingStores] = useState(true);
   const [storesTick, setStoresTick] = useState(0);
+  // Kegagalan jaringan dulu tampil sebagai "Belum ada toko di sekitar" — menyesatkan.
+  const [storesError, setStoresError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [store, setStore] = useState<ShopStore | null>(null);
   const [products, setProducts] = useState<ShopProduct[]>([]);
@@ -94,11 +96,11 @@ export default function ShopScreen() {
     rpc<ShopStore[]>('nearby_stores', { p_lat: location.lat, p_lng: location.lng, p_radius_km: 15, p_category: f?.category ?? null })
       .then((r) => {
         if (cancelled) return;
-        const list = r ?? []; setStores(list);
+        const list = r ?? []; setStores(list); setStoresError(null);
         const key = locKey(location.lat, location.lng);
         if (list.length < 5 && settings?.osm_import_enabled !== false && !autoImported.has(key)) { autoImported.add(key); importFromMap(true); }
       })
-      .catch(() => { if (!cancelled) setStores([]); })
+      .catch((e: Error) => { if (!cancelled) { setStores([]); setStoresError(friendlyError(e.message)); } })
       .finally(() => { if (!cancelled) setLoadingStores(false); });
     return () => { cancelled = true; };
   }, [filter, free, location.lat, location.lng, storesTick]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -192,7 +194,7 @@ export default function ShopScreen() {
   const colW = gridW ? Math.floor((gridW - 12) / 2) : 160;
 
   return (
-    <Screen title="AntarShop" subtitle="Belanja dari toko terdekat · dibelikan driver" band={colors.shop} back ambient={false} bottomSpace={24}
+    <Screen title="AntarShop" subtitle="Dibelikan driver dari toko terdekat" band={colors.shop} back ambient={false} bottomSpace={24}
       footer={serviceOff ? undefined : (
         <View style={{ gap: 10 }}>
           <LimitNotice limit={est?.limit} />
@@ -223,14 +225,16 @@ export default function ShopScreen() {
                 </Row>
               </Row>
               {loadingStores ? [0, 1, 2].map((i) => <View key={i} style={s.storeCard}><Skeleton width={64} height={64} radius={16} /><View style={{ flex: 1, gap: 6 }}><Skeleton width="60%" height={14} /><Skeleton width="40%" height={12} /></View></View>)
+                : storesError ? <Empty icon="cloud-offline-outline" title="Gagal memuat toko" subtitle={storesError} action={<Button title="Coba lagi" size="sm" icon="refresh" onPress={() => setStoresTick((n) => n + 1)} />} />
                 : shownStores.length === 0 ? <Empty icon="storefront-outline" title="Belum ada toko di sekitar" subtitle="Coba filter lain, atau pesan barang bebas lewat Toko lain." action={<Button title="Toko lain" size="sm" variant="secondary" onPress={() => setFilter('free')} />} />
                 : shownStores.map((st, i) => (
                   <Entrance key={st.id} index={i}>
                     <PressableScale onPress={() => selectStore(st)} scaleTo={0.985} haptic={false} style={s.storeCard}>
                       {st.image_url ? <Image source={{ uri: st.image_url }} style={s.storeIcon} /> : <View style={[s.storeIcon, { alignItems: 'center', justifyContent: 'center' }]}><Ionicons name={st.category === 'apotek' ? 'medkit-outline' : 'storefront-outline'} size={26} color={colors.primary} /></View>}
                       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                        <Row gap={6}><Text style={[font.body, { fontWeight: '700', flexShrink: 1 }]} numberOfLines={1}>{st.name}</Text><Badge text={st.is_open_now === false ? 'Tutup' : 'Buka'} color={st.is_open_now === false ? colors.danger : colors.success} /></Row>
-                        <Row gap={4}><Ionicons name="location-outline" size={12} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>{storeCategoryLabel[st.category] ?? st.category} · {km(st.distance_km)}{st.open_hours ? ` · ${st.open_hours}` : ''}</Text></Row>
+                        <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={2}>{st.name}</Text>
+                        <Row gap={4}><Badge text={st.is_open_now === false ? 'Tutup' : 'Buka'} color={st.is_open_now === false ? colors.danger : colors.success} /><Text style={[font.tiny, { flex: 1 }]} numberOfLines={1}>{storeCategoryLabel[st.category] ?? st.category} · {km(st.distance_km)}</Text></Row>
+                        {st.open_hours ? <Text style={font.tiny} numberOfLines={1}>Buka {st.open_hours}</Text> : null}
                         <Row gap={6} style={{ flexWrap: 'wrap' }}>
                           {st.product_count != null && <Text style={font.tiny}>{st.product_count} produk</Text>}
                           {st.catalog_source === 'crowd' && <Badge text="Data pengguna" color={colors.info} />}
@@ -388,16 +392,16 @@ function ProductTile({ p, width, qty, onChange }: { p: ShopProduct; width: numbe
       <View style={{ paddingHorizontal: 4, gap: 2 }}>
         <Text style={[font.small, { color: colors.text, fontWeight: '700', minHeight: 36 }]} numberOfLines={2}>{p.name}</Text>
         <Row gap={4}><Ionicons name="cube-outline" size={12} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>{productCategoryLabel[p.category] ?? p.category} · {p.unit}</Text></Row>
-        <Row between style={{ marginTop: 4 }}>
-          <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 15, flexShrink: 1 }} numberOfLines={1}>{rupiah(p.price)}</Text>
+        <Row between style={{ marginTop: 4, flexWrap: 'wrap', rowGap: 6 }}>
+          <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 15 }} numberOfLines={1}>{rupiah(p.price)}</Text>
           {out ? null : qty > 0 ? (
             <Row gap={6}>
-              <PressableScale haptic={false} onPress={() => onChange(qty - 1)} style={s.miniBtn}><Ionicons name="remove" size={14} color={colors.primary} /></PressableScale>
+              <PressableScale haptic={false} hitSlop={10} accessibilityRole="button" accessibilityLabel="Kurangi satu" onPress={() => onChange(qty - 1)} style={s.miniBtn}><Ionicons name="remove" size={14} color={colors.primary} /></PressableScale>
               <Text style={{ fontWeight: '800', color: colors.text, minWidth: 16, textAlign: 'center', fontSize: 13 }}>{qty}</Text>
-              <PressableScale haptic={false} onPress={() => onChange(Math.min(50, qty + 1))} style={[s.miniBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]} accessibilityRole="button" accessibilityLabel="Tambah satu"><Ionicons name="add" size={14} color="#fff" /></PressableScale>
+              <PressableScale haptic={false} hitSlop={10} onPress={() => onChange(Math.min(50, qty + 1))} style={[s.miniBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]} accessibilityRole="button" accessibilityLabel="Tambah satu"><Ionicons name="add" size={14} color="#fff" /></PressableScale>
             </Row>
           ) : (
-            <PressableScale haptic={false} onPress={() => onChange(1)} scaleTo={0.88} style={s.addBtn} accessibilityRole="button" accessibilityLabel="Tambah"><Ionicons name="add" size={20} color="#fff" /></PressableScale>
+            <PressableScale haptic={false} onPress={() => onChange(1)} scaleTo={0.88} hitSlop={8} style={s.addBtn} accessibilityRole="button" accessibilityLabel="Tambah"><Ionicons name="add" size={20} color="#fff" /></PressableScale>
           )}
         </Row>
       </View>

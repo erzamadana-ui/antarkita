@@ -8,8 +8,9 @@ import { Row, Button, Badge, Input, IconCircle, toast, type IconName } from '@/c
 import { Entrance, Skeleton } from '@/components/motion';
 import { rpc } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
-import { formatDate, rupiah } from '@/lib/format';
+import { rupiah } from '@/lib/format';
 import type { AutomationRun, ScheduledReport } from '@/lib/types';
+import { fmtDate, fmtAgo, WideTableHint } from './_shared';
 
 type FieldKind = 'bool' | 'int' | 'num' | 'pct' | 'rp';
 type Field = { key: string; label: string; kind: FieldKind; hint?: string; min?: number; max?: number };
@@ -116,7 +117,7 @@ export default function AdminAutomation() {
 
   const pending = st?.pending ?? {};
   const pendingTotal = useMemo(() => Object.values(pending).reduce((a, b) => a + (Number(b) || 0), 0), [pending]);
-  const fmtRun = (r?: AutomationRun) => r ? `${formatDate(r.finished_at ?? r.started_at)} · ${r.count} diproses${r.triggered_by ? ' · manual' : ''}${r.ok ? '' : ' · gagal'}` : 'Belum pernah berjalan';
+  const fmtRun = (r?: AutomationRun) => r ? `${fmtDate(r.finished_at ?? r.started_at)} · ${r.count} diproses${r.triggered_by ? ' · manual' : ''}${r.ok ? '' : ' · gagal'}` : 'Belum pernah berjalan';
 
   return (
     <AdminPage title="Otomasi" subtitle="Aturan yang berjalan sendiri: verifikasi, pencairan, retensi, harga dinamis, anti-fraud, moderasi data, laporan" onRefresh={load}>
@@ -173,13 +174,13 @@ export default function AdminAutomation() {
             <Button size="sm" title="Tambah jadwal" icon="add" onPress={() => setEdit({ name: '', cadence: 'weekly', hour: 7, months: 3, recipients: [], active: true })} />
           </Row>
           <Table rows={(st?.reports ?? []) as unknown as Record<string, unknown>[]} emptyText="Belum ada jadwal laporan" columns={[
-            { key: 'name', label: 'Nama', width: 200, render: (r) => <Text style={font.bodyStrong} numberOfLines={1}>{String(r.name)}</Text> },
+            { key: 'name', label: 'Nama', width: 180, flex: 1, render: (r) => <Text style={font.bodyStrong} numberOfLines={1}>{String(r.name)}</Text> },
             { key: 'cadence', label: 'Kadens', width: 110, render: (r) => <Badge text={CADENCE_LABEL[String(r.cadence)] ?? String(r.cadence)} color={colors.info} /> },
             { key: 'hour', label: 'Jam WIB', width: 80, render: (r) => <Text style={font.small}>{String(r.hour).padStart(2, '0')}.00</Text> },
             { key: 'months', label: 'Data', width: 80, render: (r) => <Text style={font.small}>{String(r.months)} bln</Text> },
             { key: 'active', label: 'Aktif', width: 70, render: (r) => <Switch value={!!r.active} onValueChange={() => toggleReport(r as unknown as ScheduledReport)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" /> },
-            { key: 'last_run_at', label: 'Terakhir / berikutnya', width: 220, render: (r) => <Text style={font.tiny}>{r.last_run_at ? formatDate(String(r.last_run_at)) : 'belum'} / {r.next_run_at ? formatDate(String(r.next_run_at)) : '-'}</Text> },
-            { key: 'actions', label: 'Aksi', width: 220, align: 'right', render: (r) => { const x = r as unknown as ScheduledReport; return <Row gap={6} style={{ flexWrap: 'nowrap' }}><Button size="sm" title="Kirim sekarang" variant="secondary" loading={running === x.id} onPress={() => run('reports', x.id)} /><Button size="sm" title="Ubah" variant="ghost" onPress={() => setEdit({ ...x })} /></Row>; } },
+            { key: 'last_run_at', label: 'Terakhir / berikutnya', width: 196, render: (r) => <Text style={font.tiny}>{r.last_run_at ? fmtDate(String(r.last_run_at)) : 'belum'} / {r.next_run_at ? fmtDate(String(r.next_run_at)) : '-'}</Text> },
+            { key: 'actions', label: 'Aksi', width: 208, align: 'right', render: (r) => { const x = r as unknown as ScheduledReport; return <Row gap={6} style={{ flexWrap: 'nowrap' }}><Button size="sm" title="Kirim sekarang" variant="secondary" loading={running === x.id} onPress={() => run('reports', x.id)} /><Button size="sm" title="Ubah" variant="ghost" onPress={() => setEdit({ ...x })} /></Row>; } },
           ]} />
         </Card>
       </Entrance>
@@ -196,12 +197,12 @@ export default function AdminAutomation() {
           <Card padded={false}>
             <View style={{ padding: 14 }}><Text style={font.label}>Riwayat 30 run terakhir</Text></View>
             <Table rows={(st?.recent_runs ?? []) as unknown as Record<string, unknown>[]} emptyText="Belum ada run" columns={[
-              { key: 'started_at', label: 'Waktu', width: 140, render: (r) => <Text style={font.tiny}>{formatDate(String(r.started_at))}</Text> },
-              { key: 'kind', label: 'Otomasi', width: 160, render: (r) => <Text style={font.small}>{RUN_LABEL[String(r.kind)] ?? String(r.kind)}</Text> },
-              { key: 'count', label: 'Diproses', width: 90, align: 'right', mono: true, render: (r) => <Text style={font.mono}>{String(r.count)}</Text> },
-              { key: 'ok', label: 'Status', width: 100, render: (r) => <Badge text={r.ok ? 'OK' : 'Gagal'} color={r.ok ? colors.success : colors.danger} /> },
-              { key: 'triggered_by', label: 'Pemicu', width: 90, render: (r) => <Text style={font.tiny}>{r.triggered_by ? 'Manual' : 'Jadwal'}</Text> },
-              { key: 'detail', label: 'Detail', width: 220, render: (r) => <Text style={font.tiny} numberOfLines={2}>{Object.entries((r.detail as Record<string, unknown>) ?? {}).map(([k, v]) => `${k}: ${String(v)}`).join(' · ')}</Text> },
+              { key: 'started_at', label: 'Waktu', width: 120, render: (r) => <Text style={font.tiny}>{fmtDate(String(r.started_at))}</Text> },
+              { key: 'kind', label: 'Otomasi', width: 116, render: (r) => <Text style={font.small}>{RUN_LABEL[String(r.kind)] ?? String(r.kind)}</Text> },
+              { key: 'count', label: 'Diproses', width: 80, align: 'right', mono: true, render: (r) => <Text style={font.mono}>{String(r.count)}</Text> },
+              { key: 'ok', label: 'Status', width: 86, render: (r) => <Badge text={r.ok ? 'OK' : 'Gagal'} color={r.ok ? colors.success : colors.danger} /> },
+              { key: 'triggered_by', label: 'Pemicu', width: 80, render: (r) => <Text style={font.tiny}>{r.triggered_by ? 'Manual' : 'Jadwal'}</Text> },
+              { key: 'detail', label: 'Detail', width: 120, render: (r) => <Text style={font.tiny} numberOfLines={2}>{Object.entries((r.detail as Record<string, unknown>) ?? {}).map(([k, v]) => `${k}: ${String(v)}`).join(' · ')}</Text> },
             ]} />
           </Card>
         </Entrance>
@@ -230,6 +231,7 @@ export default function AdminAutomation() {
           </Pressable>
         </Pressable>
       </Modal>
+      <WideTableHint />
     </AdminPage>
   );
 }

@@ -7,8 +7,9 @@ import { PromoCard } from '@/components/PromoCard';
 import { DocUpload } from '@/components/DocUpload';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
-import { formatDate } from '@/lib/format';
+
 import type { Blast, City, Merchant, Promo } from '@/lib/types';
+import { fmtDate, fmtAgo, WideTableHint } from './_shared';
 
 const TARGETS = [{ key: 'all', label: 'Semua pengguna aktif' }, { key: 'customers', label: 'Hanya pelanggan' }, { key: 'active30', label: 'Aktif 30 hari terakhir' }, { key: 'city', label: 'Per kota' }];
 
@@ -93,13 +94,14 @@ export default function AdminBlast() {
       <Card padded={false}>
         <View style={{ padding: 14 }}><Text style={font.label}>Riwayat blast</Text></View>
         <Table rows={blasts as unknown as Record<string, unknown>[]} columns={[
-          { key: 'created_at', label: 'Waktu', width: 150, render: (r) => <Text style={font.tiny}>{formatDate(String(r.created_at))}</Text> },
-          { key: 'title', label: 'Judul', width: 260, render: (r) => <View style={{ minWidth: 0 }}><Text style={font.bodyStrong} numberOfLines={1}>{String(r.title)}</Text><Text style={font.tiny} numberOfLines={1}>{String(r.body ?? '')}</Text></View> },
+          { key: 'created_at', label: 'Waktu', width: 150, render: (r) => <Text style={font.tiny}>{fmtDate(String(r.created_at))}</Text> },
+          { key: 'title', label: 'Judul', width: 260, render: (r) => <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Text style={font.bodyStrong} numberOfLines={1}>{String(r.title)}</Text><Text style={font.tiny} numberOfLines={1}>{String(r.body ?? '')}</Text></View> },
           { key: 'promo_code', label: 'Kode', width: 110, render: (r) => <Text style={font.small}>{String(r.promo_code ?? '—')}</Text> },
           { key: 'target', label: 'Target', width: 120, render: (r) => <Badge text={TARGETS.find((t) => t.key === r.target)?.label ?? String(r.target)} color={colors.info} /> },
           { key: 'sent_count', label: 'Terkirim', width: 90, align: 'right', mono: true, render: (r) => <Text style={font.mono}>{String(r.sent_count)}</Text> },
         ]} emptyText="Belum ada blast" />
       </Card>
+      <WideTableHint />
     </AdminPage>
   );
 }

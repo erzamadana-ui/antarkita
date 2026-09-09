@@ -1,7 +1,11 @@
 import type { OrderStatus, ServiceType, MerchantOrderStatus } from './types';
 
-export const rupiah = (n: number | null | undefined) =>
-  'Rp' + Math.round(n ?? 0).toLocaleString('id-ID');
+// Nilai negatif ditulis "-Rp420.000", bukan "Rp-420.000" — bentuk kedua sulit dibaca sekilas
+// dan pernah membuat driver tidak sadar saldonya minus.
+export const rupiah = (n: number | null | undefined) => {
+  const v = Math.round(n ?? 0);
+  return (v < 0 ? '-Rp' : 'Rp') + Math.abs(v).toLocaleString('id-ID');
+};
 
 export const km = (n: number | null | undefined) => `${(Number(n) || 0).toFixed(1).replace('.', ',')} km`;
 

@@ -6,8 +6,9 @@ import { Row, Input, Button, Badge, toast } from '@/components/ui';
 import { DocUpload } from '@/components/DocUpload';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
-import { rupiah, formatDate, cityName, storeBrandLabel, storeCategoryLabel, productCategoryLabel } from '@/lib/format';
+import { rupiah, cityName, storeBrandLabel, storeCategoryLabel, productCategoryLabel } from '@/lib/format';
 import type { ShopStore, ShopProduct, City } from '@/lib/types';
+import { fmtDate, fmtAgo, WideTableHint } from './_shared';
 
 const BRANDS = Object.keys(storeBrandLabel);
 const STORE_CATS = Object.keys(storeCategoryLabel);
@@ -144,7 +145,7 @@ export default function AdminShop() {
       </Card>
 
       <Row gap={16} style={{ flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        <Card style={{ flex: 1, minWidth: 320, gap: 10 }}>
+        <Card style={{ flexGrow: 1, flexBasis: 380, minWidth: 320, maxWidth: 560, gap: 10 }}>
           <Row between><Text style={font.label}>{sf.id ? 'Ubah toko' : 'Tambah toko'}</Text>{sf.id ? <Button size="sm" variant="ghost" title="Batal ubah" onPress={() => setSf({ ...emptyStore })} /> : null}</Row>
           <Input placeholder="Nama toko (mis. Indomaret Sudirman)" value={sf.name} onChangeText={(v) => setSf({ ...sf, name: v })} />
           <Row gap={adminSpace.sm} style={{ flexWrap: 'wrap' }}>
@@ -160,20 +161,20 @@ export default function AdminShop() {
           <Row between><Text style={font.small}>Aktif (tampil untuk pelanggan)</Text><Switch value={sf.active} onValueChange={(v) => setSf({ ...sf, active: v })} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" /></Row>
           <Button title={sf.id ? 'Simpan perubahan' : 'Tambah toko'} loading={busy} onPress={saveStore} />
         </Card>
-        <View style={{ flex: 1.4, minWidth: 360, gap: adminSpace.sm }}>
+        <View style={{ flexGrow: 1, flexBasis: '100%', minWidth: 320, gap: adminSpace.sm }}>
           <Row gap={adminSpace.sm} style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             <AdminSelect icon="location-outline" placeholder="Semua kota" width={200} value={cityFilter} options={cityOptions} onChange={setCityFilter} clearable clearLabel="Semua kota" />
           </Row>
           <Table rows={shownStores as unknown as Record<string, unknown>[]} emptyText="Belum ada toko katalog pada kota ini" columns={[
-            { key: 'name', label: 'Toko', width: 220, render: (r) => { const s = r as unknown as ShopStore; return <View style={{ minWidth: 0 }}><Text style={[font.bodyStrong, selected?.id === s.id && { color: colors.shop }]} numberOfLines={1}>{s.name}</Text><Text style={font.tiny} numberOfLines={1}>{s.address ?? '-'}</Text></View>; } },
-            { key: 'brand', label: 'Brand', width: 100, render: (r) => <Badge text={storeBrandLabel[String(r.brand)] ?? String(r.brand)} color={colors.shop} /> },
-            { key: 'category', label: 'Kategori', width: 100, render: (r) => <Text style={font.small}>{storeCategoryLabel[String(r.category)] ?? String(r.category)}</Text> },
-            { key: 'city', label: 'Kota', width: 100, render: (r) => <Text style={font.small}>{cityName(cities, String(r.city_id ?? ''))}</Text> },
-            { key: 'open_hours', label: 'Jam', width: 100, render: (r) => <Text style={font.tiny}>{String(r.open_hours ?? '-')}</Text> },
-            { key: 'catalog_source', label: 'Sumber katalog', width: 110, render: (r) => <Badge text={String(r.catalog_source ?? 'admin')} color={colors.info} /> },
-            { key: 'products', label: 'Produk', width: 90, render: (r) => { const m = counts[String(r.id)]; return <Text style={font.small}>{m?.total ?? 0}{m?.out ? ` (${m.out} habis)` : ''}</Text>; } },
-            { key: 'active', label: 'Aktif', width: 70, render: (r) => { const s = r as unknown as ShopStore; return <Switch value={s.active !== false} onValueChange={() => toggleStore(s)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />; } },
-            { key: 'actions', label: 'Aksi', width: 170, align: 'right', render: (r) => { const s = r as unknown as ShopStore; return <Row gap={6} style={{ flexWrap: 'nowrap' }}><Button size="sm" title="Produk" onPress={() => setSelected(s)} /><Button size="sm" variant="outline" title="Ubah" onPress={() => editStore(s)} /></Row>; } },
+            { key: 'name', label: 'Toko', width: 190, render: (r) => { const s = r as unknown as ShopStore; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Text style={[font.bodyStrong, selected?.id === s.id && { color: colors.shop }]} numberOfLines={1}>{s.name}</Text><Text style={font.tiny} numberOfLines={1}>{s.address ?? '-'}</Text></View>; } },
+            { key: 'brand', label: 'Brand', width: 92, render: (r) => <Badge text={storeBrandLabel[String(r.brand)] ?? String(r.brand)} color={colors.shop} /> },
+            { key: 'category', label: 'Kategori', width: 92, render: (r) => <Text style={font.small}>{storeCategoryLabel[String(r.category)] ?? String(r.category)}</Text> },
+            { key: 'city', label: 'Kota', width: 88, render: (r) => <Text style={font.small}>{cityName(cities, String(r.city_id ?? ''))}</Text> },
+            { key: 'open_hours', label: 'Jam', width: 88, render: (r) => <Text style={font.tiny}>{String(r.open_hours ?? '-')}</Text> },
+            { key: 'catalog_source', label: 'Sumber', width: 92, render: (r) => <Badge text={String(r.catalog_source ?? 'admin')} color={colors.info} /> },
+            { key: 'products', label: 'Produk', width: 82, render: (r) => { const m = counts[String(r.id)]; return <Text style={font.small}>{m?.total ?? 0}{m?.out ? ` (${m.out} habis)` : ''}</Text>; } },
+            { key: 'active', label: 'Aktif', width: 62, render: (r) => { const s = r as unknown as ShopStore; return <Switch value={s.active !== false} onValueChange={() => toggleStore(s)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />; } },
+            { key: 'actions', label: 'Aksi', width: 160, align: 'right', render: (r) => { const s = r as unknown as ShopStore; return <Row gap={6} style={{ flexWrap: 'nowrap' }}><Button size="sm" title="Produk" onPress={() => setSelected(s)} /><Button size="sm" variant="outline" title="Ubah" onPress={() => editStore(s)} /></Row>; } },
           ]} />
         </View>
       </Row>
@@ -191,15 +192,15 @@ export default function AdminShop() {
           <AdminSelect icon="pricetags-outline" placeholder="Semua kategori" width={220} value={cat} clearable clearLabel="Semua kategori"
             options={PRODUCT_CATS.map((c) => ({ value: c, label: productCategoryLabel[c] }))} onChange={setCat} />
           <Table rows={filtered as unknown as Record<string, unknown>[]} emptyText="Belum ada produk — tambah manual atau impor CSV" columns={[
-            { key: 'sku', label: 'SKU', width: 110, render: (r) => <Text style={font.tiny} numberOfLines={1}>{String(r.sku ?? '-')}</Text> },
-            { key: 'name', label: 'Nama', width: 220, render: (r) => <Text style={font.bodyStrong} numberOfLines={2}>{String(r.name)}</Text> },
-            { key: 'category', label: 'Kategori', width: 110, render: (r) => <Badge text={productCategoryLabel[String(r.category)] ?? String(r.category)} color={colors.shop} /> },
-            { key: 'unit', label: 'Satuan', width: 70 },
-            { key: 'price', label: 'Harga', width: 130, render: (r) => { const p = r as unknown as ShopProduct; return <NumCell value={p.price} width={120} onSave={(n) => { if (n && n > 0) patchProduct(p.id, { price: n }); }} />; } },
-            { key: 'stock', label: 'Stok', width: 90, render: (r) => { const p = r as unknown as ShopProduct; return <NumCell value={p.stock} width={80} onSave={(n) => patchProduct(p.id, { stock: n })} />; } },
-            { key: 'in_stock', label: 'Ketersediaan', width: 150, render: (r) => { const p = r as unknown as ShopProduct; return <Row gap={6}><Badge text={p.in_stock ? 'Tersedia' : 'Habis'} color={p.in_stock ? colors.success : colors.danger} /><Button size="sm" variant="outline" title={p.in_stock ? 'Tandai habis' : 'Tersedia'} color={p.in_stock ? colors.danger : colors.success} onPress={() => setStock([p.id], !p.in_stock)} /></Row>; } },
-            { key: 'active', label: 'Aktif', width: 70, render: (r) => { const p = r as unknown as ShopProduct; return <Switch value={p.active} onValueChange={(v) => patchProduct(p.id, { active: v })} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />; } },
-            { key: 'updated_at', label: 'Diperbarui', width: 130, render: (r) => <Text style={font.tiny}>{formatDate(String(r.updated_at))}</Text> },
+            { key: 'sku', label: 'SKU', width: 96, render: (r) => <Text style={font.tiny} numberOfLines={1}>{String(r.sku ?? '-')}</Text> },
+            { key: 'name', label: 'Nama', width: 180, render: (r) => <Text style={font.bodyStrong} numberOfLines={2}>{String(r.name)}</Text> },
+            { key: 'category', label: 'Kategori', width: 96, render: (r) => <Badge text={productCategoryLabel[String(r.category)] ?? String(r.category)} color={colors.shop} /> },
+            { key: 'unit', label: 'Satuan', width: 64 },
+            { key: 'price', label: 'Harga', width: 118, render: (r) => { const p = r as unknown as ShopProduct; return <NumCell value={p.price} width={106} onSave={(n) => { if (n && n > 0) patchProduct(p.id, { price: n }); }} />; } },
+            { key: 'stock', label: 'Stok', width: 82, render: (r) => { const p = r as unknown as ShopProduct; return <NumCell value={p.stock} width={70} onSave={(n) => patchProduct(p.id, { stock: n })} />; } },
+            { key: 'in_stock', label: 'Ketersediaan', width: 124, render: (r) => { const p = r as unknown as ShopProduct; return <Row gap={6}><Badge text={p.in_stock ? 'Tersedia' : 'Habis'} color={p.in_stock ? colors.success : colors.danger} /><Button size="sm" variant="outline" title={p.in_stock ? 'Tandai habis' : 'Tersedia'} color={p.in_stock ? colors.danger : colors.success} onPress={() => setStock([p.id], !p.in_stock)} /></Row>; } },
+            { key: 'active', label: 'Aktif', width: 62, render: (r) => { const p = r as unknown as ShopProduct; return <Switch value={p.active} onValueChange={(v) => patchProduct(p.id, { active: v })} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />; } },
+            { key: 'updated_at', label: 'Diperbarui', width: 104, render: (r) => <Text style={font.tiny}>{fmtDate(String(r.updated_at))}</Text> },
           ]} />
         </Card>
 
@@ -226,7 +227,7 @@ export default function AdminShop() {
               <View style={{ gap: 6 }}>
                 <Text style={font.small}>Pratinjau {Math.min(5, preview.length)} dari {preview.length} baris valid</Text>
                 <Table rows={preview.slice(0, 5).map((r, i) => ({ ...r, id: `${r.sku || r.name}-${i}` }))} columns={[
-                  { key: 'sku', label: 'SKU', width: 100 }, { key: 'name', label: 'Nama', width: 180 }, { key: 'category', label: 'Kategori', width: 90 }, { key: 'unit', label: 'Satuan', width: 70 },
+                  { key: 'sku', label: 'SKU', width: 100 }, { key: 'name', label: 'Nama', width: 180 }, { key: 'category', label: 'Kategori', width: 90 }, { key: 'unit', label: 'Satuan', width: 64 },
                   { key: 'price', label: 'Harga', width: 100, render: (r) => <Text style={font.small}>{rupiah(Number(r.price))}</Text> },
                   { key: 'in_stock', label: 'Stok', width: 80, render: (r) => <Badge text={r.in_stock ? 'Ada' : 'Habis'} color={r.in_stock ? colors.success : colors.danger} /> },
                 ]} />
@@ -236,6 +237,7 @@ export default function AdminShop() {
           </Card>
         </Row>
       </>)}
+      <WideTableHint />
     </AdminPage>
   );
 }

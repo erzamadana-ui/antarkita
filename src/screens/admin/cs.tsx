@@ -12,8 +12,9 @@ import { useLocalSearchParams } from 'expo-router';
 import { rpc, supabase, realtimeChannel } from '@/lib/supabase';
 import { useAuth } from '@/store/auth';
 import { colors, glass, motion, shadow } from '@/lib/theme';
-import { timeAgo, formatDate, ticketStatusLabel, ticketStatusColor, ticketCategoryLabel, ticketPriorityLabel, ticketPriorityColor, roleLabelId } from '@/lib/format';
+import { ticketStatusLabel, ticketStatusColor, ticketCategoryLabel, ticketPriorityLabel, ticketPriorityColor, roleLabelId } from '@/lib/format';
 import type { Ticket, Profile, SosAlert, TicketStatus, TicketPriority } from '@/lib/types';
+import { usePager, Pager, fmtDate, fmtAgo } from './_shared';
 
 type Stats = { open: number; in_progress: number; resolved: number; urgent: number; avg_first_response_min: number | null; avg_rating: number | null; sos_open: number };
 
@@ -59,6 +60,7 @@ export default function AdminSupport() {
     const s = !q || t.subject.toLowerCase().includes(q.toLowerCase()) || t.code.toLowerCase().includes(q.toLowerCase()) || (t.user?.full_name ?? '').toLowerCase().includes(q.toLowerCase());
     return f && s;
   }).sort((a, b) => (PRIO[b.priority] - PRIO[a.priority]) || (b.last_message_at > a.last_message_at ? 1 : -1)), [tickets, filter, q, me]);
+  const pg = usePager(shown, 25);
   const openSos = sos.filter((a) => a.status === 'open');
 
   const handleSos = async (a: SosAlert, status: 'handled' | 'false_alarm') => {
@@ -75,7 +77,7 @@ export default function AdminSupport() {
             <Row key={a.id} between style={s.sosRow}>
               <View style={{ flex: 1 }}>
                 <Text style={[font.h3, { color: '#fff' }]} numberOfLines={1}>{a.user?.full_name ?? 'Pengguna'} · {roleLabelId[a.role]}</Text>
-                <Text style={[font.tiny, { color: 'rgba(255,255,255,0.9)' }]} numberOfLines={2}>{timeAgo(a.created_at)}{a.note ? ` · ${a.note}` : ''}{a.lat ? ` · ${a.lat.toFixed(4)},${a.lng?.toFixed(4)}` : ''}</Text>
+                <Text style={[font.tiny, { color: 'rgba(255,255,255,0.9)' }]} numberOfLines={2}>{fmtAgo(a.created_at)}{a.note ? ` · ${a.note}` : ''}{a.lat ? ` · ${a.lat.toFixed(4)},${a.lng?.toFixed(4)}` : ''}</Text>
               </View>
               <Row gap={6}>
                 {!!a.lat && <Button size="sm" title="Peta" variant="glass" color="#fff" icon="map" onPress={() => Linking.openURL(`https://www.google.com/maps?q=${a.lat},${a.lng}`)} />}
@@ -102,13 +104,13 @@ export default function AdminSupport() {
             <Input placeholder="Cari kode / judul / nama" value={q} onChangeText={setQ} icon="search" containerStyle={{ minWidth: 220, flex: 1 }} />
           </Row>
           {shown.length === 0 && <Empty icon="checkmark-done-outline" title="Antrean kosong" subtitle="Tidak ada tiket pada filter ini." />}
-          {shown.map((t) => (
+          {pg.rows.map((t) => (
             <PressableScale key={t.id} onPress={() => setSelected(t.id)} scaleTo={0.99} style={[s.row, selected === t.id && { borderColor: colors.primary, backgroundColor: colors.primary + '0D' }, t.priority === 'urgent' && { borderLeftWidth: 4, borderLeftColor: colors.danger }]}>
               <Avatar name={t.user?.full_name} url={t.user?.avatar_url} size={38} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Row between>
                   <Text style={[font.h3, { flex: 1 }]} numberOfLines={1}>{t.subject}</Text>
-                  <Text style={font.tiny}>{timeAgo(t.last_message_at)}</Text>
+                  <Text style={font.tiny}>{fmtAgo(t.last_message_at)}</Text>
                 </Row>
                 <Text style={font.tiny} numberOfLines={1}>{t.code} · {t.user?.full_name ?? '—'} ({roleLabelId[t.role]}) · {ticketCategoryLabel[t.category]}</Text>
                 <Row gap={6} style={{ marginTop: 4, flexWrap: 'wrap' }}>
@@ -120,6 +122,7 @@ export default function AdminSupport() {
               </View>
             </PressableScale>
           ))}
+          <Pager p={pg} noun="tiket" hint="maks. 300 tiket terbaru dimuat" />
         </View>
         <View style={{ flex: wide ? 1.2 : undefined, width: wide ? undefined : '100%', minHeight: 520 }}>
           {selected ? <TicketPanel key={selected} id={selected} onClose={() => setSelected(null)} onChanged={load} /> : (
@@ -153,7 +156,7 @@ function TicketPanel({ id, onClose, onChanged }: { id: string; onClose: () => vo
         <Row between>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={font.h3} numberOfLines={2}>{ticket.subject}</Text>
-            <Text style={font.tiny}>{ticket.code} · {ticketCategoryLabel[ticket.category]} · dibuat {formatDate(ticket.created_at)}{orderCode ? ` · pesanan ${orderCode}` : ''}</Text>
+            <Text style={font.tiny}>{ticket.code} · {ticketCategoryLabel[ticket.category]} · dibuat {fmtDate(ticket.created_at)}{orderCode ? ` · pesanan ${orderCode}` : ''}</Text>
           </View>
           <Pressable onPress={onClose} style={s.close}><Ionicons name="close" size={adminIcon.lg} color={adminTone.muted} /></Pressable>
         </Row>

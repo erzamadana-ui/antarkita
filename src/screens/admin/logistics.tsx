@@ -7,8 +7,9 @@ import { AdminPage, Table, FilterBar, AdminSelect, adminFont as font, adminTone,
 import { Row, Input, Button, Badge, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
-import { rupiah, formatDate, formatSchedule, cityName, travelRequestStatusLabel, travelKindLabel } from '@/lib/format';
+import { rupiah, formatSchedule, cityName, travelRequestStatusLabel, travelKindLabel } from '@/lib/format';
 import type { City, Warehouse, IntercityRate, TravelRoute, AdminTravelRequestRow, TravelRequestStatus } from '@/lib/types';
+import { fmtDate, fmtAgo, WideTableHint } from './_shared';
 
 const REQ_STATUSES: TravelRequestStatus[] = ['open', 'offered', 'accepted', 'paid', 'ongoing', 'completed', 'cancelled', 'expired'];
 const REQ_COLOR: Record<string, string> = { open: colors.warning, offered: colors.info, accepted: colors.travel, paid: colors.travel, ongoing: colors.primary, completed: colors.success, cancelled: colors.danger, expired: colors.textMuted };
@@ -96,7 +97,7 @@ export default function AdminLogistics() {
           </Card>
         </Row>
         <Table rows={whs as unknown as Record<string, unknown>[]} columns={[
-          { key: 'name', label: 'Gudang', width: 240, render: (r) => { const w = r as unknown as Warehouse; return <View style={{ minWidth: 0 }}><Text style={font.bodyStrong} numberOfLines={1}>{w.name}</Text><Text style={font.tiny} numberOfLines={2}>{w.address}</Text></View>; } },
+          { key: 'name', label: 'Gudang', width: 240, render: (r) => { const w = r as unknown as Warehouse; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Text style={font.bodyStrong} numberOfLines={1}>{w.name}</Text><Text style={font.tiny} numberOfLines={2}>{w.address}</Text></View>; } },
           { key: 'city', label: 'Kota', width: 110, render: (r) => <Text style={font.small}>{cityName(cities, String(r.city_id))}</Text> },
           { key: 'type', label: 'Jenis', width: 120, render: (r) => <Badge text={r.type === 'big' ? 'Gudang besar' : 'Gudang kecil'} color={r.type === 'big' ? colors.send : colors.info} /> },
           { key: 'partner', label: 'Mitra', width: 170, render: (r) => { const w = r as unknown as Warehouse; return <Text style={font.small}>{w.partner_name ?? '—'}{'\n'}{w.phone ?? ''}</Text>; } },
@@ -160,7 +161,7 @@ export default function AdminLogistics() {
               options={[{ value: 'all', label: `Semua (${reqs.length})` }, ...REQ_STATUSES.map((st) => ({ value: st, label: `${travelRequestStatusLabel[st] ?? st} (${reqs.filter((q) => q.status === st).length})` }))]} />
           </View>
           <Table rows={filteredReqs as unknown as Record<string, unknown>[]} emptyText="Belum ada permintaan travel" columns={[
-            { key: 'code', label: 'Kode', width: 120, render: (r) => { const q = r as unknown as AdminTravelRequestRow; return <View style={{ minWidth: 0 }}><Text style={font.bodyStrong} numberOfLines={1}>{q.code}</Text><Text style={font.tiny}>{formatDate(q.created_at, false)}</Text></View>; } },
+            { key: 'code', label: 'Kode', width: 120, render: (r) => { const q = r as unknown as AdminTravelRequestRow; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Text style={font.bodyStrong} numberOfLines={1}>{q.code}</Text><Text style={font.tiny}>{fmtDate(q.created_at, false)}</Text></View>; } },
             { key: 'kind', label: 'Jenis', width: 110, render: (r) => <Badge text={travelKindLabel[String(r.kind)] ?? String(r.kind)} color={colors.travel} /> },
             { key: 'status', label: 'Status', width: 150, render: (r) => <Badge text={travelRequestStatusLabel[String(r.status)] ?? String(r.status)} color={REQ_COLOR[String(r.status)] ?? colors.textMuted} /> },
             { key: 'customer_name', label: 'Pelanggan', width: 140, render: (r) => <Text style={font.small}>{String(r.customer_name ?? '—')}</Text> },
@@ -175,6 +176,7 @@ export default function AdminLogistics() {
           ]} />
         </Card>
       </>)}
+      <WideTableHint />
     </AdminPage>
   );
 }

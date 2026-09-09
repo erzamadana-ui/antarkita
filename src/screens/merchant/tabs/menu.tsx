@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, Pressable, Switch, ScrollView, Modal, StyleSheet, Image, Platform } from 'react-native';
+import { View, Text, Pressable, Switch, ScrollView, Modal, StyleSheet, Image, Platform, Alert } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown, LinearTransition } from 'react-native-reanimated';
 import { Entrance, PressableScale } from '@/components/motion';
@@ -33,7 +33,14 @@ export default function MerchantMenu() {
     setEditing(null); toast.success('Menu disimpan'); load();
   };
   const toggle = async (it: MenuItem) => { await supabase.from('menu_items').update({ is_available: !it.is_available }).eq('id', it.id); load(); };
-  const remove = async (it: MenuItem) => { const { error } = await supabase.from('menu_items').delete().eq('id', it.id); if (error) toast.error('Menu pernah dipesan, nonaktifkan saja'); else load(); };
+  // Hapus permanen: WAJIB dikonfirmasi. Sebelumnya satu ketukan tak sengaja pada ikon tong sampah
+  // langsung menghapus menu tanpa pertanyaan apa pun dan tanpa cara membatalkan.
+  const doRemove = async (it: MenuItem) => { const { error } = await supabase.from('menu_items').delete().eq('id', it.id); if (error) toast.error('Menu pernah dipesan, nonaktifkan saja'); else { toast.show(`"${it.name}" dihapus dari menu`); load(); } };
+  const remove = (it: MenuItem) => {
+    const msg = `Hapus "${it.name}" dari menu? Tindakan ini tidak bisa dibatalkan. Bila menu hanya sedang habis, matikan saklar "Tersedia" saja.`;
+    if (Platform.OS === 'web') { if (confirm(msg)) doRemove(it); return; }
+    Alert.alert('Hapus menu?', msg, [{ text: 'Batal' }, { text: 'Hapus', style: 'destructive', onPress: () => doRemove(it) }]);
+  };
   const upload = async () => { if (!session) return; try { const r = await pickAndUpload('merchant-images', session.user.id); if (r && editing) setEditing({ ...editing, image_url: r.url }); } catch (e) { toast.error((e as Error).message); } };
   const available = items.filter((it) => it.is_available).length;
 

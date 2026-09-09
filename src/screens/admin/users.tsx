@@ -3,18 +3,17 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, Platform } from 'react-native';
 import {
-  AdminPage, DataTable, Toolbar, ReasonPrompt, StatCard, Grid, Pill, AdminDialog, SoftChip,
-  RowActions, DeletePartnerDialog, Truncate,
-  adminFont as font, adminTone, adminSpace, adminTable,
+  AdminPage, DataTable, Toolbar, ReasonPrompt, StatCard, Grid, Pill, AdminDialog, SoftChip, RowActions, DeletePartnerDialog, adminFont as font, adminTone, adminSpace, adminTable,
 } from '@/components/admin';
 import { Row, Button, toast, Input } from '@/components/ui';
 import { execLevelLabel } from '@/lib/format';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
-import { formatDate, phoneDisplay, phoneMasked, rupiah } from '@/lib/format';
+import { phoneDisplay, phoneMasked, rupiah } from '@/lib/format';
 import { adminExportCsv } from '@/lib/csv';
 import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import type { Profile, UserRole, Wallet } from '@/lib/types';
+import { usePager, Pager, fmtDate, fmtAgo, Trunc, WideTableHint } from './_shared';
 
 type Row_ = Profile & { balance: number };
 /** Samarkan email: na••@gmail.com */
@@ -72,6 +71,7 @@ export default function AdminUsers() {
   };
   const shown = rows.filter((r) => (filter === 'all' || r.role === filter)
     && (!q || r.full_name.toLowerCase().includes(q.toLowerCase()) || (r.email ?? '').toLowerCase().includes(q.toLowerCase()) || (r.phone ?? '').includes(q)));
+  const pg = usePager(shown);
   const roleColor: Record<UserRole, string> = { customer: adminTone.blue, driver: adminTone.teal, merchant: adminTone.orange, admin: adminTone.violet };
   const nRole = (r: UserRole) => rows.filter((x) => x.role === r).length;
 
@@ -92,15 +92,15 @@ export default function AdminUsers() {
         filters={[{ key: 'all', label: `Semua (${rows.length})` }, { key: 'customer', label: 'Pelanggan' }, { key: 'driver', label: 'Driver' }, { key: 'merchant', label: 'Merchant' }, { key: 'admin', label: 'Admin' }]}
         filter={filter} onFilter={setFilter} />
 
-      <DataTable rows={shown as unknown as Record<string, unknown>[]} emptyText="Tidak ada pengguna pada filter ini" emptyIcon="people-outline" columns={[
+      <DataTable rows={pg.rows as unknown as Record<string, unknown>[]} emptyText="Tidak ada pengguna pada filter ini" emptyIcon="people-outline" columns={[
         {
           key: 'name', label: 'Pengguna', width: 250, flex: 2, render: (r) => {
             const u = r as unknown as Row_; const open = !!revealed[u.id];
             return (
-              <View style={{ minWidth: 0 }}>
-                <Truncate style={font.bodyStrong} title={u.full_name}>{u.full_name}</Truncate>
+              <View style={{ minWidth: 0, alignSelf: 'stretch' }}>
+                <Trunc style={font.bodyStrong} title={u.full_name}>{u.full_name}</Trunc>
                 <Row gap={6} style={{ flexWrap: 'wrap' }}>
-                  <Truncate style={font.tiny} title={open ? `${u.email ?? '-'} · ${phoneDisplay(u.phone)}` : undefined}>{open ? `${u.email ?? '-'} · ${phoneDisplay(u.phone)}` : `${emailMasked(u.email)} · ${phoneMasked(u.phone)}`}</Truncate>
+                  <Trunc style={font.tiny} title={open ? `${u.email ?? '-'} · ${phoneDisplay(u.phone)}` : undefined}>{open ? `${u.email ?? '-'} · ${phoneDisplay(u.phone)}` : `${emailMasked(u.email)} · ${phoneMasked(u.phone)}`}</Trunc>
                   {!open ? <Pressable onPress={() => reveal(u)} hitSlop={6}><Text style={[font.tiny, { color: colors.primary, fontWeight: '700' }]}>Tampilkan</Text></Pressable> : null}
                 </Row>
               </View>
@@ -111,13 +111,13 @@ export default function AdminUsers() {
         { key: 'balance', label: 'Saldo', width: 120, align: 'right', render: (r) => <Text style={font.mono}>{rupiah(Number(r.balance))}</Text> },
         {
           key: 'is_active', label: 'Status', width: 140, render: (r) => (
-            <View style={{ gap: 3, minWidth: 0 }}>
+            <View style={{ gap: 3, minWidth: 0, alignSelf: 'stretch' }}>
               <Pill text={r.is_active ? 'Aktif' : 'Nonaktif'} tone={r.is_active ? 'ok' : 'off'} />
-              {!r.is_active && r.status_reason ? <Truncate style={font.tiny} title={String(r.status_reason)} lines={2}>{String(r.status_reason)}</Truncate> : null}
+              {!r.is_active && r.status_reason ? <Trunc style={font.tiny} title={String(r.status_reason)} lines={2}>{String(r.status_reason)}</Trunc> : null}
             </View>
           ),
         },
-        { key: 'created_at', label: 'Daftar', width: 110, render: (r) => <Text style={font.tiny}>{formatDate(String(r.created_at), false)}</Text> },
+        { key: 'created_at', label: 'Daftar', width: 110, render: (r) => <Text style={font.tiny}>{fmtDate(String(r.created_at), false)}</Text> },
         {
           // Dua aksi utama (Chat & Telepon) + kebab berisi sisanya — lebar tetap, rata kanan.
           key: 'actions', label: 'Aksi', width: adminTable.actionsW, align: 'right', render: (r) => {
@@ -139,6 +139,8 @@ export default function AdminUsers() {
           },
         },
       ]} />
+      <WideTableHint />
+      <Pager p={pg} noun="akun" hint="maks. 500 akun terbaru dimuat" />
 
       <AdminDialog visible={!!execFor} onClose={() => setExecFor(null)} title={`Akses Portal Eksekutif · ${execFor?.full_name ?? ''}`}
         subtitle="Portal eksekutif (/exec) butuh login kedua dengan PIN 6 digit. Hanya level Vice President ke atas & pemegang saham. Setiap login tercatat di log.">

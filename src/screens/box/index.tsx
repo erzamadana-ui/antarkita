@@ -99,7 +99,7 @@ export default function BoxScreen() {
   };
 
   return (
-    <Screen title="AntarBox" subtitle="Mobil box / pick up · pindahan rumah & kost" band={colors.box} back maxWidth={640} footer={ready && chosen && !serviceOff ? (
+    <Screen title="AntarBox" subtitle="Mobil box & pick up" band={colors.box} back maxWidth={640} footer={ready && chosen && !serviceOff ? (
       <View style={{ gap: 10 }}>
         <LimitNotice limit={opts?.limit} />
         <Button title={blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label}${helpers ? ` + ${helpers} pembantu` : ''} · ${rupiah(total)}`} size="lg" color={colors.box} loading={ordering} disabled={loading || blocked} onPress={order} />

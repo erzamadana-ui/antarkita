@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Switch, Image, StyleSheet } from 'react-native';
+import { View, Text, Switch, Image, StyleSheet, Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Entrance, PressableScale } from '@/components/motion';
@@ -29,15 +29,23 @@ export default function MerchantStore() {
     await loadProfile(); if (!patch) toast.success('Profil toko disimpan');
   };
 
+  const confirmSignOut = () => {
+    const doIt = async () => { await signOut(); router.replace('/(auth)/welcome'); };
+    if (Platform.OS === 'web') { if (confirm('Keluar dari akun toko?')) doIt(); return; }
+    Alert.alert('Keluar', 'Keluar dari akun toko?', [{ text: 'Batal' }, { text: 'Keluar', style: 'destructive', onPress: doIt }]);
+  };
+
   if (!merchant) return null;
   const items: Item[] = [
     { icon: 'document-text-outline', title: 'Sertifikasi & dokumen usaha', subtitle: 'NPWP, izin usaha, sertifikat halal, rekening', onPress: () => router.push('/merchant/documents' as never) },
     { icon: 'chatbubbles-outline', color: colors.info, title: 'Bantuan & tiket aduan', subtitle: 'Hubungi CS online', onPress: () => router.push('/support' as never) },
     { icon: 'person-outline', title: 'Edit profil pemilik', onPress: () => router.push('/account/edit') },
     { icon: 'language-outline', title: 'Bahasa / Language', onPress: () => router.push('/account/language') },
-    ...(driver ? [{ icon: 'bicycle-outline' as IconName, title: 'Beralih ke Mode Driver', onPress: async () => { await setMode('driver'); router.replace('/(driver)'); } }] : []),
-    { icon: 'log-out-outline', title: 'Keluar', danger: true, onPress: async () => { await signOut(); router.replace('/(auth)/welcome'); } },
     { icon: 'key-outline', title: 'Ganti kata sandi', subtitle: 'Perbarui kata sandi akun Anda', onPress: () => router.push('/account/password' as never) },
+    ...(driver ? [{ icon: 'bicycle-outline' as IconName, title: 'Beralih ke Mode Driver', onPress: async () => { await setMode('driver'); router.replace('/(driver)'); } }] : []),
+    // "Keluar" & "Hapus akun" selalu di paling bawah — sebelumnya "Keluar" terselip di tengah daftar,
+    // tepat di atas item lain, sehingga mudah tertekan tanpa sengaja.
+    { icon: 'log-out-outline', title: 'Keluar', danger: true, onPress: confirmSignOut },
     { icon: 'trash-outline', title: 'Hapus akun', subtitle: 'Hapus data pribadi secara permanen', danger: true, onPress: () => router.push('/account/delete' as never) },
   ];
   const tabs = (
@@ -58,12 +66,12 @@ export default function MerchantStore() {
             <View style={{ padding: 16, gap: 10 }}>
               <Row between style={{ alignItems: 'flex-start' }}>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={font.h2} numberOfLines={1}>{merchant.name}</Text>
+                  <Text style={font.h2} numberOfLines={2}>{merchant.name}</Text>
                   <Row gap={6}><Stars value={merchant.rating_avg} size={12} /><Text style={font.tiny}>{Number(merchant.rating_avg).toFixed(1)} ({merchant.rating_count} ulasan)</Text></Row>
                   {merchant.address ? <Row gap={4} style={{ marginTop: 2 }}><Ionicons name="location-outline" size={12} color={colors.textMuted} /><Text style={[font.tiny, { flex: 1 }]} numberOfLines={1}>{merchant.address}</Text></Row> : null}
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                  <Badge text={merchant.status === 'approved' ? 'Terverifikasi' : merchant.status === 'pending' ? 'Menunggu admin' : merchant.status} color={merchant.status === 'approved' ? colors.success : colors.warning} />
+                  <Badge text={merchant.status === 'approved' ? 'Terverifikasi' : merchant.status === 'pending' ? 'Menunggu admin' : merchant.status === 'rejected' ? 'Ditolak' : 'Ditangguhkan'} color={merchant.status === 'approved' ? colors.success : merchant.status === 'pending' ? colors.warning : colors.danger} />
                   <HalalBadge merchant={merchant} />
                 </View>
               </Row>

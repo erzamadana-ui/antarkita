@@ -3,6 +3,8 @@
 Panduan langkah demi langkah untuk pemilik (Erza). Kerjakan berurutan; tandai `[x]` yang selesai.
 Referensi: `docs/rilis/PLAY-STORE-LISTING.md` (teks listing & jawaban form), `.github/workflows/release-aab.yml` (build AAB), `supabase/migrations/0023_hapus_akun.sql` (hapus akun).
 
+> **Mau mengejar listing besok?** Baca **`docs/rilis/RUNBOOK-LISTING-BESOK.md`** lebih dulu — di sana ada urutan langkah dengan estimasi waktu, titik-titik tunggu yang tidak bisa dipercepat, dan hitungan jujur berapa hari sampai aplikasi bisa diunduh publik (**± 18–30 hari**, bukan besok). Berkas ini tetap menjadi checklist lengkapnya.
+
 > **Jangan pernah** menyimpan keystore, kata sandi, atau file JSON service account di dalam repo. Semua lewat GitHub Secrets.
 
 ---
@@ -46,9 +48,11 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 | `ANDROID_KEYSTORE_PASSWORD` | kata sandi keystore |
 | `ANDROID_KEY_ALIAS` | `antarkita-upload` |
 | `ANDROID_KEY_PASSWORD` | kata sandi key |
+| `GOOGLE_SERVICES_JSON_BASE64` | *(opsional secara teknis — **tanpa ini push notification MATI TOTAL di build Play**)* isi `google-services.json` dari Firebase Console, di-base64. Satu berkas harus memuat **kedua** package; workflow menggagalkan build bila tidak. |
 | `PLAY_SERVICE_ACCOUNT_JSON` | *(opsional, nanti di langkah C4)* isi file JSON service account |
 
 - [ ] Empat secret pertama terisi. Hapus file `.b64` dari laptop setelahnya.
+- [ ] `GOOGLE_SERVICES_JSON_BASE64` terisi — kalau dilewati, sadari bahwa pesanan masuk, chat, dan panggilan **tidak akan memunculkan notifikasi** saat aplikasi tertutup, dan build tetap sukses tanpa pesan error (hanya `::warning::` di log).
 
 ### A4. Versi & konfigurasi kode (sudah disiapkan — cukup dicek)
 - [ ] `package.json` → `"version": "3.0.0"` = versionName yang tampil di Play. Naikkan (mis. 3.0.1) setiap rilis ke produksi.
@@ -60,7 +64,9 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 
 ## B. Bangun AAB lewat GitHub Actions (± 25 menit per aplikasi)
 
-- [ ] Commit & push semua perubahan rilis ke `main` (workflow Web akan menerbitkan `/privacy/` dan `/terms/` — cek keduanya terbuka: https://erzamadana-ui.github.io/antarkita/privacy/ dan `/terms/`).
+- [ ] Commit & push semua perubahan rilis ke `main` (workflow Web menerbitkan `/privacy/`, `/terms/`, dan **`/hapus-akun/`** — buka ketiganya dan pastikan bukan 404).
+  - `/privacy/` dan `/terms/` **sudah terverifikasi hidup 9 Sep 2026**.
+  - **`/hapus-akun/` baru dibuat dan belum pernah hidup** — halaman ini wajib ada sebelum mengisi Data safety.
 - [ ] GitHub → **Actions → "Play Store AAB (rilis bertanda tangan)" → Run workflow** → `app: both`, `note: internal testing 1` → Run.
   - Atau buat tag: `git tag v3.0.0 && git push origin v3.0.0` (memicu build kedua aplikasi otomatis).
 - [ ] Tunggu hijau. Periksa log langkah **"Verifikasi package id & versi"** (applicationId, versionCode, daftar izin) dan **"Verifikasi tanda tangan AAB"** (bukan `CN=Android Debug`).
@@ -87,7 +93,7 @@ Ulangi C1–C3 untuk **AntarKita** (Pelanggan) dan **AntarKita Mitra**.
 - [ ] Unggah AAB, *Release name* otomatis, *Release notes* (id-ID): `Rilis awal AntarKita: AntarRide, AntarCar, AntarFood, AntarSend, AntarBox, AntarShop, AntarMarket, AntarTravel, AntarPay.`
 - [ ] **Testers** → buat daftar email penguji (≥12 untuk akun baru) → simpan → **Review release → Start rollout to Internal testing**.
 - [ ] Bagikan tautan *"Copy link"* ke penguji; instal dan uji alur inti (daftar → pesan → bayar → selesai; mitra: online → terima → selesai; hapus akun dengan akun uji).
-- [ ] Bila muncul peringatan **"Uses 16 KB page size"** / **target API level** → catat, biasanya peringatan saja untuk internal testing; targetSdk mengikuti Expo SDK 57 (API 35/36) dan sudah memenuhi syarat 2026.
+- [ ] **Target API level — sudah diverifikasi, tidak perlu khawatir.** `targetSdkVersion = 36` (Android 16), dibaca dari katalog versi React Native 0.86 yang dipakai Expo SDK 57 (`node_modules/react-native/gradle/libs.versions.toml`), diverifikasi 9 Sep 2026 dari hasil `expo prebuild` yang sebenarnya. Sejak **31 Agustus 2026** Google mewajibkan **API 36** untuk aplikasi baru — syarat ini **terpenuhi**. Workflow AAB sekarang menggagalkan build bila nilainya turun di bawah 36.
 
 ### C3. Isi Store listing & App content (sebelum bisa ke produksi)
 Semua jawaban ada di `PLAY-STORE-LISTING.md`:
@@ -98,11 +104,12 @@ Semua jawaban ada di `PLAY-STORE-LISTING.md`:
 - [ ] **App content → Content rating**: kuesioner IARC (jawaban di listing §4.4) → sertifikat terbit otomatis.
 - [ ] **App content → Target audience**: 18+.
 - [ ] **App content → News / COVID / Government**: Tidak.
-- [ ] **App content → Data safety**: isi tabel §4.7, sertakan URL hapus akun `.../privacy/#hapus`.
+- [ ] **App content → Data safety**: isi tabel §4.7, sertakan URL hapus akun **`https://erzamadana-ui.github.io/antarkita/hapus-akun/`** (halaman khusus; **jangan** pakai `.../privacy/#hapus` — Google menuntut jalur permintaan yang menonjol di halamannya sendiri).
 - [ ] **App content → Financial features**: Digital wallet (closed-loop) + teks §4.8; unggah bukti akun Midtrans bila diminta.
 - [ ] **App content → Advertising ID**: tidak dipakai.
 - [ ] **App content → Health / Government**: tidak berlaku.
 - [ ] **Store settings**: kategori & tag; **Countries**: Indonesia.
+- [ ] **App content → User generated content / Safety**: AntarKita punya chat, panggilan suara, ulasan, dan foto merchant → kebijakan UGC berlaku penuh. Kebijakan mewajibkan **pelaporan di dalam aplikasi** *dan* **fungsi memblokir pengguna**; **fungsi blokir belum ada** di kode. Baca `PLAY-STORE-LISTING.md` §4.11 sebelum menjawab. Aman untuk Internal testing; **perbaiki sebelum mengajukan akses produksi**.
 - [ ] Dasbor menunjukkan semua tugas "App content" ✔ tanpa peringatan merah.
 
 ### C4. (Opsional) Unggah otomatis dari GitHub ke track internal
@@ -162,7 +169,15 @@ Semua jawaban ada di `PLAY-STORE-LISTING.md`:
 
 ---
 
-## E. Migrasi hapus akun (0023) — **belum diterapkan, terapkan manual**
+## E. Migrasi hapus akun (0023) — **status BERTENTANGAN, verifikasi sebelum apa pun**
+
+> ⚠️ **Konflik dokumen (ditemukan 9 Sep 2026).** Berkas ini menandai `0023_hapus_akun.sql` **belum diterapkan**, sementara `docs/RENCANA-LISTING-LIVE.md` menyatakan "Migrasi 0001–0024 diterapkan". Keduanya tidak bisa benar sekaligus. Ini bukan detail administratif: Google **selalu** menguji tombol hapus akun, dan bila RPC-nya tidak ada di database produksi, tombol itu error dan aplikasi **hampir pasti ditolak**.
+>
+> Jalankan di SQL Editor Supabase **produksi** sebelum mengisi App access:
+> ```sql
+> select proname from pg_proc where proname = 'request_account_deletion';
+> ```
+> Kosong → terapkan migrasi di bawah, lalu uji sungguhan dengan akun dummy.
 
 ```bash
 supabase db push            # atau: supabase migration up

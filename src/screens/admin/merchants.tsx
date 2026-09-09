@@ -3,14 +3,17 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Linking, StyleSheet, Pressable } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
-import { AdminPage, DataTable, Toolbar, StatusPill, ContactActions, DeleteButton, DeletePartnerDialog, RowActions, Truncate, StatCard, Grid, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, adminTable } from '@/components/admin';
+import {
+  AdminPage, DataTable, Toolbar, StatusPill, ContactActions, DeleteButton, DeletePartnerDialog, RowActions, StatCard, Grid, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, adminTable,
+} from '@/components/admin';
 import { Row, Badge, Button, toast, Input, Chip } from '@/components/ui';
 import { HalalBadge } from '@/components/MerchantStatus';
 import { rpc, supabase } from '@/lib/supabase';
 import { signedUrl } from '@/lib/upload';
 import { colors, motion } from '@/lib/theme';
-import { formatDate } from '@/lib/format';
+
 import type { ApprovalStatus, Merchant, MerchantDocuments, Profile } from '@/lib/types';
+import { usePager, Pager, fmtDate, fmtAgo, Trunc, WideTableHint } from './_shared';
 
 type Row_ = Merchant & { owner: Profile | null; menu_count: number; docs: MerchantDocuments | null };
 const statusColor: Record<ApprovalStatus, string> = { pending: colors.warning, approved: colors.success, suspended: colors.danger, rejected: colors.textMuted };
@@ -39,6 +42,7 @@ export default function AdminMerchants() {
   useEffect(() => { load(); }, [load]);
   const shown = rows.filter((r) => (filter === 'all' || r.status === filter) && (!q || r.name.toLowerCase().includes(q.toLowerCase())));
   const pending = rows.filter((r) => r.status === 'pending').length;
+  const pg = usePager(shown);
 
   return (
     <AdminPage title="Merchant AntarFood" subtitle={`${rows.length} terdaftar · ${pending} pengajuan menunggu · ${rows.filter((r) => r.halal_verified).length} halal terverifikasi`} onRefresh={load}>
@@ -53,15 +57,13 @@ export default function AdminMerchants() {
       <Toolbar q={q} onQ={setQ} placeholder="Cari nama merchant"
         filters={[{ key: 'pending', label: `Pengajuan (${pending})` }, { key: 'approved', label: 'Aktif' }, { key: 'rejected', label: 'Ditolak' }, { key: 'suspended', label: 'Ditangguhkan' }, { key: 'all', label: `Semua (${rows.length})` }]}
         filter={filter} onFilter={setFilter} />
-      <DataTable rows={shown as unknown as Record<string, unknown>[]} emptyText="Tidak ada merchant pada filter ini" emptyIcon="restaurant-outline" columns={[
-        { key: 'name', label: 'Merchant', width: 220, flex: 2, render: (r) => { const m = r as unknown as Row_; return <View style={{ minWidth: 0 }}><Truncate style={font.bodyStrong} title={m.name}>{m.name}</Truncate><Truncate style={font.tiny} title={`${m.category} · ${m.address}`}>{m.category} · {m.address}</Truncate></View>; } },
-        { key: 'owner', label: 'Pemilik', width: 170, render: (r) => { const m = r as unknown as Row_; return <View style={{ minWidth: 0 }}><Truncate style={font.body} title={m.owner?.full_name ?? ''}>{m.owner?.full_name ?? '— (seed)'}</Truncate><Truncate style={font.tiny} title={m.owner?.email ?? ''}>{m.owner?.email ?? ''}</Truncate></View>; } },
-        { key: 'docs', label: 'Dokumen', width: 150, render: (r) => { const m = r as unknown as Row_; const d = m.docs; const n = [d?.npwp_no, d?.owner_id_card_url, d?.place_photo_url].filter(Boolean).length; return <Row gap={6}><DocDots docs={d} /><Text style={font.tiny}>{n}/3 wajib</Text></Row>; } },
-        { key: 'halal', label: 'Halal', width: 100, render: (r) => <HalalBadge merchant={r as unknown as Row_} /> },
-        { key: 'menu', label: 'Menu', width: 70, mono: true, render: (r) => <Text style={font.mono}>{String((r as unknown as Row_).menu_count)}</Text> },
-        { key: 'rating', label: 'Rating', width: 100, align: 'right', render: (r) => { const m = r as unknown as Row_; return <Text style={font.mono}>{Number(m.rating_avg).toFixed(1)} ({m.rating_count})</Text>; } },
-        { key: 'status', label: 'Status', width: 130, render: (r) => <StatusPill status={String(r.status)} label={statusLabel[r.status as ApprovalStatus]} /> },
-        { key: 'created_at', label: 'Diajukan', width: 120, render: (r) => { const m = r as unknown as Row_; return <Text style={font.tiny}>{formatDate(m.docs?.submitted_at ?? m.created_at, false)}</Text>; } },
+      <DataTable rows={pg.rows as unknown as Record<string, unknown>[]} emptyText="Tidak ada merchant pada filter ini" emptyIcon="restaurant-outline" columns={[
+        { key: 'name', label: 'Merchant', width: 200, render: (r) => { const m = r as unknown as Row_; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.bodyStrong} title={m.name}>{m.name}</Trunc><Trunc style={font.tiny} title={`${m.category} · ${m.address}`}>{m.category} · {m.address}</Trunc></View>; } },
+        { key: 'owner', label: 'Pemilik · diajukan', width: 156, render: (r) => { const m = r as unknown as Row_; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.body} title={m.owner?.full_name ?? ''}>{m.owner?.full_name ?? '— (seed)'}</Trunc><Trunc style={font.tiny} title={m.owner?.email ?? ''}>{fmtDate(m.docs?.submitted_at ?? m.created_at, false)} · {m.owner?.email ?? '—'}</Trunc></View>; } },
+        { key: 'docs', label: 'Dokumen · menu', width: 116, render: (r) => { const m = r as unknown as Row_; const d = m.docs; const n = [d?.npwp_no, d?.owner_id_card_url, d?.place_photo_url].filter(Boolean).length; return <View style={{ gap: 3, minWidth: 0, alignSelf: 'stretch' }}><Row gap={6}><DocDots docs={d} /><Text style={font.tiny}>{n}/3 wajib</Text></Row><Text style={font.tiny}>{m.menu_count} menu</Text></View>; } },
+        { key: 'halal', label: 'Halal', width: 84, render: (r) => <HalalBadge merchant={r as unknown as Row_} /> },
+        { key: 'rating', label: 'Rating', width: 76, align: 'right', render: (r) => { const m = r as unknown as Row_; return <Text style={font.mono}>{Number(m.rating_avg).toFixed(1)} ({m.rating_count})</Text>; } },
+        { key: 'status', label: 'Status', width: 104, render: (r) => <StatusPill status={String(r.status)} label={statusLabel[r.status as ApprovalStatus]} /> },
         {
           // Aksi utama layar ini = Tinjau; kontak & hapus dipindah ke kebab.
           key: 'actions', label: 'Aksi', width: adminTable.actionsWideW, align: 'right', render: (r) => { const m = r as unknown as Row_; return (
@@ -74,6 +76,8 @@ export default function AdminMerchants() {
             />
           ); } },
       ]} />
+      <WideTableHint />
+      <Pager p={pg} noun="merchant" hint="maks. 300 merchant terbaru dimuat" />
     </AdminPage>
   );
 }
@@ -142,7 +146,7 @@ function ReviewPanel({ m, onClose, onDone, onDelete }: { m: Row_; onClose: () =>
           ) : <Text style={font.tiny}>Merchant menyatakan non-halal. Pelanggan melihat label “Non-halal”.</Text>}
           <Text style={[font.label, { marginTop: 8 }]}>Catatan untuk merchant</Text>
           <Input placeholder="Contoh: Foto KTP buram, mohon unggah ulang" value={note} onChangeText={setNote} multiline style={{ minHeight: 70 }} />
-          {!!d?.reviewed_at && <Text style={font.tiny}>Tinjauan terakhir {formatDate(d.reviewed_at)}</Text>}
+          {!!d?.reviewed_at && <Text style={font.tiny}>Tinjauan terakhir {fmtDate(d.reviewed_at)}</Text>}
           <Row gap={8} style={{ flexWrap: 'wrap', marginTop: 4 }}>
             <Button size="sm" title={m.status === 'approved' ? 'Simpan (tetap aktif)' : 'Setujui'} color={colors.success} icon="checkmark" loading={busy} onPress={() => act('approved')} />
             {m.status !== 'rejected' && <Button size="sm" title="Tolak" variant="outline" color={colors.danger} icon="close" onPress={() => act('rejected')} />}
