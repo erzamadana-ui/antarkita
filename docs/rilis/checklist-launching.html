@@ -1,0 +1,478 @@
+<title>Peluncuran AntarKita</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#F1F5F5; --surface:#FFFFFF; --surface-2:#E9F0F0; --sunk:#E3ECEC;
+  --ink:#0B1F2A; --ink-2:#43585F; --ink-3:#70868D; --line:#D2DEDF; --line-2:#BFCECF;
+  --teal:#187A85; --teal-ink:#12616A; --teal-soft:#E1F0F1;
+  --done:#1B7A4B; --done-soft:#E2F2E9;
+  --wait:#9E6407; --wait-soft:#FAEEDB;
+  --block:#AC271D; --block-soft:#FAE6E4;
+  --shadow:0 1px 2px rgba(11,31,42,.06), 0 6px 18px -10px rgba(11,31,42,.22);
+  --sans:"Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#091416; --surface:#0F1E21; --surface-2:#152629; --sunk:#0C1A1D;
+    --ink:#E9F2F2; --ink-2:#A8BFC3; --ink-3:#7A9499; --line:#1F3438; --line-2:#2A454A;
+    --teal:#4FBDC9; --teal-ink:#7FD4DD; --teal-soft:#102E33;
+    --done:#54C98C; --done-soft:#10291D;
+    --wait:#E2A63F; --wait-soft:#2B2113;
+    --block:#F0847A; --block-soft:#2E1614;
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 8px 22px -12px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#091416; --surface:#0F1E21; --surface-2:#152629; --sunk:#0C1A1D;
+  --ink:#E9F2F2; --ink-2:#A8BFC3; --ink-3:#7A9499; --line:#1F3438; --line-2:#2A454A;
+  --teal:#4FBDC9; --teal-ink:#7FD4DD; --teal-soft:#102E33;
+  --done:#54C98C; --done-soft:#10291D;
+  --wait:#E2A63F; --wait-soft:#2B2113;
+  --block:#F0847A; --block-soft:#2E1614;
+  --shadow:0 1px 2px rgba(0,0,0,.5), 0 8px 22px -12px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--sans); font-size:15px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1000px; margin:0 auto; padding-inline:20px; padding-block:32px 72px}
+a{color:var(--teal-ink)}
+
+/* ---------- header ---------- */
+.mast{display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end; justify-content:space-between; margin-bottom:22px}
+.eyebrow{font-size:11.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--teal-ink); margin:0 0 6px}
+h1{font-size:clamp(28px,5vw,40px); font-weight:800; letter-spacing:-.022em; margin:0; text-wrap:balance; line-height:1.12}
+.sub{margin:8px 0 0; color:var(--ink-2); max-width:62ch}
+.themetog{
+  appearance:none; border:1px solid var(--line); background:var(--surface); color:var(--ink-2);
+  font:inherit; font-size:12.5px; font-weight:600; border-radius:999px; padding:7px 14px; cursor:pointer;
+}
+.themetog:hover{border-color:var(--line-2); color:var(--ink)}
+.themetog:focus-visible{outline:2px solid var(--teal); outline-offset:2px}
+
+/* ---------- progress ---------- */
+.board{
+  background:var(--surface); border:1px solid var(--line); border-radius:14px;
+  padding:20px; box-shadow:var(--shadow); margin-bottom:14px;
+}
+.tallies{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
+.tally{display:flex; flex-direction:column; gap:2px}
+.tally b{font-family:var(--mono); font-size:30px; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums; line-height:1.1}
+.tally span{font-size:12.5px; font-weight:600; color:var(--ink-2)}
+.t-done b{color:var(--done)} .t-wait b{color:var(--wait)} .t-block b{color:var(--block)}
+.meter{margin-top:18px; height:8px; border-radius:99px; background:var(--sunk); overflow:hidden; display:flex}
+.meter i{display:block; height:100%; transition:width .35s ease}
+.meter .m-done{background:var(--done)}
+.meter .m-wait{background:var(--wait)}
+.meter .m-block{background:var(--block)}
+.meterlab{margin-top:8px; font-size:12.5px; color:var(--ink-3); font-variant-numeric:tabular-nums}
+
+/* ---------- timeline ---------- */
+.tracks{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:28px}
+.track{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px; box-shadow:var(--shadow)}
+.track h3{margin:0 0 2px; font-size:15px; font-weight:800; letter-spacing:-.01em}
+.track .days{font-family:var(--mono); font-size:26px; font-weight:600; letter-spacing:-.02em; color:var(--teal-ink); line-height:1.2; margin-top:6px}
+.track p{margin:6px 0 0; font-size:13px; color:var(--ink-2)}
+.track .gate{
+  margin-top:12px; padding-top:11px; border-top:1px dashed var(--line);
+  font-size:12.5px; color:var(--ink-2);
+}
+.track .gate b{color:var(--ink); font-weight:700}
+
+/* ---------- sections ---------- */
+section{margin-bottom:30px}
+.shead{display:flex; align-items:baseline; gap:12px; margin-bottom:4px}
+.snum{
+  font-family:var(--mono); font-size:12px; font-weight:600; color:var(--teal-ink);
+  background:var(--teal-soft); border-radius:6px; padding:3px 8px; flex:0 0 auto;
+}
+.shead h2{margin:0; font-size:19px; font-weight:800; letter-spacing:-.015em; text-wrap:balance}
+.sdesc{margin:0 0 12px 0; color:var(--ink-2); font-size:13.5px; max-width:70ch}
+
+/* ---------- rows ---------- */
+.rows{display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden}
+.row{display:grid; grid-template-columns:auto 1fr; gap:12px; padding:13px 15px; background:var(--surface); align-items:start}
+.row:hover{background:var(--surface-2)}
+.row.is-done{background:var(--surface)}
+.row.is-done .rtitle{color:var(--ink-3); text-decoration:line-through; text-decoration-color:var(--line-2); text-decoration-thickness:1.5px}
+.row.is-done .rwhy{color:var(--ink-3)}
+input[type=checkbox]{
+  appearance:none; width:19px; height:19px; margin:2px 0 0; flex:0 0 auto; cursor:pointer;
+  border:1.5px solid var(--line-2); border-radius:6px; background:var(--surface); display:grid; place-content:center;
+}
+input[type=checkbox]:checked{background:var(--done); border-color:var(--done)}
+input[type=checkbox]:checked::after{content:""; width:10px; height:6px; border:2px solid #fff; border-top:0; border-right:0; transform:rotate(-45deg) translateY(-1px)}
+input[type=checkbox]:focus-visible{outline:2px solid var(--teal); outline-offset:2px}
+input[type=checkbox]:disabled{cursor:not-allowed; opacity:.85}
+.rbody{min-width:0}
+.rtitle{font-weight:700; font-size:14.5px; letter-spacing:-.005em; display:block}
+.rwhy{margin:3px 0 0; font-size:13px; color:var(--ink-2)}
+.chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:7px}
+.chip{
+  font-size:11px; font-weight:700; letter-spacing:.03em; border-radius:999px;
+  padding:2.5px 8px; border:1px solid transparent; white-space:nowrap;
+}
+.c-and{background:var(--surface-2); color:var(--ink-2); border-color:var(--line)}
+.c-ios{background:var(--surface-2); color:var(--ink-2); border-color:var(--line)}
+.c-both{background:var(--teal-soft); color:var(--teal-ink)}
+.c-owner{background:var(--wait-soft); color:var(--wait)}
+.c-dir{background:var(--done-soft); color:var(--done)}
+.c-block{background:var(--block-soft); color:var(--block)}
+.c-cost{font-family:var(--mono); font-weight:500; background:transparent; color:var(--ink-3); border-color:var(--line)}
+
+/* ---------- proven panel ---------- */
+.proven{background:var(--sunk); border:1px solid var(--line); border-radius:14px; padding:20px}
+.proven h2{margin:0 0 4px; font-size:16px; font-weight:800; letter-spacing:-.01em}
+.proven > p{margin:0 0 14px; font-size:13.5px; color:var(--ink-2); max-width:70ch}
+.facts{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px 18px}
+.fact b{display:block; font-family:var(--mono); font-size:19px; font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; letter-spacing:-.02em}
+.fact span{font-size:12.5px; color:var(--ink-2)}
+
+.foot{margin-top:34px; padding-top:16px; border-top:1px solid var(--line); font-size:12.5px; color:var(--ink-3)}
+.foot p{margin:0 0 6px}
+.savebar{
+  position:fixed; left:50%; transform:translateX(-50%); bottom:18px; z-index:9;
+  background:var(--ink); color:var(--ground); border-radius:999px; padding:9px 18px;
+  font-size:13px; font-weight:600; box-shadow:var(--shadow); opacity:0; pointer-events:none;
+  transition:opacity .2s ease;
+}
+.savebar.on{opacity:1}
+@media (prefers-reduced-motion: reduce){ *{transition:none !important} }
+@media (max-width:720px){
+  .tracks{grid-template-columns:1fr}
+  .tallies{grid-template-columns:1fr 1fr}
+  .wrap{padding-block:24px 64px}
+}
+</style>
+
+<div class="wrap">
+  <header class="mast">
+    <div>
+      <p class="eyebrow">AntarKita · Pekanbaru &amp; Padang</p>
+      <h1>Peluncuran AntarKita</h1>
+      <p class="sub">Apa yang sudah selesai, apa yang menunggu Bapak, dan apa yang masih memblokir rilis. Diurutkan menurut yang memblokir lebih dulu — kerjakan dari atas.</p>
+    </div>
+    <button class="themetog" id="themetog" type="button">Ganti tema</button>
+  </header>
+
+  <div class="board">
+    <div class="tallies">
+      <div class="tally t-done"><b id="n-done">0</b><span>Selesai</span></div>
+      <div class="tally t-wait"><b id="n-wait">0</b><span>Menunggu Bapak</span></div>
+      <div class="tally t-block"><b id="n-block">0</b><span>Masih dikerjakan</span></div>
+    </div>
+    <div class="meter" id="meter" role="img" aria-label="Kemajuan persiapan peluncuran">
+      <i class="m-done" id="bar-done" style="width:0%"></i>
+      <i class="m-wait" id="bar-wait" style="width:0%"></i>
+      <i class="m-block" id="bar-block" style="width:0%"></i>
+    </div>
+    <p class="meterlab" id="meterlab">—</p>
+  </div>
+
+  <div class="tracks">
+    <div class="track">
+      <h3>Google Play (Android)</h3>
+      <div class="days">18–30 hari</div>
+      <p>Tercepat 18 hari, realistis 3–4 minggu sampai publik bisa mengunduh.</p>
+      <div class="gate"><b>Penyandera jadwal:</b> akun perorangan baru wajib <b>12 penguji × 14 hari berturut-turut</b> sebelum boleh <em>mengajukan</em> akses produksi. Pakai 16–18 penguji — satu yang keluar mereset hitungan.</div>
+    </div>
+    <div class="track">
+      <h3>App Store (iOS)</h3>
+      <div class="days">5–8 hari</div>
+      <p>Sebagai perorangan. Sebagai organisasi 2–3 minggu.</p>
+      <div class="gate"><b>Penyandera jadwal:</b> bila mendaftar sebagai badan usaha, <b>D-U-N-S Number</b> wajib lebih dulu (gratis, ±7 hari kerja) sebelum pendaftaran Apple bahkan bisa dimulai. iOS tidak punya aturan 12 penguji.</div>
+    </div>
+  </div>
+
+  <div id="sections"></div>
+
+  <div class="proven">
+    <h2>Yang sudah terbukti, bukan sekadar diklaim</h2>
+    <p>Angka di bawah berasal dari uji yang benar-benar dijalankan, bukan dari dokumen. Simulasi basis data dijalankan di produksi di dalam transaksi yang selalu di-rollback, jadi tidak menyisakan data.</p>
+    <div class="facts">
+      <div class="fact"><b>246</b><span>pernyataan SQL lulus, 0 BUG</span></div>
+      <div class="fact"><b>95</b><span>rute UI bersih, 0 layar kosong</span></div>
+      <div class="fact"><b>8 / 8</b><span>layanan lolos uji aritmetika uang</span></div>
+      <div class="fact"><b>9</b><span>cacat uang ditemukan &amp; ditutup</span></div>
+      <div class="fact"><b>2 / 2</b><span>prebuild Android &amp; iOS berhasil</span></div>
+      <div class="fact"><b>0</b><span>rahasia bocor di riwayat git</span></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <p><b>Catatan keterbatasan data.</b> Estimasi hari untuk tinjauan Google dan Apple adalah pengamatan komunitas — <b>kedua perusahaan tidak menerbitkan SLA</b>. Aturan 12 penguji × 14 hari dan kewajiban D-U-N-S diverifikasi dari halaman resmi masing-masing pada 9 September 2026. Biaya dalam USD; kurs bergerak.</p>
+    <p>Sumber rinci: <code>docs/rilis/DAFTAR-PERIKSA-FINAL.md</code>, <code>RUNBOOK-LISTING-BESOK.md</code>, <code>RUNBOOK-LISTING-IOS.md</code>, <code>docs/riset/RISET-PETA-DAN-BIAYA.md</code>.</p>
+    <p id="stamp"></p>
+  </div>
+</div>
+
+<div class="savebar" id="savebar">Tersimpan</div>
+
+<script type="application/json" id="state">{"checked":{},"updated":null}</script>
+<script>
+(function(){
+  "use strict";
+
+  // Daftar butir. Struktur ini bagian dari halaman, bukan state —
+  // yang disimpan hanya peta centangnya.
+  var BLOCKS = [
+    {
+      n: "Blok 1", title: "Tanpa ini tidak ada yang bisa diunggah sama sekali",
+      desc: "Akun dan kunci. Semuanya hanya bisa Bapak yang kerjakan — saya tidak boleh membuat akun atau memasukkan kata sandi.",
+      items: [
+        {id:"1.1", t:"Akun Google Play Console + verifikasi identitas", w:"KTP dan kartu kredit atas nama sendiri. Verifikasi bisa makan hari — mulai paling awal.", s:"owner", p:"and", c:"US$25 sekali"},
+        {id:"1.2", t:"Upload keystore + 4 GitHub Secret", w:"Kehilangan keystore berarti aplikasi tidak bisa di-update selamanya. Perintah lengkap ada di runbook.", s:"owner", p:"and"},
+        {id:"1.3", t:"Akun Apple Developer Program", w:"Sama harganya untuk perorangan maupun badan usaha.", s:"owner", p:"ios", c:"US$99/tahun"},
+        {id:"1.4", t:"Keputusan: daftar Apple perorangan atau badan usaha", w:"Perorangan: nama pribadi Bapak tampil publik di App Store, bisa mulai hari ini. Badan usaha: lebih aman untuk aplikasi dompet + KYC, tapi butuh D-U-N-S dulu.", s:"owner", p:"ios"},
+        {id:"1.5", t:"Migrasi hapus akun + moderasi di database produksi", w:"Sudah saya verifikasi langsung: request_account_deletion, report_content, dan block_user ketiganya ada di produksi. Google dan Apple pasti mengujinya.", s:"done", p:"both"}
+      ]
+    },
+    {
+      n: "Blok 2", title: "Bikin ditolak reviewer, atau fitur mati diam-diam",
+      desc: "Yang berbahaya di sini: beberapa butir membuat build tetap hijau padahal fiturnya mati total di tangan pengguna.",
+      items: [
+        {id:"2.1", t:"Ganti penyedia peta ke Stadia Maps", w:"Aplikasi hari ini memakai server gratis yang MELARANG pemakaian komersial — boleh diblokir tanpa pemberitahuan sejak hari pertama. Sudah saya buat bisa diganti dari Panel Admin tanpa rilis ulang; tinggal daftar dan tempel kuncinya. Selama spanduk merah di Panel Admin masih menyala, aplikasi belum layak dipakai publik.", s:"owner", p:"both", c:"US$80/bln"},
+        {id:"2.2", t:"Server TURN untuk panggilan suara", w:"Sudah terbukti dari kode: tanpa TURN, telepon GAGAL di jaringan seluler Indonesia (CGNAT). Lolos uji internal karena Wi-Fi rumah tetap jalan. Cloudflare gratis 1.000 GB/bulan; kebutuhan Bapak ±1,8 GB. Cukup isi env, tidak perlu ubah kode.", s:"owner", p:"both", c:"gratis"},
+        {id:"2.3", t:"google-services.json dari Firebase", w:"Tanpa ini AAB tetap sukses dibangun tapi seluruh notifikasi push mati — kegagalan senyap.", s:"owner", p:"and"},
+        {id:"2.4", t:"Secret FCM_SERVICE_ACCOUNT + admin_set_push_config", w:"Tanpa keduanya push tetap mati walau berkas Firebase sudah dipasang. Jangan kirim service_role key lewat chat ini.", s:"owner", p:"and"},
+        {id:"2.5", t:"Kunci produksi Midtrans + URL webhook", w:"Play dan Apple menanyakan bukti pada deklarasi fitur keuangan.", s:"owner", p:"both"},
+        {id:"2.6", t:"Akun uji untuk reviewer", w:"Pelanggan bersaldo dan driver berstatus approved yang bisa langsung online. Penyebab penolakan nomor satu aplikasi ride-hailing: reviewer tidak menemukan satu pun driver.", s:"owner", p:"both"},
+        {id:"2.7", t:"Pengerasan Supabase produksi", w:"Nyalakan Leaked Password Protection, wajibkan konfirmasi email, CAPTCHA untuk pendaftaran dan reset, SMTP kustom, PITR, dan hapus akun demo dari seed.", s:"owner", p:"both"},
+        {id:"2.8", t:"Push notification iOS belum berfungsi", w:"Server mengirim lewat FCM, iOS mengembalikan token APNs. Driver iOS tidak akan tahu ada pesanan saat aplikasi tertutup. Butuh pengembangan — pertimbangkan rilis aplikasi Pelanggan dulu di iOS.", s:"todo", p:"ios"},
+        {id:"2.9", t:"Tautan Bagikan perjalanan tidak lagi 404", w:"Fallback URL masih menunjuk nama repo lama sehingga fitur keselamatan yang dipromosikan menghasilkan 404 di build Android. Sudah diperbaiki.", s:"done", p:"and"},
+        {id:"2.10", t:"Komisi roda dua dikunci maksimal 8%", w:"Seed lama 20% melanggar Perpres 27/2026. Sudah diturunkan dan dipasang pengawal di basis data supaya Panel Admin tidak bisa menyetel di atas batas.", s:"done", p:"both"}
+      ]
+    },
+    {
+      n: "Blok 3", title: "Aset dan konten listing",
+      desc: "Hampir semuanya sudah saya selesaikan dan tinggal disalin ke Play Console dan App Store Connect.",
+      items: [
+        {id:"3.1", t:"Screenshot dari HP asli", w:"Saya sudah membuat 8 screenshot draf dari build web — lolos semua spek dan cukup untuk mengisi listing plus Internal Testing hari ini, tapi bukan tangkapan perangkat asli. Ganti sebelum produksi.", s:"owner", p:"both"},
+        {id:"3.2", t:"Teks listing Play Store dan App Store", w:"Judul, deskripsi pendek dan panjang, kata kunci, kategori — siap salin, sudah disesuaikan batas karakter masing-masing toko.", s:"done", p:"both"},
+        {id:"3.3", t:"Jawaban Data safety dan App Privacy", w:"Ditelusuri satu per satu terhadap data yang benar-benar dikumpulkan kode hari ini, termasuk rekaman laporan dan blokir yang baru ditambahkan.", s:"done", p:"both"},
+        {id:"3.4", t:"Kebijakan privasi, S&K, dan halaman hapus akun", w:"Ketiganya terbit online dan build digagalkan bila salah satu hilang. Dinaikkan ke v1.1 karena fitur moderasi menambah data pribadi yang belum disebut — kebijakan yang tidak menyebut data yang dikumpulkan adalah alasan penolakan klasik.", s:"done", p:"both"},
+        {id:"3.5", t:"Seluruh aset grafis", w:"Ikon adaptif, splash, ikon notifikasi 96×96 putih transparan, ikon 512 dan feature graphic Play, ikon 1024 iOS tanpa alfa.", s:"done", p:"both"},
+        {id:"3.6", t:"Fitur lapor dan blokir pengguna", w:"Kewajiban kebijakan UGC di kedua toko — sebelumnya blokir tidak ada sama sekali. Kini lengkap dengan penegakannya: yang saling memblokir tidak dipasangkan, pesan dan panggilannya ditolak.", s:"done", p:"both"},
+        {id:"3.7", t:"Konfigurasi teknis rilis", w:"versionCode naik otomatis, targetSdk 36, izin manifest cocok 100% dengan yang dijanjikan, privacy manifest iOS, teks izin spesifik berbahasa Indonesia.", s:"done", p:"both"}
+      ]
+    },
+    {
+      n: "Blok 4", title: "Legal dan regulasi Indonesia",
+      desc: "Kerjakan paralel selama 14 hari masa closed testing — tidak menambah waktu bila dimulai sekarang.",
+      items: [
+        {id:"4.1", t:"NIB + KBLI 53200 di OSS", w:"Modal disetor minimal Rp500 juta untuk klasifikasi ini.", s:"owner", p:"both"},
+        {id:"4.2", t:"Pendaftaran TDPSE di Komdigi", w:"Wajib untuk penyelenggara sistem elektronik sebelum beroperasi.", s:"owner", p:"both"},
+        {id:"4.3", t:"Tunjuk Pejabat Pelindungan Data Pribadi (DPO)", w:"UU PDP 27/2022 dan Putusan MK 151/PUU-XXII/2024. Jabatan ini melekat pada orang, tidak bisa diotomasi.", s:"owner", p:"both"},
+        {id:"4.4", t:"Aktivasi Midtrans produksi", w:"Butuh dokumen legal usaha dan rekening. Review biasanya 1–3 hari kerja.", s:"owner", p:"both"},
+        {id:"4.5", t:"Opini hukum: batas komisi 8% untuk AntarFood dan AntarSend roda dua", w:"Sengaja saya biarkan 20% agar pendapatan tidak berubah diam-diam. Perlu jawaban sebelum order komersial pertama.", s:"owner", p:"both"},
+        {id:"4.6", t:"Opini hukum: biaya jasa aplikasi Rp1.000 terhadap batas 8%", w:"Apakah biaya tetap ini dihitung ke dalam batas komisi.", s:"owner", p:"both"}
+      ]
+    },
+    {
+      n: "Blok 5", title: "Uji lapangan dan keputusan bisnis",
+      desc: "Yang hanya bisa dibuktikan di perangkat nyata dan jalan nyata, plus keputusan yang menunggu Bapak.",
+      items: [
+        {id:"5.1", t:"Uji asap di APK nyata: matikan data seluler saat aplikasi memuat profil", w:"Bloker paling berbahaya minggu ini — aplikasi macet selamanya di layar memuat. Sudah diperbaiki dan dibuktikan di web, tapi jalur pemulihan native belum pernah dijalankan di perangkat.", s:"owner", p:"both"},
+        {id:"5.2", t:"Uji telepon di jaringan seluler, bukan Wi-Fi", w:"Setelah TURN terpasang. Justru di Wi-Fi telepon selalu berhasil — itu yang membuat cacatnya luput.", s:"owner", p:"both"},
+        {id:"5.3", t:"Uji lapangan 60 alamat Pekanbaru dan Padang", w:"Tidak ada sumber kredibel yang mengukur kualitas data peta kota tier-2, jadi saya tulis prosedurnya daripada mengarang angka. Lakukan sebelum menandatangani kontrak penyedia peta.", s:"owner", p:"both"},
+        {id:"5.4", t:"Keputusan: driver bayar merchant harga penuh atau setelah dipotong komisi", w:"Perbaikan order tunai memakai asumsi kedua. Setelah perbaikan, potongan platform pada order tunai naik — pastikan aplikasi Mitra menampilkan rinciannya, kalau tidak driver akan kaget.", s:"owner", p:"both"},
+        {id:"5.5", t:"Keputusan: promo mana yang boleh dipakai berulang", w:"Saya setel aman 1× per pengguna untuk ke-21 kode yang ada. Kode kampanye seperti HEMAT5 dan GAJIAN perlu Bapak ubah dari Panel Admin.", s:"owner", p:"both"},
+        {id:"5.6", t:"Isi volume pesanan per hari di model biaya peta", w:"Saya pakai 600 / 2.400 / 8.000 sebagai asumsi karena tidak ada angkanya di model biaya maupun deck. Ubah tiga sel kuning, seluruh biaya ikut berubah.", s:"owner", p:"both"},
+        {id:"5.7", t:"Rotasi PAT GitHub", w:"Token tersimpan polos di konfigurasi git dan ikut terbaca di sesi kerja. Bukan kebocoran aktif, tapi token hak-tulis sebaiknya tidak melewati kanal apa pun. Bisa dari browser HP.", s:"owner", p:"both"},
+        {id:"5.8", t:"Kirim 2 commit ke GitHub dan bangun APK", w:"Tertahan karena shell di mesin Bapak macet. Bundelnya sudah tersimpan di folder Bapak — buka Claude desktop dan saya lanjutkan, atau jalankan perintah git yang sudah saya berikan.", s:"todo", p:"both"}
+      ]
+    }
+  ];
+
+  var LABEL = {
+    and:  {cls:"c-and",   text:"Android"},
+    ios:  {cls:"c-ios",   text:"iOS"},
+    both: {cls:"c-both",  text:"Android + iOS"}
+  };
+
+  var stateEl = document.getElementById("state");
+  var state;
+  try { state = JSON.parse(stateEl.textContent) || {}; } catch (e) { state = {}; }
+  if (!state.checked || typeof state.checked !== "object") state.checked = {};
+
+  // Butir yang sudah saya selesaikan datang tercentang; sisanya mengikuti
+  // apa yang tersimpan dari centang Bapak sebelumnya.
+  var ALL = [];
+  BLOCKS.forEach(function(b){ b.items.forEach(function(it){ ALL.push(it); }); });
+  ALL.forEach(function(it){
+    if (!(it.id in state.checked)) state.checked[it.id] = (it.s === "done");
+  });
+
+  function chip(cls, text){
+    var s = document.createElement("span");
+    s.className = "chip " + cls;
+    s.textContent = text;
+    return s;
+  }
+
+  function render(){
+    var host = document.getElementById("sections");
+    host.textContent = "";
+    BLOCKS.forEach(function(b){
+      var sec = document.createElement("section");
+
+      var head = document.createElement("div");
+      head.className = "shead";
+      var num = document.createElement("span");
+      num.className = "snum";
+      num.textContent = b.n;
+      var h2 = document.createElement("h2");
+      h2.textContent = b.title;
+      head.appendChild(num); head.appendChild(h2);
+      sec.appendChild(head);
+
+      var d = document.createElement("p");
+      d.className = "sdesc";
+      d.textContent = b.desc;
+      sec.appendChild(d);
+
+      var rows = document.createElement("div");
+      rows.className = "rows";
+
+      b.items.forEach(function(it){
+        var row = document.createElement("div");
+        row.className = "row" + (state.checked[it.id] ? " is-done" : "");
+        row.id = "row-" + it.id;
+
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.id = "cb-" + it.id;
+        cb.checked = !!state.checked[it.id];
+        cb.setAttribute("aria-label", it.t);
+        cb.addEventListener("change", function(){ toggle(it.id, cb.checked); });
+
+        var body = document.createElement("div");
+        body.className = "rbody";
+        var t = document.createElement("span");
+        t.className = "rtitle";
+        t.textContent = it.t;
+        var w = document.createElement("p");
+        w.className = "rwhy";
+        w.textContent = it.w;
+        body.appendChild(t); body.appendChild(w);
+
+        var chips = document.createElement("div");
+        chips.className = "chips";
+        var L = LABEL[it.p];
+        chips.appendChild(chip(L.cls, L.text));
+        if (it.s === "owner") chips.appendChild(chip("c-owner", "Bapak"));
+        else if (it.s === "done") chips.appendChild(chip("c-dir", "Selesai"));
+        else chips.appendChild(chip("c-block", "Masih dikerjakan"));
+        if (it.c) chips.appendChild(chip("c-cost", it.c));
+        body.appendChild(chips);
+
+        row.appendChild(cb); row.appendChild(body);
+        rows.appendChild(row);
+      });
+
+      sec.appendChild(rows);
+      host.appendChild(sec);
+    });
+    tally();
+  }
+
+  function tally(){
+    var done = 0, wait = 0, block = 0;
+    ALL.forEach(function(it){
+      if (state.checked[it.id]) done++;
+      else if (it.s === "owner") wait++;
+      else block++;
+    });
+    var total = ALL.length;
+    document.getElementById("n-done").textContent = done;
+    document.getElementById("n-wait").textContent = wait;
+    document.getElementById("n-block").textContent = block;
+    var pct = function(n){ return (n / total * 100).toFixed(2) + "%"; };
+    document.getElementById("bar-done").style.width = pct(done);
+    document.getElementById("bar-wait").style.width = pct(wait);
+    document.getElementById("bar-block").style.width = pct(block);
+    document.getElementById("meterlab").textContent =
+      done + " dari " + total + " butir selesai · " + Math.round(done / total * 100) + "%";
+
+    var st = document.getElementById("stamp");
+    st.textContent = state.updated
+      ? "Terakhir dicentang: " + new Date(state.updated).toLocaleString("id-ID", {dateStyle:"long", timeStyle:"short"})
+      : "Belum ada perubahan dari Bapak. Butir bertanda Selesai adalah pekerjaan yang sudah saya tuntaskan.";
+  }
+
+  // ---- menyimpan centang sebagai versi baru halaman ----
+  var saveTimer = null, publishing = false;
+  var bar = document.getElementById("savebar");
+
+  function flash(msg){
+    bar.textContent = msg;
+    bar.classList.add("on");
+    clearTimeout(bar._t);
+    bar._t = setTimeout(function(){ bar.classList.remove("on"); }, 2200);
+  }
+
+  function toggle(id, val){
+    state.checked[id] = val;
+    state.updated = new Date().toISOString();
+    var row = document.getElementById("row-" + id);
+    if (row) row.classList.toggle("is-done", val);
+    tally();
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 900); // kumpulkan centang beruntun jadi satu penyimpanan
+  }
+
+  function buildDocument(){
+    // Susun ulang dokumen dari kerangka aslinya: daftar butir dikosongkan
+    // (selalu digambar ulang dari state saat halaman dibuka), lalu state
+    // yang baru disisipkan. Bukan menyalin DOM yang sudah berubah.
+    var clone = document.documentElement.cloneNode(true);
+    var host = clone.querySelector("#sections");
+    if (host) host.textContent = "";
+    var bar2 = clone.querySelector("#savebar");
+    if (bar2) { bar2.className = "savebar"; bar2.textContent = "Tersimpan"; }
+    var s = clone.querySelector("#state");
+    if (s) s.textContent = JSON.stringify(state);
+    return "<!doctype html>\n" + clone.outerHTML;
+  }
+
+  function save(){
+    if (publishing) return;
+    if (!window.claude || typeof window.claude.use !== "function") return;
+    publishing = true;
+    window.claude.use("artifact").then(function(artifact){
+      if (!artifact) { publishing = false; return; }
+      return artifact.publish(buildDocument()).then(function(){
+        flash("Tersimpan");
+      })["catch"](function(err){
+        var code = err && err.code;
+        if (code === "conflict") return;           // halaman akan dimuat ulang ke versi pemenang
+        if (code === "not_writer" || code === "not_granted") return; // pembaca: centang tetap tampil di layarnya
+        flash("Gagal menyimpan — coba centang lagi");
+      });
+    })["catch"](function(){ /* kapabilitas tidak tersedia di tampilan ini */ })
+      .then(function(){ publishing = false; });
+  }
+
+  // ---- tema ----
+  var tog = document.getElementById("themetog");
+  try {
+    var saved = localStorage.getItem("antarkita-tema");
+    if (saved === "dark" || saved === "light") document.documentElement.setAttribute("data-theme", saved);
+  } catch (e) {}
+  tog.addEventListener("click", function(){
+    var cur = document.documentElement.getAttribute("data-theme");
+    var isDark = cur ? cur === "dark"
+      : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var next = isDark ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    try { localStorage.setItem("antarkita-tema", next); } catch (e) {}
+  });
+
+  render();
+})();
+</script>
