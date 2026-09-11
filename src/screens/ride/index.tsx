@@ -14,7 +14,9 @@ import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoic
 import { ServiceArt } from '@/components/ServiceArt';
 import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
+import { CityNotice, cityBlockedLabel } from '@/components/city';
 import { useAppSettings } from '@/hooks/useAppSettings';
+import { useCityStatus } from '@/hooks/useCityStatus';
 import { usePayPrefs } from '@/store/payprefs';
 import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
@@ -34,6 +36,10 @@ export default function RideScreen() {
   const accent = def.color;
   const { pickup, dropoff, setPickup, setDropoff } = useBooking();
   const { location, hasFix, refresh } = useCurrentLocation();
+  // Gerbang wilayah: dinilai dari TITIK JEMPUT (sama seperti yang diperiksa create_order),
+  // jatuh ke lokasi GPS selama titik jemput belum dipilih.
+  const { status: city, blocked: cityBlockedFor } = useCityStatus(pickup ?? (hasFix ? location : null));
+  const cityBlocked = cityBlockedFor(service);
   const refreshWallet = useAuth((s) => s.refreshWallet);
   const { isEnabled } = useAppSettings();
   const [route, setRoute] = useState<RouteResult | null>(null);
@@ -84,7 +90,7 @@ export default function RideScreen() {
   const serviceOff = opts?.service_enabled === false || !isEnabled(service);
 
   const order = async () => {
-    if (!pickup || !dropoff || !chosen || blocked || serviceOff) return;
+    if (!pickup || !dropoff || !chosen || blocked || serviceOff || cityBlocked) return;
     setOrdering(true);
     try {
       // Hemat §5.3: rute sungguhan (GEOMETRI saja) baru diambil DI SINI — saat pengguna
@@ -110,11 +116,14 @@ export default function RideScreen() {
     <Screen title={def.label} subtitle={def.id === 'ride_car' ? 'Mobil · 1–4 penumpang' : 'Ojek motor · cepat & hemat'} band={def.color} back maxWidth={640} footer={ready && chosen && !serviceOff ? (
       <View style={{ gap: 10 }}>
         <LimitNotice limit={opts?.limit} actionTitle="Buka AntarTravel" actionIcon="bus-outline" onAction={() => router.push('/travel' as never)} />
-        <Button title={blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label} · ${rupiah(total)}`} size="lg" color={accent} loading={ordering} disabled={loading || blocked} onPress={order} />
+        <Button title={cityBlocked ? cityBlockedLabel(city, service) : blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label} · ${rupiah(total)}`} size="lg" color={accent} loading={ordering} disabled={loading || blocked || cityBlocked} onPress={order} />
       </View>
     ) : undefined}>
       <View style={{ gap: 14 }}>
         {serviceOff && <ServiceDisabledEmpty onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))} />}
+        {/* Muncul PALING AWAL agar pelanggan tidak mengisi seluruh alur lalu gagal di akhir.
+            Menelusuri tarif & tujuan tetap boleh — hanya tombol pesan yang dikunci. */}
+        {!serviceOff && <CityNotice status={city} service={service} />}
         {!serviceOff && <>
         <Row gap={12} style={s.hero}>
           <ServiceArt kind={def.art} color={accent} size={54} glow={false} />

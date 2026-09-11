@@ -13,6 +13,8 @@ import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
+import { CityNotice, cityBlockedLabel } from '@/components/city';
+import { useCityStatus } from '@/hooks/useCityStatus';
 import { getRoute, reverseGeocode, finalizeRoute, type RouteResult } from '@/lib/geo';
 import { importOsmPlaces } from '@/lib/osm';
 import { rpc, friendlyError } from '@/lib/supabase';
@@ -44,6 +46,7 @@ export default function MarketScreen() {
   const router = useRouter();
   const { dropoff, setDropoff } = useBooking();
   const { location, hasFix } = useCurrentLocation();
+  const { status: city, blocked: cityBlockedFor } = useCityStatus(hasFix ? location : null);
   const refreshWallet = useAuth((s) => s.refreshWallet);
   const payPrefs = usePayPrefs((st) => st.prefs);
   const { settings, isEnabled } = useAppSettings();
@@ -175,13 +178,15 @@ export default function MarketScreen() {
   const total = est ? Math.max(0, est.fare + est.platform_fee + est.service_fee - discount) + subtotal : 0;
   const blocked = limitBlocked(est?.limit);
   const serviceOff = est?.service_enabled === false || !isEnabled('market');
-  const ready = !!market && !!dropoff && !!est && chosenCount > 0 && !blocked;
+  // Gerbang wilayah — daftar pasar & harga acuan tetap bisa ditelusuri di kota mana pun.
+  const cityBlocked = cityBlockedFor('market');
+  const ready = !!market && !!dropoff && !!est && chosenCount > 0 && !blocked && !cityBlocked;
   const pickVehicle = (v: Vehicle) => { vehicleManual.current = true; setVehicle(v); };
 
   // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
   const driverCode = useAntarNowCode('market');
   const order = async () => {
-    if (!market || !dropoff || !est || chosenCount === 0 || blocked) return;
+    if (!market || !dropoff || !est || chosenCount === 0 || blocked || cityBlocked) return;
     setOrdering(true);
     try {
       // Hemat §5.3: rute sungguhan (GEOMETRI saja) baru diambil DI SINI. Jarak/durasi
@@ -214,7 +219,7 @@ export default function MarketScreen() {
         </View>
         <Badge text="Dana ditahan · sisa kembali" color={colors.primary} style={{ flexShrink: 0 }} />
       </Row>
-      <Button title={blocked ? 'Pasar di luar jangkauan' : chosenCount === 0 ? 'Pilih bahan belanja dulu' : 'Pesan ke pasar'} size="lg" disabled={!ready || ordering} loading={ordering} onPress={order} />
+      <Button title={cityBlocked ? cityBlockedLabel(city, 'market') : blocked ? 'Pasar di luar jangkauan' : chosenCount === 0 ? 'Pilih bahan belanja dulu' : 'Pesan ke pasar'} size="lg" disabled={!ready || ordering} loading={ordering} onPress={order} />
     </View>
   );
 
@@ -222,6 +227,8 @@ export default function MarketScreen() {
     <Screen title="AntarMarket" subtitle="Pasar tradisional · harga riil saat dibeli" band={colors.market} back ambient={false} bottomSpace={24} footer={footer}>
       {serviceOff ? <ServiceDisabledEmpty onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))} /> : (
       <View style={{ gap: 14 }}>
+        {/* Kota belum dilayani: pasar tetap boleh ditelusuri, hanya pesanan yang dikunci. */}
+        <CityNotice status={city} service="market" />
         <Entrance index={0}>
           <View style={{ gap: 8 }}>
             <Row between>

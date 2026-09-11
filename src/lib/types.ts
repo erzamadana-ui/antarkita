@@ -278,3 +278,60 @@ export interface DriverDirectStats {
   /** true = order dilempar ke driver lain setelah masa tahan habis. */
   fallback: boolean;
 }
+
+// ---------- 0076–0080: gerbang wilayah operasi (status kota & layanan per kota) ----------
+/** Status operasi sebuah kota. `luar_jangkauan`/`tidak_diketahui` hanya muncul dari hasil RPC, bukan kolom tabel. */
+export type CityStatusKind = 'aktif' | 'segera' | 'belum_dilayani' | 'luar_jangkauan' | 'tidak_diketahui';
+
+/** Hasil `rpc('city_service_status', { p_lat, p_lng })` — semua teksnya sudah Bahasa Indonesia dari server. */
+export interface CityServiceStatus {
+  /** true bila ada minimal satu layanan yang bisa dipesan dari titik ini. */
+  ok: boolean;
+  /** true bila titik berada di dalam radius sebuah kota (walau kotanya belum dilayani). */
+  in_range: boolean;
+  status: CityStatusKind;
+  city_id: string | null;
+  city_name: string | null;
+  province: string | null;
+  distance_km: number | null;
+  /** Peta layanan → boleh dipesan di sini (sudah memperhitungkan sakelar global admin). */
+  services: Record<string, boolean>;
+  /** Nama layanan yang sudah/belum dibuka, siap ditampilkan (mis. "AntarShop"). */
+  open_services: string[];
+  closed_services: string[];
+  waitlist_open: boolean;
+  headline: string;
+  body: string;
+}
+
+/** Hasil `rpc('city_gate', …)` — dipakai UI untuk menampilkan alasan yang sama persis dengan create_order. */
+export interface CityGateResult {
+  ok: boolean;
+  reason?: 'aktif' | 'kota_tertutup' | 'layanan_tertutup' | 'luar_jangkauan' | 'tanpa_lokasi';
+  city_id?: string | null; city_name?: string | null; status?: CityStatusKind; distance_km?: number | null;
+  message?: string | null;
+}
+
+/** Hasil `rpc('city_waitlist_mine', { p_city_id })`. */
+export interface CityWaitlistMine { joined: boolean; services?: string[] | null; total: number }
+/** Hasil `rpc('city_waitlist_join', …)`. */
+export interface CityWaitlistJoin { ok: boolean; city_id: string; city_name: string | null; total: number; message: string }
+
+/** Satu baris `rpc('admin_list_cities')` — Panel Admin · Kota & Wilayah. */
+export interface AdminCityRow {
+  id: string; name: string; province: string | null; lat: number | null; lng: number | null;
+  /** Arti LAMA: kota terdaftar di sistem (nearest_city, impor tempat, rute travel). */
+  active: boolean;
+  /** Arti BARU: status operasi. */
+  service_status: Exclude<CityStatusKind, 'luar_jangkauan' | 'tidak_diketahui'>;
+  status_note: string | null; status_changed_at: string | null; radius_km: number;
+  manager_id: string | null; manager_name: string | null; manager_note: string | null;
+  services: Record<string, boolean>;
+  waitlist: number; waitlist_30d: number;
+  drivers: { approved: number; online: number; recent: number; pending: number };
+  orders_30d: number;
+}
+/** Satu baris `rpc('admin_city_waitlist', { p_city_id })`. */
+export interface AdminWaitlistRow { id: string; name: string | null; phone: string | null; services: string[] | null; note: string | null; created_at: string }
+/** Pilihan Perwakilan Kota dari `rpc('admin_city_manager_options')`. */
+export interface AdminManagerOption { id: string; name: string | null; phone: string | null }

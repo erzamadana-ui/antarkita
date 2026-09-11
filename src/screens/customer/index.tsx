@@ -16,6 +16,8 @@ import { HalalBadge } from '@/components/MerchantStatus';
 import { DestinationCard, PromoCard } from '@/components/PromoCard';
 import { Row, Avatar, CircleButton, toast } from '@/components/ui';
 import { useAppSettings } from '@/hooks/useAppSettings';
+import { useCityStatus } from '@/hooks/useCityStatus';
+import { CityBanner } from '@/components/city';
 import { AmbientBackground } from '@/components/glass';
 import { Entrance, PressableScale, Skeleton } from '@/components/motion';
 import { ServiceIllustration } from '@/components/ServiceArt';
@@ -28,7 +30,7 @@ export default function CustomerHome() {
   const router = useRouter();
   const { profile, wallet, session, refreshWallet } = useAuth();
   const { orders: active, reload } = useMyOrders('customer', session?.user.id, true);
-  const { location } = useCurrentLocation();
+  const { location, hasFix } = useCurrentLocation();
   const [merchants, setMerchants] = useState<Merchant[] | null>(null);
   const [promos, setPromos] = useState<Promo[]>([]);
   const [freq, setFreq] = useState<FrequentData | null>(null);
@@ -37,6 +39,9 @@ export default function CustomerHome() {
   const { unread } = useNotifications(session?.user.id);
   // Layanan yang dinonaktifkan admin (kunci services_enabled = id layanan: ride_motor, ride_car, food, send, shop, market, box, travel)
   const { isEnabled, reload: reloadSettings } = useAppSettings();
+  // Gerbang wilayah (0076–0080): layanan mana yang benar-benar dibuka di kota pengguna.
+  // Data tempat tetap bisa ditelusuri; hanya tombol pesan yang dikunci, dengan alasan yang terlihat.
+  const { status: city, serviceOpen, reload: reloadCity } = useCityStatus(hasFix ? location : null);
   // Sakelar layanan di panel admin harus terasa langsung: setiap kali beranda difokuskan,
   // pengaturan publik dimuat ulang (selain lewat AppState 'active' & realtime di useAppSettings).
   useFocusEffect(React.useCallback(() => { reloadSettings(); }, [reloadSettings]));
@@ -61,7 +66,7 @@ export default function CustomerHome() {
     if ('pickup_lat' in r && r.service !== 'shop') b.setPickup({ lat: r.pickup_lat, lng: r.pickup_lng, address: r.pickup_address, name: r.pickup_address.split(',')[0] });
     router.push(serviceDef(r.service).route as never);
   };
-  const onRefresh = async () => { setRefreshing(true); await Promise.all([reload(), refreshWallet(), loadExtras()]); setRefreshing(false); };
+  const onRefresh = async () => { setRefreshing(true); reloadCity(); await Promise.all([reload(), refreshWallet(), loadExtras()]); setRefreshing(false); };
   const hour = new Date().getHours();
   const greet = hour < 11 ? t('greeting_morning') : hour < 15 ? t('greeting_noon') : hour < 18 ? t('greeting_afternoon') : t('greeting_evening');
 
@@ -123,16 +128,32 @@ export default function CustomerHome() {
               </ScrollView>
             </Entrance>
 
+            {/* Gerbang wilayah: pesan jujur bila AntarKita belum melayani kota pengguna.
+                Sengaja DI ATAS grid layanan supaya pelanggan tahu sebelum mulai memesan. */}
+            <CityBanner status={city} />
+
             {/* Layanan — ikon bulat (kit: Beach / Park / Plane / Train) */}
             <View style={s.grid}>
               {HOME_SERVICES.map((sv, i) => {
+                // "off" = dimatikan admin secara global; "cityOff" = kota/layanan belum dibuka.
+                // Keduanya meredupkan tile, tetapi alasannya berbeda dan harus disebut berbeda.
                 const off = sv.id !== 'pay' && !isEnabled(sv.id);
+                const cityOff = sv.id !== 'pay' && !off && !serviceOpen(sv.id);
+                const dim = off || cityOff;
                 return (
                   <Entrance key={sv.id} index={3 + i} from="zoom" style={{ width: '25%', alignItems: 'stretch' }}>
-                    <PressableScale onPress={() => (off ? toast.show('Layanan ini sedang dinonaktifkan sementara') : router.push(sv.route as never))} scaleTo={off ? 0.98 : 0.9} haptic={!off} style={[s.serviceTile, off && { opacity: 0.45 }]} accessibilityState={{ disabled: off }}>
-                      <View style={[s.serviceCircle, i === 0 && !off && { backgroundColor: colors.primary, borderColor: colors.primary }]}><ServiceIllustration kind={sv.art} size={40} /></View>
+                    <PressableScale
+                      onPress={() => (off
+                        ? toast.show('Layanan ini sedang dinonaktifkan sementara')
+                        // Kota belum dibuka: layar layanan TETAP boleh dibuka (pelanggan masih bisa
+                        // menelusuri tempat & melihat tarif); penjelasannya muncul di layar itu.
+                        : router.push(sv.route as never))}
+                      scaleTo={off ? 0.98 : 0.9} haptic={!off}
+                      style={[s.serviceTile, dim && { opacity: 0.5 }]} accessibilityState={{ disabled: off }}>
+                      <View style={[s.serviceCircle, i === 0 && !dim && { backgroundColor: colors.primary, borderColor: colors.primary }]}><ServiceIllustration kind={sv.art} size={40} /></View>
                       <Text style={s.serviceLabel} numberOfLines={1}>{sv.label.replace('Antar', '')}</Text>
-                      {off && <View style={s.offPill}><Text style={s.offText}>Nonaktif</Text></View>}
+                      {off ? <View style={s.offPill}><Text style={s.offText}>Nonaktif</Text></View>
+                           : cityOff ? <View style={s.offPill}><Text style={s.offText}>Belum ada</Text></View> : null}
                     </PressableScale>
                   </Entrance>
                 );
@@ -141,7 +162,7 @@ export default function CustomerHome() {
 
             {/* Banner teal berilustrasi (kit: "Let's Make Our Life so a Life · Find Trip") */}
             <Entrance index={11}>
-              <PressableScale onPress={() => (isEnabled('travel') ? router.push('/travel' as never) : toast.show('Layanan ini sedang dinonaktifkan sementara'))} scaleTo={0.985} style={[s.banner, !isEnabled('travel') && { opacity: 0.45 }]}>
+              <PressableScale onPress={() => (isEnabled('travel') ? router.push('/travel' as never) : toast.show('Layanan ini sedang dinonaktifkan sementara'))} scaleTo={0.985} style={[s.banner, (!isEnabled('travel') || !serviceOpen('travel')) && { opacity: 0.5 }]}>
                 <View style={{ flex: 1, gap: 6 }}>
                   <View style={s.bannerTag}><Ionicons name="bus-outline" size={11} color="#fff" /><Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>AntarTravel</Text></View>
                   <Text style={s.bannerTitle}>{t('banner_title')}</Text>

@@ -9,6 +9,8 @@ import { DestinationCard } from '@/components/PromoCard';
 import { Entrance, PressableScale, Skeleton } from '@/components/motion';
 import { ServiceIllustration } from '@/components/ServiceArt';
 import { useCurrentLocation } from '@/hooks/useLocation';
+import { useCityStatus } from '@/hooks/useCityStatus';
+import { CityNotice } from '@/components/city';
 import { supabase, friendlyError } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
@@ -26,7 +28,9 @@ const FILTERS: { key: Sort; label: string }[] = [{ key: 'all', label: 'Semua' },
 export default function FoodHome() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { location } = useCurrentLocation();
+  const { location, hasFix } = useCurrentLocation();
+  // Daftar merchant tetap bisa ditelusuri di kota mana pun; yang dikunci hanya pemesanan (di checkout).
+  const { status: city } = useCityStatus(hasFix ? location : null);
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('Semua');
   const [filter, setFilter] = useState<Sort>('all');
@@ -60,6 +64,7 @@ export default function FoodHome() {
     <Screen title="AntarFood" band={colors.food} back scroll={false} padded={false} footer={<CartBar />}>
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={s.inner}>
+          <CityNotice status={city} service="food" compact />
           {/* Pencarian pil + tombol filter bulat */}
           <Entrance index={0}>
             <Row gap={10} style={{ marginTop: 6 }}>

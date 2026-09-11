@@ -8,7 +8,9 @@ import { Screen, Card, Row, Stepper, Button, Badge, Empty, toast } from '@/compo
 import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
 import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
+import { CityNotice, cityBlockedLabel } from '@/components/city';
 import { useAppSettings } from '@/hooks/useAppSettings';
+import { useCityStatus } from '@/hooks/useCityStatus';
 import { usePayPrefs } from '@/store/payprefs';
 import { useCart } from '@/store/cart';
 import { useBooking } from '@/store/booking';
@@ -25,6 +27,9 @@ export default function Checkout() {
   const cart = useCart();
   const { dropoff, setDropoff } = useBooking();
   const { location, hasFix } = useCurrentLocation();
+  // Gerbang wilayah: titik jemput AntarFood adalah LOKASI MERCHANT — sama seperti create_order.
+  const { status: city, blocked: cityBlockedFor } = useCityStatus(hasFix ? location : null);
+  const cityBlocked = cityBlockedFor('food');
   const refreshWallet = useAuth((s) => s.refreshWallet);
   const { isEnabled } = useAppSettings();
   const [route, setRoute] = useState<RouteResult | null>(null);
@@ -67,7 +72,7 @@ export default function Checkout() {
   }
 
   const order = async () => {
-    if (!dropoff || !fare || blocked) return;
+    if (!dropoff || !fare || blocked || cityBlocked) return;
     try {
       // Hemat §5.3: rute sungguhan (GEOMETRI saja) baru diambil DI SINI. Jarak/durasi
       // tetap angka pratinjau yang menjadi dasar harga yang ditampilkan.
@@ -87,10 +92,12 @@ export default function Checkout() {
     <Screen title="Checkout" back ambient="amber" footer={(
       <View style={{ gap: 10 }}>
         <LimitNotice limit={fare?.limit} />
-        <Button title={blocked ? 'Merchant di luar jangkauan' : fare ? `Pesan Sekarang · ${rupiah(total)}` : 'Menghitung ongkir…'} size="lg" color={colors.food} disabled={!fare || !dropoff || blocked} onPress={order} />
+        <Button title={cityBlocked ? cityBlockedLabel(city, 'food') : blocked ? 'Merchant di luar jangkauan' : fare ? `Pesan Sekarang · ${rupiah(total)}` : 'Menghitung ongkir…'} size="lg" color={colors.food} disabled={!fare || !dropoff || blocked || cityBlocked} onPress={order} />
       </View>
     )}>
       <View style={{ gap: 16 }}>
+        {/* Penjelasan di awal checkout supaya pelanggan tidak selesai mengisi lalu gagal. */}
+        <CityNotice status={city} service="food" />
         <Entrance index={0}><Card>
           <Text style={font.label}>Antar ke</Text>
           <PressableScale scaleTo={0.98} haptic={false} onPress={() => router.push({ pathname: '/place-picker', params: { target: 'dropoff', title: 'Alamat pengantaran' } } as never)} style={s.addr}>

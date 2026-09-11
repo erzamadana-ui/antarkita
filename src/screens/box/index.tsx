@@ -12,7 +12,9 @@ import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoic
 import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { ServiceArt } from '@/components/ServiceArt';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
+import { CityNotice, cityBlockedLabel } from '@/components/city';
 import { useAppSettings } from '@/hooks/useAppSettings';
+import { useCityStatus } from '@/hooks/useCityStatus';
 import { usePayPrefs } from '@/store/payprefs';
 import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
@@ -34,6 +36,9 @@ export default function BoxScreen() {
   const router = useRouter();
   const { pickup, dropoff, setPickup, setDropoff } = useBooking();
   const { location, hasFix } = useCurrentLocation();
+  // Gerbang wilayah: dinilai dari titik jemput (sama seperti yang diperiksa create_order).
+  const { status: city, blocked: cityBlockedFor } = useCityStatus(pickup ?? (hasFix ? location : null));
+  const cityBlocked = cityBlockedFor('box');
   const refreshWallet = useAuth((s) => s.refreshWallet);
   const { isEnabled } = useAppSettings();
   const [purpose, setPurpose] = useState(PURPOSES[0].key);
@@ -82,7 +87,7 @@ export default function BoxScreen() {
   // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
   const driverCode = useAntarNowCode('box');
   const order = async () => {
-    if (!pickup || !dropoff || !chosen || blocked || serviceOff) return;
+    if (!pickup || !dropoff || !chosen || blocked || serviceOff || cityBlocked) return;
     setOrdering(true);
     try {
       // Hemat §5.3: rute sungguhan (GEOMETRI saja) baru diambil DI SINI. Jarak/durasi
@@ -105,11 +110,13 @@ export default function BoxScreen() {
     <Screen title="AntarBox" subtitle="Mobil box & pick up" band={colors.box} back maxWidth={640} footer={ready && chosen && !serviceOff ? (
       <View style={{ gap: 10 }}>
         <LimitNotice limit={opts?.limit} />
-        <Button title={blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label}${helpers ? ` + ${helpers} pembantu` : ''} · ${rupiah(total)}`} size="lg" color={colors.box} loading={ordering} disabled={loading || blocked} onPress={order} />
+        <Button title={cityBlocked ? cityBlockedLabel(city, 'box') : blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label}${helpers ? ` + ${helpers} pembantu` : ''} · ${rupiah(total)}`} size="lg" color={colors.box} loading={ordering} disabled={loading || blocked || cityBlocked} onPress={order} />
       </View>
     ) : undefined}>
       <View style={{ gap: 14 }}>
         {serviceOff && <ServiceDisabledEmpty onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))} />}
+        {/* Penjelasan muncul di awal layar, bukan sesudah semua kolom diisi. */}
+        {!serviceOff && <CityNotice status={city} service="box" />}
         {!serviceOff && <>
         <Row gap={12} style={s.hero}>
           <ServiceArt kind="box" color={colors.box} size={54} glow={false} />

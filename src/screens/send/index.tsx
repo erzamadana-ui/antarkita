@@ -16,7 +16,9 @@ import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoic
 import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { ServiceArt } from '@/components/ServiceArt';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
+import { CityNotice, cityBlockedLabel } from '@/components/city';
 import { useAppSettings, requiredSendVehicle, fitsTravel } from '@/hooks/useAppSettings';
+import { useCityStatus } from '@/hooks/useCityStatus';
 import { usePayPrefs } from '@/store/payprefs';
 import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
@@ -39,6 +41,10 @@ export default function SendScreen() {
   const router = useRouter();
   const { pickup, dropoff, setPickup, setDropoff } = useBooking();
   const { location, hasFix } = useCurrentLocation();
+  // Gerbang wilayah: kiriman antar kota pun harus DIJEMPUT dari kota yang sudah dilayani,
+  // jadi penilaiannya memakai titik jemput — sama persis dengan create_order.
+  const { status: city, blocked: cityBlockedFor } = useCityStatus(pickup ?? (hasFix ? location : null));
+  const cityBlocked = cityBlockedFor('send');
   const refreshWallet = useAuth((s) => s.refreshWallet);
   const { isEnabled, sendLimits } = useAppSettings();
   const [scope, setScope] = useState<'in_city' | 'intercity'>('in_city');
@@ -129,10 +135,11 @@ export default function SendScreen() {
   const travelPicked = scope === 'intercity' && via === 'travel';
   const valid = !!(pickup && fare && sized && !overLimit && recipient.name.trim().length >= 2 && phoneOk
     && (scope === 'in_city' ? dropoff : destCity && destWh && ic)
-    && (!travelPicked || (travelOk && destAddress.trim().length >= 6))) && !blocked && !serviceOff;
+    && (!travelPicked || (travelOk && destAddress.trim().length >= 6))) && !blocked && !serviceOff && !cityBlocked;
 
   // Alasan tombol pesan belum aktif (ditulis di judul tombol agar jelas, tetap satu baris)
-  const hint = overLimit ? 'Paket melebihi batas AntarSend'
+  const hint = cityBlocked ? cityBlockedLabel(city, 'send')
+    : overLimit ? 'Paket melebihi batas AntarSend'
     : blocked ? 'Di luar jangkauan dalam kota'
     : !sized ? 'Isi berat & ukuran paket'
     : scope === 'in_city' && !dropoff ? 'Pilih alamat tujuan'
@@ -190,6 +197,7 @@ export default function SendScreen() {
     ) : undefined}>
       <View style={{ gap: 14 }}>
         {serviceOff && <ServiceDisabledEmpty onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))} />}
+        {!serviceOff && <CityNotice status={city} service="send" />}
         {!serviceOff && <>
         <Row gap={12} style={s.hero}>
           <ServiceArt kind="send" color={colors.send} size={54} glow={false} />

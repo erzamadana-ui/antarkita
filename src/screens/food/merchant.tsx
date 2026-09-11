@@ -4,7 +4,7 @@ import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-rea
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Row, Stars, Stepper, Loading, Badge, CircleButton, IconCircle, toast, type IconName } from '@/components/ui';
+import { Row, Stars, Stepper, Badge, CircleButton, IconCircle, toast, Screen, Empty, Button, type IconName } from '@/components/ui';
 import { CartBar } from '@/components/CartBar';
 import { Entrance, PressableScale, Skeleton } from '@/components/motion';
 import { BrandGradient } from '@/components/glass';
@@ -75,13 +75,26 @@ export default function MerchantScreen() {
     </Row>
   );
 
-  if (loading || !merchant) return (
+  if (loading) return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <Skeleton width="100%" height={heroH} radius={0} />
       <View style={[s.sheet, { padding: 20, gap: 10 }]}><Skeleton width="60%" height={22} /><Skeleton width="90%" height={14} /><Skeleton width="40%" height={14} /></View>
       <CircleButton icon="chevron-back" onPress={goBack} style={[s.overlayBtn, { top: insets.top + 8, left: 16 }]} />
-      {loading ? null : <Loading />}
     </View>
+  );
+
+  // Merchant tidak ada (tautan lama/dibagikan, merchant dihapus atau ditolak admin):
+  // JANGAN biarkan layar diam berisi kerangka + pemutar tanpa akhir — pelanggan tidak
+  // tahu apa yang terjadi dan tidak punya jalan keluar selain tombol kembali kecil.
+  if (!merchant) return (
+    <Screen title="Merchant" back>
+      <Empty
+        icon="storefront-outline"
+        title="Merchant tidak ditemukan"
+        subtitle="Tautan ini mungkin sudah lama, atau merchantnya tidak lagi tersedia di AntarKita."
+        action={<Button title="Lihat merchant lain" onPress={() => router.replace('/food' as never)} />}
+      />
+    </Screen>
   );
 
   return (

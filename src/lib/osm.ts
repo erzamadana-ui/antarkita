@@ -1,5 +1,15 @@
 // Impor tempat (toko / pasar) dari OpenStreetMap lewat Overpass API, lalu simpan ke server via rpc import_places.
 // Semua fungsi menelan error: UI tidak boleh gagal hanya karena peta tidak bisa dihubungi.
+//
+// LINGKUP BERKAS INI: impor kecil di sekitar pengguna (radius ±5 km) dari sisi klien.
+// Impor massal se-Indonesia TIDAK dilakukan di sini melainkan oleh Edge Function
+// `supabase/functions/osm-import` (jaringan klien sering memblokir Overpass, dan
+// pekerjaan besar butuh antrean yang tahan timeout). Pemetaan tag → kategori di
+// kedua tempat sengaja dibuat sama; bila mengubah brandOf/categoryOf di sini,
+// ubah juga padanannya di Edge Function.
+//
+// FASKES (rumah sakit / klinik) TIDAK diimpor dari klien: faskes bukan toko belanja,
+// tempatnya di tabel poi_places sebagai titik tujuan (lihat migrasi 0072).
 import { rpc } from './supabase';
 
 export type OsmKind = 'store' | 'market';
@@ -36,12 +46,19 @@ async function postOverpass(endpoint: string, query: string): Promise<OsmElement
 
 function brandOf(tags: Record<string, string>, kind: OsmKind): string | undefined {
   if (kind !== 'store') return undefined;
-  const t = `${tags.brand ?? ''} ${tags.name ?? ''}`.toLowerCase();
+  const t = `${tags.brand ?? ''} ${tags.name ?? ''} ${tags.operator ?? ''}`.toLowerCase();
   if (t.includes('indomaret')) return 'indomaret';
   if (t.includes('alfamart') || t.includes('alfamidi')) return 'alfamart';
   if (t.includes('apotek') || t.includes('apotik') || t.includes('farma') || tags.amenity === 'pharmacy' || tags.shop === 'chemist') return 'apotek';
   if (tags.shop === 'supermarket' || t.includes('supermarket') || t.includes('swalayan') || t.includes('hypermart')) return 'supermarket';
   return 'lainnya';
+}
+/** Faskes tidak boleh ikut masuk katalog belanja walau kebetulan bertag shop/pharmacy. */
+function isFaskes(tags: Record<string, string>): boolean {
+  const name = `${tags.name ?? ''}`.toLowerCase();
+  return ['hospital', 'clinic', 'doctors'].includes(tags.amenity ?? '')
+    || ['hospital', 'clinic', 'centre'].includes(tags.healthcare ?? '')
+    || name.includes('rumah sakit') || name.includes('puskesmas') || name.includes('klinik');
 }
 function categoryOf(tags: Record<string, string>, brand: string | undefined): string | undefined {
   if (!brand) return undefined;
@@ -63,6 +80,7 @@ function mapElements(kind: OsmKind, els: OsmElement[]): OsmPlace[] {
     const tags = el.tags ?? {};
     const name = (tags.name ?? tags['name:id'] ?? tags.brand ?? '').trim();
     if (name.length < 3) continue;
+    if (kind === 'store' && isFaskes(tags)) continue;  // rumah sakit/klinik bukan toko belanja
     const lat = el.lat ?? el.center?.lat; const lng = el.lon ?? el.center?.lon;
     if (typeof lat !== 'number' || typeof lng !== 'number') continue;
     const osm_id = `${el.type}/${el.id}`;

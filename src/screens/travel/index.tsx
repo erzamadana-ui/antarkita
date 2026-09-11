@@ -15,6 +15,8 @@ import { usePayPrefs } from '@/store/payprefs';
 import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
+import { useCityStatus } from '@/hooks/useCityStatus';
+import { CityNotice, cityBlockedLabel } from '@/components/city';
 import { reverseGeocode } from '@/lib/geo';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors, font, radius, motion, shadow } from '@/lib/theme';
@@ -38,6 +40,7 @@ export default function TravelScreen() {
   const { session, profile, refreshWallet } = useAuth();
   const { pickup, setPickup } = useBooking();
   const { location, hasFix } = useCurrentLocation();
+  const { status: city, blocked: cityBlockedFor } = useCityStatus(pickup ?? (hasFix ? location : null));
   const [mode, setMode] = useState<Mode>('shared');
   const [from, setFrom] = useState<string | null>(null);
   const [to, setTo] = useState<string | null>(null);
@@ -84,11 +87,18 @@ export default function TravelScreen() {
     finally { setBusy(false); }
   };
 
-  const sharedFooter = mode === 'shared' && trip ? <Button title={`${priv ? 'Carter private' : `Pesan ${pax} kursi`} · ${rupiah(total)}`} size="lg" loading={busy} onPress={book} /> : undefined;
+  // Gerbang wilayah: AntarTravel juga punya sakelar per kota. Server (travel_book /
+  // travel_request_create sejak 0080) tetap menolak, ini supaya pelanggan tahu lebih awal.
+  const cityBlocked = cityBlockedFor('travel');
+  const sharedFooter = mode === 'shared' && trip
+    ? <Button title={cityBlocked ? cityBlockedLabel(city, 'travel') : `${priv ? 'Carter private' : `Pesan ${pax} kursi`} · ${rupiah(total)}`} size="lg" loading={busy} disabled={cityBlocked} onPress={book} />
+    : undefined;
 
   return (
     <Screen title="AntarTravel" subtitle="Antar kota · jemput di rumah" band={colors.travel} back maxWidth={640} footer={sharedFooter}>
       <View style={{ gap: 14 }}>
+        {/* Jadwal & rute tetap boleh ditelusuri; hanya pemesanan yang dikunci. */}
+        <CityNotice status={city} service="travel" />
         <Entrance index={0}>
           <View style={s.modeRow}>
             {MODES.map((m) => {
@@ -241,6 +251,8 @@ function RequestMode({ kind, uid }: { kind: TravelRequestKind; uid?: string }) {
   const { wallet, refreshWallet } = useAuth();
   const { pickup, dropoff, setPickup, setDropoff } = useBooking();
   const { location, hasFix } = useCurrentLocation();
+  const { status: city, blocked: cityBlockedFor } = useCityStatus(pickup ?? (hasFix ? location : null));
+  const cityBlocked = cityBlockedFor('travel');
   const payPrefs = usePayPrefs((st) => st.prefs);
   const daily = kind === 'daily';
   const [departAt, setDepartAt] = useState<Date>(() => roundUp30(new Date(Date.now() + 3 * 3600e3)));
@@ -410,7 +422,7 @@ function RequestMode({ kind, uid }: { kind: TravelRequestKind; uid?: string }) {
           <Chip label="Tunai ke sopir" active={method === 'cash'} onPress={() => setMethod('cash')} />
         </Row>
         <Text style={font.tiny}>{method === 'wallet' ? 'Saldo dipotong saat Anda menerima penawaran; dana diteruskan ke mitra setelah perjalanan selesai.' : 'Bayar langsung ke sopir saat berangkat. Mitra dapat menolak permintaan tunai untuk perjalanan panjang.'}</Text>
-        <Button title="Kirim permintaan" size="lg" icon="paper-plane-outline" loading={busy} onPress={submit} />
+        <Button title={cityBlocked ? cityBlockedLabel(city, 'travel') : 'Kirim permintaan'} size="lg" icon="paper-plane-outline" loading={busy} disabled={cityBlocked} onPress={submit} />
         <Text style={font.tiny}>Permintaan berlaku hingga jadwal berangkat, maksimal 3 permintaan aktif. Anda bebas memilih penawaran atau membatalkan sebelum menerima.</Text>
       </View></Entrance>
 

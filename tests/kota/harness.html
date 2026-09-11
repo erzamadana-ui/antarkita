@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<title>Harness uji gerbang wilayah — AntarKita</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 20px; color: #101F21; background: #F5F8F8; }
+  .card { background: #fff; border: 1px solid #E6ECEC; border-radius: 14px; padding: 14px; margin-bottom: 12px; max-width: 640px; }
+  #notice { border-color: #F5A52455; background: #FFF3DD; }
+  #notice[hidden] { display: none; }
+  h1 { font-size: 18px; margin: 0 0 12px; }
+  #headline { font-weight: 800; margin: 0 0 4px; }
+  #body { margin: 0; font-size: 13px; color: #5C6B6D; }
+  #avail { font-size: 12px; color: #5C6B6D; margin-top: 8px; }
+  button { font: inherit; padding: 10px 14px; border-radius: 999px; border: 1px solid #187A85; background: #187A85; color: #fff; cursor: pointer; }
+  button:disabled { background: #E6ECEC; border-color: #E6ECEC; color: #8A9899; cursor: not-allowed; }
+  button.secondary { background: #fff; color: #187A85; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  input, select { font: inherit; padding: 6px 8px; border: 1px solid #E6ECEC; border-radius: 8px; }
+  #log { font-size: 12px; white-space: pre-wrap; color: #5C6B6D; }
+</style>
+</head>
+<body>
+<h1>Layar pemesanan (kerangka uji)</h1>
+
+<div class="card">
+  <div class="row">
+    <label>Lokasi jemput
+      <select id="tempat">
+        <option value="0.5071,101.4478">Pekanbaru (kota aktif)</option>
+        <option value="3.5952,98.6722">Medan (belum dilayani)</option>
+        <option value="1.0456,104.0305">Batam (segera)</option>
+        <option value="-8.65,115.21">Denpasar (luar jangkauan)</option>
+      </select>
+    </label>
+    <label>Layanan
+      <select id="layanan">
+        <option value="ride_motor">AntarRide</option>
+        <option value="shop">AntarShop</option>
+        <option value="send">AntarSend</option>
+        <option value="food">AntarFood</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<!-- Kartu penjelasan: HARUS muncul di awal layar, sebelum pelanggan mengisi apa pun. -->
+<div class="card" id="notice" hidden>
+  <p id="headline"></p>
+  <p id="body"></p>
+  <div id="avail"></div>
+  <div class="row" style="margin-top:10px">
+    <button class="secondary" id="waitlist">Beri tahu saya kalau sudah ada</button>
+  </div>
+</div>
+
+<!-- Daftar tempat tetap bisa ditelusuri walau kota belum dilayani (tidak pernah disembunyikan). -->
+<div class="card" id="katalog">
+  <strong>Tempat di sekitar (selalu bisa ditelusuri)</strong>
+  <ul>
+    <li class="tempat">Apotek Sehat Bersama</li>
+    <li class="tempat">Pasar Pagi Kota</li>
+    <li class="tempat">Indomaret Jl. Merdeka</li>
+  </ul>
+</div>
+
+<div class="card">
+  <button id="pesan">Pesan sekarang</button>
+  <p id="log"></p>
+</div>
+
+<script type="module">
+// Modul NYATA aplikasi (dikompilasi dari src/hooks/useCityStatus.ts oleh build.mjs).
+import { useCityStatusStore, cityBlockedLabel, SERVICE_LABEL } from './build/useCityStatus.js';
+
+const el = (id) => document.getElementById(id);
+const state = { status: null, point: null };
+
+/** Cerminan apa yang dilakukan layar Ride/Shop/Send/Food: baca status, lalu kunci tombol. */
+async function render() {
+  const [lat, lng] = el('tempat').value.split(',').map(Number);
+  const service = el('layanan').value;
+  state.point = { lat, lng };
+  state.status = await useCityStatusStore.getState().load({ lat, lng });
+  const st = state.status;
+
+  // Gagal-aman: status null (RPC gagal) → layanan dianggap terbuka, server tetap menjaga.
+  const open = !st ? true : (st.services?.[service] ?? st.ok);
+  const blocked = !open;
+
+  // Kartu penjelasan
+  const perService = st && st.status === 'aktif';
+  el('notice').hidden = !blocked;
+  if (blocked && st) {
+    el('headline').textContent = perService
+      ? `${SERVICE_LABEL[service] ?? service} belum dibuka di ${st.city_name ?? 'kota ini'}`
+      : st.headline;
+    el('body').textContent = perService
+      ? (st.open_services.length ? `Kami sedang menambah driver untuk layanan ini. Yang sudah bisa dipakai di sini: ${st.open_services.join(', ')}.`
+                                 : 'Kami sedang menambah driver untuk layanan ini di kota Anda.')
+      : st.body;
+    el('avail').textContent = st.in_range
+      ? `Sudah bisa: ${st.open_services.join(', ') || '—'} | Belum dibuka: ${st.closed_services.join(', ') || '—'}`
+      : '';
+    el('waitlist').hidden = !st.waitlist_open;
+  }
+
+  // Tombol pesan: DINONAKTIFKAN dengan alasan yang terlihat, bukan dihilangkan.
+  const btn = el('pesan');
+  btn.disabled = blocked;
+  btn.textContent = blocked ? cityBlockedLabel(st, service) : 'Pesan sekarang';
+  el('log').textContent = '';
+}
+
+el('tempat').addEventListener('change', render);
+el('layanan').addEventListener('change', render);
+
+el('pesan').addEventListener('click', async () => {
+  const r = await fetch('/mock/rpc/create_order', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ p: { service: el('layanan').value, pickup: state.point, dropoff: state.point } }),
+  });
+  const d = await r.json();
+  el('log').textContent = r.ok ? `Pesanan dibuat: ${d.code}` : `Ditolak: ${d.message}`;
+});
+
+el('waitlist').addEventListener('click', async () => {
+  const r = await fetch('/mock/rpc/city_waitlist_join', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ p_city_id: state.status?.city_id, p_services: [el('layanan').value], p_note: null }),
+  });
+  const d = await r.json();
+  el('log').textContent = r.ok ? d.message : `Gagal: ${d.message}`;
+});
+
+// Dipanggil uji sesudah admin mengubah status kota, supaya cache 5 menit tidak menutupi perubahan.
+window.__segarkan = async () => { useCityStatusStore.getState().clear(); await render(); };
+window.__siap = render().then(() => true);
+</script>
+</body>
+</html>

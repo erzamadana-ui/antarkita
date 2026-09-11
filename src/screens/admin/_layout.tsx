@@ -35,6 +35,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/(admin)/merchants', label: 'Merchant', icon: 'restaurant-outline', iconActive: 'restaurant' },
       { href: '/(admin)/vendors', label: 'Mitra Pasar', icon: 'leaf-outline', iconActive: 'leaf' },
       { href: '/(admin)/logistics', label: 'Logistik & Travel', icon: 'navigate-outline', iconActive: 'navigate' },
+      { href: '/(admin)/kota', label: 'Kota & Wilayah', icon: 'globe-outline', iconActive: 'globe' },
     ],
   },
   {
@@ -43,6 +44,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/(admin)/shop', label: 'AntarShop · Toko', icon: 'basket-outline', iconActive: 'basket' },
       { href: '/(admin)/market', label: 'AntarMarket · Pasar', icon: 'storefront-outline', iconActive: 'storefront' },
       { href: '/(admin)/places', label: 'Data Tempat', icon: 'map-outline', iconActive: 'map' },
+      { href: '/(admin)/data-tempat', label: 'Impor Peta (OSM)', icon: 'cloud-download-outline', iconActive: 'cloud-download' },
       { href: '/(admin)/pricing', label: 'Tarif & Promo', icon: 'pricetags-outline', iconActive: 'pricetags' },
       { href: '/(admin)/pricing-intel', label: 'Intelijen Harga', icon: 'trending-up-outline', iconActive: 'trending-up' },
       { href: '/(admin)/blast', label: 'Blast Promo', icon: 'megaphone-outline', iconActive: 'megaphone' },

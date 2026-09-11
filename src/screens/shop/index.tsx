@@ -13,6 +13,8 @@ import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
+import { CityNotice, cityBlockedLabel } from '@/components/city';
+import { useCityStatus } from '@/hooks/useCityStatus';
 import { getRoute, reverseGeocode, finalizeRoute, type RouteResult } from '@/lib/geo';
 import { importOsmPlaces } from '@/lib/osm';
 import { rpc, friendlyError } from '@/lib/supabase';
@@ -40,6 +42,7 @@ export default function ShopScreen() {
   const router = useRouter();
   const { pickup, dropoff, setPickup, setDropoff } = useBooking();
   const { location, hasFix } = useCurrentLocation();
+  const { status: city, blocked: cityBlockedFor } = useCityStatus(hasFix ? location : null);
   const refreshWallet = useAuth((s) => s.refreshWallet);
   const payPrefs = usePayPrefs((st) => st.prefs);
   const { settings, isEnabled } = useAppSettings();
@@ -160,7 +163,11 @@ export default function ShopScreen() {
   const total = est ? Math.max(0, est.fare + est.platform_fee + est.service_fee - discount) + subtotal : 0;
   const blocked = limitBlocked(est?.limit);
   const serviceOff = est?.service_enabled === false || !isEnabled('shop');
-  const ready = !!dropoff && !!est && !blocked && (free ? !!pickup && validFree.length > 0 : !!store && cart.length > 0);
+  // Gerbang wilayah: create_order memakai LOKASI TOKO sebagai titik jemput, jadi
+  // penilaiannya pun dari sana (jatuh ke lokasi pengguna selama toko belum dipilih).
+  // Daftar toko & harga TETAP bisa ditelusuri walau kota belum dilayani.
+  const cityBlocked = cityBlockedFor('shop');
+  const ready = !!dropoff && !!est && !blocked && !cityBlocked && (free ? !!pickup && validFree.length > 0 : !!store && cart.length > 0);
   const pickVehicle = (v: Vehicle) => { vehicleManual.current = true; setVehicle(v); };
 
   // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
@@ -195,7 +202,7 @@ export default function ShopScreen() {
     setOrdering(false);
   };
 
-  const footerTitle = blocked ? 'Toko di luar jangkauan' : !ready ? (free ? 'Lengkapi toko & daftar belanja' : store ? (cart.length ? 'Menghitung…' : 'Pilih barang dulu') : 'Pilih toko dulu') : estimating ? 'Menghitung…' : `Pesan AntarShop · ${rupiah(total)}`;
+  const footerTitle = cityBlocked ? cityBlockedLabel(city, 'shop') : blocked ? 'Toko di luar jangkauan' : !ready ? (free ? 'Lengkapi toko & daftar belanja' : store ? (cart.length ? 'Menghitung…' : 'Pilih barang dulu') : 'Pilih toko dulu') : estimating ? 'Menghitung…' : `Pesan AntarShop · ${rupiah(total)}`;
   const colW = gridW ? Math.floor((gridW - 12) / 2) : 160;
 
   return (
@@ -208,6 +215,8 @@ export default function ShopScreen() {
       )}>
       {serviceOff ? <ServiceDisabledEmpty onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))} /> : (
       <View style={{ gap: 14 }}>
+        {/* Kota belum dilayani: daftar toko tetap boleh ditelusuri, hanya pesanan yang dikunci. */}
+        <CityNotice status={city} service="shop" />
         <Entrance index={0}><Input icon="search" placeholder={store ? `Cari barang di ${store.name}` : 'Cari toko atau alamat'} value={q} onChangeText={setQ} /></Entrance>
         <Entrance index={1}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
