@@ -100,14 +100,14 @@ export default function TravelRequestDetail() {
             <ServiceIllustration kind="car" size={140} />
           </BrandGradient>
           <BrandGradient colors={['rgba(0,0,0,0.25)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.35)']} angle="vertical" style={StyleSheet.absoluteFill} />
-          <View style={[s.statusPill, { top: insets.top + 60, backgroundColor: statusColor(r.status) }]}><Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>{travelRequestStatusLabel[r.status]}</Text></View>
+          <View style={[s.statusPill, { top: insets.top + 60, backgroundColor: statusColor(r.status) }]}><Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{travelRequestStatusLabel[r.status]}</Text></View>
         </Animated.View>
 
         <View style={s.wrap}>
           <Animated.View entering={FadeInDown.duration(motion.slow)} style={s.sheet}>
             <View style={s.handle} />
             <Text style={font.h1} numberOfLines={2}>{r.kind === 'daily' ? `Sopir harian · ${r.days} hari` : 'Carter privat'}</Text>
-            <Row gap={4} style={{ marginTop: 4 }}><Ionicons name="location-outline" size={14} color={colors.textMuted} /><Text style={font.small} numberOfLines={1}>{r.dropoff_address ?? r.pickup_address}</Text></Row>
+            <Row gap={4} style={{ marginTop: 4 }}><Ionicons name="location-outline" size={16} color={colors.textMuted} /><Text style={font.small} numberOfLines={1}>{r.dropoff_address ?? r.pickup_address}</Text></Row>
             <Row gap={8} style={{ marginTop: 12, flexWrap: 'wrap' }}>
               <Badge text={`Berangkat ${formatSchedule(r.depart_at)}`} color={colors.primary} />
               <Badge text={`${travelKindLabel[r.kind]} · ${r.pax} penumpang`} color={colors.textSecondary} />
@@ -116,7 +116,7 @@ export default function TravelRequestDetail() {
             <Row gap={8} style={{ marginTop: 16 }}>
               {TABS.map((x) => (
                 <PressableScale key={x.key} onPress={() => setTab(x.key)} scaleTo={0.94} style={[s.tab, tab === x.key && s.tabOn]}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: tab === x.key ? '#fff' : colors.text }}>{x.label}{x.key === 'penawaran' && offers.length ? ` (${offers.length})` : ''}</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: tab === x.key ? '#fff' : colors.text }}>{x.label}{x.key === 'penawaran' && offers.length ? ` (${offers.length})` : ''}</Text>
                 </PressableScale>
               ))}
             </Row>
@@ -183,11 +183,11 @@ export default function TravelRequestDetail() {
                       <Row gap={12} style={{ alignItems: 'flex-start' }}>
                         {p?.photo_url || p?.avatar_url ? <Avatar name={p?.company_name ?? p?.name} url={p?.photo_url ?? p?.avatar_url} size={64} /> : <View style={s.thumb}><ServiceIllustration kind="car" size={40} /></View>}
                         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                          <Text style={[font.body, { fontWeight: '800' }]} numberOfLines={1}>{p?.company_name ?? p?.name ?? 'Mitra travel'}</Text>
-                          <Row gap={4}><Ionicons name="car-outline" size={13} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>{p?.partner_type === 'agency' ? 'Agen travel' : 'Mobil pribadi'} · {p?.vehicle_model}{p?.vehicle_year ? ` ${p.vehicle_year}` : ''} · {p?.seats} kursi{p?.is_electric ? ' · listrik' : ''}</Text></Row>
-                          <Row gap={4}><Ionicons name="star" size={13} color={colors.accent} /><Text style={font.tiny}>{Number(p?.rating_avg ?? 0).toFixed(1)} ({p?.rating_count ?? 0}) · {p?.total_trips ?? 0} trip</Text></Row>
+                          <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={1}>{p?.company_name ?? p?.name ?? 'Mitra travel'}</Text>
+                          <Row gap={4}><Ionicons name="car-outline" size={12} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>{p?.partner_type === 'agency' ? 'Agen travel' : 'Mobil pribadi'} · {p?.vehicle_model}{p?.vehicle_year ? ` ${p.vehicle_year}` : ''} · {p?.seats} kursi{p?.is_electric ? ' · listrik' : ''}</Text></Row>
+                          <Row gap={4}><Ionicons name="star" size={12} color={colors.accent} /><Text style={font.tiny}>{Number(p?.rating_avg ?? 0).toFixed(1)} ({p?.rating_count ?? 0}) · {p?.total_trips ?? 0} trip</Text></Row>
                         </View>
-                        <View style={{ alignItems: 'flex-end', gap: 4 }}><Text style={{ fontWeight: '800', color: colors.primary, fontSize: 18 }}>{rupiah(o.price)}</Text><Badge text={isAcc ? 'Diterima' : o.status === 'rejected' ? 'Ditolak' : 'Penawaran'} color={isAcc ? colors.success : o.status === 'rejected' ? colors.danger : colors.accent} /></View>
+                        <View style={{ alignItems: 'flex-end', gap: 4 }}><Text style={{ fontWeight: '700', color: colors.primary, fontSize: 18 }}>{rupiah(o.price)}</Text><Badge text={isAcc ? 'Diterima' : o.status === 'rejected' ? 'Ditolak' : 'Penawaran'} color={isAcc ? colors.success : o.status === 'rejected' ? colors.danger : colors.accent} /></View>
                       </Row>
                       {(b.daily_rate || b.accommodation_fee || b.fuel_est) ? (
                         <View style={s.breakdown}>
@@ -258,8 +258,8 @@ const s = StyleSheet.create({
   wrap: { width: '100%', maxWidth: 640, alignSelf: 'center' },
   sheet: { backgroundColor: '#fff', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, marginTop: -28, padding: 20, paddingTop: 12, borderWidth: 1, borderBottomWidth: 0, borderColor: colors.border, ...shadow.card },
   handle: { width: 44, height: 5, borderRadius: 3, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 14 },
-  statusPill: { position: 'absolute', left: 16, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.full },
-  tab: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff' },
+  statusPill: { position: 'absolute', left: 16, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full },
+  tab: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff' },
   tabOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   card: { backgroundColor: '#fff', borderRadius: radius.lg, padding: 16, borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   thumb: { width: 64, height: 64, borderRadius: 16, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
