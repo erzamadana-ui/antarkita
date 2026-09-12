@@ -41,8 +41,36 @@ interface CallState {
   reset: () => void;
 }
 
-const ICE = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' },
+// ICE dasar: STUN publik + (opsional, cara lama) TURN statis dari env build.
+const ICE_BASE = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' },
   ...(process.env.EXPO_PUBLIC_TURN_URL ? [{ urls: process.env.EXPO_PUBLIC_TURN_URL, username: process.env.EXPO_PUBLIC_TURN_USER, credential: process.env.EXPO_PUBLIC_TURN_PASS }] : [])];
+
+/**
+ * TURN berumur pendek dari server (Cloudflare Realtime lewat Edge Function `turn-credentials`,
+ * migrasi 0082). Kredensial di-cache sampai ±10 menit sebelum kedaluwarsa. Kalau server belum
+ * dikonfigurasi / jaringan lambat (>4 dtk), panggilan TETAP berjalan dengan ICE_BASE — jangan
+ * pernah menggagalkan panggilan hanya karena TURN tidak tersedia.
+ */
+export type IceServer = { urls: string | string[]; username?: string; credential?: string };
+let iceCache: { servers: IceServer[]; expiresAt: number } | null = null;
+const ICE_FETCH_MS = 4_000;
+export async function getIceServers(): Promise<IceServer[]> {
+  if (iceCache && iceCache.expiresAt - Date.now() > 10 * 60_000) return [...ICE_BASE, ...iceCache.servers];
+  try {
+    const res = await Promise.race([
+      supabase.functions.invoke<{ iceServers?: IceServer[]; expiresAt?: number; configured?: boolean }>('turn-credentials', { body: {} }),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('turn timeout')), ICE_FETCH_MS)),
+    ]);
+    const servers = res?.data?.iceServers ?? [];
+    if (!res?.error && servers.length) {
+      iceCache = { servers, expiresAt: res.data?.expiresAt ?? Date.now() + 60 * 60_000 };
+      return [...ICE_BASE, ...servers];
+    }
+  } catch { /* jatuh ke STUN */ }
+  return ICE_BASE;
+}
+/** Hanya untuk uji: kosongkan cache TURN. */
+export const resetIceCache = () => { iceCache = null; };
 
 const SUBSCRIBE_MS = 8_000;    // batas menunggu channel realtime siap
 const ACK_MS = 12_000;         // tanpa balasan 'ringing' sekian lama → penerima dianggap tidak aktif
@@ -166,7 +194,9 @@ async function setupPeer(set: (p: Partial<CallState>) => void, get: () => CallSt
     if (n === 'NotReadableError' || n === 'TrackStartError') throw new Error('Mikrofon sedang dipakai aplikasi lain. Tutup aplikasi itu lalu coba lagi.');
     throw new Error((e as Error).message || 'Mikrofon tidak tersedia');
   }
-  pc = new rtc.RTCPeerConnection({ iceServers: ICE });
+  // TURN diminta SEBELUM peer dibuat: ICE server tidak bisa ditambah setelah RTCPeerConnection ada.
+  const iceServers = await getIceServers();
+  pc = new rtc.RTCPeerConnection({ iceServers });
   local.getTracks().forEach((t: any) => pc.addTrack(t, local));
   pc.onicecandidate = (e: any) => { if (e?.candidate) sigSend('ice', { candidate: e.candidate }); };
   pc.ontrack = (e: any) => { const stream = e?.streams?.[0]; if (stream) { detachRemote?.(); detachRemote = rtc.attachRemote(stream); } };
@@ -240,6 +270,8 @@ export const useCall = create<CallState>((set, get) => {
       if (inbox && inboxUid === uid) return;
       if (inbox) get().stopListening();          // pengguna berganti → channel lama harus dilepas
       inboxUid = uid;
+      // Hangatkan cache TURN saat pengguna masuk — supaya saat menelepon tidak menunggu server.
+      getIceServers().catch(() => { /* noop */ });
       const ch = supabase.channel(`call:${uid}`);
 
       ch.on('broadcast', { event: 'ring' }, ({ payload }) => {
@@ -323,6 +355,7 @@ export const useCall = create<CallState>((set, get) => {
       if (!peer?.id) { finish('Kontak tidak ditemukan'); return null; }
       if (peer.id === m.id) { finish('Tidak bisa menelepon diri sendiri'); return null; }
       starting = true;
+      getIceServers().catch(() => { /* noop */ });   // paralel dengan sinyal 'ring'; hasilnya di-cache
       try {
         if (!rtc.supported) { finish(Platform.OS === 'web' ? 'Browser ini tidak mendukung panggilan suara' : 'Panggilan suara butuh APK build (tidak tersedia di Expo Go)'); return null; }
         // Minta izin mikrofon SEBELUM membuat log panggilan, supaya penolakan izin tidak
@@ -384,6 +417,7 @@ export const useCall = create<CallState>((set, get) => {
       stopRing();
       ringTimer = clear(ringTimer); ackTimer = clear(ackTimer);
       set({ phase: 'connecting', startedAt: null, remoteRinging: false });
+      getIceServers().catch(() => { /* noop */ });
       try {
         // Channel sinyal dibuka LEBIH DULU: kalau dibuka setelah 'accept' terkirim, 'offer' dari
         // penelepon bisa lewat sebelum kita mendengarkan (panggilan diam lalu mati).
