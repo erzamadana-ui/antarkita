@@ -123,13 +123,13 @@ export default function VendorItems() {
             return (
               <Entrance key={it.id} index={Math.min(i + 1, 8)} from="up">
                 <PressableScale onPress={() => (selecting ? toggleSelect(it.id) : openEdit(it))} scaleTo={0.985} haptic={false} style={[s.item, !it.in_stock && { opacity: 0.6 }, sel && { borderColor: colors.primary, backgroundColor: colors.tint }]}>
-                  {selecting && <Ionicons name={sel ? 'checkbox' : 'square-outline'} size={22} color={sel ? colors.primary : colors.textMuted} />}
+                  {selecting && <Ionicons name={sel ? 'checkbox' : 'square-outline'} size={24} color={sel ? colors.primary : colors.textMuted} />}
                   {it.photo_url ? <Image source={{ uri: it.photo_url }} style={s.thumb} /> : <View style={[s.thumb, { alignItems: 'center', justifyContent: 'center' }]}><ServiceIllustration kind="market" size={30} /></View>}
                   <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
                     <Row gap={6}><Text style={[font.body, { fontWeight: '700', flexShrink: 1 }]} numberOfLines={1}>{it.name}</Text><Badge text={it.grade} color={g.color} /></Row>
                     <Text style={font.tiny} numberOfLines={1}>{marketCategoryLabel[it.category] ?? it.category} · per {it.unit}{it.origin ? ` · ${it.origin}` : ''}{!it.photo_url ? ' · tanpa foto' : ''}</Text>
                     <Row gap={6} style={{ flexWrap: 'wrap' }}>
-                      <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 15 }}>{rupiah(it.price)}</Text>
+                      <Text style={{ fontWeight: '700', color: colors.primary, fontSize: 16 }}>{rupiah(it.price)}</Text>
                       {it.ref_price ? <Text style={[font.tiny, { color: diff != null && (diff > 25 || diff < -40) ? colors.warning : colors.textMuted }]}>acuan {rupiah(it.ref_price)}{diff ? ` (${diff > 0 ? '+' : ''}${diff}%)` : ''}</Text> : <Text style={font.tiny}>tanpa acuan</Text>}
                       {stale && <Badge text="Perbarui harga" color={colors.warning} />}
                     </Row>
@@ -190,7 +190,7 @@ export default function VendorItems() {
               <Row gap={8} style={{ flexWrap: 'wrap' }}>{UNITS.map((u) => <Chip key={u} label={u} active={editing?.unit === u} onPress={() => patch({ unit: u })} />)}</Row>
               <Input label={`Harga per ${editing?.unit ?? 'satuan'} (Rp)`} keyboardType="number-pad" icon="pricetag-outline" value={editing?.price ?? ''} onChangeText={(v) => patch({ price: digits(v) })} />
               {ref ? <Text style={font.tiny}>Acuan {rupiah(ref)} · wajar {rupiah(Math.round(ref * COEF_MIN))}–{rupiah(Math.round(ref * COEF_MAX))} · maksimal {rupiah(Math.round(ref * COEF_HARD))}</Text> : null}
-              {priceWarn && <Row gap={6}><Ionicons name={priceWarn[1] === colors.success ? 'checkmark-circle' : 'alert-circle'} size={14} color={priceWarn[1]} /><Text style={[font.tiny, { color: priceWarn[1], fontWeight: '700' }]}>{priceWarn[0]}</Text></Row>}
+              {priceWarn && <Row gap={6}><Ionicons name={priceWarn[1] === colors.success ? 'checkmark-circle' : 'alert-circle'} size={16} color={priceWarn[1]} /><Text style={[font.tiny, { color: priceWarn[1], fontWeight: '700' }]}>{priceWarn[0]}</Text></Row>}
 
               <Text style={font.tiny}>Grade kualitas</Text>
               <View style={{ gap: 8 }}>
@@ -198,7 +198,7 @@ export default function VendorItems() {
                   const info = GRADE_INFO[g]; const active = editing?.grade === g;
                   return (
                     <PressableScale key={g} haptic={false} onPress={() => patch({ grade: g })} scaleTo={0.985} style={[s.grade, active && { borderColor: info.color, backgroundColor: info.color + '10' }]}>
-                      <View style={[s.gradeDot, { backgroundColor: info.color }]}><Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>{g}</Text></View>
+                      <View style={[s.gradeDot, { backgroundColor: info.color }]}><Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{g}</Text></View>
                       <View style={{ flex: 1 }}><Text style={[font.small, { color: colors.text, fontWeight: '700' }]}>{info.label}</Text><Text style={font.tiny}>{info.desc}</Text></View>
                       {active && <Ionicons name="checkmark-circle" size={20} color={info.color} />}
                     </PressableScale>
