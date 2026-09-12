@@ -28,6 +28,14 @@ begin
     update orders set status = 'cancelled' where customer_id = cust and status in ('searching','accepted','arrived','in_progress'); get diagnostics n = row_count;
     update orders set status = 'cancelled' where driver_id in (drv, drv2) and status in ('accepted','arrived','in_progress'); get diagnostics m0 = row_count;
     if n + m0 > 0 then log := log || format('S0 bersih: %s order aktif lama pelanggan uji & %s order aktif lama driver uji ditutup (hanya dalam transaksi simulasi)', n, m0) || E'\n'; end if;
+    -- 0085: di produksi akun & merchant uji SENGAJA dinonaktifkan/disembunyikan. Pulihkan hanya di dalam
+    -- transaksi simulasi ini (di-ROLLBACK) supaya seluruh alur bisa dijalankan tanpa mengubah produksi.
+    perform set_config('antaraja.bypass', 'on', true);
+    update profiles set is_active = true where id in (cust, drv, drv2, mown, adm) and not is_active;
+    update merchants set status = 'approved', is_open = true where id = merch and (status <> 'approved' or not is_open);
+    update travel_partners set status = 'approved' where id = drv2 and status <> 'approved';
+    update promos set is_active = true where code = 'ANTARBARU' and not is_active;   -- promo contoh dipakai S3/S44
+    perform set_config('antaraja.bypass', 'off', true);
     -- mitra uji bisa saja tertinggal berstatus suspended dari uji sebelumnya; kembalikan ke approved agar seluruh alur bisa dijalankan
     k1 := (select string_agg(id::text || '=' || status, ', ') from drivers where id in (drv, drv2) and status <> 'approved');
     if k1 is not null then
@@ -315,7 +323,8 @@ begin
     perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
     j := estimate_fare('ride_motor', 0.4810, 101.4349, 0.49, 101.44, null);
     for n in 1..2 loop
-      o := create_order(jsonb_build_object('service', 'ride_motor', 'pickup', jsonb_build_object('lat', 0.4810, 'lng', 101.4349, 'address', 'A'), 'dropoff', jsonb_build_object('lat', 0.49, 'lng', 101.44, 'address', 'B'), 'paid_via', 'cash'));
+      -- client_request_id berbeda: tanpa kunci, dua pesanan identik dalam 15 detik dianggap ketuk ganda (0083)
+      o := create_order(jsonb_build_object('service', 'ride_motor', 'pickup', jsonb_build_object('lat', 0.4810, 'lng', 101.4349, 'address', 'A'), 'dropoff', jsonb_build_object('lat', 0.49, 'lng', 101.44, 'address', 'B'), 'paid_via', 'cash', 'client_request_id', 's16-' || n || '-' || gen_random_uuid()::text));
     end loop;
     r := estimate_fare('ride_motor', 0.4810, 101.4349, 0.49, 101.44, null);
     log := log || format('S16 %s harga dinamis: sebelum=%s sesudah=%s demand=%s', case when (r->>'fare')::bigint > (j->>'fare')::bigint then 'OK' else 'BUG' end, j->>'fare', r->>'fare', r->'demand') || E'\n';
@@ -1896,6 +1905,10 @@ begin
       select balance into c1 from wallets where user_id = cust;
       if id2 is null then
         log := log || format('S48c OK panggilan create_order kedua (double tap) ditolak: %s; saldo dipotong sekali Rp%s', left(k1, 60), c0 - c1) || E'\n';
+      elsif id2 = id1 then
+        -- 0083: ketuk ganda mengembalikan PESANAN YANG SAMA (idempoten) — tidak ada order/potongan kedua
+        log := log || format('S48c %s double tap dikembalikan pesanan yang sama (%s) tanpa potongan kedua: saldo dipotong sekali Rp%s (harus %s)',
+          case when c0 - c1 = tot then 'OK' else 'BUG' end, o.code, c0 - c1, tot) || E'\n';
       else
         log := log || format('S48c CATATAN double tap menghasilkan 2 order (%s & %s) dan 2 pemotongan Rp%s+Rp%s=Rp%s; tidak ada uang tercipta/hilang, tetapi tidak ada kunci idempotensi di create_order — pelanggan wajib membatalkan order kembar untuk dapat refund',
           o.code, o2.code, tot, o2.total, c0 - c1) || E'\n';
