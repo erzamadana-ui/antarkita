@@ -24,7 +24,7 @@ export function CenterPin({ color = colors.primary, lifted }: { color?: string; 
 export function MapFab({ icon, onPress, style, color = colors.text }: { icon: React.ComponentProps<typeof Ionicons>['name']; onPress: () => void; style?: object; color?: string }) {
   return (
     <Pressable onPress={onPress} style={[styles.fab, style]}>
-      <Ionicons name={icon} size={22} color={color} />
+      <Ionicons name={icon} size={24} color={color} />
     </Pressable>
   );
 }

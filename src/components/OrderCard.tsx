@@ -22,8 +22,8 @@ export function OrderCard({ order, href, compact }: { order: Order; href?: strin
         <ServiceArt kind={def.art} color={def.color} size={46} glow={false} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Row between>
-            <Text style={[font.h3, { fontSize: 15 }]}>{serviceLabel[order.service]}</Text>
-            <Text style={{ fontWeight: '800', color: colors.text }}>{rupiah(order.total)}</Text>
+            <Text style={[font.h3, { fontSize: 16 }]}>{serviceLabel[order.service]}</Text>
+            <Text style={{ fontWeight: '700', color: colors.text }}>{rupiah(order.total)}</Text>
           </Row>
           <Text style={font.tiny}>{order.code} · {formatDate(order.created_at)}</Text>
         </View>

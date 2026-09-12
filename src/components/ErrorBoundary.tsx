@@ -21,13 +21,13 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return (
       <ScrollView contentContainerStyle={{ flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 28, backgroundColor: colors.bg }}>
         <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: colors.dangerLight, alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
-          <Ionicons name="alert-circle-outline" size={48} color={colors.danger} />
+          <Ionicons name="alert-circle-outline" size={52} color={colors.danger} />
         </View>
         <Text style={[font.h2, { textAlign: 'center' }]}>Ada yang tidak beres</Text>
         <Text style={[font.small, { textAlign: 'center', marginTop: 8 }]}>Layar ini gagal ditampilkan. Kami sudah mencatatnya. Ketuk tombol di bawah untuk kembali.</Text>
         <Text style={[font.tiny, { textAlign: 'center', marginTop: 12, color: colors.textMuted }]} numberOfLines={4}>{msg}</Text>
         <Pressable onPress={this.reset} accessibilityRole="button" style={{ marginTop: 22, backgroundColor: colors.primary, paddingHorizontal: 24, height: 50, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', minWidth: 220 }}>
-          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>Kembali ke beranda</Text>
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Kembali ke beranda</Text>
         </Pressable>
       </ScrollView>
     );

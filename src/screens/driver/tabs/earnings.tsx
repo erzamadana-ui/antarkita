@@ -20,10 +20,10 @@ export default function DriverEarnings() {
         <Entrance index={0} from="zoom">
           <View style={s.hero}>
             <Row gap={8}>
-              <View style={s.heroIcon}><Ionicons name="sunny-outline" size={18} color="#fff" /></View>
+              <View style={s.heroIcon}><Ionicons name="sunny-outline" size={20} color="#fff" /></View>
               <Text style={s.lbl}>Pendapatan hari ini</Text>
             </Row>
-            <AnimatedNumber value={sum?.today ?? 0} format={rupiah} style={{ color: '#fff', fontSize: 32, fontWeight: '800', letterSpacing: -0.5, marginTop: 8 }} />
+            <AnimatedNumber value={sum?.today ?? 0} format={rupiah} style={{ color: '#fff', fontSize: 30, fontWeight: '700', letterSpacing: -0.5, marginTop: 8 }} />
             <Text style={s.lbl}>{sum?.today_trips ?? 0} trip selesai</Text>
           </View>
         </Entrance>

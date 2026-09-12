@@ -19,17 +19,11 @@ Rute tiap aplikasi ada di `apps/<app>/app` (stub satu baris) → layar bersama d
 | Merchant | Kelola menu, terima/tolak/siapkan pesanan, buka/tutup toko, saldo penjualan |
 | Admin (web) | Dashboard KPI, verifikasi driver & merchant, pengguna, pesanan live, verifikasi top up/penarikan, tarif & promo, pengaturan |
 
-## Akun demo (kata sandi semua: `AntarAja#2026`)
+## Akun uji
 
-| Email | Peran |
-|---|---|
-| customer@antaraja.id | Pelanggan (saldo AntarPay demo) |
-| driver@antaraja.id | Driver motor (Padang) |
-| driver2@antaraja.id | Driver mobil (Padang) |
-| merchant@antaraja.id | Pemilik "Sate Padang Mak Syukur" |
-| admin@antaraja.id | Admin |
+Akun uji (`*@antaraja.id`) **dinonaktifkan di produksi** sejak 12 Sep 2026 (migrasi 0085): tidak bisa masuk dan tidak tampil di aplikasi publik. Kredensialnya tidak lagi ditulis di repositori mana pun. Untuk pengujian lokal, jalankan `supabase/seed.sql` pada proyek Supabase Anda sendiri; untuk reviewer Google Play, buat akun khusus dari Panel Admin dan isi di *App access* Play Console.
 
-> Data demo (merchant, menu, promo) berpusat di **Padang** dan **Pekanbaru**. Di web/emulator tanpa GPS, aplikasi memakai pusat kota Padang.
+> Data contoh (merchant, menu, promo) hanya untuk lingkungan lokal; di produksi merchant/promo contoh disembunyikan.
 
 ## Struktur
 

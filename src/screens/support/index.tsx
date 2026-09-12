@@ -38,7 +38,7 @@ export default function Support() {
             <Row gap={12} style={{ alignItems: 'flex-start' }}>
               <IconCircle name="headset-outline" size={52} bg={colors.tint} />
               <View style={{ flex: 1 }}>
-                <Row gap={6}><LiveDot color={csOnline ? colors.success : colors.accent} size={9} /><Text style={{ color: csOnline ? colors.success : colors.warning, fontWeight: '800', fontSize: 12, letterSpacing: 0.5 }}>{csOnline ? 'CS ONLINE · 07.00–22.00 WIB' : 'CS OFFLINE · buka 07.00 WIB'}</Text></Row>
+                <Row gap={6}><LiveDot color={csOnline ? colors.success : colors.accent} size={9} /><Text style={{ color: csOnline ? colors.success : colors.warning, fontWeight: '700', fontSize: 12, letterSpacing: 0.5 }}>{csOnline ? 'CS ONLINE · 07.00–22.00 WIB' : 'CS OFFLINE · buka 07.00 WIB'}</Text></Row>
                 <Text style={[font.h2, { marginTop: 4 }]}>Ada kendala? Kami bantu.</Text>
                 <Text style={[font.small, { marginTop: 2 }]}>Buat tiket aduan, CS online membalas langsung di aplikasi. Rata-rata balasan pertama &lt; 15 menit.</Text>
               </View>
@@ -62,10 +62,10 @@ export default function Support() {
               <PressableScale onPress={() => router.push(`/support/${t.id}` as never)} scaleTo={0.98} style={[s.ticket, t.status === 'waiting_user' && { borderColor: colors.warning + '88' }]}>
                 <View style={[s.catIcon, { backgroundColor: ticketPriorityColor(t.priority) + '14' }]}><Ionicons name={t.category === 'safety' ? 'warning-outline' : t.category === 'payment' ? 'wallet-outline' : t.category === 'order' ? 'receipt-outline' : 'help-buoy-outline'} size={20} color={ticketPriorityColor(t.priority)} /></View>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Row between><Text style={{ fontWeight: '800', color: colors.text, flex: 1 }} numberOfLines={1}>{t.subject}</Text><Badge text={ticketStatusLabel[t.status]} color={ticketStatusColor(t.status)} /></Row>
+                  <Row between><Text style={{ fontWeight: '700', color: colors.text, flex: 1 }} numberOfLines={1}>{t.subject}</Text><Badge text={ticketStatusLabel[t.status]} color={ticketStatusColor(t.status)} /></Row>
                   <Text style={font.tiny}>{t.code} · {ticketCategoryLabel[t.category]} · {timeAgo(t.last_message_at)}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
               </PressableScale>
             </Entrance>
           ))}

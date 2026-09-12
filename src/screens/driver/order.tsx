@@ -108,7 +108,7 @@ export default function DriverOrder() {
 
   const navButton = active ? (
     <PressableScale onPress={() => navigate(navTarget.lat, navTarget.lng)} scaleTo={0.92} style={s.navBtn}>
-      <Ionicons name="navigate" size={18} color="#fff" /><Text style={{ color: '#fff', fontWeight: '800' }}>Navigasi</Text>
+      <Ionicons name="navigate" size={20} color="#fff" /><Text style={{ color: '#fff', fontWeight: '700' }}>Navigasi</Text>
     </PressableScale>
   ) : null;
 
@@ -126,12 +126,12 @@ export default function DriverOrder() {
         <Animated.View entering={ZoomIn.duration(motion.base)} style={s.earnCard}>
           <Row between>
             <Row gap={12} style={{ flex: 1, minWidth: 0 }}>
-              <View style={s.earnIcon}><Ionicons name="cash-outline" size={22} color={colors.primary} /></View>
-              <View style={{ flex: 1, minWidth: 0 }}><Text style={font.tiny}>Pendapatan Anda</Text><AnimatedNumber value={order.driver_earning} format={rupiah} style={{ color: colors.primary, fontSize: 26, fontWeight: '800', letterSpacing: -0.5 }} duration={600} /></View>
+              <View style={s.earnIcon}><Ionicons name="cash-outline" size={24} color={colors.primary} /></View>
+              <View style={{ flex: 1, minWidth: 0 }}><Text style={font.tiny}>Pendapatan Anda</Text><AnimatedNumber value={order.driver_earning} format={rupiah} style={{ color: colors.primary, fontSize: 24, fontWeight: '700', letterSpacing: -0.5 }} duration={600} /></View>
             </Row>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={font.tiny}>{order.payment_method === 'cash' ? 'Tagih tunai' : 'Dibayar AntarPay'}</Text>
-              {order.payment_method === 'cash' ? <Text style={{ color: colors.text, fontWeight: '800', fontSize: 17 }}>{rupiah(order.total)}</Text> : <Row gap={4}><Ionicons name="checkmark-circle" size={16} color={colors.success} /><Text style={{ color: colors.success, fontWeight: '800', fontSize: 15 }}>Lunas</Text></Row>}
+              {order.payment_method === 'cash' ? <Text style={{ color: colors.text, fontWeight: '700', fontSize: 18 }}>{rupiah(order.total)}</Text> : <Row gap={4}><Ionicons name="checkmark-circle" size={16} color={colors.success} /><Text style={{ color: colors.success, fontWeight: '700', fontSize: 16 }}>Lunas</Text></Row>}
             </View>
           </Row>
           {order.service === 'food' && order.payment_method === 'cash' && <Text style={[font.tiny, { marginTop: 8 }]}>Bayar ke merchant {rupiah(order.items_subtotal)} tunai, tagih total ke pelanggan.</Text>}
@@ -148,7 +148,7 @@ export default function DriverOrder() {
         {customer && <Animated.View entering={FadeInDown.delay(80).duration(motion.slow)}><PersonCard name={customer.full_name} subtitle={customerSubtitle(customer)} avatar={customer.avatar_url} onChat={active ? () => router.push(`/order/${id}/chat` as never) : undefined} badge="Pelanggan" callPeer={active ? { id: customer.id, name: customer.full_name, avatar: customer.avatar_url, role: 'customer' } : null} orderId={order.id} moderationUserId={customer.id} /></Animated.View>}
         {order.service === 'food' && order.merchant_status && (
           <Row gap={10} style={s.block}>
-            <View style={s.blockIcon}><Ionicons name="restaurant-outline" size={18} color={colors.primary} /></View>
+            <View style={s.blockIcon}><Ionicons name="restaurant-outline" size={20} color={colors.primary} /></View>
             <Text style={[font.small, { flex: 1 }]}>Merchant: <Text style={{ fontWeight: '700', color: colors.text }}>{order.merchant?.name}</Text></Text>
             <Badge text={merchantStatusLabel[order.merchant_status]} color={order.merchant_status === 'ready' ? colors.success : colors.warning} />
             {active && order.merchant?.owner_id && <CallButton peer={{ id: order.merchant.owner_id, name: order.merchant.name, role: 'merchant' }} orderId={order.id} size={36} color={colors.primary} />}

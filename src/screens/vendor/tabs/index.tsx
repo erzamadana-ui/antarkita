@@ -80,7 +80,7 @@ export default function VendorHome() {
           <View style={s.card}>
             <Row gap={14}>
               <View style={[s.scoreRing, { borderColor: qualityColor(score) }]}>
-                <AnimatedNumber value={score} style={[font.display, { color: qualityColor(score), fontSize: 34 }]} />
+                <AnimatedNumber value={score} style={[font.display, { color: qualityColor(score), fontSize: 30 }]} />
                 <Text style={font.tiny}>/100</Text>
               </View>
               <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
@@ -98,14 +98,14 @@ export default function VendorHome() {
                     {/* 2 baris: pada 360px petunjuk seperti "Unggah kartu pedagang / bukti sewa lapak" terpotong */}
                     <Text style={font.tiny} numberOfLines={2}>{p.hint}</Text>
                   </View>
-                  <Text style={[font.small, { fontWeight: '800', color: p.got >= p.max ? colors.success : colors.text }]}>{p.got}/{p.max}</Text>
+                  <Text style={[font.small, { fontWeight: '700', color: p.got >= p.max ? colors.success : colors.text }]}>{p.got}/{p.max}</Text>
                 </Row>
               ))}
             </View>
             {todo.length > 0 && (
               <View style={s.todo}>
                 <Text style={[font.label, { marginBottom: 4 }]}>Cara menaikkan skor</Text>
-                {todo.map((p) => <Row key={p.key} gap={6}><Ionicons name="arrow-up-circle-outline" size={14} color={colors.primary} /><Text style={[font.tiny, { flex: 1, color: colors.text }]}>{p.label}: {p.hint} (+{Math.round((p.max - p.got) * 10) / 10})</Text></Row>)}
+                {todo.map((p) => <Row key={p.key} gap={6}><Ionicons name="arrow-up-circle-outline" size={16} color={colors.primary} /><Text style={[font.tiny, { flex: 1, color: colors.text }]}>{p.label}: {p.hint} (+{Math.round((p.max - p.got) * 10) / 10})</Text></Row>)}
               </View>
             )}
           </View>

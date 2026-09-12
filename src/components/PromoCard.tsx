@@ -31,7 +31,7 @@ export function PromoCard({ promo, index = 0, onPress, width = 260, height = Mat
       {!promo.image_url && <View style={s.art}><ServiceIllustration kind={def?.art ?? 'pay'} size={66} /></View>}
       {!promo.image_url && <BrandGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']} angle="vertical" style={s.shade} />}
       {!promo.image_url && <View style={s.body}>
-        <View style={s.code}><Ionicons name="pricetag" size={11} color="#fff" /><Text style={{ color: '#fff', fontWeight: '800', fontSize: 12, letterSpacing: 0.5 }}>{promo.code}</Text></View>
+        <View style={s.code}><Ionicons name="pricetag" size={12} color="#fff" /><Text style={{ color: '#fff', fontWeight: '700', fontSize: 12, letterSpacing: 0.5 }}>{promo.code}</Text></View>
         <Text style={s.title} numberOfLines={2}>{promoHeadline(promo)}</Text>
         <Text style={s.desc} numberOfLines={1}>{promo.min_total > 0 ? `Min. ${rupiah(promo.min_total)} · ` : ''}{def ? def.label : 'Semua layanan'}</Text>
       </View>}
@@ -46,7 +46,7 @@ const s = StyleSheet.create({
   shade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 90 },
   body: { position: 'absolute', left: 14, right: 14, bottom: 12, gap: 3 },
   code: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.22)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)', borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
-  title: { color: '#fff', fontWeight: '800', fontSize: 17, letterSpacing: -0.3, lineHeight: 21, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 },
+  title: { color: '#fff', fontWeight: '700', fontSize: 18, letterSpacing: -0.3, lineHeight: 24, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 },
   desc: { color: 'rgba(255,255,255,0.92)', fontSize: 12, fontWeight: '600' },
 });
 
@@ -60,11 +60,11 @@ export function DestinationCard({ image, title, subtitle, rating, badge, onPress
       {!image && art ? <View style={d.art}>{art}</View> : null}
       <BrandGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.05)', 'rgba(0,0,0,0.72)']} angle="vertical" style={d.shade} />
       {rating != null && (
-        <View style={d.rating}><Ionicons name="star" size={11} color="#F5A524" /><Text style={d.ratingText}>{Number(rating).toFixed(1)}</Text></View>
+        <View style={d.rating}><Ionicons name="star" size={12} color="#F5A524" /><Text style={d.ratingText}>{Number(rating).toFixed(1)}</Text></View>
       )}
       <View style={d.arrow}><Ionicons name="arrow-up-outline" size={16} color="#fff" style={{ transform: [{ rotate: '45deg' }] }} /></View>
       <View style={d.body}>
-        {badge || subtitle ? <View style={d.loc}>{badge ? <View style={d.dot} /> : <Ionicons name="location-outline" size={11} color="#fff" />}<Text style={d.locText} numberOfLines={1}>{badge ?? subtitle}</Text></View> : null}
+        {badge || subtitle ? <View style={d.loc}>{badge ? <View style={d.dot} /> : <Ionicons name="location-outline" size={12} color="#fff" />}<Text style={d.locText} numberOfLines={1}>{badge ?? subtitle}</Text></View> : null}
         <Text style={d.title} numberOfLines={2}>{title}</Text>
       </View>
     </PressableScale>
@@ -74,12 +74,12 @@ const d = StyleSheet.create({
   card: { borderRadius: 24, overflow: 'hidden', backgroundColor: colors.primaryDark },
   art: { position: 'absolute', right: 12, top: 44 },
   shade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '65%' },
-  rating: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(16,31,33,0.72)', borderRadius: radius.full, paddingHorizontal: 9, paddingVertical: 5 },
-  ratingText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  rating: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(16,31,33,0.72)', borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 4 },
+  ratingText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   arrow: { position: 'absolute', top: 12, right: 12, width: 34, height: 34, borderRadius: 17, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.85)', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.14)' },
   body: { position: 'absolute', left: 14, right: 14, bottom: 14, gap: 6 },
-  loc: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)', borderRadius: radius.full, paddingHorizontal: 9, paddingVertical: 3 },
+  loc: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)', borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 3 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#F5A524' },
   locText: { color: '#fff', fontSize: 12, fontWeight: '700', maxWidth: 150 },
-  title: { color: '#fff', fontWeight: '800', fontSize: 17, letterSpacing: -0.3, lineHeight: 21 },
+  title: { color: '#fff', fontWeight: '700', fontSize: 18, letterSpacing: -0.3, lineHeight: 24 },
 });

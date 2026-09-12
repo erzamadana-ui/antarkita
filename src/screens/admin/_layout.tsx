@@ -116,7 +116,7 @@ export default function AdminLayout() {
                           <Pressable key={n.href} onPress={() => go(n.href)} style={(st) => [s.item, !active && (st as { hovered?: boolean }).hovered && { backgroundColor: adminTone.surfaceAlt }, active && s.itemOn]}>
                             {active ? <View style={s.marker} /> : null}
                             <Ionicons name={active ? n.iconActive : n.icon} size={adminIcon.md} color={active ? colors.primary : adminTone.muted} />
-                            <Text numberOfLines={1} style={{ flex: 1, fontSize: 13, ...fam(active ? 700 : 500), color: active ? colors.primaryDark : adminTone.ink2 }}>{n.label}</Text>
+                            <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, ...fam(active ? 700 : 500), color: active ? colors.primaryDark : adminTone.ink2 }}>{n.label}</Text>
                           </Pressable>
                         );
                       })}
@@ -124,10 +124,10 @@ export default function AdminLayout() {
                   ))}
                 </ScrollView>
                 <View style={s.foot}>
-                  <Text style={{ color: adminTone.ink, fontSize: 12.5, ...fam(700) }} numberOfLines={1}>{profile?.full_name ?? 'Admin'}</Text>
+                  <Text style={{ color: adminTone.ink, fontSize: 14, ...fam(700) }} numberOfLines={1}>{profile?.full_name ?? 'Admin'}</Text>
                   <PressableScale haptic={false} onPress={async () => { await signOut(); router.replace('/(auth)/welcome'); }} style={s.footBtn}>
                     <Ionicons name="log-out-outline" size={adminIcon.md} color={colors.danger} />
-                    <Text style={{ color: colors.danger, fontSize: 12.5, ...fam(700) }}>Keluar</Text>
+                    <Text style={{ color: colors.danger, fontSize: 14, ...fam(700) }}>Keluar</Text>
                   </PressableScale>
                 </View>
               </View>
@@ -146,7 +146,7 @@ export default function AdminLayout() {
                     return (
                       <PressableScale key={n.href} haptic={false} scaleTo={0.95} onPress={() => go(n.href)} style={[s.chip, active && s.chipOn]}>
                         <Ionicons name={active ? n.iconActive : n.icon} size={adminIcon.md} color={active ? '#fff' : adminTone.muted} />
-                        <Text style={{ color: active ? '#fff' : adminTone.ink2, fontSize: 12.5, ...fam(700) }}>{n.label}</Text>
+                        <Text style={{ color: active ? '#fff' : adminTone.ink2, fontSize: 14, ...fam(700) }}>{n.label}</Text>
                       </PressableScale>
                     );
                   })}
@@ -179,6 +179,6 @@ const s = StyleSheet.create({
   footBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
   topbar: { backgroundColor: adminTone.surface, borderBottomWidth: 1, borderBottomColor: adminTone.border },
   iconBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: adminTone.surfaceAlt, borderWidth: 1, borderColor: adminTone.border, alignItems: 'center', justifyContent: 'center' },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 11, paddingVertical: 7, borderRadius: 999, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border },
   chipOn: { backgroundColor: colors.primary, borderColor: colors.primary },
 });

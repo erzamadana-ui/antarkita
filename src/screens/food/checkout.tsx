@@ -102,12 +102,12 @@ export default function Checkout() {
         <Entrance index={0}><Card>
           <Text style={font.label}>Antar ke</Text>
           <PressableScale scaleTo={0.98} haptic={false} onPress={() => router.push({ pathname: '/place-picker', params: { target: 'dropoff', title: 'Alamat pengantaran' } } as never)} style={s.addr}>
-            <Ionicons name="location" size={22} color={colors.danger} />
+            <Ionicons name="location" size={24} color={colors.danger} />
             <View style={{ flex: 1 }}>
               <Text style={{ fontWeight: '700', color: colors.text }}>{dropoff?.name ?? 'Pilih alamat'}</Text>
               <Text style={font.small} numberOfLines={2}>{dropoff?.address ?? 'Ketuk untuk memilih alamat pengantaran'}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
           </PressableScale>
           {route && <Row gap={8} style={{ marginTop: 10 }}><Badge text={`${km(route.distance_km)} dari ${m.name}`} color={colors.info} /><Badge text={`Tiba ±${minutes((route.duration_min ?? 0) + m.prep_minutes)}`} color={colors.success} /></Row>}
         </Card></Entrance>
@@ -149,5 +149,5 @@ export default function Checkout() {
 const s = StyleSheet.create({
   addr: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 6 },
   line: { borderTopWidth: 1, borderTopColor: 'rgba(11,31,42,0.07)', paddingVertical: 10, gap: 6 },
-  noteInput: { backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: glass.border, borderRadius: radius.sm, paddingHorizontal: 10, height: 36, fontSize: 13, color: colors.text },
+  noteInput: { backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: glass.border, borderRadius: radius.sm, paddingHorizontal: 10, height: 36, fontSize: 14, color: colors.text },
 });

@@ -33,7 +33,7 @@ export function OfflineNotice({ full, message, onRetry, visible, style }: Offlin
 
   const button = (
     <PressableScale onPress={onPress} scaleTo={0.94} style={[s.btn, full && { paddingHorizontal: 20, height: 44 }]}>
-      {busy ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="refresh" size={15} color="#fff" />}
+      {busy ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="refresh" size={16} color="#fff" />}
       <Text style={s.btnText}>{busy ? 'Memeriksa…' : 'Coba lagi'}</Text>
     </PressableScale>
   );
@@ -41,7 +41,7 @@ export function OfflineNotice({ full, message, onRetry, visible, style }: Offlin
   if (full) {
     return (
       <View style={[s.full, style]}>
-        <View style={s.icon}><Ionicons name="cloud-offline-outline" size={34} color={colors.danger} /></View>
+        <View style={s.icon}><Ionicons name="cloud-offline-outline" size={32} color={colors.danger} /></View>
         <Text style={[font.h3, { textAlign: 'center' }]}>Tidak ada koneksi</Text>
         <Text style={[font.small, { textAlign: 'center', maxWidth: 300 }]}>{message ?? OFFLINE_MESSAGE}</Text>
         {button}
@@ -50,7 +50,7 @@ export function OfflineNotice({ full, message, onRetry, visible, style }: Offlin
   }
   return (
     <View style={[s.banner, style]}>
-      <Ionicons name="cloud-offline-outline" size={18} color={colors.danger} />
+      <Ionicons name="cloud-offline-outline" size={20} color={colors.danger} />
       <Text style={[font.small, { flex: 1, color: colors.text }]} numberOfLines={2}>{message ?? OFFLINE_MESSAGE}</Text>
       {button}
     </View>
@@ -64,5 +64,5 @@ const s = StyleSheet.create({
   full: { alignItems: 'center', justifyContent: 'center', gap: 10, padding: 24 },
   icon: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.dangerLight, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   btn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.danger, borderRadius: radius.full, paddingHorizontal: 14, height: 36 },
-  btnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  btnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 });

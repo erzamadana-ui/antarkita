@@ -118,7 +118,7 @@ export default function OrderTracking() {
           <Animated.Text key={`t-${order.status}-${order.merchant_status ?? ''}`} entering={FadeIn.duration(motion.base)} style={font.h3} numberOfLines={2}>{statusLabel(order.status, order.service, order.merchant_status)}</Animated.Text>
           <Text style={font.tiny} numberOfLines={2}>{serviceLabel[order.service]} · {subtitle(order)}</Text>
         </View>
-        <Text style={{ fontWeight: '800', fontSize: 16, color: colors.primary, flexShrink: 0 }} numberOfLines={1}>{rupiah(order.total)}</Text>
+        <Text style={{ fontWeight: '700', fontSize: 16, color: colors.primary, flexShrink: 0 }} numberOfLines={1}>{rupiah(order.total)}</Text>
       </Row>
       {order.status !== 'cancelled' && <StatusStepper status={order.status} color={sc} />}
     </View>
@@ -128,7 +128,7 @@ export default function OrderTracking() {
     <MapScreen
       map={<MapView center={{ lat: order.pickup_lat, lng: order.pickup_lng }} markers={markers} polyline={order.route_geometry} fitTo={fitTo} paddingBottom={20} attributionBottom={196} />}
       onBack={() => (router.canGoBack() ? router.back() : router.replace('/' as never))}
-      floatingTag={<Text style={{ fontWeight: '800', fontSize: 12, color: colors.text, letterSpacing: 0.5 }}>{order.code}</Text>}
+      floatingTag={<Text style={{ fontWeight: '700', fontSize: 12, color: colors.text, letterSpacing: 0.5 }}>{order.code}</Text>}
       header={header}
       minHeight={searching ? 250 : 210}
       maxRatio={0.66}
@@ -137,7 +137,7 @@ export default function OrderTracking() {
       <Animated.View layout={LinearTransition.springify().stiffness(280).damping(18)} style={{ gap: 14 }}>
         {scheduled && (
           <Animated.View entering={FadeIn.duration(motion.slow)} exiting={FadeOut.duration(motion.fast)} style={s.radarBox}>
-            <View style={s.iconTint}><Ionicons name="calendar-outline" size={30} color={colors.primary} /></View>
+            <View style={s.iconTint}><Ionicons name="calendar-outline" size={32} color={colors.primary} /></View>
             <Text style={[font.h3, { marginTop: 6 }]}>Booking terjadwal</Text>
             <Text style={[font.small, { textAlign: 'center' }]}>{order.scheduled_at ? new Date(order.scheduled_at).toLocaleString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) + ' WIB' : ''}{'\n'}Driver dicarikan otomatis ±20 menit sebelum jadwal. Anda akan diberi tahu saat driver ditugaskan.</Text>
           </Animated.View>
@@ -147,7 +147,7 @@ export default function OrderTracking() {
         )}
         {searching && (
           <Animated.View entering={FadeIn.duration(motion.slow)} exiting={FadeOut.duration(motion.fast)} style={s.radarBox}>
-            <Radar color={colors.primary} size={140}><Ionicons name={def.icon as never} size={26} color={colors.primary} /></Radar>
+            <Radar color={colors.primary} size={140}><Ionicons name={def.icon as never} size={24} color={colors.primary} /></Radar>
             <Text style={[font.h3, { marginTop: 6 }]}>{directOnHold ? 'Menunggu driver pilihan Anda…' : 'Mencari driver terdekat…'}</Text>
             <Text style={[font.small, { textAlign: 'center' }]}>
               {directOnHold

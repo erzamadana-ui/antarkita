@@ -71,7 +71,7 @@ export function Dropdown<T extends string | number>({
           <Text style={[s.value, !selected && { color: colors.textMuted, fontWeight: '600' }]} numberOfLines={1}>{selected?.label ?? placeholder}</Text>
           {selected?.sublabel || selected?.meta ? <Text style={font.tiny} numberOfLines={1}>{[selected?.sublabel, selected?.meta].filter(Boolean).join(' · ')}</Text> : null}
         </View>
-        <Ionicons name="chevron-down" size={18} color={colors.textSecondary} />
+        <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
       </PressableScale>
       {helper ? <Text style={font.tiny}>{helper}</Text> : null}
 
@@ -82,7 +82,7 @@ export function Dropdown<T extends string | number>({
               <View style={s.handle} />
               <View style={s.sheetHead}>
                 <Text style={font.h3} numberOfLines={1}>{title ?? label ?? 'Pilih'}</Text>
-                <PressableScale onPress={() => setOpen(false)} scaleTo={0.9} style={s.close}><Ionicons name="close" size={18} color={colors.textSecondary} /></PressableScale>
+                <PressableScale onPress={() => setOpen(false)} scaleTo={0.9} style={s.close}><Ionicons name="close" size={20} color={colors.textSecondary} /></PressableScale>
               </View>
               <ScrollView style={{ maxHeight: Math.max(220, height * 0.55) }} contentContainerStyle={{ gap: 8, paddingBottom: 6 }} showsVerticalScrollIndicator={false}>
                 {options.length === 0 ? <Text style={[font.small, { padding: 12 }]}>{emptyText}</Text> : null}
@@ -94,7 +94,7 @@ export function Dropdown<T extends string | number>({
                         {renderOption ? renderOption(o, sel) : (
                           <>
                             <View style={[s.optIcon, { backgroundColor: (o.disabled ? colors.textMuted : accent) + '1A' }]}>
-                              <Ionicons name={(o.icon ?? 'ellipse-outline') as never} size={18} color={o.disabled ? colors.textMuted : accent} />
+                              <Ionicons name={(o.icon ?? 'ellipse-outline') as never} size={20} color={o.disabled ? colors.textMuted : accent} />
                             </View>
                             <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
                               <Text style={s.optLabel} numberOfLines={1}>{o.label}</Text>
@@ -130,5 +130,5 @@ const s = StyleSheet.create({
   close: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(11,31,42,0.06)', alignItems: 'center', justifyContent: 'center' },
   option: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: radius.md, borderWidth: 1.5, borderColor: glass.border, backgroundColor: '#FFFFFF' },
   optIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  optLabel: { fontSize: 14, fontWeight: '800', color: colors.text },
+  optLabel: { fontSize: 14, fontWeight: '700', color: colors.text },
 });

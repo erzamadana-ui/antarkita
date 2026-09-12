@@ -238,7 +238,7 @@ export default function MarketScreen() {
                 <Row gap={8}>
                   {!loadingMarkets && <Text style={font.tiny}>{markets.length} pasar</Text>}
                   <PressableScale haptic={false} hitSlop={6} disabled={importing} accessibilityRole="button" accessibilityLabel="Cari pasar dari peta" onPress={() => importFromMap(false)} style={s.mapBtn}>
-                    {importing ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="refresh" size={13} color={colors.primary} />}
+                    {importing ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="refresh" size={12} color={colors.primary} />}
                     <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>{importing ? 'Mencari di peta…' : 'Cari dari peta'}</Text>
                   </PressableScale>
                 </Row>
@@ -300,24 +300,24 @@ export default function MarketScreen() {
                   <View key={it.id} style={[s.tile, { width: colW }, qty > 0 && { borderColor: colors.primary }]}>
                     <View style={s.tileArt}>
                       {it.image_url ? <Image source={{ uri: it.image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <ServiceIllustration kind="market" size={52} />}
-                      {qty > 0 && <View style={s.qtyPill}><Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>{fmtQty(qty)} {it.unit}</Text></View>}
+                      {qty > 0 && <View style={s.qtyPill}><Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{fmtQty(qty)} {it.unit}</Text></View>}
                     </View>
                     <View style={{ paddingHorizontal: 4, gap: 2 }}>
                       <Text style={[font.small, { color: colors.text, fontWeight: '700', minHeight: 36 }]} numberOfLines={2}>{it.name}</Text>
                       <Text style={font.tiny} numberOfLines={1}>per {it.unit} · {priceSourceLabel(it.price_source, it.samples)}</Text>
                       <Row between style={{ marginTop: 4, flexWrap: 'wrap', rowGap: 6 }}>
-                        <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 15 }} numberOfLines={1}>±{rupiah(it.price)}</Text>
+                        <Text style={{ fontWeight: '700', color: colors.primary, fontSize: 16 }} numberOfLines={1}>±{rupiah(it.price)}</Text>
                         {qty === 0 && <PressableScale haptic={false} onPress={() => setQty(it.id, qty + 1)} scaleTo={0.88} hitSlop={8} style={s.addBtn} accessibilityRole="button" accessibilityLabel="Tambah"><Ionicons name="add" size={20} color="#fff" /></PressableScale>}
                       </Row>
                       {qty > 0 && (
                         <Row between style={{ marginTop: 6, flexWrap: 'wrap', rowGap: 6 }}>
                           <Row gap={6} style={{ flexShrink: 1 }}>
-                            <PressableScale haptic={false} hitSlop={10} accessibilityRole="button" accessibilityLabel="Kurangi satu" onPress={() => setQty(it.id, qty - 1)} style={s.miniBtn}><Ionicons name="remove" size={14} color={colors.primary} /></PressableScale>
-                            <Text style={{ fontWeight: '800', color: colors.text, minWidth: 24, textAlign: 'center', fontSize: 13 }}>{fmtQty(qty)}</Text>
-                            <PressableScale haptic={false} hitSlop={10} onPress={() => setQty(it.id, qty + 1)} style={[s.miniBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]} accessibilityRole="button" accessibilityLabel="Tambah satu"><Ionicons name="add" size={14} color="#fff" /></PressableScale>
-                            {isKg && <PressableScale haptic={false} hitSlop={10} accessibilityRole="button" accessibilityLabel="Tambah setengah" onPress={() => setQty(it.id, qty + 0.5)} style={s.halfBtn}><Text style={{ fontWeight: '800', color: colors.primary, fontSize: 12 }}>+½</Text></PressableScale>}
+                            <PressableScale haptic={false} hitSlop={10} accessibilityRole="button" accessibilityLabel="Kurangi satu" onPress={() => setQty(it.id, qty - 1)} style={s.miniBtn}><Ionicons name="remove" size={16} color={colors.primary} /></PressableScale>
+                            <Text style={{ fontWeight: '700', color: colors.text, minWidth: 24, textAlign: 'center', fontSize: 14 }}>{fmtQty(qty)}</Text>
+                            <PressableScale haptic={false} hitSlop={10} onPress={() => setQty(it.id, qty + 1)} style={[s.miniBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]} accessibilityRole="button" accessibilityLabel="Tambah satu"><Ionicons name="add" size={16} color="#fff" /></PressableScale>
+                            {isKg && <PressableScale haptic={false} hitSlop={10} accessibilityRole="button" accessibilityLabel="Tambah setengah" onPress={() => setQty(it.id, qty + 0.5)} style={s.halfBtn}><Text style={{ fontWeight: '700', color: colors.primary, fontSize: 12 }}>+½</Text></PressableScale>}
                           </Row>
-                          <PressableScale haptic={false} hitSlop={6} onPress={() => setNoteOpen((n) => (n === it.id ? null : it.id))}><Ionicons name={line?.note ? 'chatbox-ellipses' : 'chatbox-ellipses-outline'} size={18} color={line?.note ? colors.primary : colors.textMuted} /></PressableScale>
+                          <PressableScale haptic={false} hitSlop={6} onPress={() => setNoteOpen((n) => (n === it.id ? null : it.id))}><Ionicons name={line?.note ? 'chatbox-ellipses' : 'chatbox-ellipses-outline'} size={20} color={line?.note ? colors.primary : colors.textMuted} /></PressableScale>
                         </Row>
                       )}
                       {qty > 0 && <Text style={[font.tiny, { color: colors.text, fontWeight: '700' }]}>Subtotal ±{rupiah(it.price * qty)}</Text>}
@@ -344,7 +344,7 @@ export default function MarketScreen() {
                   <Entrance key={v.id} index={Math.min(vi, 5)}>
                     <View style={[s.vendorCard, picked > 0 && { borderColor: colors.primary }]}>
                       <PressableScale onPress={() => setVendorOpen(open ? null : v.id)} scaleTo={0.99} haptic={false} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                        {v.photo_url ? <Image source={{ uri: v.photo_url }} style={s.vendorImg} /> : <View style={[s.vendorImg, { alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="storefront-outline" size={22} color={colors.primary} /></View>}
+                        {v.photo_url ? <Image source={{ uri: v.photo_url }} style={s.vendorImg} /> : <View style={[s.vendorImg, { alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="storefront-outline" size={24} color={colors.primary} /></View>}
                         <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
                           <Row gap={6}><Text style={[font.body, { fontWeight: '700', flexShrink: 1 }]} numberOfLines={1}>{v.stall_name}</Text>{v.stall_no ? <Text style={font.tiny}>No. {v.stall_no}</Text> : null}</Row>
                           <Row gap={6} style={{ flexWrap: 'wrap' }}>
@@ -353,7 +353,7 @@ export default function MarketScreen() {
                             <Text style={font.tiny}>{v.items.length} barang{picked ? ` · ${picked} dipilih` : ''}</Text>
                           </Row>
                         </View>
-                        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+                        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textMuted} />
                       </PressableScale>
                       {open && (
                         <View style={{ gap: 8, marginTop: 10 }}>
@@ -372,7 +372,7 @@ export default function MarketScreen() {
                                     <Row gap={6}><Text style={[font.small, { color: colors.text, fontWeight: '700', flexShrink: 1 }]} numberOfLines={1}>{it.name}</Text><Badge text={it.grade} color={g.color} /></Row>
                                     <Text style={font.tiny} numberOfLines={1}>{g.label} · {g.desc}{it.origin ? ` · asal ${it.origin}` : ''}{out ? ' · stok habis' : ''}</Text>
                                     <Row gap={6} style={{ flexWrap: 'wrap' }}>
-                                      <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 14 }}>{rupiah(it.price)}<Text style={font.tiny}> /{it.unit}</Text></Text>
+                                      <Text style={{ fontWeight: '700', color: colors.primary, fontSize: 14 }}>{rupiah(it.price)}<Text style={font.tiny}> /{it.unit}</Text></Text>
                                       {ref ? <Text style={[font.tiny, { color: diff != null && diff > 0 ? colors.warning : diff != null && diff < 0 ? colors.success : colors.textMuted }]}>acuan {rupiah(ref)}{diff ? ` (${diff > 0 ? '+' : ''}${diff}%)` : ' (sama)'}</Text> : null}
                                     </Row>
                                   </View>
@@ -382,7 +382,7 @@ export default function MarketScreen() {
                                 {qty > 0 && (
                                   <Row between style={{ marginTop: 6 }}>
                                     <Text style={[font.tiny, { color: colors.text, fontWeight: '700' }]}>Subtotal {rupiah(it.price * qty)}</Text>
-                                    <PressableScale haptic={false} hitSlop={6} onPress={() => setNoteOpen((n) => (n === it.id ? null : it.id))}><Ionicons name={lines[it.id]?.note ? 'chatbox-ellipses' : 'chatbox-ellipses-outline'} size={18} color={lines[it.id]?.note ? colors.primary : colors.textMuted} /></PressableScale>
+                                    <PressableScale haptic={false} hitSlop={6} onPress={() => setNoteOpen((n) => (n === it.id ? null : it.id))}><Ionicons name={lines[it.id]?.note ? 'chatbox-ellipses' : 'chatbox-ellipses-outline'} size={20} color={lines[it.id]?.note ? colors.primary : colors.textMuted} /></PressableScale>
                                   </Row>
                                 )}
                                 {qty > 0 && noteOpen === it.id && <TextInput placeholder="Catatan untuk pedagang" placeholderTextColor={colors.textMuted} value={lines[it.id]?.note ?? ''} onChangeText={(val) => setNote(it.id, val)} style={s.noteInput} />}
@@ -455,8 +455,8 @@ const s = StyleSheet.create({
   addBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   miniBtn: { width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   halfBtn: { height: 28, paddingHorizontal: 8, borderRadius: 14, borderWidth: 1.5, borderColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  noteInput: { height: 40, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgSoft, paddingHorizontal: 12, color: colors.text, fontSize: 13, marginTop: 6 },
-  mapBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 28, borderRadius: 14, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.primaryLight },
+  noteInput: { height: 40, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgSoft, paddingHorizontal: 12, color: colors.text, fontSize: 14, marginTop: 6 },
+  mapBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 28, borderRadius: 14, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.primaryLight },
   vendorCard: { padding: 12, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   vendorImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.tint },
   vendorItem: { padding: 10, borderRadius: 16, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border },

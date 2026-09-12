@@ -44,10 +44,10 @@ export function ActiveOrderBubbles({ orders, hrefFor = (o) => `/order/${o.id}`, 
             <View style={{ padding: 14, gap: 10 }}>
               <Row between>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={{ fontWeight: '800', color: colors.text }} numberOfLines={1}>{statusLabel(sel.status, sel.service, sel.merchant_status)}</Text>
+                  <Text style={{ fontWeight: '700', color: colors.text }} numberOfLines={1}>{statusLabel(sel.status, sel.service, sel.merchant_status)}</Text>
                   <Text style={font.tiny} numberOfLines={1}>{serviceLabel[sel.service]} · {sel.code}</Text>
                 </View>
-                <Text style={{ fontWeight: '800', color: colors.text }}>{rupiah(sel.total)}</Text>
+                <Text style={{ fontWeight: '700', color: colors.text }}>{rupiah(sel.total)}</Text>
               </Row>
               <ProgressBar progress={PROGRESS[sel.status] ?? 0.1} color={sel.status === 'searching' ? colors.accent : statusColor(sel.status)} />
               <View style={{ gap: 4 }}>
@@ -61,7 +61,7 @@ export function ActiveOrderBubbles({ orders, hrefFor = (o) => `/order/${o.id}`, 
               <Row gap={8}>
                 <Button title={t('track')} icon="navigate" size="sm" style={{ flex: 1 }} onPress={() => router.push(hrefFor(sel) as never)} />
                 {sel.driver_id && sel.status !== 'searching' && <Button title={t('chat')} icon="chatbubble-ellipses" size="sm" variant="secondary" onPress={() => router.push(`/order/${sel.id}/chat` as never)} />}
-                <PressableScale onPress={() => setOpen(null)} scaleTo={0.9} style={s.close}><Ionicons name="chevron-up" size={18} color={colors.textSecondary} /></PressableScale>
+                <PressableScale onPress={() => setOpen(null)} scaleTo={0.9} style={s.close}><Ionicons name="chevron-up" size={20} color={colors.textSecondary} /></PressableScale>
               </Row>
             </View>
           </Glass>
@@ -74,7 +74,7 @@ export function ActiveOrderBubbles({ orders, hrefFor = (o) => `/order/${o.id}`, 
 const s = StyleSheet.create({
   bubble: { alignItems: 'center', gap: 4, padding: 6, paddingBottom: 8, borderRadius: radius.xl, borderWidth: 1.5, borderColor: glass.border, backgroundColor: 'rgba(255,255,255,0.92)', width: 70 },
   dot: { position: 'absolute', top: 4, right: 6, width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  bubbleText: { fontSize: 12, fontWeight: '800', color: colors.textSecondary },
+  bubbleText: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
   pt: { width: 8, height: 8, borderRadius: 4 },
   close: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(11,31,42,0.06)', alignItems: 'center', justifyContent: 'center' },
 });

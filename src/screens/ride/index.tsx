@@ -136,8 +136,8 @@ export default function RideScreen() {
 
         <LocationFields pickup={pickup} dropoff={dropoff} accent={accent} />
         <Row gap={8}>
-          <PressableScale onPress={async () => { const p = await refresh(); if (p) { const a = await reverseGeocode(p); setPickup({ ...p, address: a, name: 'Lokasi saya' }); } }} scaleTo={0.96} style={s.smallBtn}><Ionicons name="locate" size={14} color={colors.info} /><Text style={s.smallBtnText}>Lokasi saya</Text></PressableScale>
-          {pickup && dropoff && <PressableScale onPress={() => { const p = pickup; setPickup(dropoff); setDropoff(p); }} scaleTo={0.96} style={s.smallBtn}><Ionicons name="swap-vertical" size={14} color={colors.info} /><Text style={s.smallBtnText}>Tukar</Text></PressableScale>}
+          <PressableScale onPress={async () => { const p = await refresh(); if (p) { const a = await reverseGeocode(p); setPickup({ ...p, address: a, name: 'Lokasi saya' }); } }} scaleTo={0.96} style={s.smallBtn}><Ionicons name="locate" size={16} color={colors.info} /><Text style={s.smallBtnText}>Lokasi saya</Text></PressableScale>
+          {pickup && dropoff && <PressableScale onPress={() => { const p = pickup; setPickup(dropoff); setDropoff(p); }} scaleTo={0.96} style={s.smallBtn}><Ionicons name="swap-vertical" size={16} color={colors.info} /><Text style={s.smallBtnText}>Tukar</Text></PressableScale>}
         </Row>
 
         {!dropoff && <DestinationSuggestions onPick={(p) => setDropoff(p)} service={service} />}
@@ -156,8 +156,8 @@ export default function RideScreen() {
               <PressableScale onPress={() => setShowDetails(!showDetails)} scaleTo={0.99} haptic={false}>
                 <Animated.View layout={LinearTransition.springify().stiffness(300).damping(22)} style={s.fareBox}>
                   <Row between>
-                    <View><Text style={font.label}>Total {when ? 'booking' : 'estimasi'}</Text><Text style={{ fontSize: 26, fontWeight: '800', color: accent, letterSpacing: -0.5 }}>{rupiah(total)}</Text></View>
-                    <View style={s.chev}><Ionicons name={showDetails ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} /></View>
+                    <View><Text style={font.label}>Total {when ? 'booking' : 'estimasi'}</Text><Text style={{ fontSize: 24, fontWeight: '700', color: accent, letterSpacing: -0.5 }}>{rupiah(total)}</Text></View>
+                    <View style={s.chev}><Ionicons name={showDetails ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textSecondary} /></View>
                   </Row>
                   {showDetails && (
                     <Animated.View entering={FadeInDown.duration(motion.fast)} style={{ marginTop: 10 }}>
@@ -181,7 +181,7 @@ export default function RideScreen() {
 
 const s = StyleSheet.create({
   hero: { backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radius.lg, padding: 12, borderWidth: 1, borderColor: glass.border },
-  smallBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.full, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: glass.border },
+  smallBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.full, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: glass.border },
   smallBtnText: { fontSize: 12, fontWeight: '700', color: colors.info },
   fareBox: { backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radius.lg, padding: 14, borderWidth: 1, borderColor: glass.border },
   chev: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(11,31,42,0.06)', alignItems: 'center', justifyContent: 'center' },

@@ -81,7 +81,7 @@ export function WaitApology({ order, thresholdMinutes, onCancel }: { order: Orde
   if (now < snoozeUntil) {
     return (
       <Animated.View entering={FadeIn.duration(motion.base)} exiting={FadeOut.duration(motion.fast)} layout={LinearTransition} style={s.compact}>
-        <Ionicons name="time-outline" size={18} color={colors.warning} />
+        <Ionicons name="time-outline" size={20} color={colors.warning} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={s.compactTitle} numberOfLines={1}>Kami terus mencarikan driver · {mmss(elapsed)}</Text>
           <Text style={font.tiny} numberOfLines={2}>Pencarian sudah diperluas ke radius lebih jauh. Anda akan diberi tahu begitu ada yang menerima.</Text>
@@ -93,7 +93,7 @@ export function WaitApology({ order, thresholdMinutes, onCancel }: { order: Orde
   return (
     <Animated.View entering={FadeInDown.duration(motion.slow)} exiting={FadeOut.duration(motion.fast)} layout={LinearTransition} style={s.card}>
       <Row gap={12} style={{ alignItems: 'flex-start' }}>
-        <Radar color={colors.warning} size={62}><Ionicons name="hourglass-outline" size={18} color={colors.warning} /></Radar>
+        <Radar color={colors.warning} size={62}><Ionicons name="hourglass-outline" size={20} color={colors.warning} /></Radar>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <Text style={[font.h3, { color: colors.text }]}>Maaf, pencarian agak lama</Text>
           <Text style={[font.small, { color: colors.text }]}>
@@ -138,9 +138,9 @@ export function WaitApology({ order, thresholdMinutes, onCancel }: { order: Orde
 const s = StyleSheet.create({
   card: { gap: 12, padding: 16, borderRadius: radius.lg, backgroundColor: colors.accentLight, borderWidth: 1, borderColor: colors.accent + '55', ...shadow.soft },
   timerRow: { backgroundColor: '#fff', borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: colors.accent + '33', gap: 10 },
-  timer: { fontSize: 26, fontWeight: '800', color: colors.warning, letterSpacing: -0.5, fontVariant: ['tabular-nums'] },
+  timer: { fontSize: 24, fontWeight: '700', color: colors.warning, letterSpacing: -0.5, fontVariant: ['tabular-nums'] },
   tip: { alignItems: 'flex-start' },
   fact: { backgroundColor: '#fff', borderRadius: radius.md, padding: 12, borderWidth: 1, borderColor: colors.border },
   compact: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: radius.lg, backgroundColor: colors.accentLight, borderWidth: 1, borderColor: colors.accent + '44' },
-  compactTitle: { fontSize: 13.5, fontWeight: '800', color: colors.text },
+  compactTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
 });

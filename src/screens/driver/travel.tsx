@@ -101,14 +101,14 @@ export default function TravelPartnerHome() {
               <Text style={[font.h3, { fontSize: 16 }]} numberOfLines={1}>{me.vehicle_model} · {me.vehicle_plate}</Text>
               <Row gap={4}>
                 <Text style={font.tiny}>{me.seats} kursi{me.is_electric ? ' · listrik' : ''} · </Text>
-                <Ionicons name="star" size={11} color={colors.accent} />
+                <Ionicons name="star" size={12} color={colors.accent} />
                 <Text style={font.tiny}>{Number(me.rating_avg).toFixed(1)} · {me.total_trips} trip selesai</Text>
               </Row>
             </View>
           </Row>
           <Row between style={s.balance}>
-            <Row gap={8}><Ionicons name="wallet-outline" size={18} color={colors.primary} /><Text style={font.small}>Saldo AntarPay</Text></Row>
-            <Text style={{ color: colors.primary, fontWeight: '800', fontSize: 17 }}>{rupiah(wallet?.balance ?? 0)}</Text>
+            <Row gap={8}><Ionicons name="wallet-outline" size={20} color={colors.primary} /><Text style={font.small}>Saldo AntarPay</Text></Row>
+            <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 18 }}>{rupiah(wallet?.balance ?? 0)}</Text>
           </Row>
         </Card></Entrance>
 
@@ -127,7 +127,7 @@ export default function TravelPartnerHome() {
             {routes.map((r) => <Chip key={r.id} label={`${cityName(cities, r.from_city)} → ${cityName(cities, r.to_city)} · ${rupiah(r.seat_price)}`} active={routeId === r.id} onPress={() => setRouteId(r.id)} />)}
           </ScrollView>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {days.map((d, i) => <PressableScale key={i} onPress={() => setDay(i)} scaleTo={0.94} style={[s.day, day === i && { backgroundColor: colors.primary, borderColor: colors.primary }]}><Text style={{ fontSize: 12, fontWeight: '700', color: day === i ? 'rgba(255,255,255,0.85)' : colors.textMuted }}>{i === 0 ? 'Hari ini' : i === 1 ? 'Besok' : DAY_NAMES[d.getDay()]}</Text><Text style={{ fontSize: 18, fontWeight: '800', color: day === i ? '#fff' : colors.text }}>{d.getDate()}</Text></PressableScale>)}
+            {days.map((d, i) => <PressableScale key={i} onPress={() => setDay(i)} scaleTo={0.94} style={[s.day, day === i && { backgroundColor: colors.primary, borderColor: colors.primary }]}><Text style={{ fontSize: 12, fontWeight: '700', color: day === i ? 'rgba(255,255,255,0.85)' : colors.textMuted }}>{i === 0 ? 'Hari ini' : i === 1 ? 'Besok' : DAY_NAMES[d.getDay()]}</Text><Text style={{ fontSize: 18, fontWeight: '700', color: day === i ? '#fff' : colors.text }}>{d.getDate()}</Text></PressableScale>)}
           </ScrollView>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>{TIMES.map((t) => <Chip key={t} label={t} active={time === t} onPress={() => setTime(t)} />)}</ScrollView>
           <Row gap={8}><Chip label={allowPrivate ? 'Terima carter private' : 'Tanpa carter private'} active={allowPrivate} onPress={() => setAllowPrivate(!allowPrivate)} /></Row>
@@ -141,7 +141,7 @@ export default function TravelPartnerHome() {
           <Animated.View key={t.id} layout={LinearTransition.springify().stiffness(300).damping(22)} style={s.trip}>
             <PressableScale onPress={() => setOpen(open === t.id ? null : t.id)} scaleTo={0.99} haptic={false}>
               <Row gap={12}>
-                <View style={s.thumb}><Ionicons name="bus-outline" size={26} color={colors.primary} /></View>
+                <View style={s.thumb}><Ionicons name="bus-outline" size={24} color={colors.primary} /></View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[font.h3, { fontSize: 16 }]} numberOfLines={1}>{cityName(cities, t.route.from_city)} → {cityName(cities, t.route.to_city)}</Text>
                   <Row gap={4}><Ionicons name="time-outline" size={12} color={colors.textMuted} /><Text style={font.tiny}>{formatSchedule(t.depart_at)}</Text></Row>
@@ -167,7 +167,7 @@ export default function TravelPartnerHome() {
                     <Row gap={10} style={{ alignItems: 'flex-start' }}>
                       <Avatar name={b.customer.name} url={b.customer.avatar_url} size={36} />
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Row between><Text style={{ fontWeight: '800', color: colors.text, flex: 1 }} numberOfLines={1}>{b.customer.name} · {b.pax} pax{b.is_private ? ' (private)' : ''}</Text><Badge text={travelStatusLabel[b.status]} /></Row>
+                        <Row between><Text style={{ fontWeight: '700', color: colors.text, flex: 1 }} numberOfLines={1}>{b.customer.name} · {b.pax} pax{b.is_private ? ' (private)' : ''}</Text><Badge text={travelStatusLabel[b.status]} /></Row>
                         <Text style={font.tiny}>{b.code} · {b.payment_method === 'cash' ? `Tunai ${rupiah(b.price)} (tagih saat jemput)` : 'Dibayar AntarPay'}{b.passengers?.length ? ` · ${b.passengers.map((x) => x.name).join(', ')}` : ''}</Text>
                         <Row gap={4} style={{ marginTop: 2 }}><Ionicons name="location-outline" size={12} color={colors.primary} /><Text style={[font.small, { flex: 1 }]}>{b.pickup_address}</Text></Row>
                         {!!b.dropoff_address && <Row gap={4}><Ionicons name="flag-outline" size={12} color={colors.textMuted} /><Text style={[font.tiny, { flex: 1 }]}>{b.dropoff_address}</Text></Row>}
@@ -277,7 +277,7 @@ function RequestCard({ r, me, open, onToggle, onDone }: { r: TravelOpenRequest; 
       <PressableScale onPress={onToggle} scaleTo={0.99} haptic={false}>
         {/* Baris ala "Group Tour": thumbnail + judul + lokasi + progres */}
         <Row gap={12} style={{ alignItems: 'flex-start' }}>
-          <View style={s.thumb}><Ionicons name={r.kind === 'daily' ? 'person-outline' : 'car-outline'} size={26} color={colors.primary} /></View>
+          <View style={s.thumb}><Ionicons name={r.kind === 'daily' ? 'person-outline' : 'car-outline'} size={24} color={colors.primary} /></View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[font.h3, { fontSize: 16 }]} numberOfLines={1}>{travelKindLabel[r.kind]} · {r.customer_name}</Text>
             <Row gap={4}><Ionicons name="location-outline" size={12} color={colors.textMuted} /><Text style={[font.tiny, { flex: 1 }]} numberOfLines={1}>{r.pickup_address} → {r.dropoff_address ?? (r.kind === 'daily' ? 'keliling / rute bebas' : '—')}</Text></Row>
@@ -326,7 +326,7 @@ function RequestCard({ r, me, open, onToggle, onDone }: { r: TravelOpenRequest; 
                 <Row between><Text style={font.tiny}>{rupiah(num(rate))} × {r.days} hari</Text><Text style={font.tiny}>{rupiah(num(rate) * r.days)}</Text></Row>
                 {selfAcc && nights > 0 && <Row between><Text style={font.tiny}>Akomodasi {rupiah(num(accFee))} × {nights} malam</Text><Text style={font.tiny}>{rupiah(num(accFee) * nights)}</Text></Row>}
                 {r.fuel === 'partner' && <Row between><Text style={font.tiny}>Estimasi BBM/tol/parkir</Text><Text style={font.tiny}>{rupiah(num(fuelEst))}</Text></Row>}
-                <Row between><Text style={{ fontWeight: '800', color: colors.text }}>Total penawaran</Text><Text style={{ fontWeight: '800', color: colors.primary, fontSize: 16 }}>{rupiah(total)}</Text></Row>
+                <Row between><Text style={{ fontWeight: '700', color: colors.text }}>Total penawaran</Text><Text style={{ fontWeight: '700', color: colors.primary, fontSize: 16 }}>{rupiah(total)}</Text></Row>
               </View>
               <Row gap={8}><Chip label="Pakai kalkulator" active={!manual} onPress={() => setManual(false)} /><Chip label="Harga total manual" active={manual} onPress={() => setManual(true)} /></Row>
               {manual && <Input label="Harga total" keyboardType="number-pad" value={price} onChangeText={(v) => setPrice(v.replace(/\D/g, ''))} />}
@@ -415,8 +415,8 @@ function SendParcelTab({ uid }: { uid?: string | null }) {
             </View>
           </Row>
           <View style={{ gap: 6, marginTop: 10 }}>
-            <Row gap={8}><Ionicons name="location-outline" size={13} color={colors.primary} /><Text style={[font.small, { flex: 1 }]} numberOfLines={2}>Jemput: {o.pickup_address}</Text></Row>
-            <Row gap={8}><Ionicons name="flag-outline" size={13} color={colors.textMuted} /><Text style={[font.small, { flex: 1 }]} numberOfLines={2}>Antar: {o.dropoff_address}</Text></Row>
+            <Row gap={8}><Ionicons name="location-outline" size={12} color={colors.primary} /><Text style={[font.small, { flex: 1 }]} numberOfLines={2}>Jemput: {o.pickup_address}</Text></Row>
+            <Row gap={8}><Ionicons name="flag-outline" size={12} color={colors.textMuted} /><Text style={[font.small, { flex: 1 }]} numberOfLines={2}>Antar: {o.dropoff_address}</Text></Row>
           </View>
           <Row gap={8} style={{ marginTop: 10, flexWrap: 'wrap' }}>
             {!!o.pickup_lat && <Button size="sm" variant="outline" icon="navigate" title="Navigasi" onPress={() => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${o.status === 'in_progress' ? `${o.dropoff_lat},${o.dropoff_lng}` : `${o.pickup_lat},${o.pickup_lng}`}`)} />}
@@ -446,16 +446,16 @@ function SendParcelTab({ uid }: { uid?: string | null }) {
             </View>
           </Row>
           <View style={{ gap: 6, marginTop: 10 }}>
-            <Row gap={8}><Ionicons name="location-outline" size={13} color={colors.primary} /><Text style={[font.small, { flex: 1 }]} numberOfLines={2}>Jemput: {r.pickup_address}</Text></Row>
-            <Row gap={8}><Ionicons name="flag-outline" size={13} color={colors.textMuted} /><Text style={[font.small, { flex: 1 }]} numberOfLines={2}>Antar: {r.dropoff_address}</Text></Row>
+            <Row gap={8}><Ionicons name="location-outline" size={12} color={colors.primary} /><Text style={[font.small, { flex: 1 }]} numberOfLines={2}>Jemput: {r.pickup_address}</Text></Row>
+            <Row gap={8}><Ionicons name="flag-outline" size={12} color={colors.textMuted} /><Text style={[font.small, { flex: 1 }]} numberOfLines={2}>Antar: {r.dropoff_address}</Text></Row>
           </View>
           <Row between style={s.calc}>
             <Text style={font.tiny}>Pendapatan Anda</Text>
-            <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 17 }}>{rupiah(r.partner_earning)}</Text>
+            <Text style={{ fontWeight: '700', color: colors.primary, fontSize: 18 }}>{rupiah(r.partner_earning)}</Text>
           </Row>
           {over.length > 0 && (
             <Row gap={6} style={{ marginTop: 10, alignItems: 'flex-start' }}>
-              <Ionicons name="alert-circle" size={14} color={colors.danger} />
+              <Ionicons name="alert-circle" size={16} color={colors.danger} />
               <Text style={[font.tiny, { flex: 1, color: colors.danger, fontWeight: '700' }]}>Melebihi batas muatan mitra travel ({over.join(' · ')}). Titipan ini harus dibawa mobil box — jangan diambil.</Text>
             </Row>
           )}

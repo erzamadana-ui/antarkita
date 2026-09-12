@@ -13,7 +13,7 @@ export function HalalBadge({ merchant, size = 'sm' }: { merchant: Pick<Merchant,
   return (
     <View style={[s.halal, merchant.halal_verified && { backgroundColor: colors.success, borderColor: colors.success }, size === 'md' && { paddingHorizontal: 10, paddingVertical: 4 }]}>
       <Ionicons name={merchant.halal_verified ? 'shield-checkmark' : 'leaf-outline'} size={size === 'md' ? 13 : 11} color={merchant.halal_verified ? '#fff' : colors.success} />
-      <Text style={{ fontSize: size === 'md' ? 12 : 10, fontWeight: '800', color: merchant.halal_verified ? '#fff' : colors.success }}>{merchant.halal_verified ? 'Halal ✓' : 'Halal'}</Text>
+      <Text style={{ fontSize: size === 'md' ? 12 : 10, fontWeight: '700', color: merchant.halal_verified ? '#fff' : colors.success }}>{merchant.halal_verified ? 'Halal ✓' : 'Halal'}</Text>
     </View>
   );
 }
@@ -50,7 +50,7 @@ export function MerchantStatusCard({ merchant }: { merchant: Merchant }) {
       </Row>
       <Row gap={10} style={[s.status, { backgroundColor: st.color + '14', borderColor: st.color + '44' }]}>
         <Ionicons name={st.icon as never} size={24} color={st.color} />
-        <View style={{ flex: 1 }}><Text style={{ fontWeight: '800', color: st.color }}>{st.label}</Text><Text style={font.tiny}>{st.desc}</Text></View>
+        <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: st.color }}>{st.label}</Text><Text style={font.tiny}>{st.desc}</Text></View>
       </Row>
       {docs?.review_note && (merchant.status === 'rejected' || merchant.status === 'suspended' || merchant.status === 'approved') && (
         <View style={s.note}><Text style={font.tiny}>Catatan admin{docs.reviewed_at ? ` · ${formatDate(docs.reviewed_at)}` : ''}</Text><Text style={font.body}>{docs.review_note}</Text></View>
@@ -71,7 +71,7 @@ export function MerchantStatusCard({ merchant }: { merchant: Merchant }) {
 }
 
 const s = StyleSheet.create({
-  halal: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.full, borderWidth: 1, borderColor: colors.success + '66', backgroundColor: colors.success + '14' },
+  halal: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full, borderWidth: 1, borderColor: colors.success + '66', backgroundColor: colors.success + '14' },
   status: { padding: 12, borderRadius: radius.md, borderWidth: 1 },
   note: { backgroundColor: 'rgba(245,158,11,0.1)', borderRadius: radius.md, padding: 10, gap: 2 },
 });

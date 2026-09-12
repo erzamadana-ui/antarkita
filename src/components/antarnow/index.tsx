@@ -218,9 +218,9 @@ export function AntarNowSection({ service, accent = colors.primary }: { service:
   if (!open) {
     return (
       <PressableScale onPress={() => setOpen(true)} scaleTo={0.99} haptic={false} style={s.teaser}>
-        <View style={[s.teaserIcon, { backgroundColor: accent + '1A' }]}><Ionicons name="qr-code-outline" size={18} color={accent} /></View>
+        <View style={[s.teaserIcon, { backgroundColor: accent + '1A' }]}><Ionicons name="qr-code-outline" size={20} color={accent} /></View>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={{ fontWeight: '800', color: colors.text, fontSize: 13 }}>Punya kode driver? (AntarNow)</Text>
+          <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>Punya kode driver? (AntarNow)</Text>
           <Text style={font.tiny}>Sudah bertemu driver langsung? Masukkan kodenya agar order langsung ke dia.</Text>
         </View>
         <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
@@ -232,9 +232,9 @@ export function AntarNowSection({ service, accent = colors.primary }: { service:
     <Animated.View entering={FadeInDown.duration(motion.base)} layout={LinearTransition.springify().stiffness(300).damping(22)} style={s.box}>
       <Row between>
         <Row gap={8} style={{ flex: 1, minWidth: 0 }}>
-          <View style={[s.teaserIcon, { backgroundColor: accent + '1A' }]}><Ionicons name="qr-code-outline" size={18} color={accent} /></View>
+          <View style={[s.teaserIcon, { backgroundColor: accent + '1A' }]}><Ionicons name="qr-code-outline" size={20} color={accent} /></View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={{ fontWeight: '800', color: colors.text, fontSize: 13 }}>AntarNow · kode driver</Text>
+            <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>AntarNow · kode driver</Text>
             <Text style={font.tiny}>Kode {CODE_LENGTH} karakter di aplikasi Mitra driver.</Text>
           </View>
         </Row>
@@ -263,7 +263,7 @@ export function AntarNowSection({ service, accent = colors.primary }: { service:
           <DriverPreviewCard driver={driver} service={service} />
           {wrongService ? (
             <Row gap={6} style={s.warnRow}>
-              <Ionicons name="alert-circle" size={14} color={colors.danger} />
+              <Ionicons name="alert-circle" size={16} color={colors.danger} />
               <Text style={[font.tiny, { flex: 1, color: colors.danger }]}>
                 {driver.name ?? 'Driver'} memakai {vehicleTypeLabel[driver.vehicle_type] ?? driver.vehicle_type} sehingga tidak bisa mengambil {serviceLabel[service]}.
                 Lepas kode ini untuk lanjut memesan seperti biasa.
@@ -271,7 +271,7 @@ export function AntarNowSection({ service, accent = colors.primary }: { service:
             </Row>
           ) : (
             <Row gap={6} style={s.infoRow}>
-              <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
+              <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
               <Text style={[font.tiny, { flex: 1 }]}>
                 Order ditahan {holdText(holdSeconds)} khusus untuk {driver.name ?? 'driver ini'}.
                 {fallback ? ' Bila belum diambil, order otomatis dicarikan driver lain.' : ' Bila belum diambil, order tetap menunggu driver ini.'}
@@ -283,7 +283,7 @@ export function AntarNowSection({ service, accent = colors.primary }: { service:
       )}
       {!driver && !error && !issue && (
         <Row gap={6} style={s.infoRow}>
-          <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
+          <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
           <Text style={[font.tiny, { flex: 1 }]}>Minta driver membuka menu "Kode AntarNow" di aplikasi Mitra. Kode tidak memakai angka 0, huruf O, angka 1, dan huruf I.</Text>
         </Row>
       )}
@@ -305,7 +305,7 @@ export function DriverPreviewCard({ driver, service }: { driver: DriverByCode; s
       <Row gap={12}>
         <Avatar name={driver.name} url={driver.avatar_url} size={52} />
         <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-          <Text style={[font.body, { fontWeight: '800' }]} numberOfLines={1}>{driver.name ?? 'Driver AntarKita'}</Text>
+          <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={1}>{driver.name ?? 'Driver AntarKita'}</Text>
           {/* flexWrap: pada layar 390px sisa ruang di samping bintang hanya ±78px, sehingga tanpa ini
               teks rating pecah menjadi 3 baris sempit (atau terpotong bila dipaksa 1 baris).
               Dengan wrap, teks turun ke barisnya sendiri selebar kolom dan tampil utuh. */}
@@ -346,7 +346,7 @@ export function DirectHoldNotice({ createdAt, driverName, avatarUrl }: { created
       <Row gap={12}>
         {avatarUrl || driverName ? <Avatar name={driverName} url={avatarUrl} size={40} /> : <View style={s.holdIcon}><Ionicons name="flash" size={20} color={colors.primary} /></View>}
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={{ fontWeight: '800', color: colors.text, fontSize: 14 }} numberOfLines={1}>
+          <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }} numberOfLines={1}>
             {left > 0 ? `Ditahan untuk ${who}` : `${who} belum merespons`}
           </Text>
           <Text style={font.tiny} numberOfLines={2}>
@@ -406,9 +406,9 @@ export function DirectOrderBadge({ holdLeftSeconds, compact }: { holdLeftSeconds
   const left = useHoldCountdown(holdLeftSeconds);
   if (left <= 0) return null;   // masa tahan habis → order jadi order biasa
   return (
-    <Animated.View entering={FadeIn.duration(motion.fast)} exiting={FadeOut.duration(motion.fast)} style={[s.direct, compact && { paddingVertical: 5 }]}>
+    <Animated.View entering={FadeIn.duration(motion.fast)} exiting={FadeOut.duration(motion.fast)} style={[s.direct, compact && { paddingVertical: 4 }]}>
       <Ionicons name="flash" size={compact ? 12 : 14} color="#fff" />
-      <Text style={[s.directText, compact && { fontSize: 11 }]} numberOfLines={1}>
+      <Text style={[s.directText, compact && { fontSize: 12 }]} numberOfLines={1}>
         {compact ? 'Langsung untuk Anda' : 'Order langsung untuk Anda'}
       </Text>
       <View style={s.directTimer}><Text style={s.directTimerText}>Prioritas Anda {mmss(left)}</Text></View>
@@ -456,7 +456,7 @@ const s = StyleSheet.create({
   teaserIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   box: { padding: 14, borderRadius: radius.lg, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   closeBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  codeInput: { fontSize: 20, fontWeight: '800', letterSpacing: 6 },
+  codeInput: { fontSize: 22, fontWeight: '700', letterSpacing: 6 },
   infoRow: { marginTop: 8, alignItems: 'flex-start' },
   warnRow: { marginTop: 8, alignItems: 'flex-start', padding: 10, borderRadius: radius.md, backgroundColor: colors.dangerLight },
   preview: { padding: 12, borderRadius: radius.md, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.border },
@@ -464,14 +464,14 @@ const s = StyleSheet.create({
   hold: { padding: 14, borderRadius: radius.lg, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   holdIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
   holdTimer: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.full, backgroundColor: colors.primary },
-  holdTimerText: { color: '#fff', fontWeight: '800', fontSize: 14, letterSpacing: 0.5 },
-  direct: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: radius.full, backgroundColor: colors.primary, alignSelf: 'flex-start', maxWidth: '100%' },
-  directText: { color: '#fff', fontWeight: '800', fontSize: 12, flexShrink: 1 },
+  holdTimerText: { color: '#fff', fontWeight: '700', fontSize: 14, letterSpacing: 0.5 },
+  direct: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 8, borderRadius: radius.full, backgroundColor: colors.primary, alignSelf: 'flex-start', maxWidth: '100%' },
+  directText: { color: '#fff', fontWeight: '700', fontSize: 12, flexShrink: 1 },
   directTimer: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.full, backgroundColor: 'rgba(255,255,255,0.22)' },
-  directTimerText: { color: '#fff', fontWeight: '800', fontSize: 11, letterSpacing: 0.3 },
+  directTimerText: { color: '#fff', fontWeight: '700', fontSize: 12, letterSpacing: 0.3 },
   codeCard: { padding: 12, borderRadius: radius.lg, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   codeIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
-  codeSmall: { fontSize: 24, fontWeight: '800', color: colors.primary, letterSpacing: 4 },
+  codeSmall: { fontSize: 24, fontWeight: '700', color: colors.primary, letterSpacing: 4 },
   charBox: { width: 44, height: 56, borderRadius: radius.md, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
-  charText: { fontSize: 28, fontWeight: '800', color: colors.primary },
+  charText: { fontSize: 30, fontWeight: '700', color: colors.primary },
 });

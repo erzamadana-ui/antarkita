@@ -20,7 +20,7 @@ export function LocationFields({ pickup, dropoff, pickupLabel = 'Titik jemput', 
       {!locked(target) && (
         <Pressable onPress={() => open(target, label, 'map')} hitSlop={8} style={[s.mapBtn, { borderColor: accent + '55' }]} accessibilityLabel={`Pilih ${label.toLowerCase()} di peta`}>
           <Ionicons name="map" size={16} color={accent} />
-          <Text style={{ fontSize: 12, fontWeight: '800', color: accent }}>Peta</Text>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: accent }}>Peta</Text>
         </Pressable>
       )}
       <View style={dotStyle} />
@@ -48,6 +48,6 @@ const s = StyleSheet.create({
   dot: { width: 10, height: 10, borderRadius: 5 },
   line: { flex: 1, width: 2, backgroundColor: colors.border, marginVertical: 4 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, paddingLeft: 12, paddingRight: 10, minHeight: 60 },
-  value: { fontWeight: '600', color: colors.text, fontSize: 14.5, marginTop: 2 },
+  value: { fontWeight: '600', color: colors.text, fontSize: 16, marginTop: 2 },
   mapBtn: { alignItems: 'center', justifyContent: 'center', width: 42, height: 42, borderRadius: 12, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.8)', gap: 1 },
 });

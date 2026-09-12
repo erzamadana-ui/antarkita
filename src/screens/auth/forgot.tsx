@@ -51,7 +51,7 @@ export default function ForgotPassword() {
       {sent ? (
         <Entrance index={1}><View style={s.card}>
           <Text style={[font.h2, { textAlign: 'center' }]}>Cek email Anda</Text>
-          <Text style={[font.small, { textAlign: 'center' }]}>Jika <Text style={{ fontWeight: '800', color: colors.text }}>{sent}</Text> terdaftar, kami sudah mengirim tautan pemulihan. Buka email itu dan ketuk <Text style={{ fontWeight: '800', color: colors.text }}>Reset Password</Text> — tautan berlaku 1 jam.</Text>
+          <Text style={[font.small, { textAlign: 'center' }]}>Jika <Text style={{ fontWeight: '700', color: colors.text }}>{sent}</Text> terdaftar, kami sudah mengirim tautan pemulihan. Buka email itu dan ketuk <Text style={{ fontWeight: '700', color: colors.text }}>Reset Password</Text> — tautan berlaku 1 jam.</Text>
           <View style={s.tips}>
             <Tip icon="time-outline" text="Belum masuk dalam 1–2 menit? Periksa folder Spam/Promosi." />
             <Tip icon="phone-portrait-outline" text="Tautan membuka halaman web AntarKita untuk membuat kata sandi baru. Setelah tersimpan, masuk lagi di aplikasi dengan kata sandi baru." />
@@ -70,7 +70,7 @@ export default function ForgotPassword() {
           <Input label={t('email')} icon="mail-outline" value={email} onChangeText={(v) => { setEmail(v); setErr(null); }} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" placeholder="nama@email.com" textContentType="emailAddress" autoFocus onSubmitEditing={submit} error={err ?? undefined} />
           <Button title={t('send_link')} size="lg" icon="send-outline" loading={busy} onPress={submit} />
           <Pressable onPress={() => router.back()} style={{ alignItems: 'center', padding: 6 }} accessibilityRole="button">
-            <Text style={[font.small, { color: colors.primary, fontWeight: '800' }]}>{t('back_to_login')}</Text>
+            <Text style={[font.small, { color: colors.primary, fontWeight: '700' }]}>{t('back_to_login')}</Text>
           </Pressable>
         </View></Entrance>
       )}

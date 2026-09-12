@@ -137,7 +137,7 @@ export default function AdminDashboard() {
             </Col>
             <Col span={6} min={280}>
               <Panel title="Komposisi layanan (30 hari)" icon="pie-chart-outline" iconColor={adminTone.orange}>
-                <View style={{ gap: 7 }}>
+                <View style={{ gap: 8 }}>
                   {Object.entries(st?.orders_by_service ?? {}).map(([k, v]) => (
                     <Row key={k} between>
                       <Text style={font.body} numberOfLines={1}>{serviceLabel[k as keyof typeof serviceLabel] ?? k}</Text>

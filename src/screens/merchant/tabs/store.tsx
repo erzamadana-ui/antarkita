@@ -77,7 +77,7 @@ export default function MerchantStore() {
               </Row>
               <Row between style={[s.openRow, merchant.is_open && { backgroundColor: colors.tint }]}>
                 <Row gap={10}>
-                  <View style={[s.openIcon, merchant.is_open && { backgroundColor: colors.primary }]}><Ionicons name="storefront-outline" size={18} color={merchant.is_open ? '#fff' : colors.textMuted} /></View>
+                  <View style={[s.openIcon, merchant.is_open && { backgroundColor: colors.primary }]}><Ionicons name="storefront-outline" size={20} color={merchant.is_open ? '#fff' : colors.textMuted} /></View>
                   <View><Text style={[font.body, { fontWeight: '700' }]}>{merchant.is_open ? 'Toko buka' : 'Toko tutup'}</Text><Text style={font.tiny}>Matikan saat libur/stok habis</Text></View>
                 </Row>
                 <Switch value={merchant.is_open} onValueChange={(v) => save({ is_open: v })} trackColor={{ true: colors.primary, false: colors.border }} thumbColor="#fff" />
@@ -107,7 +107,7 @@ export default function MerchantStore() {
                     <Text style={[font.body, { fontWeight: '700' }, it.danger && { color: colors.danger }]} numberOfLines={1}>{it.title}</Text>
                     {it.subtitle ? <Text style={font.tiny} numberOfLines={2}>{it.subtitle}</Text> : null}
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                  <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
                 </PressableScale>
               ))}
             </View>

@@ -8,7 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import Animated, { FadeInDown, FadeOutUp, useSharedValue, useAnimatedStyle, withSpring, useReducedMotion, LinearTransition } from 'react-native-reanimated';
-import { colors, radius, shadow, spacing, font, glass, motion } from '@/lib/theme';
+import { colors, radius, shadow, spacing, font, glass, motion, fam, iconSize, size as sizeTok, screenPadding } from '@/lib/theme';
 import { friendlyError } from '@/lib/supabase';
 import { initials } from '@/lib/format';
 import { PressableScale } from '@/components/motion';
@@ -28,7 +28,7 @@ export function Button({ title, onPress, variant = 'primary', loading, disabled,
   const isLoading = loading || busy;
   const c = color ?? colors.primary;
   const fg = variant === 'primary' || variant === 'danger' ? '#fff' : variant === 'secondary' ? colors.primaryDark : c;
-  const height = size === 'lg' ? 54 : size === 'sm' ? 38 : 48;
+  const height = size === 'lg' ? sizeTok.buttonLg : size === 'sm' ? sizeTok.buttonSm : sizeTok.buttonMd;   // §4: 48–52, rekomendasi 52
   const handle = async () => {
     if (!onPress || isLoading || disabled) return;
     try { setBusy(true); await onPress(); } finally { setBusy(false); }
@@ -36,11 +36,11 @@ export function Button({ title, onPress, variant = 'primary', loading, disabled,
   // Judul selalu satu baris (di layar sempit teks panjang dahulu membungkus & merusak bentuk tombol)
   const inner = isLoading ? <ActivityIndicator color={fg} /> : (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: '100%' }}>
-      {icon && <Ionicons name={icon} size={size === 'sm' ? 16 : 20} color={fg} />}
-      <Text numberOfLines={1} ellipsizeMode="tail" style={{ color: fg, fontWeight: '800', fontSize: size === 'sm' ? 14 : 16, letterSpacing: 0.1, flexShrink: 1 }}>{title}</Text>
+      {icon && <Ionicons name={icon} size={size === 'sm' ? iconSize.sm : iconSize.md} color={fg} />}
+      <Text numberOfLines={1} ellipsizeMode="tail" style={[font.button, { color: fg, fontSize: size === 'sm' ? 14 : 16, flexShrink: 1 }]}>{title}</Text>
     </View>
   );
-  const shape: ViewStyle = { height, borderRadius: size === 'sm' ? 12 : 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: size === 'sm' ? 14 : 20, overflow: 'hidden' };
+  const shape: ViewStyle = { height, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', paddingHorizontal: size === 'sm' ? spacing.lg : spacing.xl, overflow: 'hidden' };
   if (variant === 'primary' || variant === 'danger') {
     const bgc = variant === 'danger' ? '#E5484D' : c;
     return (
@@ -77,14 +77,14 @@ export function Input({ label, error, icon, right, containerStyle, style, ...res
     <View style={[{ gap: 6 }, containerStyle]}>
       {label ? <Text style={s.label}>{label}</Text> : null}
       <Animated.View style={[s.inputWrap, a, error ? { borderColor: colors.danger } : null]}>
-        {icon && <Ionicons name={icon} size={18} color={focus ? colors.primary : colors.textMuted} style={{ marginRight: 8 }} />}
+        {icon && <Ionicons name={icon} size={20} color={focus ? colors.primary : colors.textMuted} style={{ marginRight: 8 }} />}
         {/* inputMode diturunkan dari keyboardType: RN-Web tidak memetakannya sendiri, sehingga di
             peramban seluler papan ketik angka tidak pernah muncul untuk kolom nominal/telepon. */}
         <TextInput placeholderTextColor={colors.textMuted} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} style={[s.input, rest.multiline && { minHeight: 64, textAlignVertical: 'top' }, style]} inputMode={webInputMode(rest.keyboardType)} {...rest}
           value={rest.value == null ? rest.value : String(rest.value)} />
         {right}
       </Animated.View>
-      {error ? <Text style={{ color: colors.danger, fontSize: 12 }}>{error}</Text> : null}
+      {error ? <Text style={[font.caption, { color: colors.danger }]}>{error}</Text> : null}
     </View>
   );
 }
@@ -114,11 +114,11 @@ export function Screen({ title, children, scroll = true, back, right, padded = t
   const insets = useSafeAreaInsetsSafe();
   const inner = { width: '100%' as const, maxWidth, alignSelf: 'center' as const };
   const body = scroll ? (
-    <ScrollView contentContainerStyle={[padded && { padding: spacing.lg }, { paddingBottom: bottomSpace }, inner, contentStyle]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+    <ScrollView contentContainerStyle={[padded && { paddingHorizontal: screenPadding.default, paddingTop: spacing.lg }, { paddingBottom: bottomSpace }, inner, contentStyle]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       {children}
     </ScrollView>
   ) : (
-    <View style={[{ flex: 1 }, padded && { padding: spacing.lg }, inner, contentStyle]}>{children}</View>
+    <View style={[{ flex: 1 }, padded && { paddingHorizontal: screenPadding.default, paddingTop: spacing.lg }, inner, contentStyle]}>{children}</View>
   );
   return (
     <View style={{ flex: 1, backgroundColor: bg ?? colors.bg }}>
@@ -133,8 +133,8 @@ export function Screen({ title, children, scroll = true, back, right, padded = t
                 </PressableScale>
               ) : <View style={{ width: 40 }} />}
               <View style={{ flex: 1, alignItems: 'center' }}>
-                <Text style={[font.h3, { color: headerFg, fontSize: subtitle ? 18 : 17, textAlign: 'center' }]} numberOfLines={1}>{title}</Text>
-                {subtitle ? <Text style={[font.tiny, { color: band ? 'rgba(255,255,255,0.85)' : colors.textSecondary, textAlign: 'center' }]} numberOfLines={1}>{subtitle}</Text> : null}
+                <Text style={[font.h3, { color: headerFg, textAlign: 'center' }]} numberOfLines={1}>{title}</Text>
+                {subtitle ? <Text style={[font.caption, { color: band ? 'rgba(255,255,255,0.85)' : colors.textSecondary, textAlign: 'center' }]} numberOfLines={1}>{subtitle}</Text> : null}
               </View>
               {right ? <View style={{ minWidth: 40, alignItems: 'flex-end' }}>{right}</View> : <View style={{ width: 40 }} />}
             </View>
@@ -161,7 +161,7 @@ export function Divider({ style }: { style?: StyleProp<ViewStyle> }) { return <V
 export function Badge({ text, color = colors.primary, bg, style }: { text: string; color?: string; bg?: string; style?: StyleProp<ViewStyle> }) {
   return (
     <View style={[{ backgroundColor: bg ?? color + '1A', paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full, alignSelf: 'flex-start', borderWidth: 1, borderColor: color + '22' }, style]}>
-      <Text style={{ color, fontSize: 12, fontWeight: '800' }}>{text}</Text>
+      <Text style={[font.captionMedium, { color }]}>{text}</Text>
     </View>
   );
 }
@@ -169,7 +169,7 @@ export function Avatar({ name, url, size = 44 }: { name?: string | null; url?: s
   if (url) return <Image source={{ uri: url }} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.border }} />;
   return (
     <BrandGradient colors={[colors.primaryLight, '#CFE9E7']} style={{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ color: colors.primaryDark, fontWeight: '800', fontSize: size * 0.38 }}>{initials(name)}</Text>
+      <Text style={{ color: colors.primaryDark, ...fam(700), fontSize: Math.max(12, Math.round(size * 0.38)) }}>{initials(name)}</Text>
     </BrandGradient>
   );
 }
@@ -193,7 +193,7 @@ export function CircleButton({ icon, onPress, size = 40, color = colors.text, fi
   return (
     <PressableScale onPress={onPress} scaleTo={0.9} hitSlop={pad} accessibilityRole="button" accessibilityLabel={label} style={[{ width: size, height: size, borderRadius: size / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: filled ? colors.primary : '#fff', borderWidth: filled ? 0 : 1, borderColor: colors.border }, style]}>
       <Ionicons name={icon} size={Math.round(size * 0.48)} color={filled ? '#fff' : color} />
-      {badge ? <View style={{ position: 'absolute', top: -2, right: -2, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 }}><Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>{badge > 9 ? '9+' : badge}</Text></View> : null}
+      {badge ? <View style={{ position: 'absolute', top: -2, right: -2, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 }}><Text style={[font.captionMedium, { color: '#fff' }]}>{badge > 9 ? '9+' : badge}</Text></View> : null}
     </PressableScale>
   );
 }
@@ -227,10 +227,10 @@ export function ListItem({ icon, iconColor = colors.primary, title, subtitle, ri
     <PressableScale onPress={onPress} disabled={!onPress} scaleTo={0.985} haptic={false} style={s.listItem}>
       {icon && <IconCircle name={icon} color={danger ? colors.danger : iconColor} size={38} />}
       <View style={{ flex: 1 }}>
-        <Text style={[font.body, { fontWeight: '600' }, danger && { color: colors.danger }]}>{title}</Text>
+        <Text style={[font.bodyMedium, danger && { color: colors.danger }]}>{title}</Text>
         {subtitle ? <Text style={font.small}>{subtitle}</Text> : null}
       </View>
-      {right ?? (onPress ? <Ionicons name="chevron-forward" size={18} color={colors.textMuted} /> : null)}
+      {right ?? (onPress ? <Ionicons name="chevron-forward" size={20} color={colors.textMuted} /> : null)}
     </PressableScale>
   );
 }
@@ -248,15 +248,15 @@ export function Stars({ value, size = 14, onChange }: { value: number; size?: nu
 export function Chip({ label, active, onPress, color = colors.primary }: { label: string; active?: boolean; onPress?: () => void; color?: string }) {
   return (
     <PressableScale onPress={onPress} scaleTo={0.94} style={[s.chip, active && { backgroundColor: color, borderColor: color }]}>
-      <Text style={{ color: active ? '#fff' : colors.text, fontWeight: '700', fontSize: 13 }}>{label}</Text>
+      <Text style={[font.bodySmall, { ...fam(500), color: active ? '#fff' : colors.text }]}>{label}</Text>
     </PressableScale>
   );
 }
 export function SectionTitle({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
   return (
-    <Row between style={{ marginBottom: 10, marginTop: 4 }}>
-      <Text style={font.h3}>{title}</Text>
-      {action ? <Pressable onPress={onAction}><Text style={{ color: colors.primary, fontWeight: '700' }}>{action}</Text></Pressable> : null}
+    <Row between style={{ marginBottom: spacing.lg, marginTop: spacing.sm }}>
+      <Text style={font.h2}>{title}</Text>
+      {action ? <Pressable onPress={onAction} hitSlop={8}><Text style={[font.bodySmall, { ...fam(500), color: colors.primary }]}>{action}</Text></Pressable> : null}
     </Row>
   );
 }
@@ -269,7 +269,7 @@ export function Stepper({ value, onChange, min = 0, max = 99 }: { value: number;
   return (
     <Row gap={10}>
       {btn('remove', () => onChange(value - 1), value <= min)}
-      <Animated.Text key={value} entering={FadeInDown.duration(motion.fast)} style={{ fontWeight: '800', minWidth: 20, textAlign: 'center', color: colors.text }}>{value}</Animated.Text>
+      <Animated.Text key={value} entering={FadeInDown.duration(motion.fast)} style={[font.bodyMedium, { minWidth: 20, textAlign: 'center' }]}>{value}</Animated.Text>
       {btn('add', () => onChange(value + 1), value >= max)}
     </Row>
   );
@@ -303,8 +303,8 @@ export function ToastHost() {
     <Animated.View key={msg.id} entering={FadeInDown.springify().stiffness(280).damping(16)} exiting={FadeOutUp.duration(180)} pointerEvents="none" style={[s.toast, { top: insets.top + 12 }]}>
       <Glass variant="strong" radius={radius.lg} style={{ maxWidth: 520, width: '100%' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14 }}>
-          <Ionicons name={icon} size={22} color={c} />
-          <Text style={{ color: colors.text, fontWeight: '600', flex: 1 }}>{msg.text}</Text>
+          <Ionicons name={icon} size={24} color={c} />
+          <Text style={[font.bodyMedium, { flex: 1 }]}>{msg.text}</Text>
         </View>
       </Glass>
     </Animated.View>
@@ -324,26 +324,27 @@ export function Sheet({ children, style }: { children: React.ReactNode; style?: 
 }
 
 export function Money({ value, style }: { value: number; style?: TextStyle }) {
-  return <Text style={[{ fontWeight: '800', color: colors.text }, style]}>{'Rp' + Math.round(value).toLocaleString('id-ID')}</Text>;
+  return <Text style={[font.price, style]}>{'Rp' + Math.round(value).toLocaleString('id-ID')}</Text>;
 }
 
 export { useReducedMotion };
 
 const s = StyleSheet.create({
-  label: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: 'rgba(11,31,42,0.10)', borderRadius: radius.md, backgroundColor: '#FFFFFF', paddingHorizontal: 12, minHeight: 50, shadowColor: colors.primary, shadowRadius: 10, shadowOffset: { width: 0, height: 0 } },
-  input: { flex: 1, minWidth: 0, fontSize: 15, color: colors.text, paddingVertical: 10, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none', WebkitTextFillColor: colors.text, caretColor: colors.primary } as object) : {}) },
-  card: { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, ...shadow.card },
+  label: { ...font.bodySmall, ...fam(500) },
+  // §5: input radius 14–16, tinggi 52–56, padding horizontal 16
+  inputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: '#FFFFFF', paddingHorizontal: spacing.lg, minHeight: sizeTok.input, shadowColor: colors.primary, shadowRadius: 10, shadowOffset: { width: 0, height: 0 } },
+  input: { flex: 1, minWidth: 0, ...font.body, paddingVertical: spacing.md, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none', WebkitTextFillColor: colors.text, caretColor: colors.primary } as object) : {}) },
+  card: { backgroundColor: colors.surface, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, ...shadow.card },
   header: { overflow: 'hidden', backgroundColor: colors.bg },
-  headerInner: { flexDirection: 'row', alignItems: 'center', height: 60, paddingHorizontal: 16, gap: 8 },
-  band: { borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg, paddingBottom: 6, ...shadow.soft },
-  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border },
-  footer: { overflow: 'hidden', paddingHorizontal: spacing.lg, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(11,31,42,0.08)', backgroundColor: Platform.OS === 'android' ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.9)' },
-  listItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 4 },
+  headerInner: { flexDirection: 'row', alignItems: 'center', height: 60, paddingHorizontal: spacing.lg, gap: spacing.sm },
+  band: { borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg, paddingBottom: spacing.sm, ...shadow.soft },
+  backBtn: { width: sizeTok.touchMin, height: sizeTok.touchMin, alignItems: 'center', justifyContent: 'center', borderRadius: radius.full, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border },
+  footer: { overflow: 'hidden', paddingHorizontal: spacing.xl, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(11,31,42,0.08)', backgroundColor: Platform.OS === 'android' ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.9)' },
+  listItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.xs },
   // minHeight 44: pedoman target sentuh. Tinggi sebelumnya 35px terlalu kecil dan Chip dipakai di 12 layar.
-  chip: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#FFFFFF', ...shadow.soft },
-  stepBtn: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF' },
+  chip: { minHeight: sizeTok.touchMin, justifyContent: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#FFFFFF', ...shadow.soft },
+  stepBtn: { width: 32, height: 32, borderRadius: 16, borderWidth: 1.5, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF' },
   toast: { position: 'absolute', left: 20, right: 20, alignItems: 'center', zIndex: 1000 },
-  sheet: { backgroundColor: Platform.OS === 'android' ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.92)', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, overflow: 'hidden', borderTopWidth: 1, borderColor: glass.border, ...shadow.sheet },
-  handle: { width: 44, height: 5, borderRadius: 3, backgroundColor: 'rgba(11,31,42,0.18)', alignSelf: 'center', marginBottom: 12, marginTop: -6 },
+  sheet: { backgroundColor: Platform.OS === 'android' ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.92)', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.xl, overflow: 'hidden', borderTopWidth: 1, borderColor: glass.border, ...shadow.sheet },
+  handle: { width: 44, height: 4, borderRadius: 2, backgroundColor: 'rgba(11,31,42,0.18)', alignSelf: 'center', marginBottom: spacing.md, marginTop: -4 },
 });

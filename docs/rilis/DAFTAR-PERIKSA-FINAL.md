@@ -52,7 +52,7 @@
 
 | # | Butir | Status | Bukti / cara verifikasi |
 |---|---|---|---|
-| 4.1 | Tidak ada "Antar Aja" yang **terlihat pengguna** | ✅ | Blok akun demo yang memuat `AntarAja#2026` dan email `@antaraja.id` (`src/screens/auth/login.tsx:13-18,79`) dipagari `EXPO_PUBLIC_DEMO_LOGIN === '1'`; `release-aab.yml` **tidak** mengisinya → tidak muncul di build Play. (Sengaja diisi `'1'` di `web.yml` untuk demo web) |
+| 4.1 | Tidak ada "Antar Aja" yang **terlihat pengguna** | ✅ | Blok akun demo di layar masuk **dihapus seluruhnya** (12 Sep 2026) dan akun uji `@antaraja.id` dinonaktifkan di produksi (migrasi 0085); kata sandi uji tidak lagi ada di repositori |
 | 4.2 | URL gambar promo di `seed.sql` menunjuk repo lama | ❌ | `supabase/seed.sql` baris 113–131: `https://erzamadana-ui.github.io/antar-aja/promos/…` sedangkan Pages ada di `/antarkita/promos/` → semua gambar promo **404**. Hanya data seed (dev), tetapi bila seed pernah dijalankan di produksi, promo tampil tanpa gambar. Berkas di luar wewenang agen ini (`supabase/`) |
 | 4.3 | User-Agent geocoding memakai identitas lama | ❌ ringan | `src/lib/geo.ts:6`: `AntarAja/1.0 (support@antaraja.id)` — alamat email itu tidak ada. Kebijakan pemakaian Nominatim/OSM menuntut kontak yang valid; alamat mati bisa berujung pemblokiran IP. Ganti ke `AntarKita/1.0 (erzamadana@gmail.com)` |
 | 4.4 | Kunci penyimpanan internal `antaraja.mode` / `antaraja.locale` / GUC `antaraja.bypass` / `https://antaraja.local/` | ✅ **jangan diubah** | Tidak terlihat pengguna. Mengganti kunci `AsyncStorage` akan **mereset preferensi semua pengguna lama**, dan mengganti GUC merusak trigger di migrasi `0007`. Biarkan apa adanya |

@@ -62,7 +62,7 @@ export function FloatingButton({ icon, onPress, color = colors.text, bg, style }
   return (
     <PressableScale onPress={onPress} scaleTo={0.88} style={[s.fab, bg ? { backgroundColor: bg } : null, style]}>
       {!bg && Platform.OS !== 'android' && <BlurView intensity={glass.blur} tint="light" style={StyleSheet.absoluteFill} />}
-      <Ionicons name={icon} size={22} color={color} />
+      <Ionicons name={icon} size={24} color={color} />
     </PressableScale>
   );
 }

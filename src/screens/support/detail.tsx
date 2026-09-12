@@ -41,7 +41,7 @@ export default function TicketDetail() {
     <View style={s.closeBox}>
       <Row between gap={10}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={{ fontWeight: '700', color: colors.text, fontSize: 13 }} numberOfLines={1}>{ticket.status === 'open' ? 'Tidak jadi bertanya?' : 'Sudah terbantu?'}</Text>
+          <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }} numberOfLines={1}>{ticket.status === 'open' ? 'Tidak jadi bertanya?' : 'Sudah terbantu?'}</Text>
           {ticket.status === 'open'
             ? <Text style={font.tiny} numberOfLines={2}>Tiket bisa Anda tutup sendiri kapan saja.</Text>
             : <Row gap={6}><Stars value={rating} size={18} onChange={setRating} /><Text style={font.tiny}>{rating ? `${rating}/5` : 'beri nilai CS'}</Text></Row>}

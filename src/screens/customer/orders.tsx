@@ -42,7 +42,7 @@ export default function CustomerOrders() {
         <Row gap={8} style={{ paddingVertical: 12 }}>
           {tabs.map((x) => (
             <PressableScale key={x.key} onPress={() => setTab(x.key)} scaleTo={0.94} style={[s.tab, tab === x.key && s.tabOn]}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: tab === x.key ? '#fff' : colors.text }}>{x.label}</Text>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: tab === x.key ? '#fff' : colors.text }}>{x.label}</Text>
             </PressableScale>
           ))}
         </Row>
@@ -65,7 +65,7 @@ const s = StyleSheet.create({
   inner: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 6 },
   stats: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: radius.lg, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   vDivider: { width: 1, height: 36, backgroundColor: colors.border, marginHorizontal: 12 },
-  tab: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 11, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff', ...shadow.soft },
+  tab: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 12, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff', ...shadow.soft },
   tabOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   skel: { marginBottom: 12, gap: 10, padding: 14, backgroundColor: '#fff', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border },
 });

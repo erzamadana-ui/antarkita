@@ -42,13 +42,13 @@ export function IncomingCallOverlay() {
           <Text style={[font.tiny, { textAlign: 'center' }]}>{t('call_privacy')}</Text>
           {micBlocked && (
             <PressableScale onPress={openMicSettings} scaleTo={0.96} style={s.micWarn}>
-              <Ionicons name="mic-off" size={14} color={colors.danger} />
+              <Ionicons name="mic-off" size={16} color={colors.danger} />
               <Text style={{ color: colors.danger, fontSize: 12, fontWeight: '700', flex: 1 }}>Izin mikrofon diblokir. Ketuk untuk membuka Pengaturan.</Text>
             </PressableScale>
           )}
           <View style={{ flexDirection: 'row', gap: 24, marginTop: 8 }}>
-            <PressableScale onPress={decline} scaleTo={0.88} accessibilityLabel="Tolak panggilan" style={[s.round, { backgroundColor: colors.danger }, shadow.glow(colors.danger)]}><Ionicons name="call" size={26} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} /></PressableScale>
-            <PressableScale onPress={() => { primeAudio(); accept(); }} scaleTo={0.88} accessibilityLabel="Angkat panggilan" style={[s.round, { backgroundColor: colors.success }, shadow.glow(colors.success)]}><Ionicons name="call" size={26} color="#fff" /></PressableScale>
+            <PressableScale onPress={decline} scaleTo={0.88} accessibilityLabel="Tolak panggilan" style={[s.round, { backgroundColor: colors.danger }, shadow.glow(colors.danger)]}><Ionicons name="call" size={24} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} /></PressableScale>
+            <PressableScale onPress={() => { primeAudio(); accept(); }} scaleTo={0.88} accessibilityLabel="Angkat panggilan" style={[s.round, { backgroundColor: colors.success }, shadow.glow(colors.success)]}><Ionicons name="call" size={24} color="#fff" /></PressableScale>
           </View>
         </View>
       </Animated.View>
@@ -77,7 +77,7 @@ export function CallButton({ peer, orderId, size = 44, color = colors.success, l
   };
   if (label) return (
     <PressableScale onPress={onPress} scaleTo={0.95} style={[s.labelBtn, { backgroundColor: color + '14', borderColor: color + '44' }]}>
-      <Ionicons name="call" size={16} color={color} /><Text style={{ color, fontWeight: '800', fontSize: 13 }}>{label ?? t('call')}</Text>
+      <Ionicons name="call" size={16} color={color} /><Text style={{ color, fontWeight: '700', fontSize: 14 }}>{label ?? t('call')}</Text>
     </PressableScale>
   );
   return (

@@ -67,7 +67,7 @@ export function ShopTotalCard({ order, onDone }: { order: Order; onDone: () => v
 
   return (
     <View style={[s.card, { borderColor: color + '55' }]}>
-      <Row gap={8}><Ionicons name="basket" size={18} color={color} /><Text style={[font.h3, { flex: 1 }]}>{isMarket ? 'Harga riil dari pasar' : 'Total belanja aktual'}</Text><Badge text={`Anggaran ${rupiah(budget)}`} color={color} /></Row>
+      <Row gap={8}><Ionicons name="basket" size={20} color={color} /><Text style={[font.h3, { flex: 1 }]}>{isMarket ? 'Harga riil dari pasar' : 'Total belanja aktual'}</Text><Badge text={`Anggaran ${rupiah(budget)}`} color={color} /></Row>
       <Text style={font.tiny}>
         {isMarket ? 'Isi harga riil per bahan sesuai nota; harga ini jadi acuan pelanggan berikutnya. ' : 'Sesuai nota. '}
         Batas maksimal {rupiah(limit)}. Jika lebih, konfirmasi ke pelanggan lewat chat/telepon.
@@ -102,18 +102,18 @@ export function ShopTotalCard({ order, onDone }: { order: Order; onDone: () => v
                   </View>
                   <View style={{ alignItems: 'flex-end', minWidth: 80 }}>
                     <Text style={font.tiny}>Subtotal</Text>
-                    <Text style={{ fontWeight: '800', color: colors.text, marginTop: 8 }}>{rupiah(r.unavailable ? 0 : num(r.price) * num(r.qty))}</Text>
+                    <Text style={{ fontWeight: '700', color: colors.text, marginTop: 8 }}>{rupiah(r.unavailable ? 0 : num(r.price) * num(r.qty))}</Text>
                   </View>
                 </Row>
               ) : (
                 <Row between>
                   <Text style={font.small}>{fmtQty(num(r.qty))} × {rupiah(r.ref)}</Text>
-                  <Text style={{ fontWeight: '800', color: colors.text, textDecorationLine: r.unavailable ? 'line-through' : 'none' }}>{rupiah(r.ref * num(r.qty))}</Text>
+                  <Text style={{ fontWeight: '700', color: colors.text, textDecorationLine: r.unavailable ? 'line-through' : 'none' }}>{rupiah(r.ref * num(r.qty))}</Text>
                 </Row>
               )}
-              {warn && <Row gap={6}><Ionicons name="alert-circle" size={14} color={warn[1]} /><Text style={[font.tiny, { flex: 1, color: warn[1], fontWeight: '700' }]}>{warn[0]}</Text></Row>}
+              {warn && <Row gap={6}><Ionicons name="alert-circle" size={16} color={warn[1]} /><Text style={[font.tiny, { flex: 1, color: warn[1], fontWeight: '700' }]}>{warn[0]}</Text></Row>}
               <PressableScale haptic={false} onPress={() => patch(r.key, { unavailable: !r.unavailable })} style={s.check}>
-                <Ionicons name={r.unavailable ? 'checkbox' : 'square-outline'} size={18} color={r.unavailable ? colors.danger : colors.textMuted} />
+                <Ionicons name={r.unavailable ? 'checkbox' : 'square-outline'} size={20} color={r.unavailable ? colors.danger : colors.textMuted} />
                 <Text style={[font.tiny, { color: r.unavailable ? colors.danger : colors.textSecondary }]}>Tidak tersedia / tidak dibeli</Text>
               </PressableScale>
             </View>

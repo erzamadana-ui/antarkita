@@ -47,7 +47,7 @@ export const adminTone = {
 /** Skala spasi panel admin (kelipatan 4). */
 export const adminSpace = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24 };
 /** Radius panel admin — kartu 14–16. */
-export const adminRadius = { chip: 999, sm: 8, md: 10, card: 14, lg: 16 };
+export const adminRadius = { chip: 999, sm: 8, md: 12, card: 16, lg: 20 };
 /**
  * Ukuran ikon baku panel admin — hanya tiga langkah supaya konsisten:
  * `sm` 14 (inline pada teks kecil), `md` 16 (aksi & judul), `lg` 18 (tombol tutup / kepala dialog).
@@ -80,17 +80,17 @@ const tnum = ['tabular-nums'] as TextStyle['fontVariant'];
  * agar layar admin cukup mengimpor `adminFont as font`.
  */
 export const adminFont = {
-  display: { fontSize: 22, ...fam(600), color: adminTone.ink, letterSpacing: -0.4, lineHeight: 28 } as TextStyle,
-  h1: { fontSize: 18, ...fam(700), color: adminTone.ink, letterSpacing: -0.2, lineHeight: 24 } as TextStyle,
-  h2: { fontSize: 15, ...fam(700), color: adminTone.ink, lineHeight: 20 } as TextStyle,
-  h3: { fontSize: 14, ...fam(700), color: adminTone.ink, lineHeight: 19 } as TextStyle,
-  body: { fontSize: 13.5, ...fam(500), color: adminTone.ink2, lineHeight: 19 } as TextStyle,
-  bodyStrong: { fontSize: 13.5, ...fam(700), color: adminTone.ink, lineHeight: 19 } as TextStyle,
-  small: { fontSize: 12.5, ...fam(500), color: adminTone.muted, lineHeight: 17 } as TextStyle,
-  tiny: { fontSize: 11.5, ...fam(500), color: adminTone.faint, lineHeight: 15 } as TextStyle,
-  label: { fontSize: 11, ...fam(700), color: adminTone.faint, letterSpacing: 0.4, textTransform: 'uppercase' } as TextStyle,
+  display: { fontSize: 24, ...fam(700), color: adminTone.ink, letterSpacing: -0.4, lineHeight: 30 } as TextStyle,
+  h1: { fontSize: 22, ...fam(700), color: adminTone.ink, letterSpacing: -0.2, lineHeight: 28 } as TextStyle,
+  h2: { fontSize: 18, ...fam(600), color: adminTone.ink, lineHeight: 24 } as TextStyle,
+  h3: { fontSize: 16, ...fam(600), color: adminTone.ink, lineHeight: 22 } as TextStyle,
+  body: { fontSize: 14, ...fam(400), color: adminTone.ink2, lineHeight: 20 } as TextStyle,
+  bodyStrong: { fontSize: 14, ...fam(600), color: adminTone.ink, lineHeight: 20 } as TextStyle,
+  small: { fontSize: 12, ...fam(400), color: adminTone.muted, lineHeight: 16 } as TextStyle,
+  tiny: { fontSize: 12, ...fam(400), color: adminTone.faint, lineHeight: 16 } as TextStyle,
+  label: { fontSize: 12, ...fam(500), color: adminTone.faint, letterSpacing: 0.4, lineHeight: 16, textTransform: 'uppercase' } as TextStyle,
   /** Angka dalam tabel / baris — rata & sejajar. */
-  mono: { fontSize: 13, ...fam(600), color: adminTone.ink, fontVariant: tnum } as TextStyle,
+  mono: { fontSize: 14, ...fam(500), color: adminTone.ink, fontVariant: tnum } as TextStyle,
   /** Angka besar kartu statistik. */
   num: { fontSize: 24, ...fam(700), color: adminTone.ink, letterSpacing: -0.6, lineHeight: 30, fontVariant: tnum } as TextStyle,
 };
@@ -238,7 +238,7 @@ export function Pill({ text, tone = 'neutral', color, icon, style }: { text: str
   return (
     <View style={[s.pill, { backgroundColor: color ? color + '12' : t.bg, borderColor: color ? color + '33' : t.border }, style]}>
       {icon ? <Ionicons name={icon} size={adminIcon.sm - 2} color={fg} /> : null}
-      <Text style={{ color: fg, fontSize: 11.5, lineHeight: 15, ...fam(700) }} numberOfLines={1}>{text}</Text>
+      <Text style={{ color: fg, fontSize: 12, lineHeight: 16, ...fam(600) }} numberOfLines={1}>{text}</Text>
     </View>
   );
 }
@@ -276,7 +276,7 @@ export function FilterBar({ options, value, onChange }: { options: { key: string
         const active = value === o.key;
         return (
           <Pressable key={o.key} onPress={() => onChange(o.key)} style={(st) => [s.filter, (st as { hovered?: boolean }).hovered && !active && { backgroundColor: adminTone.surfaceAlt, borderColor: adminTone.borderStrong }, active && s.filterOn]}>
-            <Text style={{ color: active ? '#fff' : adminTone.ink2, fontSize: 12.5, ...fam(active ? 700 : 600) }}>{o.label}</Text>
+            <Text style={{ color: active ? '#fff' : adminTone.ink2, fontSize: 14, lineHeight: 20, ...fam(active ? 600 : 500) }}>{o.label}</Text>
           </Pressable>
         );
       })}
@@ -289,7 +289,7 @@ export function FilterBar({ options, value, onChange }: { options: { key: string
 export function EmptyState({ icon = 'file-tray-outline', title, subtitle, action }: { icon?: IconName; title: string; subtitle?: string; action?: React.ReactNode }) {
   return (
     <View style={{ alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20, gap: 6 }}>
-      <View style={s.emptyIcon}><Ionicons name={icon} size={22} color={adminTone.faint} /></View>
+      <View style={s.emptyIcon}><Ionicons name={icon} size={24} color={adminTone.faint} /></View>
       <Text style={[adminFont.h2, { marginTop: 6 }]}>{title}</Text>
       {subtitle ? <Text style={[adminFont.small, { textAlign: 'center', maxWidth: 420 }]}>{subtitle}</Text> : null}
       {action ? <View style={{ marginTop: 10 }}>{action}</View> : null}
@@ -452,7 +452,7 @@ export function ReasonPrompt({ visible, title, subtitle, onCancel, onSubmit, con
 export function SoftChip({ label, active, onPress, color = adminTone.teal }: { label: string; active?: boolean; onPress?: () => void; color?: string }) {
   return (
     <Pressable onPress={onPress} style={[s.softChip, active && { backgroundColor: color + '14', borderColor: color + '55' }]}>
-      <Text style={{ fontSize: 12, ...fam(active ? 700 : 600), color: active ? color : adminTone.ink2 }}>{label}</Text>
+      <Text style={{ fontSize: 12, lineHeight: 16, ...fam(active ? 600 : 500), color: active ? color : adminTone.ink2 }}>{label}</Text>
     </Pressable>
   );
 }
@@ -469,7 +469,7 @@ export function AdminDialog({ visible, onClose, title, subtitle, children, width
                 <Text style={[adminFont.h1, { color: tone === adminTone.teal ? adminTone.ink : tone }]}>{title}</Text>
                 {subtitle ? <Text style={[adminFont.small, { marginTop: 2 }]}>{subtitle}</Text> : null}
               </View>
-              <Pressable onPress={onClose} style={s.close}><Ionicons name="close" size={18} color={adminTone.muted} /></Pressable>
+              <Pressable onPress={onClose} style={s.close}><Ionicons name="close" size={20} color={adminTone.muted} /></Pressable>
             </Row>
             {children}
           </View>
@@ -531,7 +531,7 @@ export function DeletePartnerDialog({ target, onClose, onDeleted }: {
     <AdminDialog visible onClose={busy ? () => {} : onClose} title={`Hapus ${kindLabel}?`} subtitle="Tindakan permanen — butuh PIN panel admin dan alasan tertulis." width={560} tone={colors.danger}>
       <View style={s.deleteSummary}>
         <Row gap={10}>
-          <View style={[s.iconBox, { backgroundColor: TONE.bad.bg, borderColor: TONE.bad.border }]}><Ionicons name="trash-outline" size={15} color={TONE.bad.fg} /></View>
+          <View style={[s.iconBox, { backgroundColor: TONE.bad.bg, borderColor: TONE.bad.border }]}><Ionicons name="trash-outline" size={16} color={TONE.bad.fg} /></View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={adminFont.h2} numberOfLines={2}>{target.name}</Text>
             <Text style={adminFont.tiny} numberOfLines={3}>{[kindLabel, ...(target.meta ?? [])].filter(Boolean).join(' · ')}</Text>
@@ -542,7 +542,7 @@ export function DeletePartnerDialog({ target, onClose, onDeleted }: {
       <View style={s.warnBox}>
         {KIND_WARN[target.kind].map((w) => (
           <Row key={w} gap={8} style={{ alignItems: 'flex-start' }}>
-            <Ionicons name="alert-circle-outline" size={14} color={TONE.wait.fg} style={{ marginTop: 2 }} />
+            <Ionicons name="alert-circle-outline" size={16} color={TONE.wait.fg} style={{ marginTop: 2 }} />
             <Text style={[adminFont.small, { flex: 1, color: adminTone.ink2 }]}>{w}</Text>
           </Row>
         ))}
@@ -556,7 +556,7 @@ export function DeletePartnerDialog({ target, onClose, onDeleted }: {
       </View>
       {err ? (
         <View style={s.errBox}>
-          <Ionicons name="close-circle" size={15} color={TONE.bad.fg} />
+          <Ionicons name="close-circle" size={16} color={TONE.bad.fg} />
           <Text style={[adminFont.small, { flex: 1, color: TONE.bad.fg }]} selectable>{err}</Text>
         </View>
       ) : null}

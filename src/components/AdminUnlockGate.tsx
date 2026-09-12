@@ -76,7 +76,7 @@ export function AdminUnlockGate({ children }: { children: React.ReactNode }) {
       {showBanner ? (
         <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
           <View style={s.banner}>
-            <Ionicons name="shield-outline" size={18} color={colors.warning} />
+            <Ionicons name="shield-outline" size={20} color={colors.warning} />
             <Text style={[font.small, { flex: 1, color: colors.text }]}>Amankan panel: atur PIN 6 digit. Tindakan sensitif (saldo, pencairan, gateway, peran admin) butuh PIN.</Text>
             <Button size="sm" title="Atur PIN" color={colors.warning} onPress={() => router.push('/(admin)/security' as never)} />
           </View>
@@ -111,7 +111,7 @@ const s = StyleSheet.create({
   banner: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.lg, backgroundColor: colors.accentLight, borderWidth: 1, borderColor: colors.warning + '55', maxWidth: 1100, width: '100%', alignSelf: 'center' },
   backdrop: { flex: 1, backgroundColor: colors.overlay, alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 9999, elevation: 9999 },
   box: { alignItems: 'center', gap: 12, padding: 24, borderRadius: radius.xl, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, maxWidth: 400, width: '100%' },
-  pin: { fontSize: 30, fontWeight: '800', letterSpacing: 14, textAlign: 'center', color: colors.text, borderBottomWidth: 2, borderBottomColor: colors.primary, paddingVertical: 8, width: 220 },
+  pin: { fontSize: 30, fontWeight: '700', letterSpacing: 14, textAlign: 'center', color: colors.text, borderBottomWidth: 2, borderBottomColor: colors.primary, paddingVertical: 8, width: 220 },
   locked: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: colors.dangerLight },
-  link: { color: colors.primary, fontWeight: '700', fontSize: 13 },
+  link: { color: colors.primary, fontWeight: '700', fontSize: 14 },
 });

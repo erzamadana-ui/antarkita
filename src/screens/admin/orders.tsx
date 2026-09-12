@@ -74,7 +74,7 @@ export default function AdminOrders() {
             </Col>
             <Col span={3} min={200} style={{ gap: 6 }}>
               <Text style={font.label}>Pembayaran</Text>
-              <Text style={[font.num, { fontSize: 19, lineHeight: 26 }]} numberOfLines={1}>{rupiah(open.total)}</Text>
+              <Text style={[font.num, { fontSize: 22, lineHeight: 28 }]} numberOfLines={1}>{rupiah(open.total)}</Text>
               <Text style={font.small}>{open.payment_method === 'wallet' ? 'AntarPay' : 'Tunai'} · {open.payment_status}</Text>
               {!['completed', 'cancelled'].includes(open.status)
                 ? <Button size="sm" variant="outline" color={colors.danger} title="Batalkan pesanan" icon="close-circle-outline" onPress={() => cancel(open)} style={{ marginTop: 8 }} />

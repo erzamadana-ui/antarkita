@@ -100,7 +100,7 @@ export default function BecomeMerchant() {
             <PressableScale onPress={() => router.push({ pathname: '/place-picker', params: { target: 'merchant', title: 'Lokasi usaha' } } as never)} scaleTo={0.985} haptic={false} style={s.pick}>
               <View style={s.pickIcon}><Ionicons name="location-outline" size={20} color={colors.primary} /></View>
               <Text style={[font.body, { flex: 1 }, !f.address && { color: colors.textMuted }]} numberOfLines={2}>{f.address || 'Pilih lokasi usaha di peta'}</Text>
-              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
             </PressableScale>
             <PressableScale onPress={async () => { if (!session) return; try { const r = await pickAndUpload('merchant-images', session.user.id); if (r) set('image_url')(r.url); } catch (e) { toast.error((e as Error).message); } }} scaleTo={0.985} haptic={false} style={[s.coverBox, f.image_url && { borderColor: colors.success, borderStyle: 'solid' }]}>
               {f.image_url ? <Image source={{ uri: f.image_url }} style={s.coverImg} /> : <View style={s.pickIcon}><Ionicons name="image-outline" size={20} color={colors.primary} /></View>}
@@ -164,7 +164,7 @@ export default function BecomeMerchant() {
 
 const s = StyleSheet.create({
   artCircle: { width: 124, height: 124, borderRadius: 62, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.primaryLight },
-  fieldLabel: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+  fieldLabel: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
   pick: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.bgSoft, padding: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border },
   pickIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
   coverBox: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.border, borderRadius: 14, padding: 12, backgroundColor: '#fff' },

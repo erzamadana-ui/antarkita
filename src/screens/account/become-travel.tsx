@@ -95,7 +95,7 @@ export default function BecomeTravel() {
               const active = f.partner_type === t.key;
               return (
                 <PressableScale key={t.key} onPress={() => setType(t.key)} scaleTo={0.985} haptic={false} style={[s.option, active && s.optionActive]}>
-                  <View style={s.optionIcon}><Ionicons name={t.icon} size={22} color={colors.primary} /></View>
+                  <View style={s.optionIcon}><Ionicons name={t.icon} size={24} color={colors.primary} /></View>
                   <View style={{ flex: 1, minWidth: 0 }}><Text style={[font.body, { fontWeight: '700' }]}>{t.title}</Text><Text style={font.tiny}>{t.sub}</Text></View>
                   <View style={[s.radio, active && { borderColor: colors.primary }]}>{active && <View style={s.radioDot} />}</View>
                 </PressableScale>

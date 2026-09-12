@@ -106,7 +106,7 @@ export default function MerchantScreen() {
             <BrandGradient colors={[colors.food, colors.primaryDeep]} style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}><ServiceIllustration kind="food" size={120} /></BrandGradient>
           )}
           <BrandGradient colors={['rgba(0,0,0,0.25)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.35)']} angle="vertical" style={StyleSheet.absoluteFill} />
-          {!merchant.is_open && <View style={[s.closed, { top: insets.top + 60 }]}><Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>SEDANG TUTUP</Text></View>}
+          {!merchant.is_open && <View style={[s.closed, { top: insets.top + 60 }]}><Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>SEDANG TUTUP</Text></View>}
         </Animated.View>
 
         {/* Kartu putih menumpuk */}
@@ -116,9 +116,9 @@ export default function MerchantScreen() {
             <Row between style={{ alignItems: 'flex-start' }}>
               <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                 <Text style={font.h1} numberOfLines={2}>{merchant.name}</Text>
-                <Row gap={4}><Ionicons name="location-outline" size={14} color={colors.textMuted} /><Text style={font.small} numberOfLines={1}>{merchant.category}{merchant.address ? ` · ${merchant.address}` : ''}</Text></Row>
+                <Row gap={4}><Ionicons name="location-outline" size={16} color={colors.textMuted} /><Text style={font.small} numberOfLines={1}>{merchant.category}{merchant.address ? ` · ${merchant.address}` : ''}</Text></Row>
               </View>
-              <View style={s.ratingPill}><Ionicons name="star" size={13} color={colors.accent} /><Text style={{ fontWeight: '800', fontSize: 13, color: colors.text }}>{Number(merchant.rating_avg).toFixed(1)}</Text></View>
+              <View style={s.ratingPill}><Ionicons name="star" size={12} color={colors.accent} /><Text style={{ fontWeight: '700', fontSize: 14, color: colors.text }}>{Number(merchant.rating_avg).toFixed(1)}</Text></View>
             </Row>
             <Row gap={8} style={{ marginTop: 12, flexWrap: 'wrap' }}>
               <HalalBadge merchant={merchant} size="md" />
@@ -131,7 +131,7 @@ export default function MerchantScreen() {
             <Row gap={8} style={{ marginTop: 16 }}>
               {TABS.map((t) => (
                 <PressableScale key={t.key} onPress={() => setTab(t.key)} scaleTo={0.94} style={[s.tab, tab === t.key && s.tabOn]}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: tab === t.key ? '#fff' : colors.text }}>{t.label}</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: tab === t.key ? '#fff' : colors.text }}>{t.label}</Text>
                 </PressableScale>
               ))}
             </Row>
@@ -151,11 +151,11 @@ export default function MerchantScreen() {
                           <View style={{ flex: 1, minWidth: 0 }}>
                             <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={2}>{item.name}</Text>
                             {item.description ? <Text style={font.tiny} numberOfLines={2}>{item.description}</Text> : null}
-                            <Text style={{ fontWeight: '800', color: colors.primary, marginTop: 4, fontSize: 15 }}>{rupiah(item.price)}</Text>
+                            <Text style={{ fontWeight: '700', color: colors.primary, marginTop: 4, fontSize: 16 }}>{rupiah(item.price)}</Text>
                           </View>
                           <View style={{ justifyContent: 'center' }}>
                             {!item.is_available ? <Badge text="Habis" color={colors.textMuted} /> : q === 0 ? (
-                              <PressableScale onPress={() => add(item)} scaleTo={0.88} style={s.addBtn} accessibilityRole="button" accessibilityLabel={`Tambah ${item.name} ke keranjang`}><Ionicons name="add" size={22} color="#fff" /></PressableScale>
+                              <PressableScale onPress={() => add(item)} scaleTo={0.88} style={s.addBtn} accessibilityRole="button" accessibilityLabel={`Tambah ${item.name} ke keranjang`}><Ionicons name="add" size={24} color="#fff" /></PressableScale>
                             ) : <Stepper value={q} onChange={(v) => (v > q ? add(item) : cart.setQty(item.id, v))} />}
                           </View>
                         </Animated.View>
@@ -186,7 +186,7 @@ export default function MerchantScreen() {
           {tab === 'ulasan' && (
             <Entrance index={0} style={{ paddingHorizontal: 16, marginTop: 16 }}>
               <View style={[s.infoCard, { alignItems: 'center', gap: 6 }]}>
-                <Text style={[font.display, { fontSize: 40, lineHeight: 46 }]}>{Number(merchant.rating_avg).toFixed(1)}</Text>
+                <Text style={[font.display, { fontSize: 30, lineHeight: 46 }]}>{Number(merchant.rating_avg).toFixed(1)}</Text>
                 <Stars value={merchant.rating_avg} size={18} />
                 <Text style={font.small}>{merchant.rating_count} ulasan pelanggan</Text>
                 <Text style={[font.tiny, { textAlign: 'center', marginTop: 6 }]}>Ulasan diberikan pelanggan setelah pesanan selesai. Rating merchant diperbarui otomatis.</Text>
@@ -218,13 +218,13 @@ const s = StyleSheet.create({
   sheet: { backgroundColor: '#fff', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, marginTop: -28, padding: 20, paddingTop: 12, borderWidth: 1, borderBottomWidth: 0, borderColor: colors.border, ...shadow.card },
   handle: { width: 44, height: 5, borderRadius: 3, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 14 },
   ratingPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentLight, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 6, marginLeft: 8 },
-  tab: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 11, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff' },
+  tab: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 12, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff' },
   tabOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   item: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: radius.lg, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   thumb: { width: 72, height: 72, borderRadius: radius.md, backgroundColor: colors.tint },
   addBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', ...shadow.soft },
   infoCard: { backgroundColor: '#fff', borderRadius: radius.lg, padding: 16, borderWidth: 1, borderColor: colors.border, ...shadow.soft },
-  closed: { position: 'absolute', left: 16, backgroundColor: 'rgba(16,31,33,0.72)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.full },
+  closed: { position: 'absolute', left: 16, backgroundColor: 'rgba(16,31,33,0.72)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full },
   overlayBtn: { position: 'absolute' },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 16 },
 });

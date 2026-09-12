@@ -60,11 +60,11 @@ export default function MerchantMenu() {
               <Entrance key={it.id} index={Math.min(i + 1, 8)} from="up" style={s.cell}>
                 <Animated.View layout={LinearTransition.springify().stiffness(280).damping(20)} style={[s.tile, !it.is_available && { opacity: 0.6 }]}>
                   <PressableScale onPress={() => setEditing({ id: it.id, name: it.name, description: it.description ?? '', price: String(it.price), category: it.category ?? 'Menu', image_url: it.image_url ?? '' })} scaleTo={0.98} haptic={false}>
-                    {it.image_url ? <Image source={{ uri: it.image_url }} style={s.img} /> : <View style={[s.img, { alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="fast-food-outline" size={30} color={colors.textMuted} /></View>}
+                    {it.image_url ? <Image source={{ uri: it.image_url }} style={s.img} /> : <View style={[s.img, { alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="fast-food-outline" size={32} color={colors.textMuted} /></View>}
                     <View style={{ padding: 10, gap: 2 }}>
                       <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={1}>{it.name}</Text>
                       <Text style={font.tiny} numberOfLines={1}>{it.category ?? 'Menu'}</Text>
-                      <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 15 }}>{rupiah(it.price)}</Text>
+                      <Text style={{ fontWeight: '700', color: colors.primary, fontSize: 16 }}>{rupiah(it.price)}</Text>
                     </View>
                   </PressableScale>
                   <Row between style={s.tileFoot}>

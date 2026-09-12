@@ -101,7 +101,7 @@ export default function Gateway() {
           <Entrance index={0}>
             <BrandGradient colors={[colors.primary, colors.primaryDark]} style={[s.hero, shadow.glow(colors.primary)]}>
               <Text style={{ color: 'rgba(255,255,255,0.85)', fontWeight: '600', fontSize: 12 }}>{t('balance')}</Text>
-              <AnimatedNumber value={wallet?.balance ?? 0} format={rupiah} style={{ color: '#fff', fontSize: 28, fontWeight: '800' }} />
+              <AnimatedNumber value={wallet?.balance ?? 0} format={rupiah} style={{ color: '#fff', fontSize: 30, fontWeight: '700' }} />
               <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 4 }}>{params.reason === 'order' ? 'Lengkapi kekurangan saldo untuk pesanan ini — setelah berhasil, kembali dan tekan Pesan.' : 'Top up instan lewat e-wallet, QRIS, atau virtual account bank.'}</Text>
             </BrandGradient>
           </Entrance>
@@ -116,8 +116,8 @@ export default function Gateway() {
               {enabled.map((x) => (
                 <View key={x.key} style={{ width: '31%', flexGrow: 1 }}>
                   <PressableScale onPress={() => setMethod(x.key)} scaleTo={0.95} style={[s.method, method === x.key && { borderColor: x.color, backgroundColor: x.color + '14', ...shadow.glow(x.color) }]}>
-                    <View style={[s.mIcon, { backgroundColor: x.color }]}><Ionicons name={x.icon as never} size={18} color="#fff" /></View>
-                    <Text style={{ fontWeight: '800', color: colors.text, fontSize: 13 }} numberOfLines={1}>{x.label}</Text>
+                    <View style={[s.mIcon, { backgroundColor: x.color }]}><Ionicons name={x.icon as never} size={20} color="#fff" /></View>
+                    <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }} numberOfLines={1}>{x.label}</Text>
                     {method === x.key && <Ionicons name="checkmark-circle" size={16} color={x.color} style={{ position: 'absolute', top: 6, right: 6 }} />}
                   </PressableScale>
                 </View>
@@ -131,10 +131,10 @@ export default function Gateway() {
         <Animated.View entering={ZoomIn.duration(motion.base)} layout={LinearTransition.springify().stiffness(280).damping(20)} style={{ gap: 16 }}>
           <Card><View style={{ alignItems: 'center', gap: 10 }}>
             {status === 'settlement' ? <View style={[s.big, { backgroundColor: colors.success }]}><Ionicons name="checkmark" size={44} color="#fff" /></View>
-              : status === 'pending' ? <Radar color={m.color} size={130}><Ionicons name={m.icon as never} size={30} color={m.color} /></Radar>
+              : status === 'pending' ? <Radar color={m.color} size={130}><Ionicons name={m.icon as never} size={32} color={m.color} /></Radar>
               : <View style={[s.big, { backgroundColor: colors.danger }]}><Ionicons name="close" size={44} color="#fff" /></View>}
             <Text style={font.h2}>{status === 'settlement' ? t('payment_success') : status === 'pending' ? t('payment_pending') : 'Pembayaran dibatalkan'}</Text>
-            <Text style={{ fontSize: 26, fontWeight: '800', color: colors.text }}>{rupiah(resp.payment.amount)}</Text>
+            <Text style={{ fontSize: 24, fontWeight: '700', color: colors.text }}>{rupiah(resp.payment.amount)}</Text>
             <Row gap={8}><Badge text={m.label} color={m.color} /><Badge text={resp.simulated ? t('simulation') : resp.is_production ? 'Midtrans' : 'Midtrans Sandbox'} color={resp.simulated ? colors.warning : colors.info} /></Row>
             <Text style={[font.tiny, { textAlign: 'center' }]}>ID: {resp.payment.external_id}</Text>
             {status === 'pending' && !resp.simulated && (

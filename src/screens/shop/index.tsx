@@ -234,7 +234,7 @@ export default function ShopScreen() {
                 <Row gap={8}>
                   <Text style={font.tiny}>{loadingStores ? 'Mencari…' : `${shownStores.length} toko`}</Text>
                   <PressableScale haptic={false} hitSlop={6} disabled={importing} accessibilityRole="button" accessibilityLabel="Cari toko dari peta" onPress={() => importFromMap(false)} style={s.mapBtn}>
-                    {importing ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="refresh" size={13} color={colors.primary} />}
+                    {importing ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="refresh" size={12} color={colors.primary} />}
                     <Text style={{ fontSize: 12, fontWeight: '700', color: colors.primary }}>{importing ? 'Mencari di peta…' : 'Cari dari peta'}</Text>
                   </PressableScale>
                 </Row>
@@ -245,7 +245,7 @@ export default function ShopScreen() {
                 : shownStores.map((st, i) => (
                   <Entrance key={st.id} index={i}>
                     <PressableScale onPress={() => selectStore(st)} scaleTo={0.985} haptic={false} style={s.storeCard}>
-                      {st.image_url ? <Image source={{ uri: st.image_url }} style={s.storeIcon} /> : <View style={[s.storeIcon, { alignItems: 'center', justifyContent: 'center' }]}><Ionicons name={st.category === 'apotek' ? 'medkit-outline' : 'storefront-outline'} size={26} color={colors.primary} /></View>}
+                      {st.image_url ? <Image source={{ uri: st.image_url }} style={s.storeIcon} /> : <View style={[s.storeIcon, { alignItems: 'center', justifyContent: 'center' }]}><Ionicons name={st.category === 'apotek' ? 'medkit-outline' : 'storefront-outline'} size={24} color={colors.primary} /></View>}
                       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                         <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={2}>{st.name}</Text>
                         <Row gap={4}><Badge text={st.is_open_now === false ? 'Tutup' : 'Buka'} color={st.is_open_now === false ? colors.danger : colors.success} /><Text style={[font.tiny, { flex: 1 }]} numberOfLines={1}>{storeCategoryLabel[st.category] ?? st.category} · {km(st.distance_km)}</Text></Row>
@@ -270,7 +270,7 @@ export default function ShopScreen() {
           <Entrance index={2}>
             <View style={{ gap: 10 }}>
               <View style={s.storeCard}>
-                {store.image_url ? <Image source={{ uri: store.image_url }} style={s.storeIcon} /> : <View style={[s.storeIcon, { alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="storefront-outline" size={26} color={colors.primary} /></View>}
+                {store.image_url ? <Image source={{ uri: store.image_url }} style={s.storeIcon} /> : <View style={[s.storeIcon, { alignItems: 'center', justifyContent: 'center' }]}><Ionicons name="storefront-outline" size={24} color={colors.primary} /></View>}
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={1}>{store.name}</Text>
                   <Text style={font.tiny} numberOfLines={1}>{km(store.distance_km)}{store.open_hours ? ` · ${store.open_hours}` : ''}{route ? ` · ${minutes(route.duration_min)} ke alamat` : ''}</Text>
@@ -303,11 +303,11 @@ export default function ShopScreen() {
                   <Text style={font.tiny}>{l.unit} · {rupiah(l.price)}</Text>
                 </View>
                 <Stepper value={l.qty} onChange={(v) => setCart((c) => (v <= 0 ? c.filter((x) => x.key !== l.key) : c.map((x) => (x.key === l.key ? { ...x, qty: v } : x))))} min={0} max={50} />
-                <Text style={{ fontWeight: '700', color: colors.text, minWidth: 74, textAlign: 'right', fontSize: 13 }}>{rupiah(l.price * l.qty)}</Text>
+                <Text style={{ fontWeight: '700', color: colors.text, minWidth: 74, textAlign: 'right', fontSize: 14 }}>{rupiah(l.price * l.qty)}</Text>
                 <PressableScale haptic={false} onPress={() => setCart((c) => c.filter((x) => x.key !== l.key))} style={s.del}><Ionicons name="trash-outline" size={16} color={colors.danger} /></PressableScale>
               </Row>
             ))}
-            <Row between style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }}><Text style={font.small}>Subtotal belanja</Text><Text style={{ fontWeight: '800', color: colors.text }}>{rupiah(cartSubtotal)}</Text></Row>
+            <Row between style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }}><Text style={font.small}>Subtotal belanja</Text><Text style={{ fontWeight: '700', color: colors.text }}>{rupiah(cartSubtotal)}</Text></Row>
           </Card>
         )}
 
@@ -402,18 +402,18 @@ function ProductTile({ p, width, qty, onChange }: { p: ShopProduct; width: numbe
     <View style={[s.tile, { width }, out && { opacity: 0.55 }]}>
       <View style={s.tileArt}>
         {p.image_url ? <Image source={{ uri: p.image_url }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <ServiceIllustration kind="shop" size={56} />}
-        {out ? <View style={s.outPill}><Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>Habis</Text></View> : null}
+        {out ? <View style={s.outPill}><Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Habis</Text></View> : null}
       </View>
       <View style={{ paddingHorizontal: 4, gap: 2 }}>
         <Text style={[font.small, { color: colors.text, fontWeight: '700', minHeight: 36 }]} numberOfLines={2}>{p.name}</Text>
         <Row gap={4}><Ionicons name="cube-outline" size={12} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>{productCategoryLabel[p.category] ?? p.category} · {p.unit}</Text></Row>
         <Row between style={{ marginTop: 4, flexWrap: 'wrap', rowGap: 6 }}>
-          <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 15 }} numberOfLines={1}>{rupiah(p.price)}</Text>
+          <Text style={{ fontWeight: '700', color: colors.primary, fontSize: 16 }} numberOfLines={1}>{rupiah(p.price)}</Text>
           {out ? null : qty > 0 ? (
             <Row gap={6}>
-              <PressableScale haptic={false} hitSlop={10} accessibilityRole="button" accessibilityLabel="Kurangi satu" onPress={() => onChange(qty - 1)} style={s.miniBtn}><Ionicons name="remove" size={14} color={colors.primary} /></PressableScale>
-              <Text style={{ fontWeight: '800', color: colors.text, minWidth: 16, textAlign: 'center', fontSize: 13 }}>{qty}</Text>
-              <PressableScale haptic={false} hitSlop={10} onPress={() => onChange(Math.min(50, qty + 1))} style={[s.miniBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]} accessibilityRole="button" accessibilityLabel="Tambah satu"><Ionicons name="add" size={14} color="#fff" /></PressableScale>
+              <PressableScale haptic={false} hitSlop={10} accessibilityRole="button" accessibilityLabel="Kurangi satu" onPress={() => onChange(qty - 1)} style={s.miniBtn}><Ionicons name="remove" size={16} color={colors.primary} /></PressableScale>
+              <Text style={{ fontWeight: '700', color: colors.text, minWidth: 16, textAlign: 'center', fontSize: 14 }}>{qty}</Text>
+              <PressableScale haptic={false} hitSlop={10} onPress={() => onChange(Math.min(50, qty + 1))} style={[s.miniBtn, { backgroundColor: colors.primary, borderColor: colors.primary }]} accessibilityRole="button" accessibilityLabel="Tambah satu"><Ionicons name="add" size={16} color="#fff" /></PressableScale>
             </Row>
           ) : (
             <PressableScale haptic={false} onPress={() => onChange(1)} scaleTo={0.88} hitSlop={8} style={s.addBtn} accessibilityRole="button" accessibilityLabel="Tambah"><Ionicons name="add" size={20} color="#fff" /></PressableScale>
@@ -430,7 +430,7 @@ const s = StyleSheet.create({
   iconTint: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
   rowArrow: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.tint },
   addrRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: radius.md, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border },
-  mapBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 28, borderRadius: 14, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.primaryLight },
+  mapBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 28, borderRadius: 14, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.primaryLight },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   tile: { gap: 8, padding: 8, borderRadius: 22, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   tileArt: { height: 110, borderRadius: 18, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },

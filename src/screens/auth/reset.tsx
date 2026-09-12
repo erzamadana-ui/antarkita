@@ -93,7 +93,7 @@ export default function ResetPassword() {
             right={<Pressable onPress={() => setShow(!show)} hitSlop={8} accessibilityRole="button" accessibilityLabel={show ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}><Icon name={show ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} /></Pressable>} />
           <View style={s.meter}>{[1, 2, 3].map((i) => <View key={i} style={[s.bar, strength >= i && { backgroundColor: strength === 1 ? colors.danger : strength === 2 ? colors.warning : colors.success }]} />)}<Text style={[font.tiny, { marginLeft: 6 }]}>{strength === 0 ? '' : strength === 1 ? 'Lemah' : strength === 2 ? 'Cukup kuat' : 'Kuat'}</Text></View>
           <Input label={t('confirm_password')} icon="lock-closed-outline" value={p2} onChangeText={(v) => { setP2(v); setErr(null); }} secureTextEntry={!show} placeholder="Ulangi kata sandi baru" textContentType="newPassword" onSubmitEditing={save} error={mismatch ? 'Belum sama' : undefined} />
-          {err ? <Text style={{ color: colors.danger, fontSize: 13 }}>{err}</Text> : null}
+          {err ? <Text style={{ color: colors.danger, fontSize: 14 }}>{err}</Text> : null}
           <Button title={t('save_password')} size="lg" icon="checkmark" loading={busy} onPress={save} />
           {recovery ? <Pressable onPress={restart} style={{ alignItems: 'center', padding: 6 }} accessibilityRole="button"><Text style={[font.small, { color: colors.textMuted }]}>Bukan Anda? Batalkan dan minta tautan baru</Text></Pressable> : null}
         </View></Entrance>
@@ -103,11 +103,11 @@ export default function ResetPassword() {
           <Text style={[font.small, { textAlign: 'center' }]}>Buka tautan di email pemulihan, atau masukkan kode dari email tersebut di sini.</Text>
           <Input label={t('email')} icon="mail-outline" value={email} onChangeText={(v) => { setEmail(v); setErr(null); }} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" placeholder="nama@email.com" textContentType="emailAddress" />
           <Input label="Kode dari email" icon="keypad-outline" value={code} onChangeText={(v) => { setCode(v.replace(/\D/g, '').slice(0, 8)); setErr(null); }} keyboardType="number-pad" placeholder="6 digit" textContentType="oneTimeCode" onSubmitEditing={verifyCode} />
-          {err ? <Text style={{ color: colors.danger, fontSize: 13 }}>{err}</Text> : null}
+          {err ? <Text style={{ color: colors.danger, fontSize: 14 }}>{err}</Text> : null}
           <Button title="Verifikasi kode" size="lg" icon="shield-checkmark-outline" loading={busy} onPress={verifyCode} />
           <View style={s.note}>
             <IconCircle name="information-circle-outline" size={30} bg="#fff" color={colors.primary} />
-            <Text style={[font.tiny, { flex: 1 }]}>Belum menerima email? <Text style={{ color: colors.primary, fontWeight: '800' }} onPress={() => router.replace({ pathname: '/(auth)/forgot', params: { email } } as never)}>Kirim tautan pemulihan</Text>.</Text>
+            <Text style={[font.tiny, { flex: 1 }]}>Belum menerima email? <Text style={{ color: colors.primary, fontWeight: '700' }} onPress={() => router.replace({ pathname: '/(auth)/forgot', params: { email } } as never)}>Kirim tautan pemulihan</Text>.</Text>
           </View>
         </View></Entrance>
       )}

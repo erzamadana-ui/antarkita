@@ -448,6 +448,6 @@ const dlg = {
   box: { borderRadius: adminRadius.card, borderWidth: 1, padding: adminSpace.lg },
   input: {
     height: 36, borderRadius: adminRadius.md, borderWidth: 1, borderColor: adminTone.border,
-    backgroundColor: adminTone.surface, paddingHorizontal: 10, fontSize: 13, color: adminTone.ink,
+    backgroundColor: adminTone.surface, paddingHorizontal: 10, fontSize: 14, color: adminTone.ink,
   },
 } as const;

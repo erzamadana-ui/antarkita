@@ -107,7 +107,7 @@ export default function DriverHome() {
     <View style={s.profileCard}>
       <Avatar name={profile?.full_name} url={profile?.avatar_url} size={38} />
       <View style={{ minWidth: 0, maxWidth: 150 }}>
-        <Text style={{ fontWeight: '800', color: colors.text, fontSize: 13 }} numberOfLines={1}>{profile?.full_name}</Text>
+        <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }} numberOfLines={1}>{profile?.full_name}</Text>
         <Row gap={4}>
           <LiveDot color={online ? colors.success : colors.textMuted} size={6} />
           <Text style={{ fontSize: 12, fontWeight: '700', color: online ? colors.success : colors.textMuted }}>{online ? 'Online' : 'Offline'}</Text>
@@ -123,7 +123,7 @@ export default function DriverHome() {
         <Text style={[font.h3, { fontSize: 16 }]}>{online ? (selected ? 'Detail order' : `${available.length} order tersedia`) : 'Anda offline'}</Text>
         <Row gap={4}>
           <Text style={font.tiny}>{driver?.vehicle_plate} · </Text>
-          <Ionicons name="star" size={11} color={colors.accent} />
+          <Ionicons name="star" size={12} color={colors.accent} />
           <Text style={font.tiny}>{Number(driver?.rating_avg ?? 5).toFixed(1)} · {driver?.total_trips} trip</Text>
         </Row>
       </View>
@@ -151,9 +151,9 @@ export default function DriverHome() {
         {active && (
           <Entrance index={0}>
             <PressableScale onPress={() => router.push(`/driver/order/${active.id}` as never)} scaleTo={0.97} style={s.activeCard}>
-              <View style={s.activeIcon}><Ionicons name={serviceDef(active.service).icon as never} size={22} color={colors.primary} /></View>
+              <View style={s.activeIcon}><Ionicons name={serviceDef(active.service).icon as never} size={24} color={colors.primary} /></View>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={{ color: '#fff', fontWeight: '800' }} numberOfLines={1}>Order aktif · {serviceLabel[active.service]}</Text>
+                <Text style={{ color: '#fff', fontWeight: '700' }} numberOfLines={1}>Order aktif · {serviceLabel[active.service]}</Text>
                 <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '500' }} numberOfLines={1}>{statusLabel(active.status, active.service)} · {active.code}</Text>
               </View>
               <Ionicons name="arrow-forward" size={20} color="#fff" />
@@ -176,7 +176,7 @@ export default function DriverHome() {
                   <Text style={font.tiny}>{selected.code} · {selected.payment_method === 'cash' ? `Tunai, tagih ${rupiah(selected.total)}` : 'Dibayar AntarPay'}</Text>
                 </View>
               </Row>
-              <PressableScale onPress={() => setSelected(null)} scaleTo={0.9} style={s.closeBtn}><Ionicons name="close" size={18} color={colors.textSecondary} /></PressableScale>
+              <PressableScale onPress={() => setSelected(null)} scaleTo={0.9} style={s.closeBtn}><Ionicons name="close" size={20} color={colors.textSecondary} /></PressableScale>
             </Row>
             {!!selected.direct_for_me && <View style={{ marginTop: 10 }}><DirectOrderBadge holdLeftSeconds={selected.direct_hold_left_s} /></View>}
             <Row gap={6} style={{ flexWrap: 'wrap', marginTop: 10 }}>
@@ -187,7 +187,7 @@ export default function DriverHome() {
             </Row>
             <View style={s.earnBox}>
               <Text style={font.tiny}>Pendapatan bersih</Text>
-              <AnimatedNumber value={selected.driver_earning} format={rupiah} style={{ fontSize: 28, fontWeight: '800', color: colors.primary, letterSpacing: -0.5 }} duration={500} />
+              <AnimatedNumber value={selected.driver_earning} format={rupiah} style={{ fontSize: 30, fontWeight: '700', color: colors.primary, letterSpacing: -0.5 }} duration={500} />
             </View>
             <View style={{ marginTop: 12, gap: 8 }}>
               <Row gap={10}><View style={s.dotIcon}><Ionicons name="navigate-outline" size={16} color={colors.primary} /></View><Text style={[font.small, { flex: 1 }]}>{km(selected.distance_to_pickup_km)} ke titik jemput · {selected.merchant_name ?? selected.pickup_address}</Text></Row>
@@ -196,7 +196,7 @@ export default function DriverHome() {
               {selected.service === 'food' && <Row gap={10}><View style={s.dotIcon}><Ionicons name="restaurant-outline" size={16} color={colors.primary} /></View><Text style={[font.small, { flex: 1 }]}>Beli makanan {rupiah(selected.items_subtotal)}{selected.payment_method === 'cash' ? ' (talangi tunai)' : ' (dibayar AntarPay)'}</Text></Row>}
             </View>
             <OrderLoadInfo order={selected} style={{ marginTop: 10 }} />
-            {!!selected.priority_note && <Row gap={6} style={{ marginTop: 8 }}><Ionicons name="information-circle-outline" size={13} color={colors.textMuted} /><Text style={[font.tiny, { flex: 1 }]}>{selected.priority_note}</Text></Row>}
+            {!!selected.priority_note && <Row gap={6} style={{ marginTop: 8 }}><Ionicons name="information-circle-outline" size={12} color={colors.textMuted} /><Text style={[font.tiny, { flex: 1 }]}>{selected.priority_note}</Text></Row>}
             <Row gap={8} style={{ marginTop: 14 }}>
               <Button title="Tolak" size="lg" variant="outline" color={colors.danger} onPress={() => setRejecting(selected)} style={{ flex: 1 }} />
               <Button title="Terima Order" size="lg" onPress={() => doAccept(selected)} style={{ flex: 1.6 }} />
@@ -228,7 +228,7 @@ export default function DriverHome() {
                       <Text style={font.tiny} numberOfLines={1}>Jemput {km(o.distance_to_pickup_km)} · Antar {km(o.distance_km)}</Text>
                       <Text style={font.tiny} numberOfLines={1}>{o.scheduled_at ? `Jadwal ${formatSchedule(o.scheduled_at)}` : timeAgo(o.created_at)}</Text>
                       <Row gap={4}><Ionicons name={o.payment_method === 'cash' ? 'cash-outline' : 'wallet-outline'} size={12} color={o.payment_method === 'cash' ? colors.warning : colors.primary} /><Text style={[font.tiny, { fontWeight: '700', color: o.payment_method === 'cash' ? colors.warning : colors.primary }]} numberOfLines={1}>{o.payment_method === 'cash' ? 'Tunai' : 'AntarPay'}</Text></Row>
-                      <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 15 }}>{rupiah(o.driver_earning)}</Text>
+                      <Text style={{ fontWeight: '700', color: colors.primary, fontSize: 16 }}>{rupiah(o.driver_earning)}</Text>
                     </View>
                     <View style={s.rowArrow}><Ionicons name="arrow-forward" size={16} color={colors.primary} /></View>
                   </PressableScale>

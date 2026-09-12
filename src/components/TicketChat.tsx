@@ -53,16 +53,16 @@ export function TicketChat({ ticket, messages, onSend, asCs, footer, style }: {
             <View key={m.id}>
               {showDay && <Text style={[font.tiny, { textAlign: 'center', marginVertical: 6 }]}>{day}</Text>}
               {system ? (
-                <Animated.View entering={last ? FadeInDown.duration(motion.base) : undefined} style={s.system}><Ionicons name="information-circle-outline" size={14} color={colors.textSecondary} /><Text style={[font.tiny, { flex: 1 }]}>{m.body}</Text></Animated.View>
+                <Animated.View entering={last ? FadeInDown.duration(motion.base) : undefined} style={s.system}><Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} /><Text style={[font.tiny, { flex: 1 }]}>{m.body}</Text></Animated.View>
               ) : (
                 <Animated.View entering={last ? (mine ? FadeInUp : FadeInDown).springify().stiffness(280).damping(18) : undefined} layout={LinearTransition.springify().stiffness(280).damping(20)}
                   style={[s.bubble, mine ? s.mine : s.theirs, m.is_internal && s.internal]}>
                   {mine && !m.is_internal && <BrandGradient colors={asCs ? [colors.info, '#1D4ED8'] : undefined} style={StyleSheet.absoluteFill} />}
-                  {!mine && <Text style={[font.tiny, { fontWeight: '800', color: m.sender_role === 'cs' ? colors.info : colors.textSecondary, marginBottom: 2 }]}>{m.sender_role === 'cs' ? 'CS AntarKita' : 'Pengguna'}</Text>}
-                  {!!m.is_internal && <Text style={[font.tiny, { fontWeight: '800', color: colors.warning, marginBottom: 2 }]}>Catatan internal (tak terlihat pengguna)</Text>}
-                  <Text style={{ color: mine && !m.is_internal ? '#fff' : colors.text, fontSize: 15, lineHeight: 21 }}>{m.body}</Text>
+                  {!mine && <Text style={[font.tiny, { fontWeight: '700', color: m.sender_role === 'cs' ? colors.info : colors.textSecondary, marginBottom: 2 }]}>{m.sender_role === 'cs' ? 'CS AntarKita' : 'Pengguna'}</Text>}
+                  {!!m.is_internal && <Text style={[font.tiny, { fontWeight: '700', color: colors.warning, marginBottom: 2 }]}>Catatan internal (tak terlihat pengguna)</Text>}
+                  <Text style={{ color: mine && !m.is_internal ? '#fff' : colors.text, fontSize: 16, lineHeight: 22 }}>{m.body}</Text>
                   {m.attachment_url && (
-                    <Pressable onPress={() => openAttachment(m.attachment_url!)} style={s.attach}><Ionicons name="image-outline" size={14} color={mine && !m.is_internal ? '#fff' : colors.info} /><Text style={{ fontSize: 12, fontWeight: '700', color: mine && !m.is_internal ? '#fff' : colors.info }}>Lihat lampiran</Text></Pressable>
+                    <Pressable onPress={() => openAttachment(m.attachment_url!)} style={s.attach}><Ionicons name="image-outline" size={16} color={mine && !m.is_internal ? '#fff' : colors.info} /><Text style={{ fontSize: 12, fontWeight: '700', color: mine && !m.is_internal ? '#fff' : colors.info }}>Lihat lampiran</Text></Pressable>
                   )}
                   <Text style={{ fontSize: 12, color: mine && !m.is_internal ? 'rgba(255,255,255,0.92)' : colors.textMuted, marginTop: 2, alignSelf: 'flex-end' }}>{formatTime(m.created_at)}</Text>
                 </Animated.View>
@@ -87,7 +87,7 @@ export function TicketChat({ ticket, messages, onSend, asCs, footer, style }: {
             <TextInput value={text} onChangeText={setText} placeholder={internal ? 'Catatan internal…' : asCs ? 'Tulis balasan ke pengguna…' : 'Tulis pesan ke CS…'} placeholderTextColor={colors.textMuted} style={s.input} onSubmitEditing={() => submit(text)} blurOnSubmit={false} editable={!busy} />
             <PressableScale onPress={() => submit(text)} scaleTo={0.88} style={[s.send, shadow.glow(asCs ? colors.info : colors.primary)]} disabled={!text.trim() || busy} accessibilityRole="button" accessibilityLabel="Kirim pesan">
               <BrandGradient colors={asCs ? [colors.info, '#1D4ED8'] : undefined} style={StyleSheet.absoluteFill} />
-              <Ionicons name="send" size={18} color="#fff" />
+              <Ionicons name="send" size={20} color="#fff" />
             </PressableScale>
           </Row>
         </Animated.View>
@@ -104,7 +104,7 @@ const s = StyleSheet.create({
   system: { flexDirection: 'row', gap: 6, alignItems: 'center', alignSelf: 'center', maxWidth: '90%', backgroundColor: 'rgba(11,31,42,0.05)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.full },
   attach: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
   composer: { padding: 12, backgroundColor: 'rgba(255,255,255,0.92)', borderTopWidth: 1, borderTopColor: glass.border },
-  input: { flex: 1, backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: radius.full, paddingHorizontal: 16, height: 46, color: colors.text, borderWidth: 1, borderColor: glass.border, fontSize: 15 },
+  input: { flex: 1, backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: radius.full, paddingHorizontal: 16, height: 46, color: colors.text, borderWidth: 1, borderColor: glass.border, fontSize: 16 },
   send: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   attachBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(11,31,42,0.06)' },
 });

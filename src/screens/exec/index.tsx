@@ -491,7 +491,7 @@ function RecoCard({ rc, index }: { rc: Recommendation; index: number }) {
       <View style={[s.reco, { borderColor: p.color + '44', backgroundColor: p.color + '0D' }]}>
         <Row gap={10} style={{ alignItems: 'flex-start' }}>
           <View style={[s.recoIcon, { backgroundColor: p.color + '1A', borderColor: p.color + '33' }]}><Ionicons name={p.icon} size={adminIcon.md} color={p.color} /></View>
-          <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
+          <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
             <Row gap={6} style={{ flexWrap: 'wrap' }}><Pill text={p.label} color={p.color} /><Pill text={rc.area} tone="neutral" /></Row>
             <Text style={af.h3} numberOfLines={2}>{rc.title}</Text>
             <Text style={af.small}>{rc.detail}</Text>
@@ -508,7 +508,7 @@ function RecoCard({ rc, index }: { rc: Recommendation; index: number }) {
 
 const s = StyleSheet.create({
   login: { alignItems: 'center', gap: adminSpace.md, padding: adminSpace.xxl, borderRadius: adminRadius.lg, backgroundColor: 'rgba(255,255,255,0.8)', borderWidth: 1, borderColor: glass.border, maxWidth: 420, alignSelf: 'center', width: '100%' },
-  pin: { fontSize: 30, fontWeight: '800', letterSpacing: 14, textAlign: 'center', color: colors.text, borderBottomWidth: 2, borderBottomColor: '#0B1F2A', paddingVertical: 8, width: 220 },
+  pin: { fontSize: 30, fontWeight: '700', letterSpacing: 14, textAlign: 'center', color: colors.text, borderBottomWidth: 2, borderBottomColor: '#0B1F2A', paddingVertical: 8, width: 220 },
   hero: { borderRadius: adminRadius.lg, padding: adminSpace.xl, overflow: 'hidden' },
   // Kepala portal memakai skala tipografi yang sama dengan panel admin, hanya warnanya dibalik.
   heroKicker: { ...af.label, color: 'rgba(255,255,255,0.78)', lineHeight: 16 },

@@ -64,7 +64,7 @@ export default function TravelBookingDetail() {
             {p.photo_url ? <Image source={{ uri: p.photo_url }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <ServiceIllustration kind="travel" size={140} />}
           </BrandGradient>
           <BrandGradient colors={['rgba(0,0,0,0.25)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.35)']} angle="vertical" style={StyleSheet.absoluteFill} />
-          <View style={[s.statusPill, { top: insets.top + 60 }]}><Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>{travelStatusLabel[b.status]}</Text></View>
+          <View style={[s.statusPill, { top: insets.top + 60 }]}><Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{travelStatusLabel[b.status]}</Text></View>
         </Animated.View>
 
         <View style={s.wrap}>
@@ -73,9 +73,9 @@ export default function TravelBookingDetail() {
             <Row between style={{ alignItems: 'flex-start' }}>
               <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                 <Text style={font.h1}>{cityName(cities, t.route.from_city)} → {cityName(cities, t.route.to_city)}</Text>
-                <Row gap={4}><Ionicons name="location-outline" size={14} color={colors.textMuted} /><Text style={font.small} numberOfLines={1}>Berangkat {formatSchedule(t.depart_at)}</Text></Row>
+                <Row gap={4}><Ionicons name="location-outline" size={16} color={colors.textMuted} /><Text style={font.small} numberOfLines={1}>Berangkat {formatSchedule(t.depart_at)}</Text></Row>
               </View>
-              <View style={s.ratingPill}><Ionicons name="star" size={13} color={colors.accent} /><Text style={{ fontWeight: '800', fontSize: 13, color: colors.text }}>{Number(p.rating_avg).toFixed(1)}</Text></View>
+              <View style={s.ratingPill}><Ionicons name="star" size={12} color={colors.accent} /><Text style={{ fontWeight: '700', fontSize: 14, color: colors.text }}>{Number(p.rating_avg).toFixed(1)}</Text></View>
             </Row>
             <Row gap={8} style={{ marginTop: 12, flexWrap: 'wrap' }}>
               <Badge text={`${b.pax} penumpang${b.is_private ? ' · private' : ''}`} color={colors.primary} />
@@ -85,7 +85,7 @@ export default function TravelBookingDetail() {
             <Row gap={8} style={{ marginTop: 16 }}>
               {TABS.map((x) => (
                 <PressableScale key={x.key} onPress={() => setTab(x.key)} scaleTo={0.94} style={[s.tab, tab === x.key && s.tabOn]}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: tab === x.key ? '#fff' : colors.text }}>{x.label}</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: tab === x.key ? '#fff' : colors.text }}>{x.label}</Text>
                 </PressableScale>
               ))}
             </Row>
@@ -169,8 +169,8 @@ const s = StyleSheet.create({
   sheet: { backgroundColor: '#fff', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, marginTop: -28, padding: 20, paddingTop: 12, borderWidth: 1, borderBottomWidth: 0, borderColor: colors.border, ...shadow.card },
   handle: { width: 44, height: 5, borderRadius: 3, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 14 },
   ratingPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.accentLight, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 6, marginLeft: 8 },
-  statusPill: { position: 'absolute', left: 16, backgroundColor: 'rgba(16,31,33,0.72)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.full },
-  tab: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff' },
+  statusPill: { position: 'absolute', left: 16, backgroundColor: 'rgba(16,31,33,0.72)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.full },
+  tab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff' },
   tabOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   card: { backgroundColor: '#fff', borderRadius: radius.lg, padding: 16, borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: 10 },

@@ -90,7 +90,7 @@ export default function Account() {
                   <Text style={[font.body, { fontWeight: '700' }, it.danger && { color: colors.danger }]} numberOfLines={1}>{it.title}</Text>
                   {it.subtitle ? <Text style={font.tiny} numberOfLines={2}>{it.subtitle}</Text> : null}
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
               </PressableScale>
             ))}
           </View>

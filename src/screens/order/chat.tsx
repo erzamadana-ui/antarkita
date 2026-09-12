@@ -53,7 +53,7 @@ export default function OrderChat() {
     <Row gap={10} style={{ flex: 1 }}>
       <Avatar name={other?.full_name} url={other?.avatar_url} size={34} />
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={[font.h3, { fontSize: 15 }]} numberOfLines={1}>{other?.full_name ?? 'Chat'}</Text>
+        <Text style={[font.h3, { fontSize: 16 }]} numberOfLines={1}>{other?.full_name ?? 'Chat'}</Text>
         <Text style={font.tiny} numberOfLines={1}>{closed ? 'Chat ditutup' : 'Pesanan berlangsung'}</Text>
       </View>
       {/* Wajib kebijakan UGC Google Play: lapor & blokir harus mudah ditemukan di layar chat. */}
@@ -76,7 +76,7 @@ export default function OrderChat() {
             const bubble = (
               <Animated.View entering={last ? (mine ? FadeInUp : FadeInDown).springify().stiffness(280).damping(18) : undefined} layout={LinearTransition.springify().stiffness(280).damping(20)} style={[s.bubble, mine ? s.mine : s.theirs]}>
                 {mine && <BrandGradient style={StyleSheet.absoluteFill} />}
-                <Text style={{ color: mine ? '#fff' : colors.text, fontSize: 15, lineHeight: 21 }}>{m.body}</Text>
+                <Text style={{ color: mine ? '#fff' : colors.text, fontSize: 16, lineHeight: 22 }}>{m.body}</Text>
                 <Text style={{ fontSize: 12, color: mine ? 'rgba(255,255,255,0.92)' : colors.textMuted, marginTop: 2, alignSelf: 'flex-end' }}>{formatTime(m.created_at)}</Text>
               </Animated.View>
             );
@@ -95,7 +95,7 @@ export default function OrderChat() {
               <TextInput value={text} onChangeText={setText} placeholder="Tulis pesan…" placeholderTextColor={colors.textMuted} style={s.input} onSubmitEditing={() => submit(text)} blurOnSubmit={false} />
               <PressableScale onPress={() => submit(text)} scaleTo={0.88} style={[s.send, shadow.glow(colors.primary)]} disabled={!text.trim()}>
                 <BrandGradient style={StyleSheet.absoluteFill} />
-                <Ionicons name="send" size={18} color="#fff" />
+                <Ionicons name="send" size={20} color="#fff" />
               </PressableScale>
             </Row>
           </Animated.View>
@@ -112,6 +112,6 @@ const s = StyleSheet.create({
   mine: { alignSelf: 'flex-end', borderBottomRightRadius: 6, ...shadow.soft },
   theirs: { alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.8)', borderBottomLeftRadius: 6, borderWidth: 1, borderColor: glass.border },
   composer: { padding: 12, backgroundColor: 'rgba(255,255,255,0.92)', borderTopWidth: 1, borderTopColor: glass.border },
-  input: { flex: 1, backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: radius.full, paddingHorizontal: 16, height: 46, color: colors.text, borderWidth: 1, borderColor: glass.border, fontSize: 15 },
+  input: { flex: 1, backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: radius.full, paddingHorizontal: 16, height: 46, color: colors.text, borderWidth: 1, borderColor: glass.border, fontSize: 16 },
   send: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
 });

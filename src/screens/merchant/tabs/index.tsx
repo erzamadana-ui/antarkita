@@ -88,12 +88,12 @@ export default function MerchantOrders() {
               <Row gap={10} style={{ marginTop: 10 }}>
                 <View style={s.reportBox}>
                   <Text style={font.tiny}>Hari ini</Text>
-                  <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 17 }} numberOfLines={1}>{rupiah(sales.todayEarning)}</Text>
+                  <Text style={{ fontWeight: '700', color: colors.primary, fontSize: 18 }} numberOfLines={1}>{rupiah(sales.todayEarning)}</Text>
                   <Text style={font.tiny}>{sales.todayCount} pesanan selesai</Text>
                 </View>
                 <View style={s.reportBox}>
                   <Text style={font.tiny}>7 hari terakhir</Text>
-                  <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 17 }} numberOfLines={1}>{rupiah(sales.weekEarning)}</Text>
+                  <Text style={{ fontWeight: '700', color: colors.primary, fontSize: 18 }} numberOfLines={1}>{rupiah(sales.weekEarning)}</Text>
                   <Text style={font.tiny}>{sales.weekCount} pesanan selesai</Text>
                 </View>
               </Row>
@@ -125,10 +125,10 @@ export default function MerchantOrders() {
                 </Row>
                 <View style={s.items}>
                   {o.order_items?.map((it) => <Row key={it.id} between style={{ alignItems: 'flex-start' }}><Text style={[font.body, { flex: 1 }]}>{it.qty}× {it.name}{it.notes ? <Text style={font.tiny}>  ({it.notes})</Text> : null}</Text><Text style={{ fontWeight: '600', color: colors.text }}>{rupiah(it.price * it.qty)}</Text></Row>)}
-                  <Row between style={s.total}><Text style={font.small}>Pendapatan bersih Anda</Text><Text style={{ fontWeight: '800', color: colors.primary, fontSize: 16 }}>{rupiah(o.merchant_earning)}</Text></Row>
+                  <Row between style={s.total}><Text style={font.small}>Pendapatan bersih Anda</Text><Text style={{ fontWeight: '700', color: colors.primary, fontSize: 16 }}>{rupiah(o.merchant_earning)}</Text></Row>
                 </View>
                 <Row between style={{ marginTop: 10 }}>
-                  <Row gap={4} style={{ flex: 1, minWidth: 0 }}><Ionicons name="bicycle-outline" size={14} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>Driver: {DRIVER_STAGE[o.status] ?? statusLabel(o.status, o.service).toLowerCase()}</Text></Row>
+                  <Row gap={4} style={{ flex: 1, minWidth: 0 }}><Ionicons name="bicycle-outline" size={16} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>Driver: {DRIVER_STAGE[o.status] ?? statusLabel(o.status, o.service).toLowerCase()}</Text></Row>
                   {isActive(o) && (
                     <Row gap={8}>
                       {!!o.driver_id && <CallButton peer={{ id: o.driver_id, name: 'Driver', role: 'driver' }} orderId={o.id} size={34} color={colors.primary} />}

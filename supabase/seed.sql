@@ -1,10 +1,13 @@
 -- =====================================================================
 -- Antar Aja — Seed data uji (akun demo, merchant, menu, promo)
--- Password semua akun demo: AntarAja#2026
+-- Kata sandi akun uji TIDAK ditulis di sini (repositori publik). Tetapkan dulu:
+--   set app.seed_password = '<sandi-kuat-anda>';
+-- Berkas ini hanya untuk lingkungan LOKAL/STAGING — jangan dijalankan di produksi.
 -- =====================================================================
 create or replace function seed_user(p_id uuid, p_email text, p_name text, p_phone text, p_password text)
 returns void language plpgsql security definer as $$
 begin
+  if p_password is null then raise exception 'Tetapkan dulu: set app.seed_password = ''<sandi>''; (kata sandi uji tidak boleh dibawa di repositori)'; end if;
   insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_token, recovery_token,
     email_change_token_new, email_change, is_super_admin)
@@ -19,12 +22,13 @@ begin
   on conflict do nothing;
 end $$;
 
-select seed_user('a0000000-0000-4000-8000-000000000001', 'admin@antaraja.id',    'Admin Antar Aja',  '+6281100000001', 'AntarAja#2026');
-select seed_user('a0000000-0000-4000-8000-000000000002', 'customer@antaraja.id', 'Budi Santoso',     '+6281100000002', 'AntarAja#2026');
-select seed_user('a0000000-0000-4000-8000-000000000003', 'driver@antaraja.id',   'Ahmad Fauzi',      '+6281100000003', 'AntarAja#2026');
-select seed_user('a0000000-0000-4000-8000-000000000004', 'driver2@antaraja.id',  'Rina Kartika',     '+6281100000004', 'AntarAja#2026');
-select seed_user('a0000000-0000-4000-8000-000000000005', 'merchant@antaraja.id', 'Mak Syukur',       '+6281100000005', 'AntarAja#2026');
+select seed_user('a0000000-0000-4000-8000-000000000001', 'admin@antaraja.id',    'Admin Antar Aja',  '+6281100000001', nullif(current_setting('app.seed_password', true), ''));
+select seed_user('a0000000-0000-4000-8000-000000000002', 'customer@antaraja.id', 'Budi Santoso',     '+6281100000002', nullif(current_setting('app.seed_password', true), ''));
+select seed_user('a0000000-0000-4000-8000-000000000003', 'driver@antaraja.id',   'Ahmad Fauzi',      '+6281100000003', nullif(current_setting('app.seed_password', true), ''));
+select seed_user('a0000000-0000-4000-8000-000000000004', 'driver2@antaraja.id',  'Rina Kartika',     '+6281100000004', nullif(current_setting('app.seed_password', true), ''));
+select seed_user('a0000000-0000-4000-8000-000000000005', 'merchant@antaraja.id', 'Mak Syukur',       '+6281100000005', nullif(current_setting('app.seed_password', true), ''));
 drop function seed_user(uuid, text, text, text, text);
+-- (kata sandi dibaca dari setelan sesi app.seed_password; kosong → gagal, bukan memakai sandi bawaan)
 
 -- Role
 set local antaraja.bypass = 'on';

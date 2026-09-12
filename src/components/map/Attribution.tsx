@@ -40,11 +40,11 @@ export function MapAttribution({ html, bottom = 0 }: { html: string; bottom?: nu
 const s = StyleSheet.create({
   wrap: { position: 'absolute', left: 6, right: 6, zIndex: 400, alignItems: 'flex-start' },
   text: {
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 12,
+    lineHeight: 16,
     color: '#0B1F2A',
     backgroundColor: 'rgba(255,255,255,0.82)',
-    paddingHorizontal: 5,
+    paddingHorizontal: 4,
     paddingVertical: 2,
     borderRadius: 4,
     overflow: 'hidden',
