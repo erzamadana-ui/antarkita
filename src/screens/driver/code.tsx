@@ -68,7 +68,7 @@ export default function DriverCodeScreen() {
       <View style={{ gap: 14 }}>
         <Entrance index={0}>
           <View style={s.hero}>
-            <Row gap={6}><Ionicons name="flash" size={14} color={colors.primary} /><Text style={[font.label, { color: colors.primary }]}>Kode AntarNow saya</Text></Row>
+            <Row gap={6}><Ionicons name="flash" size={16} color={colors.primary} /><Text style={[font.label, { color: colors.primary }]}>Kode AntarNow saya</Text></Row>
             <View style={{ marginTop: 12 }}><BigCode code={code} /></View>
             <Text style={[font.tiny, { textAlign: 'center', marginTop: 10 }]}>
               Bacakan atau tunjukkan kode ini kepada pelanggan yang Anda temui langsung.
@@ -110,7 +110,7 @@ export default function DriverCodeScreen() {
               ? `Bila Anda tidak menerimanya dalam ${holdText(holdSeconds)}, order dilepas ke driver lain agar pelanggan tidak menunggu terlalu lama.`
               : 'Bila Anda tidak menerimanya, order tetap menunggu Anda (fallback dimatikan admin).'} />
             <Row gap={6} style={{ marginTop: 10, alignItems: 'flex-start' }}>
-              <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
+              <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
               <Text style={[font.tiny, { flex: 1 }]}>Pelanggan hanya bisa memesan layanan yang cocok dengan kendaraan Anda. Pastikan Anda online agar tidak melewatkan order langsung.</Text>
             </Row>
           </View>
@@ -125,7 +125,7 @@ export default function DriverCodeScreen() {
 function StatBox({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
   return (
     <View style={[s.stat, highlight && { backgroundColor: colors.primaryLight, borderColor: colors.mint }]}>
-      <Text style={{ fontSize: 22, fontWeight: '800', color: highlight ? colors.primary : colors.text }}>{value}</Text>
+      <Text style={{ fontSize: 22, fontWeight: '700', color: highlight ? colors.primary : colors.text }}>{value}</Text>
       <Text style={font.tiny}>{label}</Text>
     </View>
   );
@@ -134,7 +134,7 @@ function StatBox({ label, value, highlight }: { label: string; value: number; hi
 function Step({ n, text }: { n: number; text: string }) {
   return (
     <Row gap={10} style={{ marginTop: 10, alignItems: 'flex-start' }}>
-      <View style={s.stepNo}><Text style={{ fontWeight: '800', color: colors.primary, fontSize: 12 }}>{n}</Text></View>
+      <View style={s.stepNo}><Text style={{ fontWeight: '700', color: colors.primary, fontSize: 12 }}>{n}</Text></View>
       <Text style={[font.small, { flex: 1 }]}>{text}</Text>
     </Row>
   );
