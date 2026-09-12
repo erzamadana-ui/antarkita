@@ -70,7 +70,7 @@ export default function Inbox() {
                     <IconCircle name={n.kind === 'promo' ? 'pricetag-outline' : n.kind === 'order' ? 'receipt-outline' : 'information-circle-outline'} size={42} bg={n.kind === 'promo' ? colors.accentLight : colors.tint} color={n.kind === 'promo' ? colors.warning : colors.primary} />
                     <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                       <Row between>
-                        <Text style={{ fontWeight: '800', color: colors.text, fontSize: 15, flex: 1 }} numberOfLines={2}>{n.title}</Text>
+                        <Text style={{ fontWeight: '700', color: colors.text, fontSize: 16, flex: 1 }} numberOfLines={2}>{n.title}</Text>
                         {!n.read_at && <View style={s.dot} />}
                       </Row>
                       {n.body ? <Text style={font.small} numberOfLines={3}>{n.body}</Text> : null}
@@ -81,7 +81,7 @@ export default function Inbox() {
                       </Row>
                       {/* Petunjuk kecil supaya jelas kartu ini bisa diketuk dan ke mana perginya */}
                       <View style={s.hint}>
-                        <Ionicons name={target ? 'arrow-forward-circle-outline' : 'information-circle-outline'} size={13} color={colors.primary} />
+                        <Ionicons name={target ? 'arrow-forward-circle-outline' : 'information-circle-outline'} size={12} color={colors.primary} />
                         <Text style={s.hintText} numberOfLines={1}>{target ? `Ketuk untuk membuka ${target.label}` : 'Ketuk untuk melihat detail'}</Text>
                       </View>
                     </View>
@@ -125,7 +125,7 @@ function PushPermissionBanner() {
       <Row gap={10} style={{ alignItems: 'flex-start' }}>
         <IconCircle name="notifications-outline" size={38} bg={colors.tint} color={colors.primary} />
         <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-          <Text style={{ fontWeight: '800', color: colors.text, fontSize: 14 }}>Aktifkan notifikasi</Text>
+          <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>Aktifkan notifikasi</Text>
           <Text style={font.small}>
             {blocked
               ? 'Notifikasi diblokir di Pengaturan. Ketuk untuk membukanya, lalu izinkan notifikasi AntarKita.'
@@ -163,7 +163,7 @@ function NotifDetailSheet({ notif, onClose }: { notif: AppNotification | null; o
                 <Text style={font.h3}>{notif.title}</Text>
                 <Text style={font.tiny}>{kindLabel} · {formatDateTimeShort(notif.created_at)}</Text>
               </View>
-              <PressableScale onPress={onClose} scaleTo={0.9} style={s.close}><Ionicons name="close" size={18} color={colors.textSecondary} /></PressableScale>
+              <PressableScale onPress={onClose} scaleTo={0.9} style={s.close}><Ionicons name="close" size={20} color={colors.textSecondary} /></PressableScale>
             </Row>
             <ScrollView style={{ maxHeight: 320 }} contentContainerStyle={{ gap: 10, paddingVertical: 4 }} showsVerticalScrollIndicator={false}>
               {notif.image_url ? <Animated.View entering={FadeIn.duration(motion.base)}><Image source={{ uri: notif.image_url }} style={s.sheetImg} /></Animated.View> : null}
@@ -189,7 +189,7 @@ const s = StyleSheet.create({
   img: { width: '100%', height: 130, backgroundColor: colors.bgSoft },
   dot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.primary, marginTop: 4 },
   hint: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: 2, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full, backgroundColor: colors.tint },
-  hintText: { fontSize: 11.5, fontWeight: '700', color: colors.primary },
+  hintText: { fontSize: 12, fontWeight: '700', color: colors.primary },
   backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   sheetWrap: { width: '100%', maxWidth: 640, alignSelf: 'center' },
   sheet: { backgroundColor: '#fff', borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: 16, paddingTop: 10, paddingBottom: 24, gap: 10, borderTopWidth: 1, borderColor: glass.border, ...shadow.sheet },
