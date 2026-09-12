@@ -238,7 +238,7 @@ export default function AdminAutomation() {
 
 const s = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: adminSpace.sm },
-  link: { color: colors.primary, fontWeight: '700', fontSize: 13, lineHeight: 18 },
+  link: { color: colors.primary, fontWeight: '700', fontSize: 14, lineHeight: 20 },
   backdrop: { flex: 1, backgroundColor: 'rgba(15,29,32,0.42)', alignItems: 'center', justifyContent: 'center', padding: adminSpace.xl },
   dialog: { backgroundColor: adminTone.surface, borderRadius: adminRadius.lg, padding: adminSpace.xl, gap: adminSpace.md, borderWidth: 1, borderColor: adminTone.border },
 });

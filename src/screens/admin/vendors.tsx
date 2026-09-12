@@ -137,5 +137,5 @@ function DocLink({ label, ok, onPress }: { label: string; ok: boolean; onPress: 
 
 const st = StyleSheet.create({
   photo: { width: 96, height: 96, borderRadius: adminRadius.card, backgroundColor: adminTone.surfaceAlt },
-  doc: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: adminRadius.chip, borderWidth: 1, borderColor: adminTone.border, backgroundColor: adminTone.surface },
+  doc: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: adminRadius.chip, borderWidth: 1, borderColor: adminTone.border, backgroundColor: adminTone.surface },
 });
