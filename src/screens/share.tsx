@@ -95,7 +95,7 @@ export default function SharedTrip() {
                 <Text style={font.h3}>{d.name}</Text>
                 <Text style={font.small}>{d.vehicle_type === 'car' ? 'Mobil' : 'Motor'} {d.vehicle_brand ?? ''} {d.vehicle_color ? `· ${d.vehicle_color}` : ''} · ⭐ {Number(d.rating).toFixed(1)}</Text>
               </View>
-              <View style={s.plate}><Text style={{ fontWeight: '800', color: '#fff', letterSpacing: 1 }}>{d.plate}</Text></View>
+              <View style={s.plate}><Text style={{ fontWeight: '700', color: '#fff', letterSpacing: 1 }}>{d.plate}</Text></View>
             </Row>
             <Row gap={8} style={{ marginTop: 8 }}><Ionicons name="shield-checkmark" size={16} color={colors.success} /><Text style={font.tiny}>Mitra terverifikasi AntarKita · posisi diperbarui otomatis</Text></Row>
           </View>

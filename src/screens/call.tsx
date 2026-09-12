@@ -59,8 +59,8 @@ export default function CallScreen() {
             <Text style={[font.tiny, { textAlign: 'center', maxWidth: 300 }]}>{t('call_privacy')}</Text>
             {micBlocked && (
               <PressableScale onPress={openMicSettings} scaleTo={0.96} style={s.micWarn}>
-                <Ionicons name="mic-off" size={15} color={colors.danger} />
-                <Text style={{ color: colors.danger, fontSize: 12.5, fontWeight: '700', flex: 1 }}>Izin mikrofon diblokir. Ketuk untuk membuka Pengaturan aplikasi.</Text>
+                <Ionicons name="mic-off" size={16} color={colors.danger} />
+                <Text style={{ color: colors.danger, fontSize: 14, fontWeight: '700', flex: 1 }}>Izin mikrofon diblokir. Ketuk untuk membuka Pengaturan aplikasi.</Text>
               </PressableScale>
             )}
           </View>
@@ -85,7 +85,7 @@ export default function CallScreen() {
                   </Text>
                 )}
                 <PressableScale onPress={() => { tap(); hangup(); }} scaleTo={0.88} accessibilityLabel="Akhiri panggilan" style={[s.end, shadow.glow(colors.danger)]}>
-                  <Ionicons name="call" size={30} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
+                  <Ionicons name="call" size={32} color="#fff" style={{ transform: [{ rotate: '135deg' }] }} />
                 </PressableScale>
                 <Text style={font.tiny}>{t('end_call')}</Text>
               </>

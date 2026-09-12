@@ -87,7 +87,7 @@ export default function RootLayout() {
       const style = document.createElement('style');
       style.textContent = [
         'html,body,#root{height:100%;background:#FFFFFF;color-scheme:light only}',
-        'body{font-family:"PlusJakartaSans-500",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}',
+        'body{font-family:"Inter-400",Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}',
         '*{box-sizing:border-box}',
         '::-webkit-scrollbar{width:8px;height:8px} ::-webkit-scrollbar-thumb{background:rgba(11,31,42,0.18);border-radius:8px}',
         'a,button,[role=button]{transition:transform .1s cubic-bezier(.2,.8,.2,1),box-shadow .12s,opacity .12s}',

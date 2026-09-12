@@ -95,7 +95,7 @@ export default function PlacePicker() {
             <Text style={[font.h3, { flex: 1 }]} numberOfLines={1}>{title ?? 'Pilih lokasi'}</Text>
             <PressableScale onPress={() => setMode(mode === 'search' ? 'map' : 'search')} style={s.modeBtn} scaleTo={0.94}>
               <Ionicons name={mode === 'search' ? 'map-outline' : 'search-outline'} size={16} color={colors.primary} />
-              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13 }}>{mode === 'search' ? 'Pilih di peta' : 'Cari alamat'}</Text>
+              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>{mode === 'search' ? 'Pilih di peta' : 'Cari alamat'}</Text>
             </PressableScale>
           </View>
         </View>
@@ -104,7 +104,7 @@ export default function PlacePicker() {
           <Animated.View entering={FadeIn.duration(motion.base)} style={{ flex: 1 }}>
             <View style={{ padding: 16, paddingBottom: 8, width: '100%', maxWidth: 720, alignSelf: 'center' }}>
               <Input icon="search" placeholder="Cari nama jalan, tempat, gedung…" value={q} onChangeText={setQ} autoFocus={Platform.OS !== 'web'}
-                right={searching ? <ActivityIndicator size="small" color={colors.primary} /> : q ? <Pressable onPress={() => setQ('')}><Ionicons name="close-circle" size={18} color={colors.textMuted} /></Pressable> : null} />
+                right={searching ? <ActivityIndicator size="small" color={colors.primary} /> : q ? <Pressable onPress={() => setQ('')}><Ionicons name="close-circle" size={20} color={colors.textMuted} /></Pressable> : null} />
             </View>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingTop: 8, gap: 8, width: '100%', maxWidth: 720, alignSelf: 'center' }} showsVerticalScrollIndicator={false}>
               <Entrance index={0}><PlaceRow icon="locate" color={colors.info} title="Gunakan lokasi saya saat ini" subtitle="GPS perangkat" onPress={useMyLocation} /></Entrance>
