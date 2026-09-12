@@ -181,11 +181,15 @@ jobs:
       - name: Verifikasi package id & versi hasil prebuild
         run: |
           EXPECTED=$([ "${{ matrix.app }}" = "mitra" ] && echo id.antarkita.mitra || echo id.antarkita.app)
-          APPID=$(grep -oE 'applicationId +"[^"]+"' android/app/build.gradle | grep -oE '"[^"]+"' | tr -d '"')
+          # Expo prebuild menulis kutip TUNGGAL dan (SDK 57) bentuk `applicationId = '...'`; pola harus menerima
+          # keduanya — pola lama (kutip ganda saja) membuat APPID kosong dan build gagal semu (run #2).
+          GRADLE=android/app/build.gradle
+          [ -f "$GRADLE" ] || { echo "::error::$GRADLE tidak ada — prebuild gagal diam-diam. Lihat log langkah Prebuild."; exit 1; }
+          APPID=$(grep -oE "applicationId[[:space:]]*=?[[:space:]]*['\"][^'\"]+['\"]" "$GRADLE" | head -n1 | sed -E "s/.*['\"]([^'\"]+)['\"]/\1/")
           echo "applicationId=$APPID (diharapkan $EXPECTED)"
-          [ "$APPID" = "$EXPECTED" ] || { echo "::error::applicationId $APPID ≠ $EXPECTED — periksa META di app.config.ts"; exit 1; }
-          grep -E 'versionCode +${{ steps.ver.outputs.code }}\b' android/app/build.gradle || { echo "::error::versionCode tidak sesuai"; exit 1; }
-          grep -E 'versionName +"${{ steps.ver.outputs.name }}"' android/app/build.gradle || { echo "::error::versionName tidak sesuai"; exit 1; }
+          [ "$APPID" = "$EXPECTED" ] || { echo "::error::applicationId '$APPID' ≠ $EXPECTED — periksa META di app.config.ts"; exit 1; }
+          grep -qE 'versionCode[[:space:]]*=?[[:space:]]*${{ steps.ver.outputs.code }}\b' "$GRADLE" || { echo "::error::versionCode tidak sesuai (diharapkan ${{ steps.ver.outputs.code }}): $(grep -E 'versionCode' "$GRADLE" | head -n1)"; exit 1; }
+          grep -qE "versionName[[:space:]]*=?[[:space:]]*['\"]${{ steps.ver.outputs.name }}['\"]" "$GRADLE" || { echo "::error::versionName tidak sesuai (diharapkan ${{ steps.ver.outputs.name }}): $(grep -E 'versionName' "$GRADLE" | head -n1)"; exit 1; }
 
           # --- Target API level (kebijakan Google Play) ---------------------------------
           # Sejak 31 Agustus 2026 aplikasi BARU dan pembaruan wajib targetSdk >= 36 (Android 16).
