@@ -1,0 +1,20 @@
+uji_moderasi.sql — 12 Sep 2026 (per blok, ROLLBACK)
+[OK] 1a. Sebelum blokir: order muncul di driver_available_orders()
+[OK] 1b. block_user() tercatat dan terdeteksi is_blocked_pair()
+[OK] 1c. Pencocokan: order pelanggan yang memblokir HILANG dari daftar driver
+[OK] 1d. driver_accept_order() menolak order pasangan terblokir (celah "tebak id order" tertutup)
+[OK] 1e. Chat: pesan dari pihak terblokir DITOLAK trigger t_order_messages_blokir
+[OK] 1f. create_order/AntarNow: order langsung ke driver terblokir DITOLAK
+[OK] 1g. Panggilan suara antar pihak terblokir DITOLAK
+[OK] 1h. unblock_user(): pasangan kembali bisa dicocokkan
+[OK] 2a. report_content() mencatat laporan dengan status "open"
+[OK] 2b. RLS: pelapor hanya melihat laporannya sendiri
+[OK] 2c. Batas laju report_content: berhenti setelah 20 laporan/jam (tambahan lolos = 19)
+[OK] 2d. admin_resolve_report() menolak non-admin
+[OK] 2e. Admin melihat antrean lalu menandai laporan "reviewed"
+[OK] 2f. Jejak audit penanganan laporan tersimpan (2 baris)
+[OK] 3. Aksi "tangguhkan": akun dinonaktifkan dan laporan berstatus "actioned"
+[OK] 3b. Penangguhan tanpa alasan ditolak (jejak alasan wajib untuk bukti ke Google)
+[OK] 4. RLS user_blocks: pihak yang diblokir tidak melihat blokir atas dirinya
+[OK] 4b. RLS user_blocks: pemblokir melihat daftar blokirnya sendiri
+Hasil: 18/18 lulus

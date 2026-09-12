@@ -1,0 +1,8 @@
+uji_idempotensi.sql — 12 Sep 2026, SESUDAH migrasi 0083 (ROLLBACK)
+[OK] 1. client_request_id sama 2× → 1 pesanan (AA26091201540), dompet dipotong sekali (Rp9000)
+[OK] 2. Tanpa kunci: pesanan identik < 15 dtk dikembalikan (AA26091201541), dompet dipotong sekali
+[OK] 3. Tujuan berbeda tetap membuat pesanan baru (AA26091201542)
+[OK] 4. Kunci sama pada pelanggan lain → pesanan terpisah (AA26091201543)
+[OK] 5. Indeks unik (customer_id, client_request_id) terpasang
+Hasil: 5/5 lulus. SEBELUM migrasi: simulasi S48c mencatat "double tap menghasilkan 2 order & 2 pemotongan Rp9000" (temuan yang diperbaiki).
+scripts/test-order-request.mjs (sisi aplikasi): 7/7 lulus.

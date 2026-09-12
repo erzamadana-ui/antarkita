@@ -1,0 +1,15 @@
+uji_impor.sql — 12 Sep 2026 (ROLLBACK)
+S1 kota OSM: inserted=2 | active=f source=osm service_status=belum_dilayani
+S2 jalan ulang kota: updated=1 inserted=0 | baris 17 → 17 (idempoten)
+S3 adopsi Padang: updated=1 | active=t source=admin (kota layanan tidak tergandakan)
+S4 pola LAMA akan menempel ke kota aktif terdekat: Jakarta (663 km); pola BARU: city_id=NULL (benar — tidak ada kota dalam 60 km)
+S5 setelah gazetteer: updated=1 | kota=Ujicoba
+S6 dedupe toko & pasar: jalan ulang → updated, bukan inserted
+S7 faskes → poi_places=3, shop_stores=0; CHECK menolak kategori faskes; nearby_stores tidak memuat faskes
+S8 import_places klien: inserted=1 | city_id=NULL (benar)
+S9 non-admin ditolak: t
+S9 enqueue admin: skipped — "Masih ada pekerjaan impor yang berjalan" → S9 BUG (hasil impor tidak dicatat ke log) adalah EFEK DATA: pekerjaan impor nasional b23910b5 sedang berjalan di produksi sehingga uji tidak bisa membuat pekerjaan baru. Bukan cacat kode; akan hijau setelah pekerjaan selesai.
+S10 osm_import_tick: skipped — "URL/kunci Edge Function belum diisi (admin_set_osm_config)" → impor terjadwal pg_cron belum aktif; impor dijalankan dari Panel Admin/sesi admin.
+S11 nearby_poi mengembalikan 3 baris
+S12 gazetteer vs kota layanan: Jakarta Pusat/Selatan tidak tersisip (0), kota jauh masuk (1), city_at_point=Jakarta
+Temuan operasional 12 Sep 2026: 2 tugas 'running' tanpa pekerja + 30 pending (Overpass timeout 45 dtk terlalu pendek untuk kueri se-provinsi). Diperbaiki: timeout dinamis 100 dtk dipotong sisa anggaran, mirror ketiga, dan osm_release_task (0084) agar tugas kembali ke antrean seketika.

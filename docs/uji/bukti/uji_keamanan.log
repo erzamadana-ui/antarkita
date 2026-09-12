@@ -1,0 +1,7 @@
+uji_keamanan.sql — dijalankan di basis data proyek qwltshvzrsykxdvhbxcv, 12 Sep 2026 (per blok, ROLLBACK)
+[OK] RLS: pengguna hanya melihat dompet/orders miliknya
+[OK] Eskalasi: update profiles->admin diblokir trigger
+[OK] Fungsi admin menolak non-admin
+[OK] _qc_sim_log terkunci dari anon
+[OK] gateway_secrets deny-all untuk authenticated
+Hasil: 5/5 lulus

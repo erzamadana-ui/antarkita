@@ -1,0 +1,35 @@
+simulasi_e2e.sql — dijalankan pada basis data proyek qwltshvzrsykxdvhbxcv, 12 Sep 2026 ±08:55 UTC, dalam satu transaksi yang di-ROLLBACK.
+Ringkasan: 199 baris OK, 0 BUG, 4 CATATAN. (Log lengkap 24.110 karakter tersimpan sementara di tabel qa_sim_log; ulangi dengan skrip yang sama untuk reproduksi.)
+
+Jalur uang (Standar §6.3, wajib/blocker):
+S1  OK ride_motor total=9000 pelanggan −9000, driver +7360, platform 1640 (komisi 8% — batas Perpres 27/2026)
+S2  OK ride_car total=22500 fare=18500 potongan platform driver=7700
+S3  OK food sub=60000 disc=10000 total=60000 pelanggan −60000 merchant +51000
+S4  OK send total=13000 extras=3000 · S5 OK send antar kota 15500+27000=43500 (drop gudang Padang)
+S6  OK box 172000 dipotong lalu dikembalikan utuh saat dibatalkan (refund=172000)
+S7  OK shop anggaran 163900 → riil 149000 + jasa 7450 = 167450; driver +162215
+S8a–d OK market: hard cap 1,6× harga acuan, nota wajib, flag outlier
+S12a–d OK top up manual, penarikan ditahan saat flag fraud, otomatis setelah flag ditutup, rekening terverifikasi
+S37a–d OK komisi roda dua ≤ 8% (Perpres 27/2026) — nilai di atas batas DITOLAK pengawal
+S38a–g OK pembagian dompet 7 layanan: pelanggan, driver, merchant, platform — semua sesuai rumus
+S39a–c OK order TUNAI: saldo pelanggan Δ0, potongan platform dari dompet driver, sisa di tangan driver = pendapatan
+S40 OK promo pada order tunai: diskon ditanggung platform (selisih=0)
+S41 OK send antar kota tunai: ongkir antar kota ditagih ke driver (platform tidak membayar tanpa menerima)
+S42 OK food tunai: driver membayar merchant tunai 51000, saldo merchant Δ0
+S43a–e OK promo: kedaluwarsa ditolak, kuota habis ditolak, 1× per akun, diskon dibatasi ≤ ongkir, pembatalan mengembalikan kuota
+S44a–g OK pembatalan pada SEARCHING/ACCEPTED/ARRIVED: dana kembali utuh (Δ0); IN_PROGRESS tidak bisa dibatalkan pelanggan/driver; tip dikembalikan; merchant menolak → refund + kuota promo kembali
+S45a–c OK admin membatalkan IN_PROGRESS (refund utuh, cancelled_by=admin); penyesuaian saldo butuh PIN; refund manual tercatat sebagai adjustment
+S46a–e OK top up ditolak (Δ0); persetujuan ulang ditolak; WEBHOOK SETTLEMENT DIKIRIM 2× → kredit kedua=0, 1 baris mutasi (idempoten); status "expire" → Δ0; external_id tak dikenal ditolak
+S47a–f OK penarikan: di bawah minimum, negatif, melebihi saldo, ganda atas saldo sama — semua ditolak; penolakan admin mengembalikan saldo; saldo tidak pernah minus
+S48a–b OK dua driver berebut satu order: satu pemenang, event "accepted"=1; setelah dilepas, driver lain boleh mengambil
+S48c CATATAN (SEBELUM 0083): double tap menghasilkan 2 order & 2 pemotongan — DIPERBAIKI migrasi 0083 (lihat uji_idempotensi.log)
+S49 OK pembatalan ditolak setelah driver membayar belanja di toko
+S50a–g OK AntarTravel: kursi bersama dompet/tunai, batal booking refund utuh, carter dompet, batal carter <12 jam potongan 30%, titipan travel dompet/tunai (bagian mitra 80%)
+S51a–e OK tip, tip di luar batas ditolak, surge tidak mengubah porsi driver, pesanan terjadwal menahan dana & refund utuh
+S52a–c OK hanya dompet DRIVER yang boleh minus (utang deposit tunai); di bawah −500.000 ditolak menerima order
+S53a–e OK INVARIAN GLOBAL: buku besar cocok (0 dompet selisih); 0 order selesai tanpa pembagian; 0 dompet minus di luar driver; potongan pelanggan = total+tip; platform tidak pernah membayar > diskon
+
+Order & state machine (§6.2): S9 auto-suspend cancel_spam; S14 terjadwal; S16 harga dinamis; S17 fallback kelas; S18a–g batas jarak per layanan; S22–S24 radius dispatch, tolak order, prioritas rating; S25 matriks kendaraan/berat; S26 titipan travel; S34 AntarNow kode driver + masa tahan 120 dtk.
+Akses & keamanan (§6.1, E2E-09): S19d/S28c non-admin ditolak; S27a–h hapus mitra wajib PIN & alasan, e-mail tombstone; S31a–g chat hanya peserta (RLS); S35a–e hapus akun → daftar ulang; S36a–f push token idempoten + RLS.
+Notifikasi (§6.6): S33a–g setiap notifikasi membawa kunci tujuan (order_id/ticket_id/booking_id); S32 sakelar layanan realtime.
+Pelaporan (§6.3 rekonsiliasi): S29a–f laporan keuangan cascade level 1 = level 2, net_margin = revenue − promo − gateway, cogs = driver + merchant + gateway + promo; S30a–d portal eksekutif P&L identitas gross_margin = revenue − cogs.

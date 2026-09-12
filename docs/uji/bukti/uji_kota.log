@@ -1,0 +1,26 @@
+uji_kota.sql — 12 Sep 2026 (per blok, ROLLBACK)
+[OK] 1a. Kota aktif (Pekanbaru) lolos gerbang
+[OK] 1b. Kota belum dilayani ditolak dengan pesan yang menyebut namanya
+[OK] 1c. Titik jauh dari kota mana pun ditolak (batas jarak wajar)
+[OK] 1d. city_service_status() memberi judul, penjelasan, dan pintu daftar tunggu yang benar
+[OK] 2a. Pesanan dari kota AKTIF diterima
+[OK] 2b. create_order MENOLAK pesanan dari kota belum dilayani — "AntarKita belum melayani Medan…"
+[OK] 2c. create_order MENOLAK titik jemput di luar radius kota mana pun
+[OK] 2d. Definisi create_order memanggil city_gate (penegakan ada di server, bukan hanya UI)
+[OK] 3a. Membuka kota untuk sebagian layanan tidak ikut membuka layanan lain
+[OK] 3b. Layanan yang belum dibuka ditolak & pelanggan diberi tahu layanan yang sudah bisa
+[OK] 3c. Menutup satu layanan tidak mengganggu layanan lain di kota yang sama
+[OK] 3d. Menutup kota menutup seluruh layanannya sekaligus
+[OK] 4. Kota aktif tanpa baris city_services tetap TERTUTUP (gagal-tertutup)
+[OK] 5a–5d. Daftar tunggu: tercatat, idempoten, RLS aman, terlihat Panel Admin
+[OK] 6a–6f. Non-admin/anon tidak bisa membuka kota, layanan, perwakilan, membaca daftar kota, menulis city_services
+[OK] 7a. cities.active kota layanan tidak disentuh (gazetteer OSM memang nonaktif) — uji direvisi 12 Sep 2026: versi lama menganggap SEMUA kota harus active, padahal sejak 0071 kota gazetteer OSM sengaja active=false
+[OK] 7b. nearest_city() tetap bekerja
+[OK] 7c. 13 kota belum dilayani tetap terdaftar
+[OK] 8a–8b. Perwakilan Kota tersimpan; hanya admin aktif yang bisa ditunjuk
+[OK] 9. Membuka kota wajib menyebut layanan mana yang dibuka
+[OK] 10a–10c. Kota impor tidak menutupi kota operasi; kota impor masuk TERTUTUP
+[OK] 11a–11e. Kelurahan impor tidak menutupi kota kurasi; pesan menyebut kota; minat tercatat atas nama kota
+[OK] 12. Fungsi bantu impor & pemilih kota tertutup untuk anon
+Hasil: 12/12 blok lulus (38 pemeriksaan) setelah revisi uji 7a.
+tests/kota/uji-kota.mjs (Playwright + server tiruan): 29 lulus, 0 gagal.

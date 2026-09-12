@@ -1,0 +1,21 @@
+uji_peta.sql — 12 Sep 2026 (per blok, ROLLBACK). Catatan: blok 4 (cache) dijalankan ulang tanpa penangkap notice karena pesan uji memuat karakter %; blok itu selesai tanpa GAGAL.
+[OK] 1a. map_public_config() tidak membocorkan secret_key
+[OK] 1b. {key} pada tile_url diganti kunci PUBLIK oleh server
+[OK] 1c. tidak ada placeholder {key} tersisa di URL yang dikirim ke klien
+[OK] 1d. geocode_key/route_key memakai kunci PUBLIK, bukan rahasia
+[OK] 1e. penanda uses_free_osm mati saat semua penyedia berbayar
+[OK] 2. uses_free_osm menyala bila SATU saja layanan masih endpoint gratis
+[OK] 3a. Ganti penyedia dari panel admin mengubah URL ubin yang diterima klien
+[OK] 3b. Atribusi ikut berganti mengikuti penyedia (kewajiban lisensi)
+[OK] blok 4 (4a–4d cache reverse geocode) selesai tanpa GAGAL
+[OK] 5a. Pengguna anonim tidak bisa menulis ke cache alamat
+[OK] 5b. Alamat/koordinat tidak wajar ditolak sebelum masuk cache
+[OK] 5c. Entri cache yang sudah ada tidak bisa ditimpa (anti-peracunan)
+[OK] 6a. admin_map_status() menolak non-admin (Hanya admin)
+[OK] 6b. admin_set_map_config() menolak non-admin (Hanya admin)
+[OK] 6c. admin_map_probe_urls() menolak non-admin (Hanya admin)
+[OK] 6d. anon & authenticated tidak punya hak apa pun atas tabel kunci/konfigurasi/cache
+[OK] 6e. RLS menyala di map_secrets, map_config, dan geocode_cache
+[OK] 6f. map_public_config() tetap bersih dari kunci rahasia untuk pemanggil anonim
+[OK] 7. Nilai hemat (4 huruf · 700 ms · 150 m · 10 dtk) tersimpan di server dan bisa disetel admin
+Hasil: 7/7 blok lulus (18 pemeriksaan bernama + blok cache)

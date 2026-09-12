@@ -1,0 +1,11 @@
+uji_turn.sql — 12 Sep 2026 (ROLLBACK, baris asli dipulihkan)
+[OK] 1. admin_turn_status() hanya mengembalikan versi tersamar (tanpa api_token)
+[OK] 4a. Kunci kosong tidak menimpa kredensial; sakelar enabled tersimpan
+[OK] 4b. ttl di luar 300–86400 ditolak (new row for relation "turn_secrets" violates check constraint)
+[OK] 2a. admin_turn_status() menolak non-admin (Hanya admin)
+[OK] 2b. admin_set_turn_config() menolak non-admin (Hanya admin)
+[OK] 3a. anon & authenticated tidak punya hak apa pun atas turn_secrets/turn_issue_log
+[OK] 3b. RLS menyala di turn_secrets dan turn_issue_log
+[OK] 3c. anon tidak bisa mengeksekusi fungsi admin TURN
+[OK] 4c. clear=true menghapus kredensial; status kembali "belum dikonfigurasi"
+Hasil: 9/9 lulus. Uji ujung-ke-ujung: kunci anon → 401; sesi admin → Cloudflare mengeluarkan kredensial TURN (TTL 7200).
