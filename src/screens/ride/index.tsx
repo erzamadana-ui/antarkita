@@ -23,10 +23,11 @@ import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
 import { getRoute, reverseGeocode, finalizeRoute, type RouteResult } from '@/lib/geo';
 import { rpc } from '@/lib/supabase';
+import { createOrder } from '@/lib/orders';
 import { colors, font, radius, motion, glass } from '@/lib/theme';
 import { rupiah, minutes, km } from '@/lib/format';
 import { serviceDef } from '@/lib/services';
-import type { FareOptions, Order, ServiceType } from '@/lib/types';
+import type { FareOptions, ServiceType } from '@/lib/types';
 
 export default function RideScreen() {
   const router = useRouter();
@@ -97,12 +98,12 @@ export default function RideScreen() {
       // benar-benar memesan. Jarak/durasi yang dikirim tetap angka pratinjau yang menjadi
       // dasar harga yang sudah dilihat pengguna, supaya tagihan == yang ditampilkan.
       const fin = await finalizeRoute(pickup, dropoff, route);
-      const o = await rpc<Order>('create_order', { p: {
+      const o = await createOrder({
         service, pickup: { lat: pickup.lat, lng: pickup.lng, address: pickup.address }, dropoff: { lat: dropoff.lat, lng: dropoff.lng, address: dropoff.address },
         route_km: fin.route_km, duration_min: fin.duration_min, route_geometry: fin.coords,
         payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null, notes: notes || null,
         vehicle_class: chosen.code, scheduled_at: when ? when.toISOString() : null, driver_code: driverCode,
-      } });
+      });
       await refreshWallet();
       useBooking.getState().reset();
       toast.success(when ? 'Booking terjadwal tersimpan' : 'Pesanan dibuat, mencari driver…');
