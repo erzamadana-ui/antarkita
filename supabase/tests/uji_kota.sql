@@ -315,9 +315,11 @@ declare n int;
 begin
   -- semua kota tetap `active` (terdaftar di sistem) walau pesanannya tertutup,
   -- supaya nearest_city(), impor tempat, rute travel, dan blast promo tetap jalan
-  select count(*) into n from cities where not active;
-  if n <> 0 then raise exception '[GAGAL] % kota kehilangan cities.active — kode lama (nearest_city, impor tempat, travel) ikut rusak', n; end if;
-  raise notice '[OK] 7a. cities.active tidak disentuh: data tempat & rute antar kota tetap berfungsi';
+  -- CATATAN 0071/0081: kota hasil impor OSM (source = 'osm') memang gazetteer dengan active = false;
+  -- yang tidak boleh berubah adalah kota LAYANAN (source = 'admin').
+  select count(*) into n from cities where not active and coalesce(source, 'admin') <> 'osm';
+  if n <> 0 then raise exception '[GAGAL] % kota layanan kehilangan cities.active — kode lama (nearest_city, impor tempat, travel) ikut rusak', n; end if;
+  raise notice '[OK] 7a. cities.active kota layanan tidak disentuh (gazetteer OSM memang nonaktif): data tempat & rute antar kota tetap berfungsi';
 
   -- nearest_city() (dipakai AntarSend antar kota) masih mengenali kota tertutup
   if nearest_city(3.5952, 98.6722, 40) is null then
