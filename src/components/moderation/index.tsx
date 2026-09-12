@@ -111,7 +111,7 @@ export function ReportSheet({ visible, onClose, targetUserId, targetName, kind =
     return (
       <BottomSheet visible={visible} onClose={close} title="Laporan Anda terkirim">
         <View style={{ alignItems: 'center', gap: 10, paddingVertical: 8 }}>
-          <View style={s.okCircle}><Ionicons name="checkmark" size={34} color="#fff" /></View>
+          <View style={s.okCircle}><Ionicons name="checkmark" size={32} color="#fff" /></View>
           <Text style={[font.body, { textAlign: 'center' }]}>Terima kasih sudah melapor.</Text>
           <Text style={[font.small, { textAlign: 'center' }]}>
             Tim moderasi AntarKita meninjau setiap laporan paling lambat 2×24 jam. Anda akan mendapat pemberitahuan
@@ -137,7 +137,7 @@ export function ReportSheet({ visible, onClose, targetUserId, targetName, kind =
         return (
           <PressableScale key={c.value} onPress={() => setCategory(c.value)} scaleTo={0.99} haptic={false} style={[s.option, on && s.optionOn]}>
             <View style={[s.optionIcon, on && { backgroundColor: colors.primary }]}>
-              <Ionicons name={c.icon} size={19} color={on ? '#fff' : colors.primary} />
+              <Ionicons name={c.icon} size={20} color={on ? '#fff' : colors.primary} />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={2}>{c.label}</Text>
@@ -200,7 +200,7 @@ export function BlockSheet({ visible, onClose, targetUserId, targetName, onDone 
         ['lock-open-outline', 'Anda bisa membuka blokir kapan saja lewat Akun → Pengguna diblokir.'],
       ].map(([icon, text]) => (
         <Row key={text} gap={10} style={{ alignItems: 'flex-start' }}>
-          <Ionicons name={icon as IconName} size={18} color={colors.primary} style={{ marginTop: 1 }} />
+          <Ionicons name={icon as IconName} size={20} color={colors.primary} style={{ marginTop: 1 }} />
           <Text style={[font.small, { flex: 1, color: colors.text }]}>{text}</Text>
         </Row>
       ))}
@@ -246,21 +246,21 @@ export function ModerationMenu({ userId, name, kind = 'user', targetId, size = 4
 
       <BottomSheet visible={menu} onClose={() => setMenu(false)} title={nama} subtitle="Keamanan & moderasi">
         <PressableScale onPress={() => { setMenu(false); setTimeout(() => setReport(true), 180); }} scaleTo={0.99} haptic={false} style={s.option}>
-          <View style={[s.optionIcon, { backgroundColor: colors.dangerLight }]}><Ionicons name="flag-outline" size={19} color={colors.danger} /></View>
+          <View style={[s.optionIcon, { backgroundColor: colors.dangerLight }]}><Ionicons name="flag-outline" size={20} color={colors.danger} /></View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[font.body, { fontWeight: '700' }]}>Laporkan</Text>
             <Text style={font.tiny} numberOfLines={2}>Kirim laporan ke tim moderasi AntarKita</Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
         </PressableScale>
         {userId ? (
           <PressableScale onPress={() => { setMenu(false); setTimeout(() => setBlock(true), 180); }} scaleTo={0.99} haptic={false} style={s.option}>
-            <View style={[s.optionIcon, { backgroundColor: colors.dangerLight }]}><Ionicons name="ban-outline" size={19} color={colors.danger} /></View>
+            <View style={[s.optionIcon, { backgroundColor: colors.dangerLight }]}><Ionicons name="ban-outline" size={20} color={colors.danger} /></View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[font.body, { fontWeight: '700' }]}>Blokir</Text>
               <Text style={font.tiny} numberOfLines={2}>Tidak dipasangkan lagi dan tidak bisa saling berkirim pesan</Text>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
           </PressableScale>
         ) : null}
         <Button title="Batal" variant="ghost" color={colors.textSecondary} onPress={() => setMenu(false)} />
@@ -296,8 +296,8 @@ const s = StyleSheet.create({
   option: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff' },
   optionOn: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
   optionIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
-  textarea: { minHeight: 96, textAlignVertical: 'top', backgroundColor: colors.bgSoft, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: 12, color: colors.text, fontSize: 15 },
-  input: { backgroundColor: colors.bgSoft, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, height: 46, color: colors.text, fontSize: 15 },
+  textarea: { minHeight: 96, textAlignVertical: 'top', backgroundColor: colors.bgSoft, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: 12, color: colors.text, fontSize: 16 },
+  input: { backgroundColor: colors.bgSoft, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, height: 46, color: colors.text, fontSize: 16 },
   warnBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.infoLight, padding: 10, borderRadius: radius.md, borderWidth: 1, borderColor: glass.border },
   okCircle: { width: 62, height: 62, borderRadius: 31, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', ...shadow.glow(colors.primary) },
   circleGhost: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border },
