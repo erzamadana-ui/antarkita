@@ -21,9 +21,10 @@ import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
 import { getRoute, reverseGeocode, finalizeRoute, type RouteResult } from '@/lib/geo';
 import { rpc } from '@/lib/supabase';
+import { createOrder } from '@/lib/orders';
 import { colors, font, radius, motion, glass } from '@/lib/theme';
 import { rupiah, km, minutes } from '@/lib/format';
-import type { FareOptions, Order } from '@/lib/types';
+import type { FareOptions } from '@/lib/types';
 
 const PURPOSES = [
   { key: 'barang', label: 'Kirim barang besar', icon: 'cube', desc: 'Lemari, kasur, kulkas, motor, dsb.' },
@@ -93,13 +94,13 @@ export default function BoxScreen() {
       // Hemat §5.3: rute sungguhan (GEOMETRI saja) baru diambil DI SINI. Jarak/durasi
       // tetap angka pratinjau yang menjadi dasar harga yang ditampilkan.
       const fin = await finalizeRoute(pickup, dropoff, route);
-      const o = await rpc<Order>('create_order', { p: {
+      const o = await createOrder({
         service: 'box', pickup: { lat: pickup.lat, lng: pickup.lng, address: pickup.address }, dropoff: { lat: dropoff.lat, lng: dropoff.lng, address: dropoff.address },
         route_km: fin.route_km, duration_min: fin.duration_min, route_geometry: fin.coords, payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null,
         notes: [items ? `Barang: ${items}` : '', notes].filter(Boolean).join(' · ') || null, vehicle_class: chosen.code, helpers, purpose, scheduled_at: when ? when.toISOString() : null,
         package_details: { type: PURPOSES.find((p) => p.key === purpose)?.label, description: items },
         driver_code: driverCode,
-      } });
+      });
       await refreshWallet(); useBooking.getState().reset();
       router.replace(`/order/${o.id}` as never);
     } catch (e) { if (!handleShortfall(e, router, payPrefs?.ewallet)) toast.error((e as Error).message); }
