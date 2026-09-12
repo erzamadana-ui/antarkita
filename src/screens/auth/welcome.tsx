@@ -52,7 +52,7 @@ export default function Welcome() {
             <Entrance index={0}>
               <Row between>
                 <Row gap={10}><BrandLogo size={36} /><View><Text style={[font.h3, { fontSize: 16 }]}>{APP_NAME[APP]}</Text><Text style={font.tiny}>{APP_TAGLINE}</Text></View></Row>
-                {!last && slides.length > 1 ? <PressableScale onPress={() => setI(slides.length - 1)} hitSlop={8} scaleTo={0.94}><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13 }}>Lewati</Text></PressableScale> : null}
+                {!last && slides.length > 1 ? <PressableScale onPress={() => setI(slides.length - 1)} hitSlop={8} scaleTo={0.94}><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>Lewati</Text></PressableScale> : null}
               </Row>
             </Entrance>
 

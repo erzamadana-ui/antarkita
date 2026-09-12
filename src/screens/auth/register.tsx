@@ -44,11 +44,11 @@ export default function Register() {
         <Input label={t('email')} icon="mail-outline" value={f.email} onChangeText={set('email')} autoCapitalize="none" keyboardType="email-address" placeholder="nama@email.com" />
         <Input label={t('password')} icon="lock-closed-outline" value={f.password} onChangeText={set('password')} secureTextEntry placeholder="Minimal 6 karakter" />
         <Input label="Ulangi kata sandi" icon="lock-closed-outline" value={f.confirm} onChangeText={set('confirm')} secureTextEntry placeholder="Ulangi kata sandi" onSubmitEditing={submit} />
-        {err ? <Text style={{ color: colors.danger, fontSize: 13 }}>{err}</Text> : null}
+        {err ? <Text style={{ color: colors.danger, fontSize: 14 }}>{err}</Text> : null}
         <Button title={t('register')} size="lg" onPress={submit} />
         <Text style={{ fontSize: 12, color: colors.textMuted, textAlign: 'center', lineHeight: 17 }}>Dengan mendaftar Anda menyetujui Syarat & Ketentuan serta Kebijakan Privasi AntarKita.</Text>
         <Pressable onPress={() => router.replace('/(auth)/login')} style={{ alignItems: 'center', padding: 6 }}>
-          <Text style={font.small}>{t('have_account')} <Text style={{ color: colors.primary, fontWeight: '800' }}>{t('login')}</Text></Text>
+          <Text style={font.small}>{t('have_account')} <Text style={{ color: colors.primary, fontWeight: '700' }}>{t('login')}</Text></Text>
         </Pressable>
       </View></Entrance>
     </Screen>
