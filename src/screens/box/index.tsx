@@ -128,8 +128,8 @@ export default function BoxScreen() {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {PURPOSES.map((p) => (
               <PressableScale key={p.key} onPress={() => setPurpose(p.key)} scaleTo={0.97} style={[s.purpose, purpose === p.key && { borderColor: colors.box, backgroundColor: colors.box + '12' }]}>
-                <Ionicons name={p.icon as never} size={18} color={purpose === p.key ? colors.box : colors.textSecondary} />
-                <Text style={{ fontWeight: '800', color: colors.text, fontSize: 13 }}>{p.label}</Text>
+                <Ionicons name={p.icon as never} size={20} color={purpose === p.key ? colors.box : colors.textSecondary} />
+                <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>{p.label}</Text>
                 <Text style={font.tiny} numberOfLines={2}>{p.desc}</Text>
               </PressableScale>
             ))}
@@ -144,7 +144,7 @@ export default function BoxScreen() {
             <VehicleClassPicker options={opts?.classes ?? []} value={cls} onChange={setCls} accent={colors.box} loading={loading} />
             <View style={s.group}>
               <Row between>
-                <View style={{ flex: 1 }}><Text style={{ fontWeight: '800', color: colors.text }}>Pembantu angkat</Text><Text style={font.tiny}>{rupiah(opts?.helpers_fee && helpers ? opts.helpers_fee / helpers : 50000)}/orang · bantu muat & bongkar (maks. 3)</Text></View>
+                <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text }}>Pembantu angkat</Text><Text style={font.tiny}>{rupiah(opts?.helpers_fee && helpers ? opts.helpers_fee / helpers : 50000)}/orang · bantu muat & bongkar (maks. 3)</Text></View>
                 <Stepper value={helpers} onChange={setHelpers} min={0} max={3} />
               </Row>
               <Input placeholder="Daftar barang: mis. kasur 1, lemari 2, kardus 10" icon="list-outline" value={items} onChangeText={setItems} />
