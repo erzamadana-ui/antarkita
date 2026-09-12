@@ -114,6 +114,15 @@ jobs:
             echo "::error::Secret belum di-set:$missing — lihat docs/rilis/CHECKLIST-GO-LIVE.md bagian 'Keystore'."
             exit 1
           fi
+          # Uji decode + sandi/alias SEKARANG (30 detik), bukan setelah prebuild 10 menit.
+          CLEAN="$(printf '%s' "$KS" | tr -d '\n\r\t ')"
+          printf '%s' "$CLEAN" | base64 -d > /tmp/ks-check.jks 2>/dev/null || printf '%s' "$CLEAN" | base64 -di > /tmp/ks-check.jks \
+            || { echo "::error::ANDROID_KEYSTORE_BASE64 bukan base64 valid — buka antarkita-upload.b64 di TextEdit, Cmd+A, Cmd+C, tempel ulang."; exit 1; }
+          [ -s /tmp/ks-check.jks ] || { echo "::error::ANDROID_KEYSTORE_BASE64 kosong setelah decode."; exit 1; }
+          keytool -list -keystore /tmp/ks-check.jks -storepass "$KSP" -alias "$KA" >/dev/null 2>/tmp/ks-err \
+            || { echo "::error::Sandi/alias keystore tidak cocok: $(tr -d '\n' </tmp/ks-err | cut -c1-160). Pastikan ANDROID_KEY_ALIAS=antarkita-upload dan sandi tanpa spasi/enter."; exit 1; }
+          rm -f /tmp/ks-check.jks
+          echo "Keystore OK: alias $KA terverifikasi."
 
       - run: npm ci
 
@@ -132,7 +141,14 @@ jobs:
             echo "path=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          printf '%s' "$GSJ" | tr -d '\n\r ' | base64 -d > google-services.json
+          # Toleran terhadap cara tempel: base64 murni, base64 dengan enter/spasi, atau JSON mentah.
+          CLEAN="$(printf '%s' "$GSJ" | tr -d '\n\r\t ')"
+          case "$CLEAN" in
+            \{*) printf '%s' "$GSJ" > google-services.json ;;
+            *)   printf '%s' "$CLEAN" | base64 -d > google-services.json 2>/dev/null \
+                   || printf '%s' "$CLEAN" | base64 -di > google-services.json \
+                   || { echo "::error::GOOGLE_SERVICES_JSON_BASE64 bukan base64 valid dan bukan JSON — buka google-services.b64 di TextEdit, Cmd+A, Cmd+C, tempel ulang."; exit 1; } ;;
+          esac
           node -e "
             const j = require('./google-services.json');
             const ids = (j.client || []).map((c) => c.client_info.android_client_info.package_name);
@@ -208,7 +224,8 @@ jobs:
           ANTARKITA_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANTARKITA_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\n\r ' | base64 -d > android/app/release.keystore
+          CLEAN="$(printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\n\r\t ')"
+          printf '%s' "$CLEAN" | base64 -d > android/app/release.keystore 2>/dev/null || printf '%s' "$CLEAN" | base64 -di > android/app/release.keystore
           [ -s android/app/release.keystore ] || { echo "::error::Decode keystore gagal (ANDROID_KEYSTORE_BASE64 kosong/rusak)"; exit 1; }
           keytool -list -keystore android/app/release.keystore -storepass "$ANTARKITA_UPLOAD_STORE_PASSWORD" -alias "$ANTARKITA_UPLOAD_KEY_ALIAS" >/dev/null \
             || { echo "::error::Kata sandi/alias keystore tidak cocok"; exit 1; }
