@@ -36,8 +36,12 @@ const UA = "AntarKita/1.0 (erzamadana@gmail.com)";
 const ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
 ];
-const REQ_TIMEOUT_MS = 45_000;   // batas satu permintaan Overpass
+// Batas satu permintaan Overpass. Kueri se-provinsi sering butuh > 45 dtk di sisi Overpass
+// (kueri memakai [timeout:120]); memutus lebih awal hanya membuang pekerjaan server Overpass
+// dan menyisakan tugas 'running'. Dinaikkan, tetapi tetap dipotong oleh sisa anggaran panggilan.
+const REQ_TIMEOUT_MS = 100_000;
 const DEFAULT_BUDGET_MS = 55_000; // anggaran satu panggilan Edge Function
 const PAUSE_MS = 1_500;           // jeda antar permintaan Overpass
 const CHUNK = 200;                // baris per panggilan RPC penyimpanan
@@ -177,11 +181,13 @@ function buildQuery(task: Task, maxOut: number): string {
 class OverpassDown extends Error {}
 
 /** Satu permintaan Overpass, serial, dengan endpoint cadangan. */
-async function overpass(query: string): Promise<{ elements: OsmElement[]; endpoint: string }> {
+async function overpass(query: string, deadline: number = Date.now() + REQ_TIMEOUT_MS): Promise<{ elements: OsmElement[]; endpoint: string }> {
   let lastErr = "";
   for (const ep of ENDPOINTS) {
+    const sisa = deadline - Date.now();
+    if (sisa < 10_000) { lastErr = lastErr || "anggaran waktu panggilan habis"; break; }   // jangan mulai permintaan yang pasti diputus
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), REQ_TIMEOUT_MS);
+    const timer = setTimeout(() => ctrl.abort(), Math.min(REQ_TIMEOUT_MS, sisa));
     try {
       const res = await fetch(ep, {
         method: "POST",
@@ -293,13 +299,15 @@ Deno.serve(async (req) => {
 
       let elements: OsmElement[] = []; let endpoint = "";
       try {
-        const r = await overpass(query);
+        // sisa anggaran panggilan dikurangi jeda untuk menyimpan hasil
+        const r = await overpass(query, started + budget - 8_000);
         elements = r.elements; endpoint = r.endpoint;
       } catch (e) {
         if (e instanceof OverpassDown) {
-          // Jaringan Overpass sedang tidak bisa dipakai: tugas SENGAJA dibiarkan
-          // berstatus 'running' — osm_claim_tasks mengembalikannya ke antrean
-          // setelah 10 menit (maks 3 percobaan). Tidak dianggap error fatal.
+          // Jaringan Overpass sedang tidak bisa dipakai: tugas dikembalikan ke antrean
+          // SEKETIKA (0084, osm_release_task) — bukan menunggu 10 menit — supaya
+          // panggilan berikutnya bisa langsung mencoba lagi. Tidak dianggap error fatal.
+          await admin.rpc("osm_release_task", { p_task: task.id, p_reason: (e as Error).message });
           return json({ skipped: true, reason: (e as Error).message, processed, sisa_tugas: true });
         }
         await admin.rpc("osm_finish_task", { p_task: task.id, p_status: "failed", p_stats: {}, p_error: (e as Error).message, p_endpoint: null });
