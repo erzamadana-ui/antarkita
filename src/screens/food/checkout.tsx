@@ -18,9 +18,10 @@ import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
 import { getRoute, reverseGeocode, finalizeRoute, type RouteResult } from '@/lib/geo';
 import { rpc } from '@/lib/supabase';
+import { createOrder } from '@/lib/orders';
 import { colors, font, radius, glass } from '@/lib/theme';
 import { rupiah, km, minutes } from '@/lib/format';
-import type { FareEstimate, Order, PaymentMethod } from '@/lib/types';
+import type { FareEstimate, PaymentMethod } from '@/lib/types';
 
 export default function Checkout() {
   const router = useRouter();
@@ -77,12 +78,12 @@ export default function Checkout() {
       // Hemat §5.3: rute sungguhan (GEOMETRI saja) baru diambil DI SINI. Jarak/durasi
       // tetap angka pratinjau yang menjadi dasar harga yang ditampilkan.
       const fin = await finalizeRoute({ lat: m.lat!, lng: m.lng! }, dropoff, route);
-      const o = await rpc<Order>('create_order', { p: {
+      const o = await createOrder({
         service: 'food', merchant_id: m.id, dropoff: { lat: dropoff.lat, lng: dropoff.lng, address: dropoff.address },
         route_km: fin.route_km, duration_min: fin.duration_min, route_geometry: fin.coords, payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null, notes: notes || null,
         items: cart.lines.map((l) => ({ menu_item_id: l.item.id, qty: l.qty, notes: l.notes || null })),
         driver_code: driverCode,
-      } });
+      });
       cart.clear(); await refreshWallet(); useBooking.getState().reset();
       router.replace(`/order/${o.id}` as never);
     } catch (e) { if (!handleShortfall(e, router, payPrefs?.ewallet)) toast.error((e as Error).message); }
