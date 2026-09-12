@@ -21,7 +21,7 @@ begin
   select id into city_bkt from cities where name = 'Bukittinggi';
   select id into route1 from travel_routes where active and from_city = (select id from cities where name = 'Pekanbaru') and to_city = (select id from cities where name = 'Padang') limit 1;
   select id into wh_dest from warehouses where city_id = city_bkt and active limit 1;
-  select id into dbox from drivers where vehicle_type in ('box','pickup') and status = 'approved' order by created_at limit 1;
+  select id into dbox from drivers where vehicle_type in ('box','pickup') order by (status = 'approved') desc, created_at limit 1;   -- bila tidak ada yang approved, S0 memulihkannya (dalam ROLLBACK)
 
   -- ===== S0 Pembersihan sisa uji manual (ikut di-rollback): order aktif lama akun uji ditutup agar batas 3 order aktif & "selesaikan order aktif dulu" tidak mengganggu =====
   begin
@@ -31,7 +31,8 @@ begin
     -- 0085: di produksi akun & merchant uji SENGAJA dinonaktifkan/disembunyikan. Pulihkan hanya di dalam
     -- transaksi simulasi ini (di-ROLLBACK) supaya seluruh alur bisa dijalankan tanpa mengubah produksi.
     perform set_config('antaraja.bypass', 'on', true);
-    update profiles set is_active = true where id in (cust, drv, drv2, mown, adm) and not is_active;
+    update profiles set is_active = true where id in (cust, drv, drv2, mown, adm, dbox) and not is_active;
+    update drivers set status = 'approved', status_reason = null, is_online = false where id = dbox and status <> 'approved';   -- driver box bisa saja ditangguhkan saat uji manual
     update merchants set status = 'approved', is_open = true where id = merch and (status <> 'approved' or not is_open);
     update travel_partners set status = 'approved' where id = drv2 and status <> 'approved';
     update promos set is_active = true where code = 'ANTARBARU' and not is_active;   -- promo contoh dipakai S3/S44
@@ -298,7 +299,14 @@ begin
   begin
     perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
     o := create_order(jsonb_build_object('service', 'ride_motor', 'scheduled_at', (now() + interval '45 minutes')::text, 'pickup', jsonb_build_object('lat', 0.4810, 'lng', 101.4349, 'address', 'A'), 'dropoff', jsonb_build_object('lat', 0.49, 'lng', 101.44, 'address', 'B'), 'paid_via', 'wallet'));
+    -- 0086: pekerjaan latar hanya boleh dijalankan cron/service_role/admin — pelanggan harus ditolak
+    begin
+      n := release_scheduled_orders();
+      log := log || 'S14b BUG pelanggan bisa memanggil release_scheduled_orders()' || E'\n';
+    exception when others then log := log || format('S14b OK pelanggan ditolak memanggil pekerjaan latar: %s', left(sqlerrm, 40)) || E'\n'; end;
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
     n := release_scheduled_orders();
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
     log := log || format('S14 %s terjadwal status=%s scheduled_at=%s dirilis sekarang=%s', case when o.status = 'scheduled' then 'OK' else 'BUG' end, o.status, o.scheduled_at, n) || E'\n';
     perform cancel_order(o.id, 'uji');
   exception when others then log := log || 'S14 BUG terjadwal: ' || sqlerrm || E'\n'; end;
@@ -1171,6 +1179,7 @@ begin
     log := log || format('S36e %s unregister_push_token oleh pemilik: removed=%s, baris tersisa=%s (harus 0)',
       case when (r->>'removed')::int = 1 and n = 0 then 'OK' else 'BUG' end, r->>'removed', n) || E'\n';
 
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);   -- 0086: hanya admin/cron
     j := push_dispatch(10);
     log := log || format('S36f %s push_dispatch() aman saat push_config belum diisi (tanpa error): %s',
       case when j ? 'skipped' or j ? 'ok' then 'OK' else 'BUG' end, j::text) || E'\n';

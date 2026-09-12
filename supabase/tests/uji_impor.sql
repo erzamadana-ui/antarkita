@@ -192,6 +192,7 @@ begin
 
   -- ===== S10 Penjadwal tidak error saat konfigurasi kosong =====
   begin
+    perform set_config('request.jwt.claims', null, true);   -- 0086: dijalankan sebagai cron/sistem
     r := osm_import_tick();
     log := log || format('S10 osm_import_tick: %s', r) || E'\n';
     r := osm_auto_refresh();
