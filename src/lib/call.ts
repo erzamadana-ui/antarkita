@@ -41,9 +41,9 @@ interface CallState {
   reset: () => void;
 }
 
-// ICE dasar: STUN publik + (opsional, cara lama) TURN statis dari env build.
-const ICE_BASE = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' },
-  ...(process.env.EXPO_PUBLIC_TURN_URL ? [{ urls: process.env.EXPO_PUBLIC_TURN_URL, username: process.env.EXPO_PUBLIC_TURN_USER, credential: process.env.EXPO_PUBLIC_TURN_PASS }] : [])];
+// ICE dasar: STUN publik saja. TURN statis dari env build DIHAPUS (0086): kredensial yang tertanam di APK
+// bisa diekstrak siapa pun; TURN kini hanya lewat kredensial berumur pendek dari server (getIceServers).
+const ICE_BASE = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }];
 
 /**
  * TURN berumur pendek dari server (Cloudflare Realtime lewat Edge Function `turn-credentials`,
