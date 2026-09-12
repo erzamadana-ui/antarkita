@@ -44,8 +44,8 @@ export default function TopUp() {
         <Entrance index={0}>
           <Pressable onPress={() => router.push({ pathname: '/pay/gateway', params: { amount: amount || '50000' } } as never)} style={s.gw}>
             <View style={s.gwIcon}><Ionicons name="flash" size={20} color="#fff" /></View>
-            <View style={{ flex: 1 }}><Text style={{ fontWeight: '800', color: colors.text }}>Top up instan — GoPay, OVO, DANA, ShopeePay, QRIS, VA</Text><Text style={font.tiny}>Saldo langsung masuk otomatis lewat payment gateway.</Text></View>
-            <Ionicons name="chevron-forward" size={18} color={colors.primary} />
+            <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text }}>Top up instan — GoPay, OVO, DANA, ShopeePay, QRIS, VA</Text><Text style={font.tiny}>Saldo langsung masuk otomatis lewat payment gateway.</Text></View>
+            <Ionicons name="chevron-forward" size={20} color={colors.primary} />
           </Pressable>
           <Text style={[font.tiny, { textAlign: 'center', marginTop: 10 }]}>— atau transfer bank manual (verifikasi admin) —</Text>
         </Entrance>
@@ -65,8 +65,8 @@ export default function TopUp() {
               <View style={s.bank}>
                 <Text style={font.tiny}>{bank.bank} a.n. {bank.name}</Text>
                 <Row between>
-                  <Text style={{ fontSize: 22, fontWeight: '800', color: colors.text, letterSpacing: 1 }}>{bank.number}</Text>
-                  <Pressable onPress={async () => { await Clipboard.setStringAsync(bank.number); toast.show('Nomor rekening disalin'); }} style={s.copy}><Ionicons name="copy-outline" size={18} color={colors.primary} /></Pressable>
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text, letterSpacing: 1 }}>{bank.number}</Text>
+                  <Pressable onPress={async () => { await Clipboard.setStringAsync(bank.number); toast.show('Nomor rekening disalin'); }} style={s.copy}><Ionicons name="copy-outline" size={20} color={colors.primary} /></Pressable>
                 </Row>
               </View>
             ) : <Text style={font.small}>Memuat rekening…</Text>}
@@ -77,7 +77,7 @@ export default function TopUp() {
           <Card>
             <Text style={font.label}>2. Unggah bukti transfer</Text>
             <Pressable onPress={upload} style={s.upload}>
-              <Ionicons name={proof ? 'checkmark-circle' : 'cloud-upload-outline'} size={28} color={proof ? colors.success : colors.primary} />
+              <Ionicons name={proof ? 'checkmark-circle' : 'cloud-upload-outline'} size={32} color={proof ? colors.success : colors.primary} />
               <Text style={{ color: proof ? colors.success : colors.primary, fontWeight: '700' }}>{proof ? 'Bukti terunggah · ganti' : 'Pilih foto bukti transfer'}</Text>
             </Pressable>
             <Input placeholder="Catatan (nama pengirim / bank asal)" value={note} onChangeText={setNote} containerStyle={{ marginTop: 10 }} />
