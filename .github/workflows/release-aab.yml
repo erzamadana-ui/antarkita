@@ -71,6 +71,13 @@ jobs:
       EXPO_PUBLIC_APP: ${{ matrix.app }}
       EXPO_PUBLIC_SITE_ROOT: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
       EXPO_PUBLIC_APK_URL: https://github.com/${{ github.repository }}/releases/latest
+      # Tautan "Bagikan perjalanan" & halaman hukum: tanpa ini Safety.tsx memakai fallback dan bisa menunjuk path lama.
+      EXPO_PUBLIC_SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+      # Server TURN untuk panggilan suara di jaringan seluler (CGNAT). Kosong = panggilan hanya berhasil di Wi-Fi.
+      # Isi dari GitHub Secrets; pakai kredensial berumur pendek/berkuota (Cloudflare Realtime TURN), bukan statis.
+      EXPO_PUBLIC_TURN_URL: ${{ secrets.EXPO_PUBLIC_TURN_URL }}
+      EXPO_PUBLIC_TURN_USER: ${{ secrets.EXPO_PUBLIC_TURN_USER }}
+      EXPO_PUBLIC_TURN_PASS: ${{ secrets.EXPO_PUBLIC_TURN_PASS }}
       EXPO_NO_TELEMETRY: 1
       CI: 1
       GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g
