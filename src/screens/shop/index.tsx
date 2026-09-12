@@ -18,10 +18,11 @@ import { useCityStatus } from '@/hooks/useCityStatus';
 import { getRoute, reverseGeocode, finalizeRoute, type RouteResult } from '@/lib/geo';
 import { importOsmPlaces } from '@/lib/osm';
 import { rpc, friendlyError } from '@/lib/supabase';
+import { createOrder } from '@/lib/orders';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { ServiceIllustration } from '@/components/ServiceArt';
 import { rupiah, km, minutes, storeCategoryLabel, productCategoryLabel } from '@/lib/format';
-import type { CartLine, Order, Place, ShopProduct, ShopStore, ShoppingEstimate } from '@/lib/types';
+import type { CartLine, Place, ShopProduct, ShopStore, ShoppingEstimate } from '@/lib/types';
 
 const FILTERS: { key: string; label: string; category: string | null }[] = [
   { key: 'all', label: 'Semua', category: null },
@@ -195,7 +196,7 @@ export default function ShopScreen() {
     }
     setOrdering(true);
     try {
-      const o = await rpc<Order>('create_order', { p });
+      const o = await createOrder(p);
       await refreshWallet(); useBooking.getState().reset();
       router.replace(`/order/${o.id}` as never);
     } catch (e) { if (!handleShortfall(e, router, payPrefs?.ewallet)) toast.error((e as Error).message); }
