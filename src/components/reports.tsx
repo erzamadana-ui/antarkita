@@ -87,7 +87,7 @@ export function DateField({ value, onChange, label }: { value: string; onChange:
       onChange: (e: { target: { value: string } }) => onChange(e.target.value),
       style: {
         height: 30, boxSizing: 'border-box', borderRadius: adminRadius.sm, border: `1px solid ${adminTone.borderStrong}`,
-        background: adminTone.surface, color: adminTone.ink, fontSize: 12.5, fontFamily: 'inherit',
+        background: adminTone.surface, color: adminTone.ink, fontSize: 14, fontFamily: 'inherit',
         padding: '0 8px', outline: 'none', minWidth: 138,
       },
     })
@@ -243,7 +243,7 @@ export function DefinitionList({ items }: { items: { term: string; desc: string 
 }
 
 const st = StyleSheet.create({
-  line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 7, minHeight: 34 },
-  dateInput: { height: 30, minWidth: 138, borderRadius: adminRadius.sm, borderWidth: 1, borderColor: adminTone.borderStrong, backgroundColor: adminTone.surface, paddingHorizontal: 8, fontSize: 12.5, color: adminTone.ink },
-  note: { gap: 5, backgroundColor: adminTone.surfaceAlt, borderRadius: adminRadius.card, borderWidth: 1, borderColor: adminTone.border, padding: adminSpace.md },
+  line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, minHeight: 34 },
+  dateInput: { height: 30, minWidth: 138, borderRadius: adminRadius.sm, borderWidth: 1, borderColor: adminTone.borderStrong, backgroundColor: adminTone.surface, paddingHorizontal: 8, fontSize: 14, color: adminTone.ink },
+  note: { gap: 4, backgroundColor: adminTone.surfaceAlt, borderRadius: adminRadius.card, borderWidth: 1, borderColor: adminTone.border, padding: adminSpace.md },
 });

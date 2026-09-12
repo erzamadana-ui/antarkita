@@ -44,7 +44,7 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
           <Row between>
             <View>
               <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 }}>SALDO ANTARPAY</Text>
-              <AnimatedNumber value={wallet?.balance ?? 0} format={rupiah} style={{ color: '#fff', fontSize: 28, fontWeight: '800', letterSpacing: -0.5 }} />
+              <AnimatedNumber value={wallet?.balance ?? 0} format={rupiah} style={{ color: '#fff', fontSize: 30, fontWeight: '700', letterSpacing: -0.5 }} />
             </View>
             <Button title="Top up" size="sm" color="#0B1F2A" icon="add" onPress={() => router.push('/pay/gateway' as never)} />
           </Row>
@@ -64,8 +64,8 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
           {EWALLETS.map((x) => (
             <View key={x.key} style={{ width: '31%', flexGrow: 1 }}>
               <PressableScale onPress={() => pick('ewallet', x.key)} scaleTo={0.95} style={[s.method, ew === x.key && method === 'ewallet' && { borderColor: x.color, backgroundColor: x.color + '14', ...shadow.glow(x.color) }]}>
-                <View style={[s.mIcon, { backgroundColor: x.color }]}><Ionicons name={x.icon as never} size={18} color="#fff" /></View>
-                <Text style={{ fontWeight: '800', color: colors.text, fontSize: 13 }} numberOfLines={1}>{x.label}</Text>
+                <View style={[s.mIcon, { backgroundColor: x.color }]}><Ionicons name={x.icon as never} size={20} color="#fff" /></View>
+                <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }} numberOfLines={1}>{x.label}</Text>
                 {ew === x.key && method === 'ewallet' && <Ionicons name="checkmark-circle" size={16} color={x.color} style={{ position: 'absolute', top: 6, right: 6 }} />}
               </PressableScale>
             </View>
@@ -77,7 +77,7 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
       {!compact && (
         <Entrance index={3}><Card style={{ gap: 8 }}>
           <Row between>
-            <Row gap={10}><View style={[s.mIcon, { backgroundColor: nfc === 'supported' ? colors.success : colors.textMuted }]}><Ionicons name="radio-outline" size={18} color="#fff" /></View><View><Text style={font.h3}>E-money (kartu NFC)</Text><Text style={font.tiny}>Flazz · e-money Mandiri · BRIZZI · TapCash</Text></View></Row>
+            <Row gap={10}><View style={[s.mIcon, { backgroundColor: nfc === 'supported' ? colors.success : colors.textMuted }]}><Ionicons name="radio-outline" size={20} color="#fff" /></View><View><Text style={font.h3}>E-money (kartu NFC)</Text><Text style={font.tiny}>Flazz · e-money Mandiri · BRIZZI · TapCash</Text></View></Row>
             <Badge text={nfc === 'supported' ? 'Perangkat mendukung NFC' : nfc === 'unsupported' ? 'NFC tidak tersedia' : 'Memeriksa…'} color={nfc === 'supported' ? colors.success : colors.textMuted} />
           </Row>
           <Text style={font.tiny}>
@@ -94,8 +94,8 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
 function MethodRow({ active, onPress, icon, color, title, subtitle }: { active: boolean; onPress: () => void; icon: string; color: string; title: string; subtitle: string }) {
   return (
     <PressableScale onPress={onPress} scaleTo={0.985} style={[s.row, active && { borderColor: color, backgroundColor: color + '0F' }]}>
-      <View style={[s.mIcon, { backgroundColor: active ? color : 'rgba(11,31,42,0.08)' }]}><Ionicons name={icon as never} size={18} color={active ? '#fff' : colors.textSecondary} /></View>
-      <View style={{ flex: 1, minWidth: 0 }}><Text style={{ fontWeight: '800', color: colors.text }}>{title}</Text><Text style={font.tiny} numberOfLines={2}>{subtitle}</Text></View>
+      <View style={[s.mIcon, { backgroundColor: active ? color : 'rgba(11,31,42,0.08)' }]}><Ionicons name={icon as never} size={20} color={active ? '#fff' : colors.textSecondary} /></View>
+      <View style={{ flex: 1, minWidth: 0 }}><Text style={{ fontWeight: '700', color: colors.text }}>{title}</Text><Text style={font.tiny} numberOfLines={2}>{subtitle}</Text></View>
       <Ionicons name={active ? 'radio-button-on' : 'radio-button-off'} size={20} color={active ? color : colors.textMuted} />
     </PressableScale>
   );

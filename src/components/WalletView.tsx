@@ -53,10 +53,10 @@ export function WalletView({ allowWithdraw, bottomSpace = 40 }: { allowWithdraw?
         <BrandGradient colors={[colors.primary, colors.primaryDark]} style={[s.balance, shadow.glow(colors.primary)]}>
           <View style={s.orb} /><View style={[s.orb, { right: -60, top: 30, width: 160, height: 160, opacity: 0.12 }]} />
           <Row between>
-            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '600' }}>Saldo AntarPay</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '600' }}>Saldo AntarPay</Text>
             <Ionicons name="wallet" size={20} color="rgba(255,255,255,0.8)" />
           </Row>
-          <AnimatedNumber value={wallet?.balance ?? 0} format={rupiah} style={{ color: '#fff', fontSize: 36, fontWeight: '800', marginVertical: 8, letterSpacing: -0.5 }} />
+          <AnimatedNumber value={wallet?.balance ?? 0} format={rupiah} style={{ color: '#fff', fontSize: 30, fontWeight: '700', marginVertical: 8, letterSpacing: -0.5 }} />
           <Row gap={10} style={{ marginTop: 8 }}>
             <WalletAction icon="add" label="Top Up" onPress={() => router.push('/pay/topup')} />
             {allowWithdraw && <WalletAction icon="arrow-up" label="Tarik Saldo" onPress={() => router.push('/pay/withdraw')} />}
@@ -94,7 +94,7 @@ export function WalletView({ allowWithdraw, bottomSpace = 40 }: { allowWithdraw?
                     <Text style={font.tiny}>{formatDate(t.created_at)}</Text>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={{ fontWeight: '800', color: t.amount >= 0 ? colors.success : colors.text }}>{t.amount >= 0 ? '+' : '-'}{rupiah(Math.abs(t.amount))}</Text>
+                    <Text style={{ fontWeight: '700', color: t.amount >= 0 ? colors.success : colors.text }}>{t.amount >= 0 ? '+' : '-'}{rupiah(Math.abs(t.amount))}</Text>
                     <Text style={font.tiny}>Saldo {rupiah(t.balance_after)}</Text>
                   </View>
                 </Row>
@@ -113,8 +113,8 @@ export function WalletView({ allowWithdraw, bottomSpace = 40 }: { allowWithdraw?
 function WalletAction({ icon, label, onPress }: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; onPress: () => void }) {
   return (
     <PressableScale onPress={onPress} scaleTo={0.95} style={s.action}>
-      <Ionicons name={icon} size={18} color="#fff" />
-      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>{label}</Text>
+      <Ionicons name={icon} size={20} color="#fff" />
+      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{label}</Text>
     </PressableScale>
   );
 }
@@ -122,5 +122,5 @@ function WalletAction({ icon, label, onPress }: { icon: React.ComponentProps<typ
 const s = StyleSheet.create({
   balance: { borderRadius: radius.xxl, padding: 20, overflow: 'hidden' },
   orb: { position: 'absolute', right: -30, top: -50, width: 200, height: 200, borderRadius: 100, backgroundColor: '#fff', opacity: 0.08 },
-  action: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)', borderRadius: radius.md, paddingVertical: 11 },
+  action: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.18)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)', borderRadius: radius.md, paddingVertical: 12 },
 });

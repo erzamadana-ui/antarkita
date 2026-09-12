@@ -31,7 +31,7 @@ export function DocUpload({ label, hint, value, onChange, required, camera, colo
           <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>{label}{required && <Text style={{ color: colors.danger }}> *</Text>}</Text>
           <Text style={font.tiny} numberOfLines={2}>{busy ? 'Mengunggah…' : ok ? 'Terunggah · ketuk untuk ganti' : hint ?? (camera ? 'Ambil foto dengan kamera' : 'Ketuk untuk pilih foto/PDF')}</Text>
         </View>
-        {ok && <Pressable onPress={open} hitSlop={8} style={s.eye}><Ionicons name="eye-outline" size={18} color={colors.textSecondary} /></Pressable>}
+        {ok && <Pressable onPress={open} hitSlop={8} style={s.eye}><Ionicons name="eye-outline" size={20} color={colors.textSecondary} /></Pressable>}
       </Pressable>
     </View>
   );

@@ -63,7 +63,7 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
       </Row>
       <PressableScale onPress={() => router.push('/(customer)/pay' as never)} scaleTo={0.98} haptic={false} style={s.gwRow}>
         <View style={s.gwIcons}>{['#00AA13', '#4C2A86', '#118EEA', '#EE4D2D'].map((c) => <View key={c} style={[s.gwDot, { backgroundColor: c }]} />)}</View>
-        <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text, fontSize: 13 }}>{method === 'ewallet' ? `Bayar dengan ${ew.label} (via Midtrans)` : 'Ganti e-wallet / metode utama'}</Text><Text style={font.tiny}>{method === 'ewallet' ? 'Bila saldo AntarPay kurang, halaman bayar dibuka otomatis untuk kekurangannya.' : 'GoPay · OVO · DANA · ShopeePay · QRIS · VA Bank'}</Text></View>
+        <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>{method === 'ewallet' ? `Bayar dengan ${ew.label} (via Midtrans)` : 'Ganti e-wallet / metode utama'}</Text><Text style={font.tiny}>{method === 'ewallet' ? 'Bila saldo AntarPay kurang, halaman bayar dibuka otomatis untuk kekurangannya.' : 'GoPay · OVO · DANA · ShopeePay · QRIS · VA Bank'}</Text></View>
         <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
       </PressableScale>
       <Row gap={8}>
@@ -74,7 +74,7 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
       </Row>
       {promoMsg && <Text style={{ color: promoMsg.ok ? colors.success : colors.danger, fontSize: 12, marginTop: -6 }}>{promoMsg.text}</Text>}
       <View style={s.notes}>
-        <Ionicons name="chatbox-ellipses-outline" size={18} color={colors.textMuted} />
+        <Ionicons name="chatbox-ellipses-outline" size={20} color={colors.textMuted} />
         <TextInput placeholder={notesPlaceholder ?? 'Catatan untuk driver (opsional)'} placeholderTextColor={colors.textMuted} value={notes} onChangeText={onNotes} style={s.notesInput} />
       </View>
     </View>
@@ -84,7 +84,7 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
 function PayOption({ active, onPress, icon, title, subtitle, color = colors.primary }: { active: boolean; onPress: () => void; icon: React.ComponentProps<typeof Ionicons>['name']; title: string; subtitle: string; color?: string }) {
   return (
     <PressableScale onPress={onPress} scaleTo={0.97} style={[s.pay, active && { borderColor: color, backgroundColor: color + '14', ...shadow.glow(color) }]}>
-      <View style={[s.payIcon, active && { backgroundColor: color }]}><Ionicons name={icon} size={18} color={active ? '#fff' : colors.textSecondary} /></View>
+      <View style={[s.payIcon, active && { backgroundColor: color }]}><Ionicons name={icon} size={20} color={active ? '#fff' : colors.textSecondary} /></View>
       {/* Tata letak menurun (ikon di atas teks): pada layar 390px, tata letak mendatar hanya menyisakan ~45px
           untuk teks sehingga "AntarPay" terpotong jadi "Anta…" dan nominal saldo tidak terbaca. */}
       <Text style={s.payTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{title}</Text>
@@ -112,7 +112,7 @@ export function PriceSummary({ rows, total }: { rows: { label: string; value: nu
 
 const s = StyleSheet.create({
   pay: { flex: 1, minWidth: 0, alignItems: 'center', gap: 4, borderWidth: 1.5, borderColor: 'rgba(11,31,42,0.08)', borderRadius: radius.lg, paddingVertical: 10, paddingHorizontal: 6, backgroundColor: 'rgba(255,255,255,0.92)' },
-  payTitle: { fontWeight: '700', color: colors.text, fontSize: 13, textAlign: 'center', alignSelf: 'stretch' },
+  payTitle: { fontWeight: '700', color: colors.text, fontSize: 14, textAlign: 'center', alignSelf: 'stretch' },
   paySub: { ...font.tiny, textAlign: 'center', alignSelf: 'stretch' },
   payIcon: { width: 30, height: 30, borderRadius: 10, backgroundColor: 'rgba(11,31,42,0.06)', alignItems: 'center', justifyContent: 'center' },
   gwRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderRadius: radius.lg, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: glass.border },

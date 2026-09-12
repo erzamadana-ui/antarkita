@@ -32,7 +32,7 @@ export function TipCard({ order, onDone }: { order: Order; onDone: () => void })
   };
   return (
     <Animated.View style={[s.card, style]} layout={LinearTransition.springify().stiffness(280).damping(20)}>
-      <Row gap={8}><Ionicons name="heart" size={18} color={colors.food} /><Text style={font.h3}>Beri tip driver</Text>{(order.tip ?? 0) > 0 && <Badge text={`Sudah ${rupiah(order.tip ?? 0)}`} color={colors.success} />}</Row>
+      <Row gap={8}><Ionicons name="heart" size={20} color={colors.food} /><Text style={font.h3}>Beri tip driver</Text>{(order.tip ?? 0) > 0 && <Badge text={`Sudah ${rupiah(order.tip ?? 0)}`} color={colors.success} />}</Row>
       <Text style={font.tiny}>100% tip diterima driver. Dipotong dari saldo AntarPay ({rupiah(wallet?.balance ?? 0)}).</Text>
       <Row gap={8} style={{ flexWrap: 'wrap' }}>{TIPS.map((v) => <Chip key={v} label={rupiah(v)} active={amount === v} onPress={() => { setAmount(v); setCustom(''); }} color={colors.food} />)}</Row>
       <Row gap={8}>
@@ -57,12 +57,12 @@ export function ExtrasApproval({ order, onDone }: { order: Order; onDone: () => 
   };
   return (
     <Animated.View entering={FadeInDown.springify().stiffness(280).damping(16)} style={[s.card, { borderColor: colors.warning + '66', backgroundColor: 'rgba(245,158,11,0.10)' }]}>
-      <Row gap={8}><Ionicons name="alert-circle" size={18} color={colors.warning} /><Text style={font.h3}>Driver mengajukan biaya tambahan</Text></Row>
+      <Row gap={8}><Ionicons name="alert-circle" size={20} color={colors.warning} /><Text style={font.h3}>Driver mengajukan biaya tambahan</Text></Row>
       {pending.map((e) => (
         <View key={e.id} style={{ gap: 8 }}>
           <Row between>
             <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text }}>{extraKindLabel[e.kind]}{e.note ? ` · ${e.note}` : ''}</Text><Text style={font.tiny}>{order.payment_method === 'wallet' ? 'Dipotong dari saldo AntarPay' : 'Dibayar tunai ke driver'}</Text></View>
-            <Text style={{ fontWeight: '800', fontSize: 18, color: colors.text }}>{rupiah(e.amount)}</Text>
+            <Text style={{ fontWeight: '700', fontSize: 18, color: colors.text }}>{rupiah(e.amount)}</Text>
           </Row>
           <Row gap={8}>
             <Button title="Tolak" size="sm" variant="outline" color={colors.danger} loading={busy === e.id} onPress={() => respond(e, false)} />
@@ -93,8 +93,8 @@ export function ExtraRequest({ order, onDone }: { order: Order; onDone: () => vo
   return (
     <Animated.View layout={LinearTransition.springify().stiffness(280).damping(20)} style={s.card}>
       <Row between>
-        <Row gap={8}><Ionicons name="receipt-outline" size={18} color={colors.warning} /><Text style={font.h3}>Biaya tambahan</Text>{pending.length > 0 && <Badge text={`${pending.length} menunggu`} color={colors.warning} />}</Row>
-        <PressableScale onPress={() => setOpen(!open)} scaleTo={0.9} style={s.plus}><Ionicons name={open ? 'remove' : 'add'} size={18} color={colors.primary} /></PressableScale>
+        <Row gap={8}><Ionicons name="receipt-outline" size={20} color={colors.warning} /><Text style={font.h3}>Biaya tambahan</Text>{pending.length > 0 && <Badge text={`${pending.length} menunggu`} color={colors.warning} />}</Row>
+        <PressableScale onPress={() => setOpen(!open)} scaleTo={0.9} style={s.plus}><Ionicons name={open ? 'remove' : 'add'} size={20} color={colors.primary} /></PressableScale>
       </Row>
       {open && (
         <Animated.View entering={FadeInDown.duration(motion.base)} style={{ gap: 10 }}>

@@ -45,12 +45,12 @@ export function LanguageList() {
     <View style={{ gap: 10 }}>
       {LOCALES.map((l) => (
         <PressableScale key={l.code} onPress={() => set(l.code)} scaleTo={0.98} style={[s.item, locale === l.code && { borderColor: colors.primary, backgroundColor: colors.primary + '14' }]}>
-          <Text style={{ fontSize: 26 }}>{l.flag}</Text>
+          <Text style={{ fontSize: 24 }}>{l.flag}</Text>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontWeight: '800', color: colors.text, fontSize: 15 }}>{l.native}</Text>
+            <Text style={{ fontWeight: '700', color: colors.text, fontSize: 16 }}>{l.native}</Text>
             <Text style={font.tiny}>{l.label}{l.rtl ? ' · RTL' : ''}</Text>
           </View>
-          {locale === l.code && <Ionicons name="checkmark-circle" size={22} color={colors.primary} />}
+          {locale === l.code && <Ionicons name="checkmark-circle" size={24} color={colors.primary} />}
         </PressableScale>
       ))}
     </View>
@@ -61,6 +61,6 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 6 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.full, borderWidth: 1, borderColor: glass.border, backgroundColor: 'rgba(255,255,255,0.92)' },
   chipActive: { borderColor: colors.primary, backgroundColor: colors.primary + '14' },
-  chipText: { fontSize: 12, fontWeight: '800', color: colors.textSecondary },
+  chipText: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
   item: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: radius.lg, borderWidth: 1.5, borderColor: glass.border, backgroundColor: 'rgba(255,255,255,0.92)' },
 });

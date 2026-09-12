@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, useReducedMotion } from 'react-native-reanimated';
-import { colors, motion, radius, shadow } from '@/lib/theme';
+import { colors, motion, radius, shadow, spacing, font, fam, iconSize } from '@/lib/theme';
 import { useI18n, translate, isRTL, type TKey } from '@/lib/i18n';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -47,12 +47,12 @@ export function makeGlassTabBar(spec: TabSpec, accent = colors.primary, fab?: Ta
                 <Pressable key={r.key} accessibilityRole="button" accessibilityLabel={sp.tk ? translate(locale, sp.tk) : sp.label} accessibilityState={focused ? { selected: true } : {}}
                   onPress={() => { if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {}); const e = navigation.emit({ type: 'tabPress', target: r.key, canPreventDefault: true }); if (!focused && !e.defaultPrevented) navigation.navigate(r.name); }}
                   style={[s.tab, { width: tabW }]}>
-                  <Ionicons name={focused ? sp.iconActive : sp.icon} size={22} color={focused ? accent : colors.textMuted} />
+                  <Ionicons name={focused ? sp.iconActive : sp.icon} size={iconSize.lg} color={focused ? accent : colors.textMuted} />
                   {(() => {
                     const text = sp.tk ? translate(locale, sp.tk) : sp.label;
-                    // Ukuran huruf mengikuti lebar tab & panjang label supaya label panjang ("Pendapatan") tidak terpotong
-                    const fs = Math.max(9, Math.min(12, Math.floor((tabW - 8) / (text.length * 0.56))));
-                    return <Text style={[s.label, { fontSize: fs, color: focused ? accent : colors.textMuted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{text}</Text>;
+                    // §6: label navigasi 12sp/500, aktif 12sp/600 — TIDAK dikecilkan; label panjang dipotong ellipsis
+                    // (desain melarang mengecilkan teks demi memuat konten).
+                    return <Text style={[s.label, focused ? fam(600) : fam(500), { color: focused ? accent : colors.textMuted }]} numberOfLines={1} ellipsizeMode="tail">{text}</Text>;
                   })()}
                 </Pressable>
               );
@@ -62,7 +62,7 @@ export function makeGlassTabBar(spec: TabSpec, accent = colors.primary, fab?: Ta
             <Pressable accessibilityRole="button" accessibilityLabel={fab.accessibilityLabel ?? 'Aksi cepat'}
               onPress={() => { if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); if (fab.onPress) fab.onPress(); else if (fab.href) router.push(fab.href as never); }}
               style={[s.fab, { backgroundColor: fab.color ?? accent }, shadow.glow(fab.color ?? accent)]}>
-              <Ionicons name={fab.icon} size={26} color="#fff" />
+              <Ionicons name={fab.icon} size={iconSize.lg} color="#fff" />
             </Pressable>
           )}
         </View>
@@ -74,10 +74,10 @@ export function makeGlassTabBar(spec: TabSpec, accent = colors.primary, fab?: Ta
 const s = StyleSheet.create({
   wrap: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', paddingHorizontal: 16 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  bar: { flexDirection: 'row', padding: 6, height: 64, borderRadius: radius.full, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.card },
+  bar: { flexDirection: 'row', padding: spacing.xs, height: 64, borderRadius: radius.full, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.card },
   pill: { position: 'absolute', top: 6, bottom: 6, left: 6, alignItems: 'center', justifyContent: 'center' },
   pillCircle: { width: 52, height: 52, borderRadius: 26 },
-  tab: { alignItems: 'center', justifyContent: 'center', gap: 1, paddingHorizontal: 3, overflow: 'hidden' },
-  label: { fontSize: 12, fontWeight: '700', maxWidth: '100%' },
+  tab: { alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: spacing.xs, overflow: 'hidden' },
+  label: { ...font.navigation, maxWidth: '100%', textAlign: 'center' },
   fab: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
 });

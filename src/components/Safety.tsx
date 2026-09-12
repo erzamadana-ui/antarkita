@@ -44,7 +44,7 @@ export function SosButton({ orderId, compact, style }: { orderId?: string | null
         <BrandGradient colors={['#EF4444', '#B91C1C']} style={StyleSheet.absoluteFill} />
         <Animated.View style={[s.sosBar, bar]} />
         <Ionicons name="alert-circle" size={compact ? 18 : 22} color="#fff" />
-        {!compact && <Text style={{ color: '#fff', fontWeight: '800', letterSpacing: 1 }}>{sent ? 'SOS TERKIRIM' : holding ? 'TAHAN…' : 'SOS'}</Text>}
+        {!compact && <Text style={{ color: '#fff', fontWeight: '700', letterSpacing: 1 }}>{sent ? 'SOS TERKIRIM' : holding ? 'TAHAN…' : 'SOS'}</Text>}
       </Pressable>
       {!compact && <Text style={[font.tiny, { textAlign: 'center', marginTop: 4 }]}>Tahan 2 detik · darurat 112</Text>}
     </View>
@@ -78,10 +78,10 @@ export function PinCard({ orderId, status }: { orderId: string; status: string }
     <Animated.View entering={FadeInDown.springify().stiffness(280).damping(16)} style={[s.pinCard, shadow.glow(colors.ride)]}>
       <BrandGradient colors={[colors.ride, '#0F766E']} style={StyleSheet.absoluteFill} />
       <View style={{ flex: 1 }}>
-        <Row gap={6}><Ionicons name="shield-checkmark" size={16} color="#fff" /><Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>PIN penjemputan</Text></Row>
+        <Row gap={6}><Ionicons name="shield-checkmark" size={16} color="#fff" /><Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>PIN penjemputan</Text></Row>
         <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12, marginTop: 2 }}>Sebutkan ke driver sebelum naik. Pastikan plat nomor sesuai aplikasi.</Text>
       </View>
-      <Row gap={6}>{pin.split('').map((d, i) => <View key={i} style={s.pinDigit}><Text style={{ fontSize: 22, fontWeight: '800', color: colors.ride }}>{d}</Text></View>)}</Row>
+      <Row gap={6}>{pin.split('').map((d, i) => <View key={i} style={s.pinDigit}><Text style={{ fontSize: 22, fontWeight: '700', color: colors.ride }}>{d}</Text></View>)}</Row>
     </Animated.View>
   );
 }
@@ -102,7 +102,7 @@ export function PinPrompt({ visible, onCancel, onSubmit }: { visible: boolean; o
       <Pressable onPress={onCancel} style={s.backdrop}>
         <Pressable onPress={() => {}} style={{ width: '100%', maxWidth: 380 }}>
           <Animated.View entering={ZoomIn.duration(motion.base)} style={[s.dialog, shake]}>
-            <View style={[s.pinIcon, { backgroundColor: colors.ride + '1A' }]}><Ionicons name="keypad" size={26} color={colors.ride} /></View>
+            <View style={[s.pinIcon, { backgroundColor: colors.ride + '1A' }]}><Ionicons name="keypad" size={24} color={colors.ride} /></View>
             <Text style={font.h2}>Masukkan PIN pelanggan</Text>
             <Text style={[font.small, { textAlign: 'center' }]}>Minta 4 digit PIN dari pelanggan untuk memastikan Anda menjemput orang yang benar.</Text>
             <TextInput value={pin} onChangeText={(v) => setPin(v.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" maxLength={4} autoFocus style={s.pinInput} placeholder="• • • •" placeholderTextColor={colors.textMuted} onSubmitEditing={submit} />
@@ -132,7 +132,7 @@ export function SelfieGate({ visible, onDone, onCancel }: { visible: boolean; on
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={s.backdrop}>
         <Animated.View entering={ZoomIn.duration(motion.base)} style={[s.dialog, { width: '100%', maxWidth: 420, alignItems: 'stretch' }]}>
-          <Row gap={10}><View style={[s.pinIcon, { backgroundColor: colors.info + '1A', width: 44, height: 44 }]}><Ionicons name="person-circle" size={26} color={colors.info} /></View><View style={{ flex: 1 }}><Text style={font.h2}>Verifikasi wajah</Text><Text style={font.tiny}>Wajib sebelum online — memastikan akun dipakai mitra terdaftar (seperti Gojek/Grab).</Text></View></Row>
+          <Row gap={10}><View style={[s.pinIcon, { backgroundColor: colors.info + '1A', width: 44, height: 44 }]}><Ionicons name="person-circle" size={24} color={colors.info} /></View><View style={{ flex: 1 }}><Text style={font.h2}>Verifikasi wajah</Text><Text style={font.tiny}>Wajib sebelum online — memastikan akun dipakai mitra terdaftar (seperti Gojek/Grab).</Text></View></Row>
           <DocUpload label="Selfie sekarang" hint="Wajah jelas, tanpa masker/helm, cahaya cukup" required camera value={url} onChange={setUrl} color={colors.info} />
           <Text style={font.tiny}>Foto disimpan privat untuk audit keamanan (UU PDP) dan dibandingkan admin dengan foto KTP.</Text>
           <Row gap={8}>
@@ -166,7 +166,7 @@ export function EmergencyContactCard() {
         </>
       ) : (
         <Row gap={10}>
-          <View style={[s.pinIcon, { backgroundColor: colors.danger + '1A', width: 40, height: 40 }]}><Ionicons name="call" size={18} color={colors.danger} /></View>
+          <View style={[s.pinIcon, { backgroundColor: colors.danger + '1A', width: 40, height: 40 }]}><Ionicons name="call" size={20} color={colors.danger} /></View>
           <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text }}>{profile?.emergency_contact_name || 'Kontak darurat'}</Text><Text style={font.small}>{profile?.emergency_contact_phone}</Text></View>
           <Button size="sm" variant="outline" color={colors.danger} title="Telepon" icon="call-outline" onPress={() => Linking.openURL(`tel:${profile?.emergency_contact_phone}`)} />
         </Row>
@@ -180,9 +180,9 @@ export function EmergencyContactCard() {
 export function DriverVerifyCard({ plate, vehicle, name, selfieAt }: { plate: string; vehicle: string; name: string; selfieAt?: string | null }) {
   return (
     <Animated.View entering={FadeIn.duration(motion.base)} style={s.verify}>
-      <Ionicons name="shield-checkmark" size={18} color={colors.success} />
+      <Ionicons name="shield-checkmark" size={20} color={colors.success} />
       <View style={{ flex: 1 }}>
-        <Text style={{ fontWeight: '700', color: colors.text, fontSize: 13 }}>Cocokkan sebelum naik: <Text style={{ color: colors.ride }}>{plate}</Text> · {vehicle}</Text>
+        <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>Cocokkan sebelum naik: <Text style={{ color: colors.ride }}>{plate}</Text> · {vehicle}</Text>
         <Text style={font.tiny}>{name} {selfieAt ? `· wajah terverifikasi ${formatDate(selfieAt)}` : '· mitra terverifikasi AntarKita'}</Text>
       </View>
     </Animated.View>
@@ -197,7 +197,7 @@ export function SafetyRow({ order, forDriver }: { order: Order; forDriver?: bool
     <Animated.View entering={FadeInDown.duration(motion.base)} exiting={FadeOut.duration(motion.fast)} style={s.safetyRow}>
       <SosButton orderId={order.id} compact />
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={{ fontWeight: '800', color: colors.text, fontSize: 13 }}>Pusat keamanan</Text>
+        <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>Pusat keamanan</Text>
         <Text style={font.tiny} numberOfLines={2}>{forDriver ? 'Nomor pelanggan disamarkan · panggilan lewat aplikasi' : 'Bagikan posisi ke keluarga · nomor Anda disamarkan'}</Text>
       </View>
       {!forDriver && <ShareTripButton order={order} size="sm" variant="glass" />}
@@ -214,7 +214,7 @@ const s = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(11,31,42,0.45)', alignItems: 'center', justifyContent: 'center', padding: 20 },
   dialog: { backgroundColor: '#fff', borderRadius: radius.xl, padding: 20, gap: 12, alignItems: 'center', ...shadow.card },
   pinIcon: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center' },
-  pinInput: { fontSize: 32, fontWeight: '800', letterSpacing: 16, textAlign: 'center', color: colors.text, borderBottomWidth: 2, borderBottomColor: colors.ride, paddingVertical: 8, width: 200 },
+  pinInput: { fontSize: 30, fontWeight: '700', letterSpacing: 16, textAlign: 'center', color: colors.text, borderBottomWidth: 2, borderBottomColor: colors.ride, paddingVertical: 8, width: 200 },
   input: { backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, height: 44, color: colors.text },
   verify: { flexDirection: 'row', gap: 10, alignItems: 'center', backgroundColor: colors.success + '12', borderRadius: radius.md, padding: 10, borderWidth: 1, borderColor: colors.success + '44' },
   safetyRow: { flexDirection: 'row', gap: 12, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radius.lg, padding: 12, borderWidth: 1, borderColor: glass.border },

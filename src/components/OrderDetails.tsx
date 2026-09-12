@@ -119,13 +119,13 @@ export function ShoppingListBlock({ order }: { order: Order }) {
         const unavailable = !!a && (a.price ?? 0) === 0;
         return (
           <Row key={i} gap={8} style={{ alignItems: 'flex-start' }}>
-            <View style={[s.bullet, { backgroundColor: color }]}><Text style={{ color: '#fff', fontSize: 12, fontWeight: '800' }}>{fmtQty(it.qty)}</Text></View>
+            <View style={[s.bullet, { backgroundColor: color }]}><Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{fmtQty(it.qty)}</Text></View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[font.body, unavailable && { color: colors.textMuted, textDecorationLine: 'line-through' }]}>{it.name}{it.note ? <Text style={font.tiny}>  ({it.note})</Text> : null}</Text>
               {ref > 0 && <Text style={font.tiny}>{it.unit ? `${it.unit} · ` : ''}{isMarket ? 'acuan' : 'katalog'} {rupiah(ref)}{a && !unavailable && a.qty != null && a.qty !== it.qty ? ` · dibeli ${fmtQty(aQty)} ${it.unit ?? ''}` : ''}{unavailable ? ' · tidak tersedia' : ''}</Text>}
             </View>
             {ref > 0 && <Text style={[font.small, { minWidth: 76, textAlign: 'right', fontWeight: '600', color: a ? colors.textMuted : colors.text }]}>{rupiah(ref * it.qty)}</Text>}
-            {actual && hasPrice && <Text style={{ minWidth: 76, textAlign: 'right', fontWeight: '700', color: unavailable ? colors.textMuted : colors.text, fontSize: 13 }}>{aPrice == null ? '—' : rupiah(aPrice * aQty)}</Text>}
+            {actual && hasPrice && <Text style={{ minWidth: 76, textAlign: 'right', fontWeight: '700', color: unavailable ? colors.textMuted : colors.text, fontSize: 14 }}>{aPrice == null ? '—' : rupiah(aPrice * aQty)}</Text>}
           </Row>
         );
       })}
@@ -194,7 +194,7 @@ const s = StyleSheet.create({
   person: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radius.xl, padding: 12, borderWidth: 1, borderColor: glass.border, ...shadow.soft },
   circle: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   dot: { width: 10, height: 10, borderRadius: 5 },
-  bullet: { minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, backgroundColor: colors.shop, alignItems: 'center', justifyContent: 'center' },
+  bullet: { minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 4, backgroundColor: colors.shop, alignItems: 'center', justifyContent: 'center' },
   addr: { fontWeight: '600', color: colors.text, fontSize: 14 },
   note: { flexDirection: 'row', gap: 8, backgroundColor: 'rgba(245,158,11,0.12)', padding: 10, borderRadius: radius.md, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(245,158,11,0.25)' },
   tdot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.border, marginTop: 4 },

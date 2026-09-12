@@ -50,12 +50,12 @@ export function DestinationSuggestions({ onPick, service, title = 'Tujuan terakh
       <Text style={[font.label, { marginBottom: 2 }]}>{title}</Text>
       {items.map((it) => (
         <PressableScale key={it.key} onPress={() => onPick(it.place)} scaleTo={0.985} haptic={false} style={s.sugg}>
-          <View style={[s.suggIcon, { backgroundColor: it.color + '1A' }]}><Ionicons name={it.icon as never} size={18} color={it.color} /></View>
+          <View style={[s.suggIcon, { backgroundColor: it.color + '1A' }]}><Ionicons name={it.icon as never} size={20} color={it.color} /></View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }} numberOfLines={1}>{it.title}</Text>
             <Text style={font.tiny} numberOfLines={1}>{it.subtitle}</Text>
           </View>
-          <Ionicons name="arrow-forward-circle" size={22} color={colors.primary} />
+          <Ionicons name="arrow-forward-circle" size={24} color={colors.primary} />
         </PressableScale>
       ))}
     </Animated.View>
@@ -76,12 +76,12 @@ export function VehicleClassPicker({ options, value, onChange, accent, loading }
           <PressableScale key={o.code} onPress={() => onChange(o.code)} scaleTo={0.985} style={[s.cls, active && { borderColor: accent, backgroundColor: accent + '10', ...shadow.glow(accent) }]}>
             <View style={[s.clsIcon, { backgroundColor: active ? accent : 'rgba(11,31,42,0.06)' }]}><Ionicons name={(CLASS_ICON[o.code] ?? 'car') as never} size={20} color={active ? '#fff' : colors.textSecondary} /></View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Row gap={6}><Text style={{ fontWeight: '800', color: colors.text, fontSize: 14.5 }} numberOfLines={1}>{o.label}</Text>{!!o.is_ev && <Badge text="⚡ Listrik" color={colors.success} />}{o.rank === 3 && <Badge text="Premium" color={colors.accent} />}</Row>
+              <Row gap={6}><Text style={{ fontWeight: '700', color: colors.text, fontSize: 16 }} numberOfLines={1}>{o.label}</Text>{!!o.is_ev && <Badge text="⚡ Listrik" color={colors.success} />}{o.rank === 3 && <Badge text="Premium" color={colors.accent} />}</Row>
               <Text style={font.tiny} numberOfLines={2}>{o.description}{o.seats && !/penumpang/i.test(o.description ?? '') ? ` · ${o.seats} penumpang` : ''}</Text>
               <Text style={[font.tiny, { color: none ? colors.warning : colors.success, fontWeight: '700' }]}>{none ? 'Belum ada driver online di dekat Anda' : `${o.drivers_nearby} driver di dekat Anda`}</Text>
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={{ fontWeight: '800', color: active ? accent : colors.text, fontSize: 16 }}>{rupiah(o.total)}</Text>
+              <Text style={{ fontWeight: '700', color: active ? accent : colors.text, fontSize: 16 }}>{rupiah(o.total)}</Text>
               {o.multiplier !== 1 && <Text style={font.tiny}>{o.multiplier < 1 ? `hemat ${Math.round((1 - o.multiplier) * 100)}%` : `+${Math.round((o.multiplier - 1) * 100)}%`}</Text>}
             </View>
           </PressableScale>
@@ -117,7 +117,7 @@ export function SchedulePicker({ value, onChange, accent }: { value: Date | null
               return (
                 <Pressable key={i} onPress={() => { setDay(d); const t = new Date(d); t.setHours(value?.getHours() ?? 8, value?.getMinutes() ?? 0, 0, 0); if (t.getTime() < Date.now() + 30 * 60000) t.setTime(Date.now() + 60 * 60000); onChange(t); }} style={[s.day, active && { backgroundColor: accent, borderColor: accent }]}>
                   <Text style={{ fontSize: 12, fontWeight: '700', color: active ? '#fff' : colors.textMuted }}>{i === 0 ? 'Hari ini' : i === 1 ? 'Besok' : DAY_NAMES[d.getDay()]}</Text>
-                  <Text style={{ fontSize: 18, fontWeight: '800', color: active ? '#fff' : colors.text }}>{d.getDate()}</Text>
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: active ? '#fff' : colors.text }}>{d.getDate()}</Text>
                 </Pressable>
               );
             })}
@@ -128,7 +128,7 @@ export function SchedulePicker({ value, onChange, accent }: { value: Date | null
               return <Chip key={t.getTime()} label={t.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} active={!!active} onPress={() => onChange(t)} color={accent} />;
             })}
           </ScrollView>
-          <Row gap={6} style={{ marginTop: 8 }}><Ionicons name="information-circle-outline" size={14} color={colors.textSecondary} /><Text style={[font.tiny, { flex: 1 }]}>Driver dicarikan otomatis ±20 menit sebelum jadwal. Bisa dibatalkan gratis sampai driver ditugaskan.</Text></Row>
+          <Row gap={6} style={{ marginTop: 8 }}><Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} /><Text style={[font.tiny, { flex: 1 }]}>Driver dicarikan otomatis ±20 menit sebelum jadwal. Bisa dibatalkan gratis sampai driver ditugaskan.</Text></Row>
           {value && <Badge text={`Jemput ${value.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' })} · ${value.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB`} color={accent} />}
         </Animated.View>
       )}
@@ -153,7 +153,7 @@ export function MerchantAds({ near, title, max = 6 }: { near: { lat: number; lng
           <PressableScale key={m.id} onPress={() => router.push(`/food/${m.id}` as never)} scaleTo={0.97} style={s.ad}>
             <Image source={{ uri: m.image_url ?? undefined }} style={s.adImg} />
             <View style={{ padding: 8, gap: 2 }}>
-              <Row between><Text style={{ fontWeight: '800', color: colors.text, fontSize: 12.5, flex: 1 }} numberOfLines={1}>{m.name}</Text><HalalBadge merchant={m} /></Row>
+              <Row between><Text style={{ fontWeight: '700', color: colors.text, fontSize: 14, flex: 1 }} numberOfLines={1}>{m.name}</Text><HalalBadge merchant={m} /></Row>
               <Text style={font.tiny} numberOfLines={1}>⭐ {Number(m.rating_avg).toFixed(1)} · {m.distance_km} km · ongkir {rupiah(m.delivery_fee ?? 0)}</Text>
               <Text style={{ fontSize: 12, fontWeight: '700', color: colors.food }}>Pesan makanan →</Text>
             </View>
@@ -172,7 +172,7 @@ export function RoutePreview({ pickup, dropoff, polyline, accent }: { pickup: Pl
   return (
     <View style={{ gap: 8 }}>
       <Pressable onPress={() => setOpen(!open)} style={s.mapToggle}>
-        <Ionicons name="map-outline" size={16} color={accent} /><Text style={{ fontWeight: '700', color: accent, fontSize: 13, flex: 1 }}>{open ? 'Sembunyikan peta rute' : 'Lihat peta rute'}</Text><Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={accent} />
+        <Ionicons name="map-outline" size={16} color={accent} /><Text style={{ fontWeight: '700', color: accent, fontSize: 14, flex: 1 }}>{open ? 'Sembunyikan peta rute' : 'Lihat peta rute'}</Text><Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={accent} />
       </Pressable>
       {open && (
         <Animated.View entering={FadeInDown.duration(motion.base)} exiting={FadeOut.duration(motion.fast)} style={s.mapBox}>

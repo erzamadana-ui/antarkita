@@ -28,7 +28,7 @@ export function BrandLogo({ size = 48, tone, style, flat }: { size?: number; ton
 /** Wordmark "AntarKita": "Antar" tinta, "Kita" teal (atau putih/mint di latar gelap). */
 export function Wordmark({ size = 22, dark }: { size?: number; dark?: boolean }) {
   return (
-    <Text style={{ fontSize: size, fontWeight: '800', letterSpacing: -size * 0.02, color: dark ? '#fff' : colors.text, lineHeight: size * 1.2 }}>
+    <Text style={{ fontSize: size, fontWeight: '700', letterSpacing: -size * 0.02, color: dark ? '#fff' : colors.text, lineHeight: size * 1.2 }}>
       Antar<Text style={{ color: dark ? '#BFF3EA' : colors.primary }}>Kita</Text>
     </Text>
   );

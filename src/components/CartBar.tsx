@@ -21,12 +21,12 @@ export function CartBar() {
     <Animated.View entering={FadeInDown.springify().stiffness(280).damping(16)} exiting={FadeOutDown} layout={LinearTransition.springify().stiffness(280).damping(20)}>
       <PressableScale onPress={() => router.push('/food/checkout')} scaleTo={0.97} style={[s.wrap, shadow.glow(colors.food)]}>
         <BrandGradient colors={[colors.food, '#EA580C']} angle="horizontal" style={s.bar}>
-          <Animated.View key={count} entering={FadeInDown.duration(220)} style={s.count}><Text style={{ color: colors.food, fontWeight: '800' }}>{count}</Text></Animated.View>
+          <Animated.View key={count} entering={FadeInDown.duration(220)} style={s.count}><Text style={{ color: colors.food, fontWeight: '700' }}>{count}</Text></Animated.View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={{ color: '#fff', fontWeight: '800' }} numberOfLines={1}>Lihat keranjang · {merchant?.name}</Text>
+            <Text style={{ color: '#fff', fontWeight: '700' }} numberOfLines={1}>Lihat keranjang · {merchant?.name}</Text>
             <AnimatedNumber value={subtotal} format={rupiah} style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '600' }} duration={400} />
           </View>
-          <Ionicons name="cart" size={22} color="#fff" />
+          <Ionicons name="cart" size={24} color="#fff" />
         </BrandGradient>
       </PressableScale>
     </Animated.View>

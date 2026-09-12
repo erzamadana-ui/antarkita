@@ -18,7 +18,7 @@ export function LimitNotice({ limit, actionTitle, onAction, actionIcon }: { limi
       <Row gap={10} style={{ alignItems: 'flex-start' }}>
         <View style={s.icon}><Ionicons name="alert-circle" size={20} color={colors.danger} /></View>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Text style={[font.body, { fontWeight: '800', color: colors.danger }]}>Di luar jangkauan layanan</Text>
+          <Text style={[font.body, { fontWeight: '700', color: colors.danger }]}>Di luar jangkauan layanan</Text>
           <Text style={[font.small, { color: colors.text }]}>{limit?.message || 'Jarak perjalanan melebihi batas layanan dalam kota.'}</Text>
         </View>
       </Row>
