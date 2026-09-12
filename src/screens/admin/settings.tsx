@@ -264,7 +264,85 @@ export default function AdminSettings() {
           <Button title="Buka pengaturan Peta" variant="secondary" icon="globe-outline" onPress={() => router.push('/(admin)/map' as never)} />
         </Card>
       </Entrance>
+      <Entrance index={7}>
+        <TurnCard />
+      </Entrance>
     </AdminPage>
+  );
+}
+
+// --- Panggilan suara: TURN berumur pendek (Cloudflare Realtime, migrasi 0082) ----------------
+type TurnStatus = {
+  configured: boolean; enabled: boolean; provider: string; token_id_masked?: string | null; api_token_masked?: string | null;
+  ttl_seconds: number; updated_at?: string | null; issued_7d?: number; failed_7d?: number;
+  last_issue?: { ok: boolean; detail: string | null; at: string } | null;
+};
+function TurnCard() {
+  const [status, setStatus] = useState<TurnStatus | null>(null);
+  const [tokenId, setTokenId] = useState('');
+  const [apiToken, setApiToken] = useState('');
+  const [ttl, setTtl] = useState('7200');
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try { const s = await rpc<TurnStatus>('admin_turn_status'); setStatus(s); setTtl(String(s?.ttl_seconds ?? 7200)); }
+    catch (e) { toast.error((e as Error).message); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const save = async (p: Record<string, unknown>) => {
+    setSaving(true);
+    try { const s = await rpc<TurnStatus>('admin_set_turn_config', { p }); setStatus(s); setTokenId(''); setApiToken(''); toast.success('Konfigurasi TURN disimpan'); }
+    catch (e) { toast.error((e as Error).message); }
+    finally { setSaving(false); }
+  };
+  /** Uji SUNGGUHAN: minta kredensial ke Edge Function persis seperti aplikasi saat menelepon. */
+  const test = async () => {
+    setTesting(true); setTestResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke<{ iceServers?: unknown[]; configured?: boolean; ok?: boolean; reason?: string; ttl?: number }>('turn-credentials', { body: {} });
+      if (error) throw new Error(error.message);
+      if (data?.ok && (data.iceServers?.length ?? 0) > 0) setTestResult(`OK — Cloudflare mengeluarkan kredensial (TTL ${data.ttl ?? '?'} dtk). Panggilan di jaringan seluler akan lewat TURN.`);
+      else setTestResult(`GAGAL — ${data?.reason ?? 'tidak ada kredensial'}. Panggilan hanya andal di Wi-Fi.`);
+      load();
+    } catch (e) { setTestResult(`GAGAL — ${(e as Error).message}`); }
+    finally { setTesting(false); }
+  };
+
+  const ok = !!status?.configured && !!status?.enabled;
+  return (
+    <Card style={{ gap: 12, maxWidth: 640 }}>
+      <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+        <Text style={font.label}>Panggilan suara — server TURN (jaringan seluler)</Text>
+        <Badge text={ok ? 'aktif' : status?.configured ? 'nonaktif' : 'belum dikonfigurasi'} color={ok ? colors.success : colors.warning} />
+      </Row>
+      <Text style={font.small}>
+        Tanpa TURN, telepon dalam aplikasi sering gagal tersambung di jaringan seluler (CGNAT) dan hanya andal di Wi‑Fi.
+        Kredensial dibuat berumur pendek oleh server (Cloudflare Realtime → TURN Server) — API token TIDAK pernah dikirim ke aplikasi,
+        jadi mengganti/mematikan TURN tidak perlu build ulang.
+      </Text>
+      <Row style={{ flexWrap: 'wrap', gap: 8 }}>
+        <Badge text={status?.token_id_masked ? `Token ID ${status.token_id_masked}` : 'Token ID: kosong'} color={status?.token_id_masked ? colors.success : colors.textMuted} />
+        <Badge text={status?.api_token_masked ? `API token ${status.api_token_masked}` : 'API token: kosong'} color={status?.api_token_masked ? colors.success : colors.textMuted} />
+        <Badge text={`7 hari: ${status?.issued_7d ?? 0} berhasil · ${status?.failed_7d ?? 0} gagal`} color={colors.textMuted} />
+      </Row>
+      <Input label="Turn Token ID (Cloudflare → Realtime → TURN Server)" value={tokenId} onChangeText={setTokenId} autoCapitalize="none" placeholder={status?.token_id_masked ?? 'mis. 43c5…13ad'} />
+      <Input label="API Token (hanya tampil sekali di Cloudflare)" value={apiToken} onChangeText={setApiToken} autoCapitalize="none" secureTextEntry placeholder={status?.api_token_masked ?? 'belum diisi'} />
+      <Input label="Masa berlaku kredensial (detik, 300–86400)" value={ttl} onChangeText={setTtl} keyboardType="number-pad" />
+      <Row style={{ flexWrap: 'wrap', gap: 8 }}>
+        <Button title="Simpan" icon="key-outline" loading={saving} onPress={() => {
+          if (!tokenId.trim() && !apiToken.trim() && String(status?.ttl_seconds ?? '') === ttl) return toast.error('Tidak ada yang diubah');
+          save({ token_id: tokenId.trim(), api_token: apiToken.trim(), ttl_seconds: Number(ttl) || 7200 });
+        }} />
+        <Button title="Uji" icon="pulse-outline" variant="secondary" loading={testing} onPress={test} />
+        <Button title={status?.enabled ? 'Nonaktifkan' : 'Aktifkan'} icon={status?.enabled ? 'pause-outline' : 'play-outline'} variant="secondary" loading={saving} onPress={() => save({ enabled: !status?.enabled })} />
+        <Button title="Hapus kredensial" icon="trash-outline" variant="secondary" loading={saving} onPress={() => save({ clear: true })} />
+      </Row>
+      {testResult ? <Text style={[font.small, { color: testResult.startsWith('OK') ? colors.success : colors.danger }]}>{testResult}</Text> : null}
+      {status?.last_issue ? <Text style={font.small}>Terakhir: {status.last_issue.ok ? 'berhasil' : 'gagal'} · {status.last_issue.detail ?? ''} · {new Date(status.last_issue.at).toLocaleString('id-ID')}</Text> : null}
+    </Card>
   );
 }
 
