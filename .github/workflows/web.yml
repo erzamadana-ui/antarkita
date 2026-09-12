@@ -34,7 +34,6 @@ jobs:
           EXPO_PUBLIC_BASE_URL: ${{ steps.base.outputs.url }}
           EXPO_PUBLIC_SITE_ROOT: https://${{ github.repository_owner }}.github.io${{ steps.base.outputs.url }}
           EXPO_PUBLIC_APK_URL: https://github.com/${{ github.repository }}/releases/latest
-          EXPO_PUBLIC_DEMO_LOGIN: '1'   # web uji/demo: blok akun demo tampil; hapus baris ini saat produksi
           EXPO_NO_TELEMETRY: 1
           CI: 1
         run: node scripts/build-web.mjs
