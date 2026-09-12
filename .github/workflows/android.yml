@@ -66,9 +66,6 @@ jobs:
           EXPO_PUBLIC_SITE_ROOT: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
           EXPO_PUBLIC_APK_URL: https://github.com/${{ github.repository }}/releases/latest
           EXPO_PUBLIC_SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
-          EXPO_PUBLIC_TURN_URL: ${{ secrets.EXPO_PUBLIC_TURN_URL }}
-          EXPO_PUBLIC_TURN_USER: ${{ secrets.EXPO_PUBLIC_TURN_USER }}
-          EXPO_PUBLIC_TURN_PASS: ${{ secrets.EXPO_PUBLIC_TURN_PASS }}
           EXPO_NO_TELEMETRY: 1
           CI: 1
         run: npx expo prebuild --platform android --no-install

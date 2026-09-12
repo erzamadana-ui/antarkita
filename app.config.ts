@@ -156,6 +156,9 @@ const config: ExpoConfig = {
   android: {
     package: m.id,
     versionCode,
+    // Keamanan (uji 12 Sep 2026): cadangan ADB/cloud dimatikan agar sesi Supabase (AsyncStorage) tidak bisa
+    // disalin lewat `adb backup`. Lalu lintas HTTP polos sudah dilarang bawaan Expo (semua endpoint HTTPS).
+    allowBackup: false,
     ...(googleServicesFile ? { googleServicesFile } : {}),
     adaptiveIcon: { foregroundImage: `${assets}/adaptive-icon.png`, backgroundColor: m.bg },
     // Izin minimal (Play Store). Lokasi hanya foreground (useLocation.ts memakai requestForegroundPermissionsAsync +
