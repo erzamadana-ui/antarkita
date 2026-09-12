@@ -9,7 +9,7 @@
 // (project_id, client_email, private_key). BILA SECRET BELUM DIISI fungsi TIDAK error:
 // baris antrean ditandai `skipped`, dicatat di log, dan balasan { skipped: true }.
 //
-// verify_jwt = true: pemanggil wajib membawa JWT sah (service_role key dari pg_net, atau token admin).
+// verify_jwt = true DAN pemeriksaan peran di dalam fungsi: hanya service_role (pg_net) atau admin AntarKita (0086).
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -68,6 +68,20 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    // ---- Perizinan (0086): hanya service_role (pg_net/pg_cron) atau admin AntarKita. verify_jwt saja tidak cukup,
+    //      karena JWT pengguna biasa juga sah — tanpa cek ini siapa pun bisa mengirim notifikasi ke pengguna lain.
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const jwt = authHeader.replace(/^Bearer\s+/i, "").trim();
+    let role = "";
+    try { role = String(JSON.parse(atob(jwt.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).role ?? ""); } catch { /* diperlakukan sebagai pengguna biasa */ }
+    if (role !== "service_role") {
+      const asUser = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        { global: { headers: { Authorization: `Bearer ${jwt}` } } });
+      const { data: isAdmin, error } = await asUser.rpc("is_admin");
+      if (error || isAdmin !== true) return json({ error: "Hanya admin" }, 403);
+    }
+
     const payload = await req.json().catch(() => ({}));
 
     // ---- Kumpulkan pesan yang akan dikirim ----
