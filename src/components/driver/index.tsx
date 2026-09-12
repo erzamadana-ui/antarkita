@@ -85,15 +85,15 @@ export function PriorityCard({ info }: { info: DriverPriorityInfo | null }) {
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Row gap={4}>
-              <Ionicons name="star" size={13} color={colors.accent} />
-              <Text style={[font.body, { fontWeight: '800' }]}>{rating.toFixed(1).replace('.', ',')}</Text>
+              <Ionicons name="star" size={12} color={colors.accent} />
+              <Text style={[font.body, { fontWeight: '700' }]}>{rating.toFixed(1).replace('.', ',')}</Text>
               <Text style={font.tiny}>· {info.rating_count} ulasan</Text>
             </Row>
             <Text style={[font.small, { color: colors.text }]} numberOfLines={2}>
               {delay === 0 ? 'Anda dapat order paling awal.' : `Anda melihat order ${delay} detik setelah driver rating tertinggi.`}
             </Text>
           </View>
-          <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+          <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textMuted} />
         </Row>
       </PressableScale>
       <Row gap={6} style={{ flexWrap: 'wrap', marginTop: 10 }}>
@@ -121,7 +121,7 @@ export function PriorityCard({ info }: { info: DriverPriorityInfo | null }) {
               return (
                 <Row key={i} between style={{ paddingVertical: 3 }}>
                   <Row gap={6} style={{ flex: 1, minWidth: 0 }}>
-                    <Ionicons name={mine ? 'ellipse' : 'ellipse-outline'} size={9} color={mine ? colors.primary : colors.textMuted} />
+                    <Ionicons name={mine ? 'ellipse' : 'ellipse-outline'} size={12} color={mine ? colors.primary : colors.textMuted} />
                     <Text style={[font.small, mine && { color: colors.text, fontWeight: '700' }]} numberOfLines={1}>
                       Rating {Number(t.min_rating) > 0 ? `≥ ${numId(Number(t.min_rating))}` : 'di bawah itu'}
                     </Text>
@@ -134,7 +134,7 @@ export function PriorityCard({ info }: { info: DriverPriorityInfo | null }) {
           <Text style={font.label}>Tips menaikkan rating</Text>
           {TIPS.map((t) => (
             <Row key={t} gap={8} style={{ alignItems: 'flex-start' }}>
-              <Ionicons name="checkmark-circle" size={14} color={colors.success} style={{ marginTop: 2 }} />
+              <Ionicons name="checkmark-circle" size={16} color={colors.success} style={{ marginTop: 2 }} />
               <Text style={[font.small, { flex: 1 }]}>{t}</Text>
             </Row>
           ))}
@@ -161,7 +161,7 @@ export function OrderLoadInfo({ order, style }: { order: Pick<AvailableOrder, 's
     <Row gap={6} style={[{ flexWrap: 'wrap' }, style]}>
       {bits.map((b) => (
         <Row key={b.text} gap={4} style={[s.pill, b.warn && { backgroundColor: colors.accentLight, borderColor: colors.accent + '33' }]}>
-          <Ionicons name={b.icon} size={11} color={b.warn ? colors.warning : colors.textSecondary} />
+          <Ionicons name={b.icon} size={12} color={b.warn ? colors.warning : colors.textSecondary} />
           <Text style={[font.tiny, b.warn && { color: colors.warning, fontWeight: '700' }]}>{b.text}</Text>
         </Row>
       ))}
@@ -218,7 +218,7 @@ export function VehicleServiceMatrix({ vehicle, defaultOpen = false }: { vehicle
             {/* 2 baris: pada layar 360px teks ini terpotong beberapa piksel di ujung. */}
             <Text style={font.tiny} numberOfLines={2}>{VEHICLE_LABEL[v]} · {yes.length} dari {rows.length} layanan</Text>
           </View>
-          <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textMuted} />
+          <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textMuted} />
         </Row>
       </PressableScale>
       {!open && (
@@ -233,7 +233,7 @@ export function VehicleServiceMatrix({ vehicle, defaultOpen = false }: { vehicle
               <Ionicons name={r.verdict.ok ? 'checkmark-circle' : 'close-circle'} size={16} color={r.verdict.ok ? colors.success : colors.textMuted} style={{ marginTop: 2 }} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Row gap={6}>
-                  <Ionicons name={r.icon} size={13} color={r.verdict.ok ? colors.primary : colors.textMuted} />
+                  <Ionicons name={r.icon} size={12} color={r.verdict.ok ? colors.primary : colors.textMuted} />
                   <Text style={[font.small, r.verdict.ok ? { color: colors.text, fontWeight: '600' } : { color: colors.textMuted }]} numberOfLines={1}>{r.label}</Text>
                 </Row>
                 {r.verdict.ok && r.verdict.note ? <Text style={font.tiny}>{r.verdict.note}</Text> : null}
