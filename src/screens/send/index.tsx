@@ -25,9 +25,10 @@ import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
 import { getRoute, reverseGeocode, haversineKm, finalizeRoute, type RouteResult } from '@/lib/geo';
 import { rpc, supabase } from '@/lib/supabase';
+import { createOrder } from '@/lib/orders';
 import { colors, font, radius, motion, glass } from '@/lib/theme';
 import { rupiah, km, minutes } from '@/lib/format';
-import type { FareEstimate, Order, City, Warehouse, IntercityEstimate, SendVehicle } from '@/lib/types';
+import type { FareEstimate, City, Warehouse, IntercityEstimate, SendVehicle } from '@/lib/types';
 
 const TYPES = ['Dokumen', 'Makanan', 'Pakaian', 'Elektronik', 'Lainnya'];
 const QUICK_KG = [1, 3, 5, 10, 20];
@@ -162,7 +163,7 @@ export default function SendScreen() {
       const fin = legDrop
         ? await finalizeRoute(pickup, legDrop, route)
         : { route_km: route?.distance_km ?? null, duration_min: route?.duration_min ?? null, coords: route?.coords ?? null };
-      const o = await rpc<Order>('create_order', { p: {
+      const o = await createOrder({
         service: 'send', pickup: { lat: pickup.lat, lng: pickup.lng, address: pickup.address },
         dropoff: scope === 'in_city' ? { lat: dropoff!.lat, lng: dropoff!.lng, address: dropoff!.address } : { lat: legDrop!.lat, lng: legDrop!.lng, address: legDrop!.address },
         route_km: fin.route_km, duration_min: fin.duration_min, route_geometry: fin.coords, payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null, notes: notes || null,
@@ -171,7 +172,7 @@ export default function SendScreen() {
         send_scope: scope, dest_city_id: destCity?.id ?? null, warehouse_id: destWh?.id ?? null,
         weight_kg: wKg, size_cm: sCm, via: travelPicked ? 'travel' : null,
         scheduled_at: when ? when.toISOString() : null, driver_code: driverCode,
-      } });
+      });
       await refreshWallet();
       useBooking.getState().reset();
       router.replace(`/order/${o.id}` as never);
