@@ -1,7 +1,7 @@
-// Design system AntarKita 2026 — "Solid Motion" gaya kit ToureGo (5 Sep 2026): header putih, tombol bulat, kartu gambar tinggi, tab bar pil + FAB teal
-// Prinsip: permukaan padat (kaca hanya di header band, tab bar, dan panel di atas peta — transparansi terkendali),
-// tipografi Plus Jakarta Sans skala 4-pt (tidak ada teks < 12), warna dari logo C29, gerak singkat & bermakna,
-// tema selalu terang (pengaturan dark mode OS diabaikan).
+// Design system AntarKita — token terpusat sesuai ANTARKITA_DESIGN_SYSTEM.md v1.0 (12 Sep 2026):
+// tipografi Inter skala 30/24/22/18/16/14/12 (bobot 400–700), spacing 4/8-point, radius kartu 16 / promo 20 /
+// tombol-input 12–16, ikon 16/20/24/32, tombol utama 52. Warna dari logo C29; gerak singkat & bermakna;
+// tema selalu terang (pengaturan dark mode OS diabaikan). Layar TIDAK boleh hardcode ukuran — pakai token ini.
 import { Easing } from 'react-native-reanimated';
 import { Platform } from 'react-native';
 
@@ -58,8 +58,20 @@ export const glass = {
   blurStrong: 28,
 };
 
-export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 };
-export const radius = { sm: 12, md: 16, lg: 22, xl: 28, xxl: 36, full: 999 };
+/**
+ * Spacing 4/8-point (ANTARKITA_DESIGN_SYSTEM §4). Nama lama (xs…xxl) dipertahankan;
+ * `space` memberi nama numerik yang sama dengan dokumen desain.
+ */
+export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 };
+export const space = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32, 10: 40, 12: 48 } as const;
+/** Padding horizontal layar: 20 bawaan; 16 untuk halaman padat; 24 untuk layout lega. */
+export const screenPadding = { compact: 16, default: 20, airy: 24 };
+/** Radius (§5): sm = tombol/input 12, md = kartu standar 16, lg = kartu promo 20, xl = sheet 24, xxl = 32. */
+export const radius = { sm: 12, md: 16, lg: 20, xl: 24, xxl: 32, full: 999 };
+/** Ukuran ikon (§6). */
+export const iconSize = { sm: 16, md: 20, lg: 24, service: 32, feature: 44, hero: 52 };
+/** Ukuran komponen bersama (§4–§6). */
+export const size = { buttonLg: 52, buttonMd: 48, buttonSm: 40, input: 52, touchMin: 44, navIcon: 24 };
 
 export const shadow = {
   card: {
@@ -92,33 +104,53 @@ export const shadow = {
   }),
 };
 
-/** Keluarga font per bobot (Plus Jakarta Sans, dimuat di RootLayout). Di luar bobot ini memakai font sistem. */
+/**
+ * Keluarga font: Inter (ANTARKITA_DESIGN_SYSTEM §2) — Regular 400, Medium 500, SemiBold 600, Bold 700.
+ * Bobot 800 sengaja dipetakan ke 700: dokumen desain melarang 800/900.
+ * Fallback: Android → Roboto/sans-serif, iOS → SF Pro (lewat fontWeight bila berkas font belum termuat).
+ */
 export const FONT_FAMILY = {
-  500: 'PlusJakartaSans-500',
-  600: 'PlusJakartaSans-600',
-  700: 'PlusJakartaSans-700',
-  800: 'PlusJakartaSans-800',
+  400: 'Inter-400',
+  500: 'Inter-500',
+  600: 'Inter-600',
+  700: 'Inter-700',
+  800: 'Inter-700',
 } as const;
 export const FONT_ASSETS = {
-  'PlusJakartaSans-500': require('../../assets/fonts/PlusJakartaSans-500.ttf'),
-  'PlusJakartaSans-600': require('../../assets/fonts/PlusJakartaSans-600.ttf'),
-  'PlusJakartaSans-700': require('../../assets/fonts/PlusJakartaSans-700.ttf'),
-  'PlusJakartaSans-800': require('../../assets/fonts/PlusJakartaSans-800.ttf'),
+  'Inter-400': require('../../assets/fonts/Inter-400.ttf'),
+  'Inter-500': require('../../assets/fonts/Inter-500.ttf'),
+  'Inter-600': require('../../assets/fonts/Inter-600.ttf'),
+  'Inter-700': require('../../assets/fonts/Inter-700.ttf'),
 };
 /** Style keluarga font untuk bobot tertentu (fontWeight tetap ikut agar fallback sistem benar). */
-export const fam = (w: 500 | 600 | 700 | 800) => ({ fontFamily: FONT_FAMILY[w], fontWeight: String(w) as '500' | '600' | '700' | '800' });
+export const fam = (w: 400 | 500 | 600 | 700 | 800) => {
+  const ww = (w === 800 ? 700 : w) as 400 | 500 | 600 | 700;
+  return { fontFamily: FONT_FAMILY[ww], fontWeight: String(ww) as '400' | '500' | '600' | '700' };
+};
 const W = fam;
 
+/**
+ * Skala tipografi global (ANTARKITA_DESIGN_SYSTEM §2): 30 / 24 / 22 / 18 / 16 / 14 / 12.
+ * Nama lama (small, tiny, label) dipertahankan sebagai alias supaya layar lama tetap benar.
+ */
 export const font = {
-  // Skala tipografi 4-pt: 28 / 24 / 20 / 17 / 15 / 13 / 12 / label 11
-  display: { fontSize: 28, ...W(800), color: colors.text, letterSpacing: -0.5, lineHeight: 34 },
-  h1: { fontSize: 24, ...W(800), color: colors.text, letterSpacing: -0.3, lineHeight: 30 },
-  h2: { fontSize: 20, ...W(800), color: colors.text, letterSpacing: -0.2, lineHeight: 26 },
-  h3: { fontSize: 17, ...W(700), color: colors.text, lineHeight: 22 },
-  body: { fontSize: 15, ...W(500), color: colors.text, lineHeight: 21 },
-  small: { fontSize: 13, ...W(500), color: colors.textSecondary, lineHeight: 18 },
-  tiny: { fontSize: 12, ...W(500), color: colors.textMuted, lineHeight: 16 },
-  label: { fontSize: 11, ...W(700), color: colors.textMuted, letterSpacing: 0.8, textTransform: 'uppercase' as const },
+  display: { fontSize: 30, ...W(700), color: colors.text, letterSpacing: -0.4, lineHeight: 36 },   // judul halaman
+  h1: { fontSize: 24, ...W(700), color: colors.text, letterSpacing: -0.3, lineHeight: 30 },        // heading besar, total penting
+  h2: { fontSize: 22, ...W(700), color: colors.text, letterSpacing: -0.2, lineHeight: 28 },        // judul section
+  h3: { fontSize: 18, ...W(600), color: colors.text, lineHeight: 24 },                            // judul kartu/merchant/harga
+  body: { fontSize: 16, ...W(400), color: colors.text, lineHeight: 22 },                          // teks utama
+  bodyMedium: { fontSize: 16, ...W(500), color: colors.text, lineHeight: 22 },                    // body dengan penekanan
+  bodySmall: { fontSize: 14, ...W(400), color: colors.textSecondary, lineHeight: 20 },            // informasi sekunder
+  caption: { fontSize: 12, ...W(400), color: colors.textMuted, lineHeight: 16 },                  // metadata
+  captionMedium: { fontSize: 12, ...W(500), color: colors.textMuted, lineHeight: 16 },            // badge, label navigasi
+  button: { fontSize: 16, ...W(600), lineHeight: 20 },
+  navigation: { fontSize: 12, ...W(500), lineHeight: 16 },
+  price: { fontSize: 18, ...W(600), color: colors.text, lineHeight: 24 },                         // harga normal
+  total: { fontSize: 24, ...W(700), color: colors.text, lineHeight: 30 },                         // total / harga utama
+  // ---- alias lama ----
+  small: { fontSize: 14, ...W(400), color: colors.textSecondary, lineHeight: 20 },
+  tiny: { fontSize: 12, ...W(400), color: colors.textMuted, lineHeight: 16 },
+  label: { fontSize: 12, ...W(500), color: colors.textMuted, letterSpacing: 0.6, lineHeight: 16, textTransform: 'uppercase' as const },
 };
 
 /** Token gerak: singkat & bermakna — aplikasi harus terasa gesit. */
