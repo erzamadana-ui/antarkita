@@ -71,7 +71,7 @@ export default function FoodHome() {
               <View style={[s.search, { flex: 1 }]}>
                 <Ionicons name="search-outline" size={20} color={colors.primary} />
                 <TextInput value={q} onChangeText={setQ} placeholder="Cari resto atau menu" placeholderTextColor={colors.textMuted} style={s.searchInput} returnKeyType="search" />
-                {q ? <PressableScale onPress={() => setQ('')} hitSlop={8} scaleTo={0.85}><Ionicons name="close-circle" size={18} color={colors.textMuted} /></PressableScale> : null}
+                {q ? <PressableScale onPress={() => setQ('')} hitSlop={8} scaleTo={0.85}><Ionicons name="close-circle" size={20} color={colors.textMuted} /></PressableScale> : null}
               </View>
               <PressableScale onPress={() => setNonHalal((v) => !v)} scaleTo={0.9} style={[s.filterBtn, nonHalal && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
                 <Ionicons name="options-outline" size={20} color={nonHalal ? '#fff' : colors.primary} />
@@ -95,7 +95,7 @@ export default function FoodHome() {
                 return (
                   <PressableScale key={c.label} onPress={() => setCat(c.label)} scaleTo={0.9} style={s.catTile}>
                     <View style={[s.catCircle, on && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
-                      {c.label === 'Semua' ? <ServiceIllustration kind="food" size={36} /> : <Ionicons name={c.icon} size={26} color={on ? '#fff' : colors.primary} />}
+                      {c.label === 'Semua' ? <ServiceIllustration kind="food" size={36} /> : <Ionicons name={c.icon} size={24} color={on ? '#fff' : colors.primary} />}
                     </View>
                     <Text style={[s.catLabel, on && { color: colors.primary }]} numberOfLines={1} adjustsFontSizeToFit>{c.label}</Text>
                   </PressableScale>
