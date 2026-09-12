@@ -119,7 +119,7 @@ export default function BecomeVendor() {
         <Entrance index={1}>
           <View style={{ gap: 6 }}>
             <ProgressBar progress={(step + 1) / STEPS.length} color={colors.market} />
-            <Row between>{STEPS.map((label, i) => <Text key={label} style={[font.tiny, i === step && { color: colors.primary, fontWeight: '800' }]}>{i + 1}. {label}</Text>)}</Row>
+            <Row between>{STEPS.map((label, i) => <Text key={label} style={[font.tiny, i === step && { color: colors.primary, fontWeight: '700' }]}>{i + 1}. {label}</Text>)}</Row>
           </View>
         </Entrance>
 
@@ -127,7 +127,7 @@ export default function BecomeVendor() {
           <Entrance index={2}>
             <View style={{ gap: 10 }}>
               <Input icon="search" placeholder="Cari nama pasar" value={q} onChangeText={setQ} />
-              <Row gap={6}><Ionicons name={hasFix ? 'location' : 'location-outline'} size={14} color={colors.primary} /><Text style={font.tiny}>{hasFix ? 'Diurutkan dari lokasi Anda saat ini' : 'Aktifkan lokasi untuk melihat pasar terdekat'}</Text></Row>
+              <Row gap={6}><Ionicons name={hasFix ? 'location' : 'location-outline'} size={16} color={colors.primary} /><Text style={font.tiny}>{hasFix ? 'Diurutkan dari lokasi Anda saat ini' : 'Aktifkan lokasi untuk melihat pasar terdekat'}</Text></Row>
               {markets === null ? [0, 1].map((i) => <View key={i} style={s.marketRow}><Skeleton width={56} height={56} radius={14} /><View style={{ flex: 1, gap: 6 }}><Skeleton width="60%" height={14} /><Skeleton width="40%" height={12} /></View></View>)
                 : shownMarkets.length === 0 ? <Empty icon="basket-outline" title="Pasar tidak ditemukan" subtitle="Belum ada pasar mitra dengan nama itu. Hubungi CS agar pasar Anda ditambahkan." />
                 : shownMarkets.map((m, i) => {

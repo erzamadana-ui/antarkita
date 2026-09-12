@@ -54,7 +54,7 @@ export default function DeleteAccount() {
     <Screen title="Hapus akun" back footer={<Button title="Hapus akun saya" size="lg" variant="danger" icon="trash-outline" loading={busy} disabled={!ready} onPress={confirm} />}>
       <Entrance index={0} from="zoom">
         <View style={s.hero}>
-          <View style={s.heroIcon}><Ionicons name="warning-outline" size={30} color={colors.danger} /></View>
+          <View style={s.heroIcon}><Ionicons name="warning-outline" size={32} color={colors.danger} /></View>
           <Text style={[font.h2, { textAlign: 'center' }]}>Kami sedih melihat Anda pergi</Text>
           <Text style={[font.small, { textAlign: 'center' }]}>
             {profile?.email ? `Akun ${profile.email} ` : 'Akun Anda '}akan dihapus. Bacalah dulu apa yang terjadi setelahnya.
@@ -66,7 +66,7 @@ export default function DeleteAccount() {
         <View style={s.card}>
           {CONSEQUENCES.map((c, i) => (
             <View key={c.icon} style={[s.row, i < CONSEQUENCES.length - 1 && s.rowBorder]}>
-              <View style={s.rowIcon}><Ionicons name={c.icon} size={18} color={colors.danger} /></View>
+              <View style={s.rowIcon}><Ionicons name={c.icon} size={20} color={colors.danger} /></View>
               <Text style={[font.body, { flex: 1 }]}>{c.text}</Text>
             </View>
           ))}
@@ -105,7 +105,7 @@ export default function DeleteAccount() {
 function Check({ ok, text }: { ok: boolean; text: string }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-      <Ionicons name={ok ? 'checkmark-circle' : 'close-circle'} size={18} color={ok ? colors.success : colors.danger} style={{ marginTop: 1 }} />
+      <Ionicons name={ok ? 'checkmark-circle' : 'close-circle'} size={20} color={ok ? colors.success : colors.danger} style={{ marginTop: 1 }} />
       <Text style={[font.small, { flex: 1 }, !ok && { color: colors.danger }]}>{text}</Text>
     </View>
   );

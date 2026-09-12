@@ -90,7 +90,7 @@ export default function BlockedUsers() {
                   </Text>
                 </View>
                 <PressableScale onPress={() => unblock(b)} scaleTo={0.94} haptic={false} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.full, borderWidth: 1, borderColor: colors.primary }} disabled={busy === b.blocked_id}>
-                  <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13 }}>{busy === b.blocked_id ? 'Memproses…' : 'Buka blokir'}</Text>
+                  <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>{busy === b.blocked_id ? 'Memproses…' : 'Buka blokir'}</Text>
                 </PressableScale>
               </View>
             ))}

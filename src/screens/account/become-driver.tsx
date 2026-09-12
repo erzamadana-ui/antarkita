@@ -203,9 +203,9 @@ export default function BecomeDriver() {
               {([['standar', 'Standar'], ['baik', 'Baik'], ['sangat_baik', 'Sangat baik']] as const).map(([k, l]) => <Chip key={k} label={l} active={f.vehicle_condition === k} onPress={() => set('vehicle_condition')(k)} />)}
             </Row>
             <Row gap={10} style={s.classBox}>
-              <View style={s.hintIcon}><Ionicons name="pricetag-outline" size={18} color={colors.primary} /></View>
+              <View style={s.hintIcon}><Ionicons name="pricetag-outline" size={20} color={colors.primary} /></View>
               <View style={{ flex: 1, gap: 2 }}>
-                <Text style={{ fontWeight: '800', color: colors.primary, fontSize: 13 }}>Kelas & tarif Anda: {predictedClass}</Text>
+                <Text style={{ fontWeight: '700', color: colors.primary, fontSize: 14 }}>Kelas & tarif Anda: {predictedClass}</Text>
                 <Text style={font.tiny}>Kelas ditentukan dari tipe, tahun, kondisi, dan bahan bakar listrik; diverifikasi admin dari foto & STNK. Kelas lebih tinggi = tarif per km lebih tinggi. Driver kelas Premium juga bisa menerima order Standar/Hemat.</Text>
               </View>
             </Row>
@@ -226,10 +226,10 @@ export default function BecomeDriver() {
         {/* Ringkasan sebelum kirim */}
         <Entrance index={6}>
           <View style={s.summary}>
-            <View style={[s.hintIcon, { backgroundColor: '#fff' }]}><Ionicons name={kind === 'motor' ? 'bicycle-outline' : 'car-outline'} size={18} color={colors.primary} /></View>
+            <View style={[s.hintIcon, { backgroundColor: '#fff' }]}><Ionicons name={kind === 'motor' ? 'bicycle-outline' : 'car-outline'} size={20} color={colors.primary} /></View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={font.tiny}>Ringkasan kendaraan</Text>
-              <Text style={[font.body, { fontWeight: '800' }]} numberOfLines={2}>{summary ?? 'Lengkapi merek, model, bahan bakar & tahun'}</Text>
+              <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={2}>{summary ?? 'Lengkapi merek, model, bahan bakar & tahun'}</Text>
               {f.vehicle_plate ? <Text style={font.tiny}>{current.label} · {f.vehicle_plate}{f.vehicle_color ? ` · ${f.vehicle_color}` : ''}{isEv ? ' · Kendaraan listrik' : ''}</Text> : null}
             </View>
           </View>
@@ -249,7 +249,7 @@ const s = StyleSheet.create({
   optionArt: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   radioDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.primary },
-  fieldLabel: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
+  fieldLabel: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
   classBox: { backgroundColor: colors.tint, borderRadius: 14, padding: 12, alignItems: 'flex-start' },
   summary: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.tint, borderRadius: radius.lg, padding: 14, borderWidth: 1, borderColor: colors.primary + '30' },
 });
