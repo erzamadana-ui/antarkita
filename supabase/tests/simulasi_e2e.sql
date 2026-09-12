@@ -1499,6 +1499,7 @@ begin
   exception when others then log := log || 'S42 BUG food tunai: ' || sqlerrm || E'\n'; end;
 
   -- ===== S43 QC UANG — aturan promo: kedaluwarsa, kuota habis, dipakai 2x orang yang sama, diskon > subtotal =====
+  -- client_request_id unik di tiap pemanggilan: tanpa kunci, order identik dalam 15 detik dianggap ketuk ganda (0083)
   begin
     declare d1x bigint; d2x bigint; kuota int; pakai int;
     begin
@@ -1517,7 +1518,7 @@ begin
       -- (a) kode kedaluwarsa harus ditolak
       begin
         o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','A'),
-          'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','B'), 'paid_via','cash','promo_code','QCEXP43'));
+          'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','B'), 'paid_via','cash','promo_code','QCEXP43', 'client_request_id', 's43-1-' || gen_random_uuid()::text));
         log := log || format('S43a BUG kode kedaluwarsa QCEXP43 diterima (order %s diskon %s)', o.code, o.discount) || E'\n';
         perform cancel_order(o.id, 'uji');
       exception when others then
@@ -1526,12 +1527,12 @@ begin
 
       -- (b) kuota habis: pemakaian ke-2 harus ditolak
       o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','A'),
-        'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','B1'), 'paid_via','cash','promo_code','QCKUOTA43'));
+        'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','B1'), 'paid_via','cash','promo_code','QCKUOTA43', 'client_request_id', 's43-2-' || gen_random_uuid()::text));
       d1x := o.discount; ordid := o.id;
       select quota, used_count into kuota, pakai from promos where code = 'QCKUOTA43';
       begin
         o2 := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','A'),
-          'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','B2'), 'paid_via','cash','promo_code','QCKUOTA43'));
+          'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','B2'), 'paid_via','cash','promo_code','QCKUOTA43', 'client_request_id', 's43-3-' || gen_random_uuid()::text));
         log := log || format('S43b BUG kuota habis tidak ditegakkan: order ke-2 %s tetap dapat diskon %s (kuota=%s terpakai=%s)', o2.code, o2.discount, kuota, pakai) || E'\n';
         perform cancel_order(o2.id, 'uji');
       exception when others then
@@ -1542,11 +1543,11 @@ begin
 
       -- (c) orang yang sama memakai kode yang sama dua kali
       o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','A'),
-        'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','C1'), 'paid_via','cash','promo_code','QCDUA43'));
+        'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','C1'), 'paid_via','cash','promo_code','QCDUA43', 'client_request_id', 's43-4-' || gen_random_uuid()::text));
       d1x := o.discount; ordid := o.id;
       begin
         o2 := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','A'),
-          'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','C2'), 'paid_via','cash','promo_code','QCDUA43'));
+          'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','C2'), 'paid_via','cash','promo_code','QCDUA43', 'client_request_id', 's43-5-' || gen_random_uuid()::text));
         d2x := o2.discount;
         log := log || format('S43c BUG pelanggan yang sama memakai QCDUA43 dua kali: order 1 diskon=%s, order 2 %s diskon=%s (tidak ada batas per pengguna)', d1x, o2.code, d2x) || E'\n';
         perform cancel_order(o2.id, 'uji');
@@ -1557,7 +1558,7 @@ begin
 
       -- (d) diskon jauh lebih besar dari subtotal → total tidak boleh negatif / gratis berlebihan
       o := create_order(jsonb_build_object('service','ride_motor','vehicle_class','motor_economy','pickup', jsonb_build_object('lat',0.4810,'lng',101.4349,'address','A'),
-        'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','D'), 'paid_via','cash','promo_code','QCBESAR43'));
+        'dropoff', jsonb_build_object('lat',0.49,'lng',101.44,'address','D'), 'paid_via','cash','promo_code','QCBESAR43', 'client_request_id', 's43-6-' || gen_random_uuid()::text));
       log := log || format('S43d %s diskon Rp99.999.999 pada ongkir %s: diskon tercatat=%s total=%s (harus >= 0 dan diskon <= ongkir)',
         case when o.discount <= o.fare_delivery and o.total >= 0 then 'OK' else 'BUG' end, o.fare_delivery, o.discount, o.total) || E'\n';
       perform cancel_order(o.id, 'uji');
