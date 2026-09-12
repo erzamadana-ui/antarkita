@@ -61,7 +61,7 @@ export function CityNotice({ status, service, compact, onJoined }: {
         <Row gap={10} style={{ alignItems: 'flex-start' }}>
           <View style={s.icon}><Ionicons name={t.icon} size={20} color={t.fg} /></View>
           <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-            <Text style={[font.body, { fontWeight: '800', color: colors.text }]}>{headline}</Text>
+            <Text style={[font.body, { fontWeight: '700', color: colors.text }]}>{headline}</Text>
             <Text style={[font.small, { color: colors.textSecondary }]}>{body}</Text>
           </View>
         </Row>
@@ -89,13 +89,13 @@ export function ServiceAvailability({ status }: { status: CityServiceStatus | nu
     <View style={{ gap: 6, marginTop: 10 }}>
       {open.length > 0 && (
         <Row gap={6} style={{ alignItems: 'flex-start' }}>
-          <Ionicons name="checkmark-circle" size={14} color={colors.success} style={{ marginTop: 1 }} />
+          <Ionicons name="checkmark-circle" size={16} color={colors.success} style={{ marginTop: 1 }} />
           <Text style={[font.tiny, { flex: 1, color: colors.textSecondary }]}>Sudah bisa: {open.join(', ')}</Text>
         </Row>
       )}
       {closed.length > 0 && (
         <Row gap={6} style={{ alignItems: 'flex-start' }}>
-          <Ionicons name="ellipse-outline" size={14} color={colors.textMuted} style={{ marginTop: 1 }} />
+          <Ionicons name="ellipse-outline" size={16} color={colors.textMuted} style={{ marginTop: 1 }} />
           <Text style={[font.tiny, { flex: 1, color: colors.textMuted }]}>Belum dibuka: {closed.join(', ')}</Text>
         </Row>
       )}
@@ -117,10 +117,10 @@ export function CityBanner({ status, onPress }: { status: CityServiceStatus | nu
         accessibilityRole="button" accessibilityLabel={status.headline}>
         <View style={s.icon}><Ionicons name={t.icon} size={20} color={t.fg} /></View>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Text style={[font.body, { fontWeight: '800' }]} numberOfLines={1}>{status.headline}</Text>
+          <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={1}>{status.headline}</Text>
           <Text style={[font.tiny, { color: colors.textSecondary }]} numberOfLines={2}>{status.body}</Text>
         </View>
-        {status.waitlist_open ? <Ionicons name="chevron-forward" size={18} color={t.fg} /> : null}
+        {status.waitlist_open ? <Ionicons name="chevron-forward" size={20} color={t.fg} /> : null}
       </PressableScale>
       <WaitlistSheet visible={sheet} status={status} onClose={() => setSheet(false)} />
     </>
@@ -181,7 +181,7 @@ export function WaitlistSheet({ visible, status, preselect, onClose, onJoined }:
               </Text>
               {typeof mine?.total === 'number' && mine.total > 0 && (
                 <Row gap={5} style={{ marginTop: 2 }}>
-                  <Ionicons name="people-outline" size={13} color={colors.primary} />
+                  <Ionicons name="people-outline" size={12} color={colors.primary} />
                   <Text style={[font.tiny, { color: colors.primary, fontWeight: '700' }]}>{mine.total} orang sudah mendaftar di {kota}</Text>
                 </Row>
               )}
