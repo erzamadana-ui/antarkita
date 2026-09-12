@@ -223,9 +223,9 @@ export default function SendScreen() {
           {!sized && <Text style={font.tiny}>Isi berat & sisi terpanjang paket — kami tentukan kendaraan yang dibutuhkan (motor, mobil, atau AntarBox).</Text>}
           {sized && need && (
             <Row gap={8} style={[s.needBox, { borderColor: NEED_COLOR[need] + '55', backgroundColor: NEED_COLOR[need] + '12' }]}>
-              <Ionicons name={NEED_ICON[need] as never} size={18} color={NEED_COLOR[need]} />
+              <Ionicons name={NEED_ICON[need] as never} size={20} color={NEED_COLOR[need]} />
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={{ fontWeight: '800', color: colors.text, fontSize: 13.5 }} numberOfLines={1}>{NEED_LABEL[need]} · {fmtNum(wKg)} kg / {fmtNum(sCm)} cm</Text>
+                <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }} numberOfLines={1}>{NEED_LABEL[need]} · {fmtNum(wKg)} kg / {fmtNum(sCm)} cm</Text>
                 <Text style={font.tiny} numberOfLines={2}>Batas {need === 'motor' ? 'motor' : need === 'car' ? 'mobil' : 'AntarBox'}: {fmtNum(sendLimits[need].max_kg)} kg · sisi terpanjang {fmtNum(sendLimits[need].max_cm)} cm{need !== 'motor' ? ` · di atas batas motor (${fmtNum(sendLimits.motor.max_kg)} kg / ${fmtNum(sendLimits.motor.max_cm)} cm)` : ''}</Text>
               </View>
             </Row>
@@ -235,7 +235,7 @@ export default function SendScreen() {
               <Row gap={10} style={{ alignItems: 'flex-start' }}>
                 <Ionicons name="alert-circle" size={20} color={colors.danger} />
                 <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                  <Text style={[font.body, { fontWeight: '800', color: colors.danger }]}>Paket melebihi batas AntarSend</Text>
+                  <Text style={[font.body, { fontWeight: '700', color: colors.danger }]}>Paket melebihi batas AntarSend</Text>
                   <Text style={[font.small, { color: colors.text }]}>{fmtNum(wKg)} kg / {fmtNum(sCm)} cm melebihi batas terbesar ({fmtNum(sendLimits.box.max_kg)} kg · sisi terpanjang {fmtNum(sendLimits.box.max_cm)} cm). Untuk barang sebesar ini gunakan AntarBox (mobil box / pick up).</Text>
                 </View>
               </Row>
@@ -352,7 +352,7 @@ function ScopeBtn({ active, onPress, icon, title, sub }: { active: boolean; onPr
   return (
     <PressableScale onPress={onPress} scaleTo={0.97} style={[s.scope, active && { borderColor: colors.send, backgroundColor: colors.send + '12' }]}>
       <Ionicons name={icon as never} size={20} color={active ? colors.send : colors.textSecondary} />
-      <View style={{ flex: 1, minWidth: 0 }}><Text style={{ fontWeight: '800', color: colors.text, fontSize: 14 }} numberOfLines={1}>{title}</Text><Text style={font.tiny} numberOfLines={2}>{sub}</Text></View>
+      <View style={{ flex: 1, minWidth: 0 }}><Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }} numberOfLines={1}>{title}</Text><Text style={font.tiny} numberOfLines={2}>{sub}</Text></View>
     </PressableScale>
   );
 }
@@ -365,12 +365,12 @@ function RouteCard({ active, onPress, icon, title, sub, meta, color = colors.sen
     <PressableScale onPress={() => { if (!disabled) onPress(); }} disabled={disabled} scaleTo={0.985} style={[s.routeCard, active && !disabled && { borderColor: color, backgroundColor: color + '10' }]}>
       <Row gap={10} style={{ alignItems: 'flex-start' }}>
         <View style={[s.routeIcon, { backgroundColor: (disabled ? colors.textMuted : color) + '1A' }]}>
-          <Ionicons name={icon as never} size={18} color={disabled ? colors.textMuted : color} />
+          <Ionicons name={icon as never} size={20} color={disabled ? colors.textMuted : color} />
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <Row between gap={8}>
-            <Text style={{ fontWeight: '800', color: colors.text, fontSize: 14, flex: 1 }} numberOfLines={1}>{title}</Text>
-            {active && !disabled ? <Ionicons name="checkmark-circle" size={18} color={color} /> : null}
+            <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14, flex: 1 }} numberOfLines={1}>{title}</Text>
+            {active && !disabled ? <Ionicons name="checkmark-circle" size={20} color={color} /> : null}
           </Row>
           <Text style={font.tiny}>{sub}</Text>
           <Text style={[font.tiny, { color: colors.textSecondary, fontWeight: '700' }]}>{meta}</Text>
