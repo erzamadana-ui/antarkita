@@ -20,7 +20,7 @@ export default function CustomerPay() {
       <Row gap={8} style={{ paddingBottom: 12 }}>
         {tabs.map((x) => (
           <PressableScale key={x.key} onPress={() => setTab(x.key)} scaleTo={0.94} style={[s.tab, tab === x.key && s.tabOn]}>
-            <Text style={{ fontSize: 13, fontWeight: '700', color: tab === x.key ? '#fff' : colors.text }}>{x.label}</Text>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: tab === x.key ? '#fff' : colors.text }}>{x.label}</Text>
           </PressableScale>
         ))}
       </Row>
@@ -35,6 +35,6 @@ export default function CustomerPay() {
 
 const s = StyleSheet.create({
   inner: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 16 },
-  tab: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 18, paddingVertical: 11, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff', ...shadow.soft },
+  tab: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 18, paddingVertical: 12, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff', ...shadow.soft },
   tabOn: { backgroundColor: colors.primary, borderColor: colors.primary },
 });

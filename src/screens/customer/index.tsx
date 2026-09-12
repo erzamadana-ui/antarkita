@@ -117,12 +117,12 @@ export default function CustomerHome() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, marginTop: 10, paddingRight: 16 }}>
                 {(freq?.recent ?? []).slice(0, 4).map((r, i) => (
                   <PressableScale key={i} onPress={() => goRoute(r)} scaleTo={0.95} style={s.placeChip}>
-                    <View style={s.placeDot}><Ionicons name="location" size={10} color="#fff" /></View>
+                    <View style={s.placeDot}><Ionicons name="location" size={12} color="#fff" /></View>
                     <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }} numberOfLines={1}>{r.address.split(',')[0]}</Text>
                   </PressableScale>
                 ))}
                 <PressableScale onPress={() => router.push('/account/places')} scaleTo={0.95} style={s.placeChip}>
-                  <Ionicons name="bookmark-outline" size={13} color={colors.primary} />
+                  <Ionicons name="bookmark-outline" size={12} color={colors.primary} />
                   <Text style={{ fontSize: 12, fontWeight: '700', color: colors.text }}>{t('saved_places')}</Text>
                 </PressableScale>
               </ScrollView>
@@ -164,10 +164,10 @@ export default function CustomerHome() {
             <Entrance index={11}>
               <PressableScale onPress={() => (isEnabled('travel') ? router.push('/travel' as never) : toast.show('Layanan ini sedang dinonaktifkan sementara'))} scaleTo={0.985} style={[s.banner, (!isEnabled('travel') || !serviceOpen('travel')) && { opacity: 0.5 }]}>
                 <View style={{ flex: 1, gap: 6 }}>
-                  <View style={s.bannerTag}><Ionicons name="bus-outline" size={11} color="#fff" /><Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>AntarTravel</Text></View>
+                  <View style={s.bannerTag}><Ionicons name="bus-outline" size={12} color="#fff" /><Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>AntarTravel</Text></View>
                   <Text style={s.bannerTitle}>{t('banner_title')}</Text>
                   <Text style={s.bannerSub}>{t('banner_sub')}</Text>
-                  <View style={s.bannerBtn}><Text style={{ color: colors.primaryDark, fontWeight: '800', fontSize: 13 }}>{t('banner_cta')}</Text></View>
+                  <View style={s.bannerBtn}><Text style={{ color: colors.primaryDark, fontWeight: '700', fontSize: 14 }}>{t('banner_cta')}</Text></View>
                 </View>
                 <View style={s.bannerArt}><ServiceIllustration kind="travel" size={96} /></View>
               </PressableScale>
@@ -261,16 +261,16 @@ const s = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 22, rowGap: 14 },
   serviceTile: { alignItems: 'center', gap: 8, width: '100%', paddingHorizontal: 2 },
   serviceCircle: { width: 66, height: 66, borderRadius: 33, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
-  serviceLabel: { fontSize: 12.5, fontWeight: '700', color: colors.text },
+  serviceLabel: { fontSize: 14, fontWeight: '700', color: colors.text },
   offPill: { position: 'absolute', top: -4, right: 2, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: 6, paddingVertical: 2 },
   offText: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
   banner: { marginTop: 22, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primary, borderRadius: 24, padding: 16, overflow: 'hidden', ...shadow.glow(colors.primary) },
-  bannerTag: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: radius.full, paddingHorizontal: 9, paddingVertical: 4 },
-  bannerTitle: { color: '#fff', fontSize: 18, fontWeight: '800', lineHeight: 23, letterSpacing: -0.3 },
+  bannerTag: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 4 },
+  bannerTitle: { color: '#fff', fontSize: 18, fontWeight: '700', lineHeight: 24, letterSpacing: -0.3 },
   bannerSub: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '500' },
-  bannerBtn: { alignSelf: 'flex-start', marginTop: 4, backgroundColor: '#fff', borderRadius: radius.full, paddingHorizontal: 16, paddingVertical: 9 },
+  bannerBtn: { alignSelf: 'flex-start', marginTop: 4, backgroundColor: '#fff', borderRadius: radius.full, paddingHorizontal: 16, paddingVertical: 8 },
   bannerArt: { width: 110, alignItems: 'center', justifyContent: 'center' },
-  seeAll: { color: colors.primary, fontWeight: '700', fontSize: 13 },
+  seeAll: { color: colors.primary, fontWeight: '700', fontSize: 14 },
   rowCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   rowImg: { width: 64, height: 64, borderRadius: 16, backgroundColor: colors.bgSoft },
   rowArrow: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.tint },
