@@ -15,7 +15,8 @@ import { colors, font, radius, shadow, glass, motion } from '@/lib/theme';
 import { formatDate } from '@/lib/format';
 import type { Order } from '@/lib/types';
 
-const SITE = process.env.EXPO_PUBLIC_SITE_URL ?? (Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.origin + (process.env.EXPO_PUBLIC_BASE_URL ?? '') : 'https://erzamadana-ui.github.io/antarkita');
+// Akar URL tautan "Bagikan perjalanan": env saat build → origin halaman (web) → domain resmi apps.antarkitaindonesia.com.
+const SITE = (process.env.EXPO_PUBLIC_SITE_URL || (Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.origin + (process.env.EXPO_PUBLIC_BASE_URL ?? '') : 'https://apps.antarkitaindonesia.com')).replace(/\/$/, '');
 export const shareUrl = (token: string) => `${SITE}/share/${token}`;
 
 /** Tombol SOS — tahan 2 detik untuk mengirim alarm (mencegah salah pencet). */
