@@ -9,7 +9,9 @@ type AppKind = 'pelanggan' | 'mitra' | 'admin';
 const APP = ((process.env.APP || process.env.EXPO_PUBLIC_APP || 'pelanggan') as AppKind);
 process.env.EXPO_PUBLIC_APP = APP;
 
-// Base URL untuk hosting web di sub-path (GitHub Pages: https://<user>.github.io/antarkita/[mitra|admin])
+// Base URL web. Domain kustom https://apps.antarkitaindonesia.com/ dilayani dari akar → EXPO_PUBLIC_BASE_URL kosong
+// (pelanggan), "/mitra" atau "/admin" (diisi otomatis oleh scripts/build-web.mjs). Isi "/antarkita" hanya bila
+// kembali ke sub-path repo tanpa domain kustom.
 const baseUrl = process.env.EXPO_PUBLIC_BASE_URL ?? '';
 
 const META: Record<AppKind, { name: string; slug: string; scheme: string; id: string; bg: string; desc: string }> = {
