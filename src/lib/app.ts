@@ -16,8 +16,11 @@ export const BRAND = 'AntarKita';
 export const APP_NAME: Record<AppKind, string> = { pelanggan: 'AntarKita', mitra: 'AntarKita Mitra', admin: 'AntarKita Admin' };
 export const APP_TAGLINE = 'Antar apa saja, bersama kita';
 
-/** Alamat web tiap aplikasi (dipakai untuk tautan silang: "Buka aplikasi Mitra", dll.). */
-const SITE = (process.env.EXPO_PUBLIC_SITE_ROOT || 'https://erzamadana-ui.github.io/antarkita').replace(/\/$/, '');
+/** Alamat web tiap aplikasi (dipakai untuk tautan silang: "Buka aplikasi Mitra", dll.).
+ *  Domain resmi: https://apps.antarkitaindonesia.com (GitHub Pages, domain kustom). URL lama
+ *  https://erzamadana-ui.github.io/antarkita/ tetap dialihkan GitHub ke domain ini. */
+export const SITE_ROOT = (process.env.EXPO_PUBLIC_SITE_ROOT || 'https://apps.antarkitaindonesia.com').replace(/\/$/, '');
+const SITE = SITE_ROOT;
 export const APP_URL: Record<AppKind, string> = { pelanggan: `${SITE}/`, mitra: `${SITE}/mitra/`, admin: `${SITE}/admin/` };
 export const APK_URL = process.env.EXPO_PUBLIC_APK_URL || 'https://github.com/erzamadana-ui/antarkita/releases/latest';
 
