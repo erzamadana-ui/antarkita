@@ -64,7 +64,7 @@ export default function Entry() {
     if (target === 'driver' && !driver) target = 'customer';
     if (target === 'merchant' && !merchant) target = 'customer';
     if (target === 'customer' || target === 'admin' || !persisted) {
-      if (driver) target = 'driver'; else if (merchant) target = 'merchant'; else if (travelPartner) return <Redirect href={'/driver/travel' as never} />; else if (marketVendor) return <Redirect href={'/(vendor)' as never} />; else return <Redirect href={'/mitra/onboarding' as never} />;
+      if (driver) target = 'driver'; else if (merchant) target = 'merchant'; else if (travelPartner) return <Redirect href={'/driver/travel' as never} />; else if (marketVendor) return <Redirect href={'/(vendor)' as never} />; else return <Redirect href={'/onboarding' as never} />;
     }
     return <Redirect href={modeHome[target] as never} />;
   }
