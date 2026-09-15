@@ -92,6 +92,11 @@ jobs:
           java-version: 17
 
       - uses: android-actions/setup-android@v3
+        # 15 Sep 2026: paket "tools" sudah dihapus Google dari repositori SDK → default aksi
+        # ("tools platform-tools") gagal (sdkmanager exit 1). Minta platform-tools saja;
+        # build-tools/platform diunduh otomatis oleh Gradle saat bundleRelease.
+        with:
+          packages: platform-tools
 
       - uses: gradle/actions/setup-gradle@v4
 
