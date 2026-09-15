@@ -14,6 +14,16 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+# Domain kustom GitHub Pages (keputusan direksi, Sep 2026): https://apps.antarkitaindonesia.com/
+#   Pelanggan → /   ·   Mitra → /mitra/   ·   Admin → /admin/   ·   hukum → /privacy/ /terms/ /hapus-akun/
+# DNS: CNAME `apps` → erzamadana-ui.github.io (diatur di registrar & Settings → Pages → Custom domain).
+# Base path menjadi "/" (EXPO_PUBLIC_BASE_URL kosong) karena domain kustom melayani langsung dari akar,
+# bukan sub-path /antarkita/. URL lama https://erzamadana-ui.github.io/antarkita/… tetap hidup sebagai
+# alias — GitHub Pages mengalihkannya (301) ke domain kustom secara otomatis.
+# Untuk kembali ke sub-path repo (tanpa domain kustom), kosongkan SITE_DOMAIN di bawah.
+env:
+  SITE_DOMAIN: apps.antarkitaindonesia.com
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,16 +34,29 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Tentukan base URL (sub-path repo, kosong untuk <user>.github.io)
+      - name: Tentukan base URL & akar situs (domain kustom → "/", tanpa domain → sub-path repo)
         id: base
         run: |
           REPO="${{ github.event.repository.name }}"
-          if [[ "$REPO" == *.github.io ]]; then echo "url=" >> "$GITHUB_OUTPUT"; else echo "url=/$REPO" >> "$GITHUB_OUTPUT"; fi
+          if [[ -n "$SITE_DOMAIN" ]]; then
+            echo "url=" >> "$GITHUB_OUTPUT"
+            echo "site=https://$SITE_DOMAIN" >> "$GITHUB_OUTPUT"
+            echo "Domain kustom: https://$SITE_DOMAIN (base path /)"
+          elif [[ "$REPO" == *.github.io ]]; then
+            echo "url=" >> "$GITHUB_OUTPUT"
+            echo "site=https://${{ github.repository_owner }}.github.io" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=/$REPO" >> "$GITHUB_OUTPUT"
+            echo "site=https://${{ github.repository_owner }}.github.io/$REPO" >> "$GITHUB_OUTPUT"
+          fi
       - name: Export 3 aplikasi web (Pelanggan → /, Mitra → /mitra, Admin → /admin)
         env:
           EXPO_PUBLIC_BASE_URL: ${{ steps.base.outputs.url }}
-          EXPO_PUBLIC_SITE_ROOT: https://${{ github.repository_owner }}.github.io${{ steps.base.outputs.url }}
+          EXPO_PUBLIC_SITE_ROOT: ${{ steps.base.outputs.site }}
           EXPO_PUBLIC_APK_URL: https://github.com/${{ github.repository }}/releases/latest
+          # Ditulis build-web.mjs ke dist/CNAME — tanpa berkas ini deploy-pages MENGHAPUS setelan
+          # custom domain di Settings → Pages pada setiap deploy.
+          PAGES_CNAME: ${{ env.SITE_DOMAIN }}
           EXPO_NO_TELEMETRY: 1
           CI: 1
         run: node scripts/build-web.mjs
@@ -41,7 +64,7 @@ jobs:
       # Halaman permintaan hapus akun — WAJIB Google Play: selain jalur di dalam aplikasi, harus ada
       # tautan web publik tempat pengguna (termasuk yang sudah meng-uninstal) bisa meminta penghapusan
       # akun, dengan jalur permintaan yang menonjol dan menyebut nama aplikasi/pengembang.
-      # (scripts/build-web.mjs hanya menyalin privacy.html & terms.html; halaman ini ditambahkan di sini.)
+      # (scripts/build-web.mjs sudah menyalinnya juga; langkah ini menjadi pengaman ganda bila skrip berubah.)
       - name: Terbitkan halaman hapus akun → /hapus-akun/
         run: |
           test -f docs/rilis/hapus-akun.html || { echo "::error::docs/rilis/hapus-akun.html tidak ada — URL hapus akun di Play Console akan 404."; exit 1; }
@@ -55,6 +78,18 @@ jobs:
             test -s "dist/$p/index.html" || { echo "::error::dist/$p/index.html hilang — URL wajib Play Store akan 404."; exit 1; }
             echo "✔ /$p/ ($(wc -c < "dist/$p/index.html") byte)"
           done
+
+      - name: Pastikan CNAME domain kustom & base path "/" benar di dist/
+        if: env.SITE_DOMAIN != ''
+        run: |
+          [[ "$(cat dist/CNAME)" == "$SITE_DOMAIN" ]] || { echo "::error::dist/CNAME bukan '$SITE_DOMAIN' (isi: '$(cat dist/CNAME 2>/dev/null)')"; exit 1; }
+          echo "✔ dist/CNAME = $SITE_DOMAIN"
+          for d in "" mitra/ admin/; do
+            test -s "dist/${d}index.html" || { echo "::error::dist/${d}index.html hilang"; exit 1; }
+            grep -q 'src="/'"${d}"'_expo/' "dist/${d}index.html" || { echo "::error::dist/${d}index.html tidak memuat aset dari /${d}_expo/ (base path salah?)"; exit 1; }
+            echo "✔ /${d} memuat aset dari /${d}_expo/"
+          done
+          ! grep -q '/antarkita/_expo/' dist/index.html || { echo "::error::dist/index.html masih memakai base path lama /antarkita/"; exit 1; }
 
       - uses: actions/upload-pages-artifact@v3
         with:

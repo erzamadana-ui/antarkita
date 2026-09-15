@@ -69,10 +69,10 @@ jobs:
       # dan bundel JS dibuat di dalam Gradle (bundleRelease) sehingga APP/EXPO_PUBLIC_APP wajib di-set di sana juga.
       APP: ${{ matrix.app }}
       EXPO_PUBLIC_APP: ${{ matrix.app }}
-      EXPO_PUBLIC_SITE_ROOT: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+      EXPO_PUBLIC_SITE_ROOT: https://apps.antarkitaindonesia.com
       EXPO_PUBLIC_APK_URL: https://github.com/${{ github.repository }}/releases/latest
       # Tautan "Bagikan perjalanan" & halaman hukum: tanpa ini Safety.tsx memakai fallback dan bisa menunjuk path lama.
-      EXPO_PUBLIC_SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+      EXPO_PUBLIC_SITE_URL: https://apps.antarkitaindonesia.com
       # Server TURN untuk panggilan suara di jaringan seluler (CGNAT). Kosong = panggilan hanya berhasil di Wi-Fi.
       # Isi dari GitHub Secrets; pakai kredensial berumur pendek/berkuota (Cloudflare Realtime TURN), bukan statis.
       EXPO_NO_TELEMETRY: 1
