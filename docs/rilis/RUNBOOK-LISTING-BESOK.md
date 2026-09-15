@@ -116,9 +116,9 @@ Workflow akan **menggagalkan build** bila berkas itu tidak memuat package yang s
 
 1. Push dulu semua perubahan rilis ke `main`. Ini **wajib** karena workflow Web yang menerbitkan halaman `/privacy/`, `/terms/`, dan `/hapus-akun/`.
 2. Setelah workflow **"Web (3 aplikasi) → GitHub Pages"** hijau, **buka ketiga URL ini di peramban** dan pastikan terbuka (bukan 404):
-   - https://erzamadana-ui.github.io/antarkita/privacy/
-   - https://erzamadana-ui.github.io/antarkita/terms/
-   - https://erzamadana-ui.github.io/antarkita/hapus-akun/  ← **baru, belum pernah hidup sebelum push ini**
+   - https://apps.antarkitaindonesia.com/privacy/
+   - https://apps.antarkitaindonesia.com/terms/
+   - https://apps.antarkitaindonesia.com/hapus-akun/  ← **baru, belum pernah hidup sebelum push ini**
 3. GitHub → **Actions → "Play Store AAB (rilis bertanda tangan)" → Run workflow** → `app: both`, `note: internal testing 1` → **Run**.
 4. Sambil menunggu, periksa log tiga langkah ini:
    - **"Tulis google-services.json"** — tidak boleh ada `::warning::` bila Anda ingin push hidup.

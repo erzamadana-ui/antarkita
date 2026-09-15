@@ -9,13 +9,15 @@ Dua aplikasi Android terpisah dari satu basis kode:
 | Ikon / splash | `apps/pelanggan/assets/` | `apps/mitra/assets/` |
 | Panel Admin | **web saja** (`/admin/`), tidak dipublikasikan ke Play | |
 
-URL wajib (dari deploy GitHub Pages, lihat `scripts/build-web.mjs`):
+URL wajib (dari deploy GitHub Pages di domain kustom **`apps.antarkitaindonesia.com`**, lihat `scripts/build-web.mjs` & `.github/workflows/web.yml`):
 
-- Kebijakan Privasi: `https://erzamadana-ui.github.io/antarkita/privacy/` — **terverifikasi hidup (HTTP 200) 9 Sep 2026**
-- Syarat & Ketentuan: `https://erzamadana-ui.github.io/antarkita/terms/` — **terverifikasi hidup (HTTP 200) 9 Sep 2026**
-- **Permintaan hapus akun (URL wajib Play): `https://erzamadana-ui.github.io/antarkita/hapus-akun/`** — halaman berdiri sendiri (`docs/rilis/hapus-akun.html`), diterbitkan oleh `.github/workflows/web.yml`. **Baru; belum hidup sampai push berikutnya ke `main`.**
-- Situs web aplikasi: `https://erzamadana-ui.github.io/antarkita/` (Mitra: `/mitra/`)
+- Kebijakan Privasi: `https://apps.antarkitaindonesia.com/privacy/` — **terverifikasi hidup (HTTP 200) 9 Sep 2026**
+- Syarat & Ketentuan: `https://apps.antarkitaindonesia.com/terms/` — **terverifikasi hidup (HTTP 200) 9 Sep 2026**
+- **Permintaan hapus akun (URL wajib Play): `https://apps.antarkitaindonesia.com/hapus-akun/`** — halaman berdiri sendiri (`docs/rilis/hapus-akun.html`), diterbitkan oleh `.github/workflows/web.yml`. **Baru; belum hidup sampai push berikutnya ke `main`.**
+- Situs web aplikasi: `https://apps.antarkitaindonesia.com/` (Mitra: `/mitra/`)
 - Email kontak developer: `erzamadana@gmail.com`
+
+> **Domain (keputusan direksi, Sep 2026):** URL resmi kini `https://apps.antarkitaindonesia.com/` (base path `/`). URL lama `https://erzamadana-ui.github.io/antarkita/…` **tetap berfungsi sebagai alias** — GitHub Pages mengalihkannya (301) ke domain kustom secara otomatis, jadi listing/APK yang masih memuat URL lama tidak 404. Yang diisi di Play Console tetap URL domain kustom. Status "terverifikasi hidup 9 Sep 2026" di atas merujuk ke URL lama; verifikasi ulang di domain baru setelah DNS + *Enforce HTTPS* aktif.
 
 > **Kenapa bukan `.../privacy/#hapus`?** Kebijakan Play menuntut halaman web tempat penghapusan akun dapat *diminta*, dengan jalur permintaan yang **menonjol dan mudah ditemukan di halaman itu**, serta menyebut nama aplikasi/pengembang. Sebuah *anchor* di tengah kebijakan privasi sering dinilai tidak memenuhi "prominently featured". Halaman `/hapus-akun/` dibuat khusus untuk itu.
 
@@ -72,13 +74,13 @@ IZIN YANG DIPAKAI
 Tertarik jadi mitra? Unduh aplikasi AntarKita Mitra untuk driver, merchant, pedagang pasar, mitra travel, dan mobil box.
 
 AntarKita — antar apa saja, ke mana saja.
-Kebijakan Privasi: https://erzamadana-ui.github.io/antarkita/privacy/
+Kebijakan Privasi: https://apps.antarkitaindonesia.com/privacy/
 Bantuan: erzamadana@gmail.com
 ```
 
 **Kategori:** Maps & Navigation *(alternatif: Food & Drink — pilih Maps & Navigation karena ride-hailing adalah layanan utama)*
 **Tag (maks 5):** Ride hailing, Food delivery, Package delivery, Grocery delivery, Travel
-**Email kontak:** erzamadana@gmail.com · **Situs:** https://erzamadana-ui.github.io/antarkita/
+**Email kontak:** erzamadana@gmail.com · **Situs:** https://apps.antarkitaindonesia.com/
 **Nama developer:** AntarKita
 
 ---
@@ -137,13 +139,13 @@ IZIN YANG DIPAKAI
 Syarat menjadi mitra: usia minimal 18 tahun, KTP dan dokumen kendaraan/usaha yang berlaku. Mitra adalah mitra usaha independen; komisi platform tercantum transparan di setiap pesanan.
 
 AntarKita Mitra — penghasilan tambahan, satu aplikasi.
-Kebijakan Privasi: https://erzamadana-ui.github.io/antarkita/privacy/
+Kebijakan Privasi: https://apps.antarkitaindonesia.com/privacy/
 Bantuan: erzamadana@gmail.com
 ```
 
 **Kategori:** Business *(alternatif: Maps & Navigation)*
 **Tag:** Driver app, Delivery partner, Merchant, Ride hailing, Business tools
-**Email kontak:** erzamadana@gmail.com · **Situs:** https://erzamadana-ui.github.io/antarkita/mitra/
+**Email kontak:** erzamadana@gmail.com · **Situs:** https://apps.antarkitaindonesia.com/mitra/
 
 ---
 
@@ -164,7 +166,7 @@ Desain harus bebas dari klaim "terbaik/#1", tidak menampilkan merek pesaing, tid
 ## 4. Checklist Play Console → *App content* (isi untuk KEDUA aplikasi)
 
 ### 4.1 Privacy policy
-- URL: `https://erzamadana-ui.github.io/antarkita/privacy/` (harus bisa dibuka publik tanpa login; sudah dipublikasikan oleh workflow Web).
+- URL: `https://apps.antarkitaindonesia.com/privacy/` (harus bisa dibuka publik tanpa login; sudah dipublikasikan oleh workflow Web).
 
 ### 4.2 Ads
 - **Apakah aplikasi berisi iklan?** → **Tidak**. Promo merchant/voucher yang tampil di aplikasi adalah konten internal platform (bukan SDK iklan pihak ketiga). Tidak ada iklan pihak ketiga.
@@ -235,7 +237,7 @@ Pertanyaan lain di form:
 - *Is all of the user data collected by your app encrypted in transit?* → **Ya**.
 - *Do you provide a way for users to request that their data is deleted?* → **Ya** (Akun → Lainnya → Hapus akun, atau email erzamadana@gmail.com).
 - *Data collected is processed ephemerally?* → Tidak (kecuali audio panggilan yang tidak dikumpulkan).
-- *Account deletion URL* (di bagian Data safety → "Account deletion"): **`https://erzamadana-ui.github.io/antarkita/hapus-akun/`**
+- *Account deletion URL* (di bagian Data safety → "Account deletion"): **`https://apps.antarkitaindonesia.com/hapus-akun/`**
   *(jangan pakai `.../privacy/#hapus` — lihat catatan di bagian "URL wajib" di atas)*
 
 ### 4.8 Government apps / Financial features declaration
@@ -368,7 +370,7 @@ Aturan yang **tidak boleh** dilanggar (Metadata policy): tanpa "terbaik/#1/nomor
 |---|---|
 | Email | `erzamadana@gmail.com` **(wajib; akan tampil publik di halaman Play Store)** |
 | Telepon | Opsional — kosongkan bila tidak ingin nomor pribadi tampil publik |
-| Situs web | Pelanggan: `https://erzamadana-ui.github.io/antarkita/` · Mitra: `https://erzamadana-ui.github.io/antarkita/mitra/` |
+| Situs web | Pelanggan: `https://apps.antarkitaindonesia.com/` · Mitra: `https://apps.antarkitaindonesia.com/mitra/` |
 | Alamat eksternal (External marketing) | Tidak diisi |
 | Nama developer publik | `AntarKita` |
 

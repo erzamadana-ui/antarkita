@@ -7,6 +7,8 @@
 > **❌ belum, perlu perubahan kode/aset**
 >
 > Diurutkan menurut **apa yang memblokir rilis lebih dulu**. Kerjakan dari atas.
+>
+> **Pembaruan 15 Sep 2026 (domain kustom):** web pindah ke `https://apps.antarkitaindonesia.com/` (base path `/`). Butir 2.1 dan 4.2 di bawah **sudah selesai**: fallback `Safety.tsx`/`app.ts` kini `https://apps.antarkitaindonesia.com`, `EXPO_PUBLIC_SITE_URL` diisi di `release-aab.yml` & `android.yml`, `seed.sql` menunjuk `https://apps.antarkitaindonesia.com/promos/…`. URL lama `erzamadana-ui.github.io/antarkita/…` tetap hidup sebagai alias (pengalihan otomatis GitHub). Nomor baris yang dikutip di bawah adalah nomor pada 9 Sep 2026.
 
 ---
 
@@ -160,8 +162,8 @@ otomatis mengikuti.
 | `EXPO_PUBLIC_SUPABASE_URL` | **WAJIB** | `.env` (ikut repo) | Aplikasi tidak bisa masuk sama sekali — layar putih/gagal login |
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | **WAJIB** | `.env` | Sama seperti di atas |
 | `EXPO_PUBLIC_APP` | **WAJIB** | diisi otomatis `app.config.ts` + `release-aab.yml` | Salah aplikasi yang dibangun (rute & package id tertukar) |
-| `EXPO_PUBLIC_SITE_ROOT` | **WAJIB (sudah diisi)** | `release-aab.yml` baris 72 | Fallback `src/lib/app.ts:20` sudah benar (`…/antarkita`), jadi aman |
-| `EXPO_PUBLIC_SITE_URL` | **WAJIB — BELUM DIISI** | tidak diset di build Android | **Tautan "Bagikan perjalanan" jadi 404** karena fallback `Safety.tsx:18` menunjuk repo lama `antar-aja`. Lihat butir 2.1 |
+| `EXPO_PUBLIC_SITE_ROOT` | **WAJIB (sudah diisi)** | `release-aab.yml` & `android.yml` = `https://apps.antarkitaindonesia.com` | Fallback `src/lib/app.ts` sudah domain baru, jadi aman |
+| `EXPO_PUBLIC_SITE_URL` | **WAJIB (sudah diisi, 15 Sep 2026)** | `release-aab.yml` & `android.yml` = `https://apps.antarkitaindonesia.com` | Fallback `Safety.tsx` juga sudah domain baru → tautan "Bagikan perjalanan" aman. Build ≤ 107 masih memakai github.io (tetap hidup lewat pengalihan) |
 | `EXPO_PUBLIC_APK_URL` | Opsional | `release-aab.yml` baris 73 | Fallback `src/lib/app.ts:22` sudah benar. Aman |
 | `EXPO_PUBLIC_BASE_URL` | Opsional (web) | `.env` / workflow web | Kosong = benar untuk Android |
 | `EXPO_PUBLIC_TURN_URL` | **WAJIB untuk panggilan suara** | belum ada | **Panggilan suara gagal di jaringan seluler** (Lampiran A) |

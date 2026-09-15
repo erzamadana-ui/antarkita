@@ -63,9 +63,9 @@ jobs:
         env:
           APP: ${{ matrix.app }}
           EXPO_PUBLIC_APP: ${{ matrix.app }}
-          EXPO_PUBLIC_SITE_ROOT: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+          EXPO_PUBLIC_SITE_ROOT: https://apps.antarkitaindonesia.com
           EXPO_PUBLIC_APK_URL: https://github.com/${{ github.repository }}/releases/latest
-          EXPO_PUBLIC_SITE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+          EXPO_PUBLIC_SITE_URL: https://apps.antarkitaindonesia.com
           EXPO_NO_TELEMETRY: 1
           CI: 1
         run: npx expo prebuild --platform android --no-install
@@ -88,8 +88,10 @@ jobs:
         env:
           APP: ${{ matrix.app }}
           EXPO_PUBLIC_APP: ${{ matrix.app }}
-          EXPO_PUBLIC_SITE_ROOT: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+          EXPO_PUBLIC_SITE_ROOT: https://apps.antarkitaindonesia.com
           EXPO_PUBLIC_APK_URL: https://github.com/${{ github.repository }}/releases/latest
+          # Bundel JS dibuat di dalam Gradle (bundleRelease) → env tautan "Bagikan perjalanan" wajib ada di sini juga.
+          EXPO_PUBLIC_SITE_URL: https://apps.antarkitaindonesia.com
           EXPO_NO_TELEMETRY: 1
           CI: 1
         run: |
@@ -143,6 +145,6 @@ jobs:
 
             Dibangun untuk ABI `armeabi-v7a` + `arm64-v8a` (semua HP Android nyata; **tidak** untuk emulator x86 — jalankan workflow manual dengan pilihan arsitektur "semua" bila perlu emulator).
 
-            Panel Admin dipakai lewat web: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/admin/
+            Panel Admin dipakai lewat web: https://apps.antarkitaindonesia.com/admin/
             Buka APK di HP Android, izinkan "instal dari sumber tidak dikenal". Untuk Play Store gunakan `eas build -p android --profile production` (AAB — Play Store memecah per-perangkat sendiri, biasanya 30-40% lebih kecil dari APK ini).
           files: antarkita-*.apk

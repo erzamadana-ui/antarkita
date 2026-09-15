@@ -6,9 +6,11 @@ Super-app ala Gojek: **AntarRide** (ojek motor), **AntarCar** (mobil), **AntarFo
 
 | Aplikasi | Isi | Web | Android |
 |---|---|---|---|
-| **AntarKita** (Pelanggan) | semua layanan, pesanan, pembayaran, akun | `https://erzamadana-ui.github.io/antarkita/` | `antarkita-pelanggan-<build>.apk` |
-| **AntarKita Mitra** | driver motor/mobil/box, merchant, mitra travel & sopir pribadi | `…/antarkita/mitra/` | `antarkita-mitra-<build>.apk` |
-| **AntarKita Admin** | panel operasional, CS, keuangan, katalog, gateway, portal eksekutif | `…/antarkita/admin/` | web (bisa dibungkus APK: `APP=admin`) |
+| **AntarKita** (Pelanggan) | semua layanan, pesanan, pembayaran, akun | `https://apps.antarkitaindonesia.com/` | `antarkita-pelanggan-<build>.apk` |
+| **AntarKita Mitra** | driver motor/mobil/box, merchant, mitra travel & sopir pribadi | `https://apps.antarkitaindonesia.com/mitra/` | `antarkita-mitra-<build>.apk` |
+| **AntarKita Admin** | panel operasional, CS, keuangan, katalog, gateway, portal eksekutif | `https://apps.antarkitaindonesia.com/admin/` | web (bisa dibungkus APK: `APP=admin`) |
+
+Domain web resmi: **`https://apps.antarkitaindonesia.com/`** (GitHub Pages + domain kustom, CNAME `apps` → `erzamadana-ui.github.io`). URL lama `https://erzamadana-ui.github.io/antarkita/…` tetap berfungsi sebagai alias — GitHub mengalihkannya otomatis ke domain kustom.
 
 Rute tiap aplikasi ada di `apps/<app>/app` (stub satu baris) → layar bersama di `src/screens`. Pilih aplikasi saat build dengan env `APP=pelanggan|mitra|admin` (lihat `app.config.ts`, `scripts/build-web.mjs`, workflow CI). Satu akun bisa dipakai di ketiga aplikasi; aplikasi Admin hanya menerima akun berperan admin.
 
@@ -61,10 +63,10 @@ Expo Go: pasang dari App Store / Play Store, pastikan HP dan Mac satu Wi-Fi, sca
 
 1. Buat repositori GitHub bernama `antarkita` (public atau private).
 2. Push kode ini ke branch `main`.
-3. **Settings → Pages → Build and deployment → Source: GitHub Actions.**
+3. **Settings → Pages → Build and deployment → Source: GitHub Actions.** Lalu **Custom domain**: `apps.antarkitaindonesia.com` (DNS: `CNAME apps → erzamadana-ui.github.io`), centang *Enforce HTTPS*. Workflow menulis `dist/CNAME` pada setiap deploy sehingga setelan ini tidak terhapus.
 4. Setiap push ke `main`:
-   * workflow **Web → GitHub Pages** menerbitkan aplikasi web ke `https://<username>.github.io/antar-aja/`
-   * workflow **Android APK** membangun APK dan menaruhnya di **Releases** (`https://github.com/<username>/antar-aja/releases/latest`).
+   * workflow **Web → GitHub Pages** menerbitkan aplikasi web ke `https://apps.antarkitaindonesia.com/` (Mitra `/mitra/`, Admin `/admin/`; halaman hukum `/privacy/`, `/terms/`, `/hapus-akun/`). Tanpa domain kustom (kosongkan `SITE_DOMAIN` di `web.yml`) situs kembali ke sub-path `https://<username>.github.io/antarkita/`.
+   * workflow **Android APK** membangun APK dan menaruhnya di **Releases** (`https://github.com/<username>/antarkita/releases/latest`).
 5. Unduh APK di HP Android → izinkan instal dari sumber tidak dikenal → pasang.
 
 APK dari workflow ditandatangani keystore debug (cocok untuk uji/distribusi langsung). Untuk Play Store gunakan EAS (bawah).
