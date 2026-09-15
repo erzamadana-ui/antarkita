@@ -79,8 +79,8 @@ export function RequireAuth({ children, role }: { children: React.ReactNode; rol
     return <Loading text="Memuat profil…" />;
   }
   if (role === 'admin' && profile.role !== 'admin') return <Redirect href={(APP === 'admin' ? '/(auth)/login?denied=1' : '/') as never} />;
-  if (role === 'driver' && !driver) return <Redirect href={(APP === 'mitra' ? '/mitra/onboarding' : '/') as never} />;
-  if (role === 'merchant' && !merchant) return <Redirect href={(APP === 'mitra' ? '/mitra/onboarding' : '/') as never} />;
-  if (role === 'vendor' && !marketVendor) return <Redirect href={(APP === 'mitra' ? '/mitra/onboarding' : '/') as never} />;
+  if (role === 'driver' && !driver) return <Redirect href={(APP === 'mitra' ? '/onboarding' : '/') as never} />;
+  if (role === 'merchant' && !merchant) return <Redirect href={(APP === 'mitra' ? '/onboarding' : '/') as never} />;
+  if (role === 'vendor' && !marketVendor) return <Redirect href={(APP === 'mitra' ? '/onboarding' : '/') as never} />;
   return <>{children}</>;
 }
