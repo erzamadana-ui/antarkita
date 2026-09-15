@@ -5,12 +5,14 @@ Bingkai tangkapan layar mentah menjadi screenshot Play Store 1080x1920 (rasio 9:
 
     python3 docs/rilis/aset/bingkai-screenshot.py
 
-Masukan : docs/rilis/aset/screenshot/mentah/<nama>.png   (tangkapan viewport ponsel 412x892 @3x)
+Masukan : docs/rilis/aset/screenshot/mentah/<nama>.png   (tangkapan viewport ponsel 412x892 @3x,
+          dibuat oleh docs/rilis/aset/tangkap-mentah.mjs dari build web — lihat komentar di skrip itu)
 Keluaran: docs/rilis/aset/screenshot/pelanggan-N-<nama>.png
           docs/rilis/aset/screenshot/mitra-N-<nama>.png
 
 ⚠️  STATUS: DRAF. Tangkapan mentah diambil dari BUILD WEB (Chromium, viewport ponsel) memakai
-    harness data tiruan — BUKAN tangkapan dari perangkat Android sungguhan. Perbedaan yang tetap
+    harness data tiruan (tangkap-mentah.mjs, regenerasi 15 Sep 2026 dengan desain v1.0) — BUKAN
+    tangkapan dari perangkat Android sungguhan. Perbedaan yang tetap
     ada: tidak ada status bar Android, font/rendering web berbeda tipis dari React Native, dan
     peta memakai basemap prosedural (tile OpenStreetMap diblokir di lingkungan build). Layak
     dipakai untuk Internal testing; SEBAIKNYA DIGANTI tangkapan HP asli sebelum rilis produksi.
@@ -156,9 +158,9 @@ RENCANA = [
     ("p-ride-peta", "Pilih titik jemput langsung di peta",      "pelanggan"),
     ("p-lacak",     "Lacak perjalanan Anda di peta",            "pelanggan"),
     ("p-pay",       "AntarPay untuk bayar tanpa tunai",         "pelanggan"),
-    # p-food sengaja TIDAK dipakai: gambar merchant pada harness tiruan memakai berkas promo
-    # sehingga teksnya bertumpuk dan terlihat cacat. Ganti dengan tangkapan HP asli bila ingin
-    # menampilkan AntarFood di halaman listing.
+    # p-food sengaja TIDAK dipakai (tangkap-mentah.mjs pun tidak membuatnya): gambar merchant pada
+    # harness tiruan tidak ada / pernah memakai berkas promo sehingga terlihat cacat. Ganti dengan
+    # tangkapan HP asli bila ingin menampilkan AntarFood di halaman listing.
     ("m-beranda",   "Nyalakan Online, terima order masuk",      "mitra"),
     ("m-order",     "Rincian order dan pendapatan tiap trip",   "mitra"),
     ("m-account",   "Satu akun untuk semua layanan mitra",      "mitra"),
