@@ -390,33 +390,54 @@ Sudah dibuat di `docs/rilis/aset/` (skrip pembuatnya: `docs/rilis/aset/buat-aset
 | `feature-graphic-mitra.png` | 1024×500 RGB | Feature graphic — AntarKita Mitra |
 | `notification-icon.png` (di `apps/<app>/assets/`) | 96×96 RGBA, putih penuh + transparan | Bukan aset Play Console — ikon kecil notifikasi Android; skrip `docs/rilis/aset/buat-ikon-notifikasi.py` |
 
-### Screenshot — **SUDAH ADA, berstatus DRAF**
+### Screenshot — **SUDAH ADA, berstatus DRAF** (diregenerasi 15 Sep 2026 dengan desain v1.0)
 
-Delapan screenshot 1080×1920 (tepat 9:16) tersedia di `docs/rilis/aset/screenshot/`. Dibuat dengan
-`docs/rilis/aset/bingkai-screenshot.py` dari tangkapan mentah di `screenshot/mentah/`.
+Delapan screenshot 1080×1920 (tepat 9:16) tersedia di `docs/rilis/aset/screenshot/`. Tangkapan mentahnya
+(`screenshot/mentah/*.png`, viewport 412×892 @3x) dibuat oleh `docs/rilis/aset/tangkap-mentah.mjs`
+dari build web, lalu dibingkai `docs/rilis/aset/bingkai-screenshot.py`. Regenerasi **15 September 2026**
+menggantikan set 9 September yang masih memakai font/tema lama (sebelum "desain v1.0", 12 Sep 2026).
+
+Mengulang regenerasi (urutan wajib):
+
+```bash
+npm ci
+EXPO_PUBLIC_BASE_URL= EXPO_PUBLIC_SITE_ROOT=https://apps.antarkitaindonesia.com \
+PAGES_CNAME=apps.antarkitaindonesia.com EXPO_NO_TELEMETRY=1 CI=1 node scripts/build-web.mjs
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node docs/rilis/aset/tangkap-mentah.mjs   # → screenshot/mentah/
+python3 docs/rilis/aset/bingkai-screenshot.py                                        # → screenshot/*.png
+```
 
 | Berkas | Layar | Aplikasi |
 |---|---|---|
 | `pelanggan-1-beranda.png` | Beranda — 8 layanan, promo AntarTravel, pesanan berjalan | AntarKita |
-| `pelanggan-2-ride.png` | AntarRide — kelas kendaraan, titik jemput, tujuan sering dikunjungi | AntarKita |
-| `pelanggan-3-ride-peta.png` | Pilih titik jemput di peta | AntarKita |
-| `pelanggan-4-lacak.png` | Pelacakan driver — peta, kartu mitra, cocokkan plat, tip, bagikan perjalanan | AntarKita |
+| `pelanggan-2-ride.png` | AntarRide — titik jemput & tujuan terisi, estimasi jarak, kelas kendaraan (Hemat/Standar/Listrik) dengan harga, jadwalkan, tombol pesan | AntarKita |
+| `pelanggan-3-ride-peta.png` | Pilih titik jemput di peta (pin tengah, alamat terpilih, tombol "Pilih lokasi ini") | AntarKita |
+| `pelanggan-4-lacak.png` | Pelacakan driver — peta rute, posisi driver, kode order, status + stepper (Mencari→Menuju→Tiba→Jalan→Selesai), sheet bawah kondisi awal (kartu mitra/PIN/plat ada di bawah sheet, terlihat saat ditarik) | AntarKita |
 | `pelanggan-5-pay.png` | AntarPay — saldo, tunai/saldo/e-wallet lewat Midtrans | AntarKita |
-| `mitra-1-beranda.png` | Beranda mitra — sakelar Online, peta, order tersedia | AntarKita Mitra |
-| `mitra-2-order.png` | Rincian order — pendapatan per trip, rute, potongan platform | AntarKita Mitra |
-| `mitra-3-account.png` | Akun mitra — rating, layanan yang bisa diambil, kode AntarNow | AntarKita Mitra |
+| `mitra-1-beranda.png` | Beranda mitra — sakelar Online, peta dengan 2 order tersedia, kartu order aktif | AntarKita Mitra |
+| `mitra-2-order.png` | Rincian order — pendapatan bersih per trip, status pembayaran, pusat keamanan, kartu pelanggan (nomor disamarkan), rute | AntarKita Mitra |
+| `mitra-3-account.png` | Akun mitra — rating/ulasan/trip, layanan yang bisa diambil, kode AntarNow, data kendaraan | AntarKita Mitra |
 
-Tambahan (**bukan** untuk halaman listing): `bukti-ugc-blokir.png` — layar **Akun → Pengguna diblokir**,
-untuk dilampirkan bila formulir UGC/moderasi Play Console meminta bukti tangkapan layar (lihat §4.11).
+Tambahan (**bukan** untuk halaman listing): `bukti-ugc-blokir.png` — layar **Akun → Pengguna diblokir**
+(tangkapan mentah 1236×2676, diregenerasi bersamaan), untuk dilampirkan bila formulir UGC/moderasi
+Play Console meminta bukti tangkapan layar (lihat §4.11).
 
 > ⚠️ **JUJUR SOAL KUALITASNYA — ini DRAF, bukan tangkapan perangkat asli.** Tangkapan mentahnya diambil
-> dari **build web** (`dist/`) di Chromium headless pada viewport ponsel dengan data tiruan, bukan dari HP
-> Android. Perbedaan yang tetap ada dan bisa dilihat orang yang teliti:
+> dari **build web** (`dist/`, dibangun persis seperti workflow `web.yml`) di Chromium headless (Playwright)
+> pada viewport ponsel dengan data tiruan, bukan dari HP Android. Semua permintaan ke Supabase dicegat di
+> peramban dan dijawab data tiruan — **tidak ada akun nyata, tidak ada permintaan ke Supabase produksi**.
+> Perbedaan yang tetap ada dan bisa dilihat orang yang teliti:
 > 1. **Tidak ada status bar Android** (jam, sinyal, baterai) — screenshot HP asli selalu punya.
-> 2. **Peta memakai basemap prosedural**, bukan peta Padang yang sebenarnya — tile OpenStreetMap
->    diblokir di lingkungan build. Jalannya terlihat terlalu teratur bila diperhatikan.
-> 3. **Data tiruan**: nama "Budi Santoso"/"Ahmad Fauzi", saldo Rp250.000, plat BA 1234 AB.
+> 2. **Peta memakai basemap prosedural** (SVG: blok, jalan, taman, sungai), bukan peta Padang yang
+>    sebenarnya — tile OpenStreetMap diblokir di lingkungan build. Jalannya terlihat terlalu teratur bila
+>    diperhatikan; badge atribusi yang tampil adalah atribusi bawaan aplikasi, bukan sumber gambar peta ini.
+> 3. **Data tiruan**: nama "Budi Santoso"/"Ahmad Fauzi", saldo Rp250.000, plat BA 1234 AB, kode order
+>    AK2609150042, jam dibekukan 16.30 WIB (sapaan "Selamat sore").
 > 4. Rendering React Native Web berbeda tipis dari React Native di Android (jarak huruf, bayangan).
+> 5. Kompromi layar: `pelanggan-4-lacak` diambil pada kondisi sheet bawah **belum ditarik** (kartu driver,
+>    cocokkan plat, PIN, dan tip ada di bawah lipatan) karena bila sheet ditarik penuh pada build web, area
+>    peta menyusut dan badge atribusi melayang di tengah peta. `mitra-2-order` diambil dengan sheet ditarik
+>    penuh (tarikan mouse disimulasikan). Layar AntarFood sengaja tidak dipakai (gambar merchant tiruan).
 >
 > **Cukup untuk Internal testing dan untuk mengisi listing hari ini** — Google tidak mewajibkan
 > screenshot berasal dari perangkat. Tetapi **ganti dengan tangkapan HP asli sebelum rilis produksi**:
