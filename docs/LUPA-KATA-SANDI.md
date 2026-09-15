@@ -4,7 +4,7 @@ Berlaku untuk aplikasi Pelanggan, Mitra, dan Admin (kode yang sama, `src/screens
 
 ## Alur pengguna
 1. Layar **Masuk** → tautan **Lupa kata sandi?** → halaman *Lupa kata sandi* (email terisi otomatis bila sudah diketik).
-2. Kirim → Supabase Auth mengirim email pemulihan (`resetPasswordForEmail`, `redirect_to` = beranda web aplikasi yang sama: `…/antarkita/`, `…/antarkita/mitra/`, `…/antarkita/admin/`). Layar "Cek email Anda" + tombol kirim ulang (jeda 60 detik). Pesan tidak membocorkan apakah email terdaftar.
+2. Kirim → Supabase Auth mengirim email pemulihan (`resetPasswordForEmail`, `redirect_to` = beranda web aplikasi yang sama: `https://apps.antarkitaindonesia.com/`, `https://apps.antarkitaindonesia.com/mitra/`, `https://apps.antarkitaindonesia.com/admin/`). Layar "Cek email Anda" + tombol kirim ulang (jeda 60 detik). Pesan tidak membocorkan apakah email terdaftar.
 3. Pengguna mengetuk **Reset Password** di email → Supabase memverifikasi token → mengarahkan ke beranda web dengan `#access_token=…&type=recovery`.
 4. `RootLayout` (web) membaca token dari URL (langsung di hash, atau lewat `?r=` bila melewati 404 GitHub Pages), membuat sesi pemulihan, menghapus token dari URL, dan **memaksa** ke layar *Buat kata sandi baru* (semua rute lain diblokir selama `recovery`).
 5. Kata sandi baru (min. 8 karakter, huruf + angka, indikator kekuatan, ulangi) → `updateUser({ password })` → "Kata sandi diperbarui" → Lanjut ke aplikasi (sesi tetap). Tautan kedaluwarsa/sudah dipakai → pesan + langsung ke halaman Lupa kata sandi.
@@ -12,13 +12,13 @@ Berlaku untuk aplikasi Pelanggan, Mitra, dan Admin (kode yang sama, `src/screens
 7. Pengguna yang sudah masuk: **Akun → Ganti kata sandi** (`/account/password`, layar yang sama tanpa mode pemulihan).
 
 ## Di APK Android
-Tautan email membuka halaman **web** AntarKita (bukan aplikasi) — di sana kata sandi baru dibuat, lalu pengguna masuk lagi di APK dengan kata sandi baru. Ini disengaja: tidak butuh App Links/assetlinks (butuh SHA-256 keystore rilis) dan bekerja di semua perangkat. Bila kelak diinginkan buka langsung di aplikasi, tambahkan intent-filter `https://erzamadana-ui.github.io/antarkita/*` + `assetlinks.json` setelah keystore rilis ada.
+Tautan email membuka halaman **web** AntarKita (bukan aplikasi) — di sana kata sandi baru dibuat, lalu pengguna masuk lagi di APK dengan kata sandi baru. Ini disengaja: tidak butuh App Links/assetlinks (butuh SHA-256 keystore rilis) dan bekerja di semua perangkat. Bila kelak diinginkan buka langsung di aplikasi, tambahkan intent-filter `https://apps.antarkitaindonesia.com/*` + `assetlinks.json` setelah keystore rilis ada.
 
 ## Konfigurasi Supabase yang WAJIB dicek pemilik (Dashboard → Authentication)
 | Pengaturan | Nilai |
 |---|---|
-| URL Configuration → **Site URL** | `https://erzamadana-ui.github.io/antarkita/` |
-| URL Configuration → **Redirect URLs** | `https://erzamadana-ui.github.io/antarkita/`, `https://erzamadana-ui.github.io/antarkita/mitra/`, `https://erzamadana-ui.github.io/antarkita/admin/`, `https://erzamadana-ui.github.io/antarkita/**` |
+| URL Configuration → **Site URL** | `https://apps.antarkitaindonesia.com/` |
+| URL Configuration → **Redirect URLs** | `https://apps.antarkitaindonesia.com/`, `https://apps.antarkitaindonesia.com/mitra/`, `https://apps.antarkitaindonesia.com/admin/`, `https://apps.antarkitaindonesia.com/**` — **plus** `https://erzamadana-ui.github.io/antarkita/**` selama APK build ≤ 107 (masih mengirim `redirect_to` lama) beredar; Supabase menolak `redirect_to` yang tidak ada di daftar |
 | Email Templates → **Reset Password** | Disarankan Bahasa Indonesia + kode: lihat template di bawah |
 | Rate limits → Email | Bawaan Supabase (SMTP internal) sangat terbatas (≈ 2–4 email/jam) dan **hanya untuk pengujian** — untuk produksi wajib **Custom SMTP** (mis. Resend/Brevo/SES) di Project Settings → Auth → SMTP |
 

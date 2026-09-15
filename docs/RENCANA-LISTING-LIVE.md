@@ -35,7 +35,7 @@ Peran: Direktur (AI) mengeksekusi semua pekerjaan teknis; Komisaris (Erza) menge
 |---|---|---|
 | 1. Daftar/masuk dashboard Midtrans → ambil **Server Key & Client Key Sandbox** (Settings → Access Keys) | Komisaris | 15 menit |
 | 2. Masukkan kunci di Panel Admin → **Payment Gateway** (tersimpan di tabel rahasia `gateway_secrets`, bukan di kode) — jangan kirim kunci lewat chat | Komisaris | 5 menit |
-| 3. Di Midtrans → Settings → Configuration: **Payment Notification URL** = `https://qwltshvzrsykxdvhbxcv.supabase.co/functions/v1/midtrans-webhook`; Finish/Unfinish/Error redirect = `https://erzamadana-ui.github.io/antarkita/pay/gateway` | Komisaris | 5 menit |
+| 3. Di Midtrans → Settings → Configuration: **Payment Notification URL** = `https://qwltshvzrsykxdvhbxcv.supabase.co/functions/v1/midtrans-webhook`; Finish/Unfinish/Error redirect = `https://apps.antarkitaindonesia.com/pay/gateway` | Komisaris | 5 menit |
 | 4. Uji top-up sandbox dari APK Pelanggan (GoPay/QRIS simulator Midtrans) → saldo bertambah otomatis lewat webhook; cek di Admin → Keuangan & Log Aktivitas | Komisaris menjalankan di HP, Direktur memantau log Edge Function & tabel `payments` | 30 menit |
 | 5. Bila ada kegagalan: Direktur memperbaiki hari itu juga (log fungsi + tabel `payments.raw`) | Direktur | — |
 | 6. Ajukan **aktivasi produksi Midtrans** (dokumen legal usaha, rekening) — proses review Midtrans biasanya 1–3 hari kerja; sementara itu aplikasi tetap live dengan top-up manual + sandbox | Komisaris | 30 menit + menunggu |
@@ -48,7 +48,7 @@ Peran: Direktur (AI) mengeksekusi semua pekerjaan teknis; Komisaris (Erza) menge
 | 2. Tambah GitHub Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` | Komisaris |
 | 3. Jalankan workflow **Release AAB** (Actions → Release AAB → Run, app: both) → unduh `antarkita-pelanggan.aab` & `antarkita-mitra.aab` dari release `aab-N` | Komisaris (1 klik), Direktur memverifikasi log |
 | 4. Play Console: buat 2 aplikasi (`id.antarkita.app` "AntarKita", `id.antarkita.mitra` "AntarKita Mitra"), unggah AAB ke **Internal testing**, isi listing dari `PLAY-STORE-LISTING.md` (teks siap salin), unggah ikon 512 & feature graphic 1024×500 & ≥2 screenshot per aplikasi (ambil dari HP) | Komisaris; Direktur menyiapkan feature graphic & screenshot dari build web bila diminta |
-| 5. App content: Privacy policy URL `https://erzamadana-ui.github.io/antarkita/privacy/`, Data safety (tabel jawaban tersedia), IARC, Target audience 18+, Financial features (dompet closed-loop + Midtrans), Ads: tidak ada iklan pihak ketiga | Komisaris |
+| 5. App content: Privacy policy URL `https://apps.antarkitaindonesia.com/privacy/`, Data safety (tabel jawaban tersedia), IARC, Target audience 18+, Financial features (dompet closed-loop + Midtrans), Ads: tidak ada iklan pihak ketiga | Komisaris |
 | 6. Internal testing → undang penguji (email) → uji di HP → **Closed testing** (syarat akun developer pribadi baru: 12 penguji × 14 hari) → ajukan **Production** | Komisaris |
 
 ### Sepanjang review Google (1–7 hari) — Direktur
