@@ -102,13 +102,13 @@ Ulangi C1–C3 untuk **AntarKita** (Pelanggan) dan **AntarKita Mitra**.
 Semua jawaban ada di `PLAY-STORE-LISTING.md`:
 - [ ] **Main store listing**: nama, deskripsi singkat, deskripsi lengkap, ikon 512×512, feature graphic 1024×500, ≥2 screenshot ponsel, kategori, tag, email kontak, situs web.
   - Semua aset grafis sudah jadi di `docs/rilis/aset/` — ikon & feature graphic **final**; **screenshot berstatus DRAF** (dibuat dari build web, bukan HP asli — lihat peringatan di `PLAY-STORE-LISTING.md` §7). Boleh dipakai untuk Internal testing; ganti dengan tangkapan HP asli sebelum produksi.
-- [ ] **App content → Privacy policy**: `https://erzamadana-ui.github.io/antarkita/privacy/`.
+- [ ] **App content → Privacy policy**: `https://apps.antarkitaindonesia.com/privacy/`.
 - [ ] **App content → App access**: akun uji reviewer (buat khusus di Supabase produksi; untuk Mitra pakai driver yang sudah *approved*).
 - [ ] **App content → Ads**: Tidak ada iklan.
 - [ ] **App content → Content rating**: kuesioner IARC (jawaban di listing §4.4) → sertifikat terbit otomatis.
 - [ ] **App content → Target audience**: 18+.
 - [ ] **App content → News / COVID / Government**: Tidak.
-- [ ] **App content → Data safety**: isi tabel §4.7, sertakan URL hapus akun **`https://erzamadana-ui.github.io/antarkita/hapus-akun/`** (halaman khusus; **jangan** pakai `.../privacy/#hapus` — Google menuntut jalur permintaan yang menonjol di halamannya sendiri).
+- [ ] **App content → Data safety**: isi tabel §4.7, sertakan URL hapus akun **`https://apps.antarkitaindonesia.com/hapus-akun/`** (halaman khusus; **jangan** pakai `.../privacy/#hapus` — Google menuntut jalur permintaan yang menonjol di halamannya sendiri).
 - [ ] **App content → Financial features**: Digital wallet (closed-loop) + teks §4.8; unggah bukti akun Midtrans bila diminta.
 - [ ] **App content → Advertising ID**: tidak dipakai.
 - [ ] **App content → Health / Government**: tidak berlaku.
@@ -145,7 +145,7 @@ Semua jawaban ada di `PLAY-STORE-LISTING.md`:
 ### D2. Auth
 - [ ] **Authentication → Providers → Email**: aktifkan *Confirm email*; *Secure email change* on; minimal panjang kata sandi 8; aktifkan *Leaked password protection*.
 - [ ] **Authentication → Email Templates**: ganti teks ke Bahasa Indonesia dengan nama AntarKita (Confirm signup, Magic link, Reset password, Change email). Sertakan tautan Kebijakan Privasi.
-- [ ] **Authentication → URL Configuration**: Site URL `https://erzamadana-ui.github.io/antarkita/`; Redirect URLs: `https://erzamadana-ui.github.io/antarkita/**`, `antarkita://**`, `antarkitamitra://**`, `antarkitaadmin://**`.
+- [ ] **Authentication → URL Configuration**: Site URL `https://apps.antarkitaindonesia.com/`; Redirect URLs: `https://apps.antarkitaindonesia.com/**`, `antarkita://**`, `antarkitamitra://**`, `antarkitaadmin://**`. **Pertahankan** `https://erzamadana-ui.github.io/antarkita/**` di daftar selama APK build ≤ 107 (masih mengirim `redirect_to` github.io) beredar.
 - [ ] **Custom SMTP** (Project Settings → Auth → SMTP): pakai Resend/Brevo/Mailgun/SES dengan domain sendiri (`noreply@antarkita.id`) — SMTP bawaan Supabase dibatasi ±3 email/jam dan tidak cocok untuk produksi. Set SPF/DKIM/DMARC di DNS.
 - [ ] **Rate limits** (Auth → Rate Limits): sign-up & OTP per IP ≤ 30/jam, token refresh default, aktifkan **CAPTCHA (Turnstile/hCaptcha)** untuk sign-up/login web.
 - [ ] Hapus semua akun uji/dummy dari seed (`supabase/seed.sql`) di proyek produksi; pastikan tidak ada admin dengan kata sandi default.
@@ -163,14 +163,19 @@ Semua jawaban ada di `PLAY-STORE-LISTING.md`:
 - [ ] `supabase secrets set MIDTRANS_SERVER_KEY=… MIDTRANS_CLIENT_KEY=… MIDTRANS_IS_PRODUCTION=true` (kunci **produksi**, bukan sandbox) atau isi lewat panel Admin → Payment Gateway.
 - [ ] Daftarkan URL webhook produksi di dashboard Midtrans (Settings → Configuration → Payment Notification URL) → `https://<project-ref>.supabase.co/functions/v1/midtrans-webhook`; uji satu transaksi Rp10.000 nyata lalu refund.
 - [ ] Verifikasi tanda tangan webhook (signature key SHA-512) aktif di fungsi; tolak request tanpa signature.
-- [ ] Batasi CORS Edge Functions ke origin GitHub Pages + skema aplikasi.
+- [ ] Batasi CORS Edge Functions ke origin `https://apps.antarkitaindonesia.com` (+ `https://erzamadana-ui.github.io` selama alias dipakai) + skema aplikasi.
 
 ### D5. Domain & URL hukum
-- [ ] (Direkomendasikan) Beli domain `antarkita.id` / `antarkita.co.id` → GitHub Pages **Custom domain** (`www.antarkita.id`, CNAME ke `erzamadana-ui.github.io`, aktifkan *Enforce HTTPS*). Setelah itu:
-  - [ ] Set `EXPO_PUBLIC_SITE_ROOT=https://www.antarkita.id` dan `EXPO_PUBLIC_BASE_URL=` (kosong) di workflow Web & AAB, lalu build ulang.
-  - [ ] Perbarui URL privasi di Play Console → `https://www.antarkita.id/privacy/` (URL lama tetap hidup selama repo Pages ada; jangan hapus).
-  - [ ] Pakai domain yang sama untuk email transaksional (SMTP) dan kontak dukungan (`halo@antarkita.id` diteruskan ke Gmail).
-- [ ] Sampai domain ada, URL resmi: `https://erzamadana-ui.github.io/antarkita/privacy/` dan `/terms/` — pastikan keduanya terbuka **tanpa** redirect ke aplikasi (dicek: file statis ada di `dist/privacy/index.html`, 404.html tidak menyentuhnya).
+Keputusan direksi (Sep 2026): domain kustom **`https://apps.antarkitaindonesia.com/`** (base path `/`; Mitra `/mitra/`, Admin `/admin/`), tetap di GitHub Pages.
+- [x] Kode & workflow: `EXPO_PUBLIC_BASE_URL=` (kosong) + `EXPO_PUBLIC_SITE_ROOT/SITE_URL=https://apps.antarkitaindonesia.com` di `web.yml`, `android.yml`, `release-aab.yml`; `scripts/build-web.mjs` menulis `dist/CNAME` (= `apps.antarkitaindonesia.com`) pada setiap deploy; fallback di `src/lib/app.ts` & `src/components/Safety.tsx` ke domain baru.
+- [ ] **DNS** (registrar `antarkitaindonesia.com`, direktur utama): record `CNAME apps → erzamadana-ui.github.io` (TTL 1 jam). Jangan pakai A record/proxy CDN (Cloudflare proxy oranye) sebelum sertifikat GitHub terbit.
+- [ ] **GitHub → Settings → Pages → Custom domain**: isi `apps.antarkitaindonesia.com`, tunggu "DNS check successful", lalu centang **Enforce HTTPS** (sertifikat Let's Encrypt terbit otomatis, bisa sampai 1 jam). Deploy berikutnya membawa `dist/CNAME`, sehingga setelan tidak terhapus.
+- [ ] (Opsional, disarankan) **Settings → Pages → Verified domains** di profil GitHub: verifikasi `antarkitaindonesia.com` agar subdomain tidak bisa diambil alih (*domain takeover*).
+- [ ] Setelah HTTPS hijau: cek `https://apps.antarkitaindonesia.com/`, `/mitra/`, `/admin/`, `/privacy/`, `/terms/`, `/hapus-akun/` (HTTP 200, aset dimuat dari `/_expo/…`), dan cek URL lama `https://erzamadana-ui.github.io/antarkita/privacy/` → 301 ke domain baru.
+- [ ] Bangun ulang APK/AAB (build ≥ 108) supaya tautan "Bagikan perjalanan", tautan silang antar aplikasi, dan `redirect_to` pemulihan kata sandi memakai domain baru. Build ≤ 107 masih memuat URL github.io — **tetap berfungsi** lewat pengalihan GitHub, tetapi `redirect_to` github.io harus tetap ada di allow-list Supabase sampai build lama tidak dipakai.
+- [ ] URL lama `https://erzamadana-ui.github.io/antarkita/…` **tetap hidup sebagai alias** (GitHub Pages mengalihkan ke domain kustom). Jangan hapus repo/Pages.
+- [ ] Pakai domain yang sama untuk email transaksional (SMTP) dan kontak dukungan (`halo@antarkitaindonesia.com` diteruskan ke Gmail).
+- [ ] URL hukum resmi: `https://apps.antarkitaindonesia.com/privacy/`, `/terms/`, `/hapus-akun/` — pastikan ketiganya terbuka **tanpa** redirect ke aplikasi (file statis ada di `dist/<halaman>/index.html`, 404.html tidak menyentuhnya).
 
 ---
 
@@ -205,6 +210,6 @@ Setelah diterapkan, uji dengan akun dummy:
 
 
 ## Lupa kata sandi (verifikasi email)
-- [ ] Authentication → URL Configuration: Site URL `https://erzamadana-ui.github.io/antarkita/`; Redirect URLs berisi `…/antarkita/`, `…/antarkita/mitra/`, `…/antarkita/admin/`, `…/antarkita/**`.
+- [ ] Authentication → URL Configuration: Site URL `https://apps.antarkitaindonesia.com/`; Redirect URLs berisi `https://apps.antarkitaindonesia.com/`, `https://apps.antarkitaindonesia.com/mitra/`, `https://apps.antarkitaindonesia.com/admin/`, `https://apps.antarkitaindonesia.com/**`.
 - [ ] Email Templates → Reset Password: pakai template Bahasa Indonesia + `{{ .Token }}` (lihat `docs/LUPA-KATA-SANDI.md`).
 - [ ] Custom SMTP aktif sebelum produksi (SMTP bawaan Supabase hanya untuk uji, kuota beberapa email/jam).

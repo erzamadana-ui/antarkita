@@ -30,13 +30,13 @@ Tiga aplikasi, dua yang dirilis ke App Store:
 > (diverifikasi 9 Sep 2026). Begitu aplikasi menyatakan mendukung iPad, App Store Connect
 > **mewajibkan** screenshot iPad 13" — pekerjaan tambahan untuk perangkat yang tidak jadi sasaran.
 
-URL wajib (sama dengan Play, sudah hidup):
+URL wajib (sama dengan Play; domain kustom `apps.antarkitaindonesia.com` — URL lama `erzamadana-ui.github.io/antarkita/…` tetap hidup sebagai alias yang dialihkan GitHub):
 
-- Kebijakan Privasi (**wajib** di App Store Connect): `https://erzamadana-ui.github.io/antarkita/privacy/`
-- Syarat & Ketentuan / EULA: `https://erzamadana-ui.github.io/antarkita/terms/`
-- Dukungan (**Support URL — wajib**): `https://erzamadana-ui.github.io/antarkita/`
-- Marketing URL (opsional): `https://erzamadana-ui.github.io/antarkita/` (Mitra: `/mitra/`)
-- Halaman permintaan hapus akun: `https://erzamadana-ui.github.io/antarkita/hapus-akun/`
+- Kebijakan Privasi (**wajib** di App Store Connect): `https://apps.antarkitaindonesia.com/privacy/`
+- Syarat & Ketentuan / EULA: `https://apps.antarkitaindonesia.com/terms/`
+- Dukungan (**Support URL — wajib**): `https://apps.antarkitaindonesia.com/`
+- Marketing URL (opsional): `https://apps.antarkitaindonesia.com/` (Mitra: `/mitra/`)
+- Halaman permintaan hapus akun: `https://apps.antarkitaindonesia.com/hapus-akun/`
   — di App Store ini **pelengkap**, bukan pengganti tombol hapus akun di dalam aplikasi (§8).
 - Email kontak: `erzamadana@gmail.com`
 
@@ -112,8 +112,8 @@ Anda dapat menghapus akun beserta datanya kapan saja langsung dari aplikasi: Aku
 Tertarik jadi mitra? Unduh aplikasi AntarKita Mitra untuk driver, merchant, pedagang pasar, mitra travel, dan mobil box.
 
 AntarKita — antar apa saja, ke mana saja.
-Kebijakan Privasi: https://erzamadana-ui.github.io/antarkita/privacy/
-Syarat & Ketentuan: https://erzamadana-ui.github.io/antarkita/terms/
+Kebijakan Privasi: https://apps.antarkitaindonesia.com/privacy/
+Syarat & Ketentuan: https://apps.antarkitaindonesia.com/terms/
 Bantuan: erzamadana@gmail.com
 ```
 
@@ -217,8 +217,8 @@ Hapus akun beserta datanya kapan saja dari aplikasi: Akun → Lainnya → Hapus 
 Syarat menjadi mitra: usia minimal 18 tahun, KTP dan dokumen kendaraan/usaha yang berlaku. Mitra adalah mitra usaha independen; komisi platform tercantum transparan di setiap pesanan.
 
 AntarKita Mitra — penghasilan tambahan, satu aplikasi.
-Kebijakan Privasi: https://erzamadana-ui.github.io/antarkita/privacy/
-Syarat & Ketentuan: https://erzamadana-ui.github.io/antarkita/terms/
+Kebijakan Privasi: https://apps.antarkitaindonesia.com/privacy/
+Syarat & Ketentuan: https://apps.antarkitaindonesia.com/terms/
 Bantuan: erzamadana@gmail.com
 ```
 
@@ -312,7 +312,7 @@ tracking?**, plus **tujuan**.
 | User Content → Photos | KTP, SIM, STNK, NPWP, izin usaha, selfie verifikasi | Linked · App Functionality |
 
 **Privacy Policy URL** (wajib diisi di halaman yang sama):
-`https://erzamadana-ui.github.io/antarkita/privacy/`
+`https://apps.antarkitaindonesia.com/privacy/`
 
 > **Peringatan konsistensi.** Label ini harus cocok dengan: (a) isi Kebijakan Privasi,
 > (b) jawaban Data safety di Play Console (`PLAY-STORE-LISTING.md` §4.7), dan (c) izin yang
@@ -447,7 +447,7 @@ saja **tidak cukup** (berbeda dari Play yang justru mewajibkan tautan web).
 - Layar in-app: `src/screens/account/delete.tsx` → menu **Akun → Lainnya → Hapus akun**
 - Sisi server: `supabase/migrations/0023_hapus_akun.sql`
 - Halaman web pendamping (dipakai Play, boleh disebut juga di sini):
-  `https://erzamadana-ui.github.io/antarkita/hapus-akun/`
+  `https://apps.antarkitaindonesia.com/hapus-akun/`
 
 > **Verifikasi sebelum submit.** `CHECKLIST-GO-LIVE.md` §E menandai status migrasi 0023 sebagai
 > "BERTENTANGAN, verifikasi sebelum apa pun". Tombol hapus akun yang menampilkan galat adalah
