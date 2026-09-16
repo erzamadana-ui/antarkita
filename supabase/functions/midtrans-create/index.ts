@@ -43,6 +43,11 @@ Deno.serve(async (req) => {
       return json({ configured: true, source: keys.source, is_production: keys.prod, reachable: ok, http: res.status, message: ok ? "Kunci valid, Midtrans dapat dihubungi" : res.status === 401 ? "Server key ditolak Midtrans (401) — periksa kunci & mode sandbox/production" : `Respons Midtrans: ${res.status}` });
     }
 
+    // ---- Sakelar AntarPay (migrasi 0088): saat nonaktif, tidak ada transaksi Snap baru yang dibuat ----
+    const { data: antarpayOn, error: toggleErr } = await admin.rpc("antarpay_enabled");
+    if (toggleErr) return json({ error: "Status AntarPay tidak dapat diperiksa — coba lagi" }, 503);
+    if (antarpayOn !== true) return json({ error: "AntarPay sedang dinonaktifkan sementara. Gunakan pembayaran tunai.", antarpay_enabled: false }, 403);
+
     const { amount, method = "any", purpose = "topup", order_id = null } = body;
     const amt = Math.round(Number(amount));
     const { data: cfg } = await admin.rpc("gateway_public_config");
