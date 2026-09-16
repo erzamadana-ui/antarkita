@@ -6,6 +6,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Card, Row, Input, Button, toast, Chip } from '@/components/ui';
 import { Entrance } from '@/components/motion';
 import { useAuth } from '@/store/auth';
+import { useAntarPay, ANTARPAY_OFF_TEXT } from '@/hooks/useAppSettings';
+import { AntarPayOffBanner } from '@/components/AntarPayNotice';
 import { rpc, supabase } from '@/lib/supabase';
 import { pickAndUpload } from '@/lib/upload';
 import { colors, font, radius } from '@/lib/theme';
@@ -20,6 +22,7 @@ export default function TopUp() {
   const [bank, setBank] = useState<{ bank: string; number: string; name: string } | null>(null);
   const [proof, setProof] = useState<{ path: string; uri?: string } | null>(null);
   const [note, setNote] = useState('');
+  const { enabled: antarpayOn } = useAntarPay();   // 0088: request_topup ditolak server saat nonaktif
 
   useEffect(() => { supabase.from('app_settings').select('value').eq('key', 'bank_account').maybeSingle().then(({ data }) => setBank((data?.value as typeof bank) ?? null)); }, []);
 
@@ -29,6 +32,7 @@ export default function TopUp() {
     catch (e) { toast.error((e as Error).message); }
   };
   const submit = async () => {
+    if (!antarpayOn) return toast.error(ANTARPAY_OFF_TEXT);
     const n = Number(amount.replace(/\D/g, ''));
     if (n < 10000) return toast.error('Minimal top up Rp10.000');
     try {
@@ -39,10 +43,11 @@ export default function TopUp() {
   };
 
   return (
-    <Screen title="Top Up AntarPay" back footer={<Button title={`Kirim Permintaan Top Up ${rupiah(Number(amount.replace(/\D/g, '')) || 0)}`} size="lg" onPress={submit} />}>
+    <Screen title="Top Up AntarPay" back footer={<Button title={antarpayOn ? `Kirim Permintaan Top Up ${rupiah(Number(amount.replace(/\D/g, '')) || 0)}` : 'Top up sementara nonaktif'} size="lg" disabled={!antarpayOn} onPress={submit} />}>
       <View style={{ gap: 16 }}>
+        {!antarpayOn && <Entrance index={0}><AntarPayOffBanner /></Entrance>}
         <Entrance index={0}>
-          <Pressable onPress={() => router.push({ pathname: '/pay/gateway', params: { amount: amount || '50000' } } as never)} style={s.gw}>
+          <Pressable disabled={!antarpayOn} onPress={() => router.push({ pathname: '/pay/gateway', params: { amount: amount || '50000' } } as never)} style={[s.gw, !antarpayOn && { opacity: 0.5 }]}>
             <View style={s.gwIcon}><Ionicons name="flash" size={20} color="#fff" /></View>
             <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text }}>Top up instan — GoPay, OVO, DANA, ShopeePay, QRIS, VA</Text><Text style={font.tiny}>Saldo langsung masuk otomatis lewat payment gateway.</Text></View>
             <Ionicons name="chevron-forward" size={20} color={colors.primary} />
