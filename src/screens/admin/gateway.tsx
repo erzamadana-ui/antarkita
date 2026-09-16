@@ -1,6 +1,10 @@
-// Admin · Payment Gateway (Midtrans): sakelar AntarPay (0088), status, konfigurasi kunci, metode aktif, webhook & checklist pengajuan
+// Admin · Payment Gateway (Midtrans): sakelar AntarPay global (0088), sakelar per SALURAN pembayaran (0089),
+// status, konfigurasi kunci, webhook & checklist pengajuan.
+// Daftar saluran (0089) menggantikan Chip "Metode aktif" lama supaya tidak ada dua kontrol yang bertabrakan:
+// admin_set_payment_channel ikut menulis pg_methods, dan Simpan konfigurasi mengirim metode hasil daftar ini.
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Switch } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Clipboard from 'expo-clipboard';
 import { AdminPage, Table, StatCard, adminFont as font, adminTone, adminSpace, adminRadius, AdminCard as Card } from '@/components/admin';
 import { Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
@@ -9,14 +13,11 @@ import { colors } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
 import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import { useAppSettingsStore } from '@/hooks/useAppSettings';
-import type { GatewayStatus } from '@/lib/types';
+import { PAYMENT_CHANNELS, GATEWAY_CHANNELS, channelLabel } from '@/store/payprefs';
+import type { AdminPaymentChannels, GatewayStatus, PaymentChannels } from '@/lib/types';
 import { fmtDate, fmtAgo, WideTableHint } from './_shared';
 
 const WEBHOOK_URL = 'https://qwltshvzrsykxdvhbxcv.supabase.co/functions/v1/midtrans-webhook';
-const METHODS: { key: string; label: string }[] = [
-  { key: 'gopay', label: 'GoPay' }, { key: 'shopeepay', label: 'ShopeePay' }, { key: 'qris', label: 'QRIS' }, { key: 'ovo', label: 'OVO' },
-  { key: 'dana', label: 'DANA' }, { key: 'bank_transfer', label: 'Transfer bank (VA)' }, { key: 'card', label: 'Kartu kredit/debit' },
-];
 const CHECKLIST = [
   'Daftar akun di dashboard.midtrans.com (email bisnis, nomor HP aktif).',
   'Verifikasi bisnis. Perorangan: KTP + NPWP pemilik. Badan usaha: akta pendirian + SK Kemenkumham, KTP & NPWP direktur, NPWP perusahaan, NIB.',
@@ -39,6 +40,9 @@ export default function AdminGateway() {
   // 0088: sakelar AntarPay. null = belum termuat.
   const [payOn, setPayOn] = useState<boolean | null>(null);
   const [payBusy, setPayBusy] = useState(false);
+  // 0089: sakelar per saluran pembayaran (nilai MENTAH yang disetel admin, bukan status efektif).
+  const [chan, setChan] = useState<PaymentChannels | null>(null);
+  const [chanBusy, setChanBusy] = useState<string | null>(null);
 
   const apply = useCallback((g: GatewayStatus) => {
     setSt(g);
@@ -47,6 +51,7 @@ export default function AdminGateway() {
   const load = useCallback(async () => {
     try { apply(await rpc<GatewayStatus>('admin_gateway_status')); } catch (e) { toast.error((e as Error).message); }
     try { setPayOn((await rpc<boolean>('antarpay_enabled')) === true); } catch { setPayOn(false); }
+    try { setChan((await rpc<AdminPaymentChannels>('admin_payment_channels'))?.payment_channels ?? null); } catch (e) { handleAdminError(e); }
   }, [apply]);
   useEffect(() => { load(); }, [load]);
 
@@ -65,14 +70,31 @@ export default function AdminGateway() {
     finally { setPayBusy(false); }
   };
 
+  /** 0089: sakelar satu saluran pembayaran — butuh PIN panel (admin_require_unlock); ikut menyinkronkan pg_methods. */
+  const toggleChannel = async (key: string, on: boolean) => {
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    const prev = chan;
+    setChanBusy(key); setChan((c) => ({ ...(c ?? {}), [key]: on }));
+    try {
+      const r = await rpc<AdminPaymentChannels>('admin_set_payment_channel', { p_key: key, p_enabled: on });
+      setChan(r?.payment_channels ?? { ...(prev ?? {}), [key]: on });
+      if (Array.isArray(r?.pg_methods)) setF((p) => ({ ...p, methods: r.pg_methods }));
+      const label = PAYMENT_CHANNELS.find((c) => c.key === key)?.label ?? key;
+      toast.success(`${label} ${on ? 'diaktifkan' : 'dinonaktifkan'}`);
+      useAppSettingsStore.getState().load(true);
+    } catch (e) { setChan(prev); handleAdminError(e); }
+    finally { setChanBusy(null); }
+  };
+
   const save = async () => {
     const min = Number(f.topup_min), max = Number(f.topup_max);
     if (!min || !max || min >= max) return toast.error('Batas top up tidak valid (min < max)');
-    if (!f.methods.length) return toast.error('Pilih minimal satu metode pembayaran');
     if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
     setBusy(true);
     try {
-      const p: Record<string, unknown> = { client_key: f.client_key.trim(), merchant_id: f.merchant_id.trim(), is_production: f.is_production, methods: f.methods, topup_min: min, topup_max: max };
+      // Metode gateway = hasil daftar Saluran Pembayaran (0089) supaya pg_methods tidak bertabrakan dengan sakelar saluran.
+      const methods = chan ? GATEWAY_CHANNELS.filter((k) => chan[k] === true) : f.methods;
+      const p: Record<string, unknown> = { client_key: f.client_key.trim(), merchant_id: f.merchant_id.trim(), is_production: f.is_production, methods, topup_min: min, topup_max: max };
       if (f.server_key.trim()) p.server_key = f.server_key.trim();
       apply(await rpc<GatewayStatus>('admin_set_gateway', { p })); toast.success('Konfigurasi gateway disimpan'); setTest(null);
     } catch (e) { handleAdminError(e); } finally { setBusy(false); }
@@ -93,7 +115,6 @@ export default function AdminGateway() {
     } catch (e) { setTest({ ok: false, text: (e as Error).message }); } finally { setTesting(false); }
   };
   const copyWebhook = async () => { await Clipboard.setStringAsync(WEBHOOK_URL); toast.success('URL webhook disalin'); };
-  const toggleMethod = (k: string) => setF((p) => ({ ...p, methods: p.methods.includes(k) ? p.methods.filter((m) => m !== k) : [...p.methods, k] }));
 
   const stats = st?.stats;
   return (
@@ -123,6 +144,62 @@ export default function AdminGateway() {
         </View>
       </Card>
 
+      {/* 0089: sakelar aktif/nonaktif SETIAP saluran pembayaran (gaya daftar halaman bayar Alfagift). */}
+      <Card style={{ gap: 4 }}>
+        <Row between style={{ flexWrap: 'wrap', gap: 8 }}>
+          <View style={{ flex: 1, minWidth: 220 }}>
+            <Text style={font.h3}>Saluran Pembayaran</Text>
+            <Text style={[font.small, { marginTop: 2 }]}>Nyalakan/matikan tiap saluran satu per satu. Pelanggan hanya melihat saluran yang menyala; server menolak pesanan dengan saluran yang mati.</Text>
+          </View>
+          {chan === null ? <Badge text="Memuat…" color={colors.textMuted} /> : <Badge text={`${PAYMENT_CHANNELS.filter((c) => (c.key === 'cash' ? chan[c.key] !== false : chan[c.key] === true) && (c.key === 'cash' || payOn)).length}/${PAYMENT_CHANNELS.length} aktif`} color={adminTone.blue} />}
+        </Row>
+        {payOn === false ? (
+          <View style={[s.note, { backgroundColor: colors.warning + '14', borderColor: colors.warning + '50', marginVertical: 6 }]}>
+            <Text style={font.small}>Sakelar AntarPay global sedang nonaktif — semua saluran non-tunai ikut nonaktif.</Text>
+          </View>
+        ) : null}
+        <View style={{ marginTop: 6 }}>
+          {PAYMENT_CHANNELS.map((c) => {
+            const isCash = c.key === 'cash';
+            const stored = chan === null ? false : isCash ? chan[c.key] !== false : chan[c.key] === true;
+            // Dua induk: (1) sakelar global AntarPay 0088, (2) saluran 'antarpay' itu sendiri —
+            // di server SETIAP pembayaran non-tunai diselesaikan lewat saldo AntarPay.
+            const railOn = chan !== null && chan.antarpay === true && payOn === true;
+            const dimGlobal = !isCash && payOn === false;
+            const dimRail = !isCash && c.key !== 'antarpay' && payOn === true && chan !== null && chan.antarpay !== true;
+            const dim = dimGlobal || dimRail;
+            const effective = stored && (isCash || (c.key === 'antarpay' ? payOn === true : railOn));
+            return (
+              <Row key={c.key} between style={[s.chRow, dim && { opacity: 0.45 }]}>
+                <Row gap={10} style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
+                  <View style={[s.chIcon, { backgroundColor: effective ? c.color : adminTone.surfaceAlt }]}>
+                    <Ionicons name={c.icon as never} size={18} color={effective ? '#fff' : colors.textMuted} />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[font.body, { color: adminTone.ink, fontWeight: '700' }]} numberOfLines={1}>{c.label}</Text>
+                    <Text style={font.tiny} numberOfLines={2}>{dimGlobal ? 'Nonaktif karena sakelar AntarPay global mati' : dimRail ? 'Nonaktif karena saluran AntarPay (saldo) dimatikan' : c.hint}</Text>
+                  </View>
+                </Row>
+                <Switch
+                  value={stored}
+                  disabled={chan === null || chanBusy !== null || dim}
+                  onValueChange={(v) => toggleChannel(c.key, v)}
+                  trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />
+              </Row>
+            );
+          })}
+        </View>
+        <Text style={[font.tiny, { marginTop: 6 }]}>
+          Mengubah sakelar memerlukan PIN panel admin dan dicatat di log aktivitas (payment_channel.toggle). Saluran gateway (GoPay/ShopeePay/QRIS/OVO/DANA/VA/kartu) ikut memperbarui daftar metode Snap Midtrans. Tunai/COD tidak tunduk pada sakelar global.
+        </Text>
+        <View style={[s.note, { backgroundColor: adminTone.blue + '12', borderColor: adminTone.blue + '40', marginTop: 8 }]}>
+          <Text style={font.tiny}>
+            <Text style={{ fontWeight: '700' }}>Catatan teknis: </Text>
+            semua pembayaran non-tunai saat ini diselesaikan lewat saldo AntarPay (GoPay/QRIS/VA/e-money sekalipun). Karena itu mematikan saluran <Text style={{ fontWeight: '700' }}>AntarPay (saldo)</Text> otomatis menutup seluruh saluran non-tunai dan menutup top up. Untuk mematikan satu metode saja, matikan barisnya sendiri — jangan baris AntarPay.
+          </Text>
+        </View>
+      </Card>
+
       <Row gap={adminSpace.lg} style={{ flexWrap: 'wrap' }}>
         <StatCard index={0} icon="card-outline" label="Total transaksi" value={stats?.total ?? 0} hint={`${stats?.last_7d ?? 0} dalam 7 hari · ${stats?.simulated ?? 0} simulasi`} color={adminTone.blue} />
         <StatCard index={1} icon="checkmark-circle-outline" label="Berhasil (settlement)" value={stats?.settlement ?? 0} color={adminTone.green} />
@@ -139,7 +216,7 @@ export default function AdminGateway() {
           </Row>
           {[
             ['Server key', st?.server_key_masked ?? 'Belum diisi'], ['Client key', st?.client_key ?? '-'], ['Merchant ID', st?.merchant_id ?? '-'],
-            ['Metode aktif', (st?.methods ?? []).map((m) => METHODS.find((x) => x.key === m)?.label ?? m).join(', ') || '-'],
+            ['Metode aktif', (st?.methods ?? []).map(channelLabel).join(', ') || '-'],
             ['Batas top up', st ? `${rupiah(st.topup_min)} - ${rupiah(st.topup_max)}` : '-'],
             ['Diperbarui', st?.updated_at ? `${fmtDate(st.updated_at)}${st.updated_by ? ` oleh ${st.updated_by}` : ''}` : '-'],
             ['Webhook terakhir', st?.last_webhook_at ? fmtDate(String(st.last_webhook_at).replace(/"/g, '')) : 'Belum pernah diterima'],
@@ -160,8 +237,7 @@ export default function AdminGateway() {
           <Input label="Merchant ID" placeholder="G123456789" value={f.merchant_id} onChangeText={(v) => setF({ ...f, merchant_id: v })} autoCapitalize="none" />
           <Text style={font.label}>Mode</Text>
           <Row gap={6}><Chip label="Sandbox (uji)" active={!f.is_production} onPress={() => setF({ ...f, is_production: false })} color={colors.info} /><Chip label="Production" active={f.is_production} onPress={() => setF({ ...f, is_production: true })} color={colors.success} /></Row>
-          <Text style={font.label}>Metode aktif</Text>
-          <Row gap={6} style={{ flexWrap: 'wrap' }}>{METHODS.map((m) => <Chip key={m.key} label={m.label} active={f.methods.includes(m.key)} onPress={() => toggleMethod(m.key)} />)}</Row>
+          <Text style={font.tiny}>Metode aktif diatur di kartu <Text style={{ fontWeight: '700' }}>Saluran Pembayaran</Text> di atas (ikut memperbarui daftar metode Snap).</Text>
           <Row gap={8}><Input label="Top up minimum" value={f.topup_min} onChangeText={(v) => setF({ ...f, topup_min: v })} keyboardType="number-pad" containerStyle={{ flex: 1 }} /><Input label="Top up maksimum" value={f.topup_max} onChangeText={(v) => setF({ ...f, topup_max: v })} keyboardType="number-pad" containerStyle={{ flex: 1 }} /></Row>
           <Button title="Simpan konfigurasi" loading={busy} onPress={save} />
           {st?.configured ? <Button title="Hapus server key (kembali ke simulasi)" variant="outline" color={colors.danger} loading={busy} onPress={clearKey} /> : null}
@@ -198,6 +274,8 @@ export default function AdminGateway() {
 
 const s = StyleSheet.create({
   note: { borderWidth: 1, borderRadius: adminRadius.card, padding: adminSpace.md },
+  chRow: { gap: 12, paddingVertical: 9, borderTopWidth: 1, borderTopColor: adminTone.border },
+  chIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   code: { backgroundColor: adminTone.surfaceAlt, borderRadius: adminRadius.card, padding: adminSpace.md, borderWidth: 1, borderColor: adminTone.border },
   codeText: { fontSize: 12, lineHeight: 17, color: adminTone.ink, fontFamily: 'monospace' },
   step: { width: 24, height: 24, borderRadius: adminRadius.chip, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
