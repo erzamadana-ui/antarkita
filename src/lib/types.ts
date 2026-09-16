@@ -212,7 +212,7 @@ export interface TravelOpenRequest { id: string; code: string; kind: TravelReque
 export interface AdminTravelRequestRow { id: string; code: string; kind: TravelRequestKind; status: TravelRequestStatus; customer_name: string; partner_name: string | null; pickup_address: string; dropoff_address: string | null; depart_at: string; days: number; pax: number; price: number; platform_fee: number; payment_status: string; offers_count: number; created_at: string }
 
 // ---------- Tahap 6: payment gateway ----------
-export interface GatewayPublicConfig { provider: string; methods: string[]; topup_min: number; topup_max: number; configured: boolean; is_production: boolean; client_key: string | null; /** 0088 */ antarpay_enabled?: boolean }
+export interface GatewayPublicConfig { provider: string; methods: string[]; topup_min: number; topup_max: number; configured: boolean; is_production: boolean; client_key: string | null; /** 0088 */ antarpay_enabled?: boolean; /** 0089: status EFEKTIF tiap saluran */ payment_channels?: PaymentChannels }
 export interface GatewayStatus extends GatewayPublicConfig { server_key_masked: string | null; merchant_id: string | null; updated_at: string | null; updated_by: string | null; last_webhook_at: string | null; stats: { total: number; settlement: number; pending: number; failed: number; amount_settled: number; simulated: number; last_7d: number }; recent: (Payment & { user: string | null })[] }
 
 // ---------- Tahap 7 ----------
@@ -240,7 +240,14 @@ export interface AppPublicSettings {
   pickup_radius_km: Record<string, number>; send_limits: SendLimits; priority_tiers: PriorityTier[]; wait_apology_minutes: number;
   /** 0088: sakelar AntarPay dari Panel Admin. false/tidak ada = nonaktif (top up, pencairan, bayar dompet/e-wallet ditolak server). */
   antarpay_enabled: boolean;
+  /** 0089: status EFEKTIF tiap saluran pembayaran (sudah memperhitungkan sakelar global AntarPay). */
+  payment_channels: PaymentChannels;
 }
+
+/** 0089: peta saluran pembayaran → aktif/tidak (`payment_channels_public()`). */
+export type PaymentChannels = Record<string, boolean>;
+/** 0089: balasan `admin_set_payment_channel()` / `admin_payment_channels()`. */
+export interface AdminPaymentChannels { payment_channels: PaymentChannels; effective: PaymentChannels; antarpay_enabled: boolean; pg_methods: string[] }
 
 // ---------- Tahap 9: dispatch driver (prioritas rating, tolak order, titipan travel) ----------
 /** Hasil `rpc('driver_priority_info')` — antrean prioritas driver berdasarkan rating. */

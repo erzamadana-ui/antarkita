@@ -16,6 +16,8 @@ import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
 import { useCityStatus } from '@/hooks/useCityStatus';
+import { usePaymentChannels, ANTARPAY_OFF_TEXT } from '@/hooks/useAppSettings';
+import { AntarPayOffNote } from '@/components/AntarPayNotice';
 import { CityNotice, cityBlockedLabel } from '@/components/city';
 import { reverseGeocode } from '@/lib/geo';
 import { rpc, supabase } from '@/lib/supabase';
@@ -266,6 +268,17 @@ function RequestMode({ kind, uid }: { kind: TravelRequestKind; uid?: string }) {
   const [notes, setNotes] = useState('');
   const [budget, setBudget] = useState('');
   const [method, setMethod] = useState<'wallet' | 'cash'>('wallet');
+  // 0088/0089: saluran yang dimatikan admin TIDAK boleh terpilih di sini. `travel_request_create`
+  // memanggil payment_channel_require(), jadi tanpa penjaga ini permintaan carter/sopir harian
+  // selalu gagal di server (bawaannya 'wallet') tanpa pemulihan apa pun di layar.
+  const { isChannelOn, loaded: payLoaded } = usePaymentChannels();
+  const walletPayOn = isChannelOn('antarpay');
+  const cashPayOn = isChannelOn('cash');
+  useEffect(() => {
+    if (!payLoaded) return;                                   // sebelum pengaturan termuat, jangan geser pilihan
+    if (method === 'wallet' && !walletPayOn) setMethod('cash');
+    else if (method === 'cash' && !cashPayOn && walletPayOn) setMethod('wallet');
+  }, [payLoaded, walletPayOn, cashPayOn, method]);
   const [partner, setPartner] = useState<TravelPartnerCard | null>(null);
   const [partners, setPartners] = useState<TravelPartnerCard[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -300,6 +313,7 @@ function RequestMode({ kind, uid }: { kind: TravelRequestKind; uid?: string }) {
 
   const submit = async () => {
     if (!uid) return toast.error('Masuk dulu untuk mengirim permintaan');
+    if (!walletPayOn && !cashPayOn) return toast.error('Semua metode pembayaran sedang dinonaktifkan admin — coba lagi nanti.');
     if (!pickup) return toast.error('Isi alamat jemput');
     if (!daily && !dropoff) return toast.error('Isi tujuan carter');
     if (departAt.getTime() < Date.now() + MIN_LEAD_MS) return toast.error('Jadwal berangkat minimal 2 jam dari sekarang');
@@ -418,9 +432,10 @@ function RequestMode({ kind, uid }: { kind: TravelRequestKind; uid?: string }) {
         <Input label="Anggaran (opsional)" placeholder="Contoh 1500000" keyboardType="number-pad" icon="cash-outline" value={budget} onChangeText={(v) => setBudget(v.replace(/\D/g, ''))} right={budget ? <Text style={font.tiny}>{rupiah(Number(budget))}</Text> : undefined} />
         <Text style={font.label}>Pembayaran</Text>
         <Row gap={8}>
-          <Chip label={`AntarPay · ${rupiah(wallet?.balance ?? 0)}`} active={method === 'wallet'} onPress={() => setMethod('wallet')} />
-          <Chip label="Tunai ke sopir" active={method === 'cash'} onPress={() => setMethod('cash')} />
+          {walletPayOn && <Chip label={`AntarPay · ${rupiah(wallet?.balance ?? 0)}`} active={method === 'wallet'} onPress={() => setMethod('wallet')} />}
+          {cashPayOn && <Chip label="Tunai ke sopir" active={method === 'cash'} onPress={() => setMethod('cash')} />}
         </Row>
+        {!walletPayOn && <AntarPayOffNote text={cashPayOn ? ANTARPAY_OFF_TEXT : 'Semua metode pembayaran sedang dinonaktifkan admin — coba lagi nanti.'} />}
         <Text style={font.tiny}>{method === 'wallet' ? 'Saldo dipotong saat Anda menerima penawaran; dana diteruskan ke mitra setelah perjalanan selesai.' : 'Bayar langsung ke sopir saat berangkat. Mitra dapat menolak permintaan tunai untuk perjalanan panjang.'}</Text>
         <Button title={cityBlocked ? cityBlockedLabel(city, 'travel') : 'Kirim permintaan'} size="lg" icon="paper-plane-outline" loading={busy} disabled={cityBlocked} onPress={submit} />
         <Text style={font.tiny}>Permintaan berlaku hingga jadwal berangkat, maksimal 3 permintaan aktif. Anda bebas memilih penawaran atau membatalkan sebelum menerima.</Text>

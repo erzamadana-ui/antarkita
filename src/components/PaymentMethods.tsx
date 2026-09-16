@@ -1,4 +1,5 @@
 // Pusat metode pembayaran: tunai, AntarPay, e-wallet pilihan (via Midtrans), e-money NFC (cek perangkat)
+// 0089: setiap saluran hanya tampil bila diaktifkan admin (Panel Admin → Gateway → Saluran Pembayaran).
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -8,7 +9,7 @@ import { Entrance, PressableScale, AnimatedNumber } from '@/components/motion';
 import { BrandGradient } from '@/components/glass';
 import { useAuth } from '@/store/auth';
 import { usePayPrefs, EWALLETS } from '@/store/payprefs';
-import { useAntarPay } from '@/hooks/useAppSettings';
+import { useAntarPay, usePaymentChannels, CHANNELS_OFF_TEXT } from '@/hooks/useAppSettings';
 import { AntarPayOffBanner } from '@/components/AntarPayNotice';
 import { colors, font, radius, glass, shadow } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
@@ -31,10 +32,17 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
   const { prefs, loaded, load, save } = usePayPrefs();
   const nfc = useNfcSupport();
   const { enabled: antarpayOn } = useAntarPay();
+  const { isChannelOn, nonCashOn } = usePaymentChannels();
   useEffect(() => { if (uid && !loaded) load(uid); }, [uid, loaded, load]);
   if (!uid) return null;
-  // 0088: saat AntarPay nonaktif, metode utama efektif = tunai (preferensi lama tidak dihapus, hanya tidak dipakai).
-  const method = antarpayOn ? (prefs?.default_method ?? 'cash') : 'cash';
+  // 0089: saluran yang dimatikan admin tidak ditampilkan (server juga menolaknya).
+  const walletOn = isChannelOn('antarpay');
+  const emoneyOn = isChannelOn('emoney_nfc');
+  const wallets = EWALLETS.filter((x) => isChannelOn(x.key));
+  const ewalletOn = wallets.length > 0;
+  // 0088/0089: metode utama efektif = tunai bila saluran pilihan lama sedang dimatikan (preferensi tidak dihapus).
+  const saved = prefs?.default_method ?? 'cash';
+  const method = (saved === 'wallet' && walletOn) || (saved === 'ewallet' && ewalletOn) ? saved : 'cash';
   const ew = prefs?.ewallet ?? null;
   const pick = async (m: 'cash' | 'wallet' | 'ewallet', wallet?: string) => {
     await save(uid, { default_method: m, ewallet: (wallet ?? ew ?? (m === 'ewallet' ? 'gopay' : null)) as never });
@@ -59,15 +67,16 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
 
       <Entrance index={1}><Card style={{ gap: 10 }}>
         <Text style={font.label}>Metode utama saat memesan</Text>
-        <MethodRow active={method === 'cash'} onPress={() => pick('cash')} icon="cash-outline" color={colors.success} title="Tunai" subtitle="Bayar langsung ke driver" />
-        {antarpayOn && <MethodRow active={method === 'wallet'} onPress={() => pick('wallet')} icon="wallet-outline" color={colors.primary} title="Saldo AntarPay" subtitle={`Saldo ${rupiah(wallet?.balance ?? 0)} · dipotong otomatis`} />}
-        {antarpayOn && <MethodRow active={method === 'ewallet'} onPress={() => pick('ewallet')} icon="phone-portrait-outline" color={colors.info} title={`E-wallet${ew ? ` · ${EWALLETS.find((e) => e.key === ew)?.label}` : ''}`} subtitle="GoPay/OVO/DANA/ShopeePay/QRIS/VA — via Midtrans, dana masuk AntarPay lalu dipotong" />}
+        {isChannelOn('cash') && <MethodRow active={method === 'cash'} onPress={() => pick('cash')} icon="cash-outline" color={colors.success} title="Tunai" subtitle="Bayar langsung ke driver" />}
+        {walletOn && <MethodRow active={method === 'wallet'} onPress={() => pick('wallet')} icon="wallet-outline" color={colors.primary} title="Saldo AntarPay" subtitle={`Saldo ${rupiah(wallet?.balance ?? 0)} · dipotong otomatis`} />}
+        {ewalletOn && <MethodRow active={method === 'ewallet'} onPress={() => pick('ewallet', wallets.some((w) => w.key === ew) ? (ew as string) : wallets[0].key)} icon="phone-portrait-outline" color={colors.info} title={`E-wallet${ew && wallets.some((w) => w.key === ew) ? ` · ${wallets.find((e) => e.key === ew)?.label}` : ''}`} subtitle={`${wallets.map((w) => w.label).join(' · ')} — via Midtrans, dana masuk AntarPay lalu dipotong`} />}
+        {antarpayOn && !nonCashOn && <Text style={font.tiny}>{CHANNELS_OFF_TEXT}</Text>}
       </Card></Entrance>
 
-      {antarpayOn && <Entrance index={2}><Card style={{ gap: 10 }}>
+      {ewalletOn && <Entrance index={2}><Card style={{ gap: 10 }}>
         <Row between><Text style={font.label}>E-wallet pilihan Anda</Text><Badge text="Midtrans · PCI-DSS" color={colors.info} /></Row>
         <View style={s.grid}>
-          {EWALLETS.map((x) => (
+          {wallets.map((x) => (
             <View key={x.key} style={{ width: '31%', flexGrow: 1 }}>
               <PressableScale onPress={() => pick('ewallet', x.key)} scaleTo={0.95} style={[s.method, ew === x.key && method === 'ewallet' && { borderColor: x.color, backgroundColor: x.color + '14', ...shadow.glow(x.color) }]}>
                 <View style={[s.mIcon, { backgroundColor: x.color }]}><Ionicons name={x.icon as never} size={20} color="#fff" /></View>
@@ -77,10 +86,10 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
             </View>
           ))}
         </View>
-        <Text style={font.tiny}>Saat memesan, bila saldo kurang, halaman bayar {ew ? EWALLETS.find((e) => e.key === ew)?.label : 'e-wallet'} dibuka otomatis untuk kekurangannya. AntarKita tidak menyimpan data akun e-wallet Anda.</Text>
+        <Text style={font.tiny}>Saat memesan, bila saldo kurang, halaman bayar {ew ? wallets.find((e) => e.key === ew)?.label ?? 'e-wallet' : 'e-wallet'} dibuka otomatis untuk kekurangannya. AntarKita tidak menyimpan data akun e-wallet Anda.</Text>
       </Card></Entrance>}
 
-      {!compact && (
+      {!compact && emoneyOn && (
         <Entrance index={3}><Card style={{ gap: 8 }}>
           <Row between>
             <Row gap={10}><View style={[s.mIcon, { backgroundColor: nfc === 'supported' ? colors.success : colors.textMuted }]}><Ionicons name="radio-outline" size={20} color="#fff" /></View><View><Text style={font.h3}>E-money (kartu NFC)</Text><Text style={font.tiny}>Flazz · e-money Mandiri · BRIZZI · TapCash</Text></View></Row>

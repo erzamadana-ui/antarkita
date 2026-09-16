@@ -9,6 +9,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...cors, "Content-Type": "application/json" } });
 // Pemetaan metode aplikasi → enabled_payments Snap. OVO/DANA lewat QRIS (dipindai dari aplikasi e-wallet masing-masing).
+// Label saluran (0089) — sama dengan payment_channel_label() di server, untuk pesan penolakan berbahasa Indonesia.
+const CHANNEL_LABEL: Record<string, string> = { gopay: "GoPay", shopeepay: "ShopeePay", qris: "QRIS", ovo: "OVO", dana: "DANA", bank_transfer: "Transfer bank (VA)", card: "Kartu kredit/debit" };
 const METHODS: Record<string, string[]> = { gopay: ["gopay"], shopeepay: ["shopeepay"], qris: ["other_qris"], bank_transfer: ["bank_transfer", "echannel", "permata_va", "bca_va", "bni_va", "bri_va", "cimb_va"], ovo: ["other_qris"], dana: ["other_qris"], card: ["credit_card"], any: [] };
 
 async function loadKeys(admin: ReturnType<typeof createClient>) {
@@ -55,6 +57,19 @@ Deno.serve(async (req) => {
     if (!amt || amt < min || amt > max) return json({ error: `Nominal Rp${min.toLocaleString("id-ID")} – Rp${max.toLocaleString("id-ID")}` }, 400);
     const allowed: string[] = Array.isArray(cfg?.methods) ? cfg.methods : [];
     if (method !== "any" && allowed.length && !allowed.includes(method)) return json({ error: "Metode pembayaran tidak diaktifkan admin" }, 400);
+    // ---- Saluran pembayaran per metode (migrasi 0089): sumber kebenaran, tidak bergantung pada pg_methods yang bisa kosong ----
+    // Saldo AntarPay adalah rail semua pembayaran non-tunai: kalau saluran 'antarpay' mati,
+    // top up pun ditutup supaya pelanggan tidak menyetor dana ke dompet yang tak bisa dipakai.
+    {
+      const { data: apOn, error: apErr } = await admin.rpc("payment_channel_enabled", { p_key: "antarpay" });
+      if (apErr) return json({ error: "Status saluran pembayaran tidak dapat diperiksa — coba lagi" }, 503);
+      if (apOn !== true) return json({ error: "Saluran AntarPay (saldo) sedang dinonaktifkan. Top up ditutup sementara.", channel: "antarpay" }, 403);
+    }
+    if (method !== "any") {
+      const { data: chOn, error: chErr } = await admin.rpc("payment_channel_enabled", { p_key: method });
+      if (chErr) return json({ error: "Status saluran pembayaran tidak dapat diperiksa — coba lagi" }, 503);
+      if (chOn !== true) return json({ error: `Metode pembayaran ${CHANNEL_LABEL[method] ?? method} sedang dinonaktifkan. Pilih metode lain.`, channel: method }, 403);
+    }
 
     const { data: prof } = await admin.from("profiles").select("full_name, email, phone").eq("id", user.id).single();
     const externalId = `AKPAY-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
