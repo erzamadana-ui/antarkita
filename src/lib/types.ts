@@ -212,7 +212,7 @@ export interface TravelOpenRequest { id: string; code: string; kind: TravelReque
 export interface AdminTravelRequestRow { id: string; code: string; kind: TravelRequestKind; status: TravelRequestStatus; customer_name: string; partner_name: string | null; pickup_address: string; dropoff_address: string | null; depart_at: string; days: number; pax: number; price: number; platform_fee: number; payment_status: string; offers_count: number; created_at: string }
 
 // ---------- Tahap 6: payment gateway ----------
-export interface GatewayPublicConfig { provider: string; methods: string[]; topup_min: number; topup_max: number; configured: boolean; is_production: boolean; client_key: string | null }
+export interface GatewayPublicConfig { provider: string; methods: string[]; topup_min: number; topup_max: number; configured: boolean; is_production: boolean; client_key: string | null; /** 0088 */ antarpay_enabled?: boolean }
 export interface GatewayStatus extends GatewayPublicConfig { server_key_masked: string | null; merchant_id: string | null; updated_at: string | null; updated_by: string | null; last_webhook_at: string | null; stats: { total: number; settlement: number; pending: number; failed: number; amount_settled: number; simulated: number; last_7d: number }; recent: (Payment & { user: string | null })[] }
 
 // ---------- Tahap 7 ----------
@@ -238,6 +238,8 @@ export interface AppPublicSettings {
   services_enabled: Record<string, boolean>; max_km: Record<string, number>; osm_import_enabled: boolean; osm_import_radius_km: number;
   /** Tahap 9 */
   pickup_radius_km: Record<string, number>; send_limits: SendLimits; priority_tiers: PriorityTier[]; wait_apology_minutes: number;
+  /** 0088: sakelar AntarPay dari Panel Admin. false/tidak ada = nonaktif (top up, pencairan, bayar dompet/e-wallet ditolak server). */
+  antarpay_enabled: boolean;
 }
 
 // ---------- Tahap 9: dispatch driver (prioritas rating, tolak order, titipan travel) ----------
