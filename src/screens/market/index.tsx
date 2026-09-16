@@ -206,7 +206,9 @@ export default function MarketScreen() {
       await refreshWallet(); useBooking.getState().reset();
       router.replace(`/order/${o.id}` as never);
     } catch (e) { if (!handleShortfall(e, router, payPrefs?.ewallet)) toast.error((e as Error).message); }
-    setOrdering(false);
+    // `finally`: tombol "Pesan ke pasar" tidak boleh tersangkut memutar selamanya
+    // bila ada kegagalan tak terduga di jalur error.
+    finally { setOrdering(false); }
   };
 
   const colW = gridW ? Math.floor((gridW - 12) / 2) : 160;
