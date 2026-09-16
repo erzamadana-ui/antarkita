@@ -10,6 +10,8 @@ import { Entrance, PressableScale, Radar, AnimatedNumber } from '@/components/mo
 import { BrandGradient } from '@/components/glass';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/store/auth';
+import { useAntarPay, ANTARPAY_OFF_TEXT } from '@/hooks/useAppSettings';
+import { AntarPayOffBanner } from '@/components/AntarPayNotice';
 import { useT } from '@/lib/i18n';
 import { colors, font, radius, glass, shadow, motion } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
@@ -46,6 +48,9 @@ export default function Gateway() {
   const enabled = cfg?.methods?.length ? METHODS.filter((x) => cfg.methods.includes(x.key)) : METHODS.filter((x) => x.key !== 'card');
   useEffect(() => { if (enabled.length && !enabled.some((x) => x.key === method)) setMethod(enabled[0].key); }, [cfg]); // eslint-disable-line react-hooks/exhaustive-deps
   const minTopup = cfg?.topup_min ?? 10000;
+  // 0088: sakelar AntarPay — gabungan pengaturan publik (realtime) & gateway_public_config (dibaca layar ini).
+  const { enabled: settingsOn } = useAntarPay();
+  const antarpayOn = settingsOn && cfg?.antarpay_enabled !== false;
 
   useEffect(() => () => { if (poll.current) clearInterval(poll.current); }, []);
 
@@ -59,6 +64,7 @@ export default function Gateway() {
   };
 
   const create = async () => {
+    if (!antarpayOn) return toast.error(ANTARPAY_OFF_TEXT);
     if (n < minTopup) return toast.error(`Minimal ${rupiah(minTopup)}`);
     setBusy(true);
     const { data, error } = await supabase.functions.invoke<CreateResp>('midtrans-create', { body: { amount: n, method, purpose: params.purpose ?? 'topup', order_id: params.order_id ?? null } });
@@ -98,6 +104,7 @@ export default function Gateway() {
     <Screen title={t('ewallet')} back maxWidth={560}>
       {!resp ? (
         <View style={{ gap: 16 }}>
+          {!antarpayOn && <Entrance index={0}><AntarPayOffBanner /></Entrance>}
           <Entrance index={0}>
             <BrandGradient colors={[colors.primary, colors.primaryDark]} style={[s.hero, shadow.glow(colors.primary)]}>
               <Text style={{ color: 'rgba(255,255,255,0.85)', fontWeight: '600', fontSize: 12 }}>{t('balance')}</Text>
@@ -125,7 +132,7 @@ export default function Gateway() {
             </View>
             <Text style={[font.tiny, { marginTop: 8 }]}>Diproses oleh Midtrans (PCI-DSS). AntarKita tidak menyimpan data kartu/akun e-wallet Anda.</Text>
           </Card></Entrance>
-          <Entrance index={3}><Button title={`${t('pay_now')} · ${rupiah(n)} via ${m?.label ?? ''}`} size="lg" loading={busy} disabled={n < minTopup} onPress={create} /></Entrance>
+          <Entrance index={3}><Button title={antarpayOn ? `${t('pay_now')} · ${rupiah(n)} via ${m?.label ?? ''}` : 'AntarPay sementara nonaktif'} size="lg" loading={busy} disabled={!antarpayOn || n < minTopup} onPress={create} /></Entrance>
         </View>
       ) : (
         <Animated.View entering={ZoomIn.duration(motion.base)} layout={LinearTransition.springify().stiffness(280).damping(20)} style={{ gap: 16 }}>

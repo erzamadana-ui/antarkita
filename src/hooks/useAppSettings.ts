@@ -64,6 +64,8 @@ export const useAppSettingsStore = create<State>((set, get) => ({
             send_limits: normalizeSendLimits(r?.send_limits),
             priority_tiers: Array.isArray(r?.priority_tiers) ? r!.priority_tiers : [],
             wait_apology_minutes: num(r?.wait_apology_minutes, DEFAULT_WAIT_APOLOGY_MIN),
+            // 0088: GAGAL-TERTUTUP — hanya true bila server tegas mengirim true (server lama tanpa kunci = nonaktif).
+            antarpay_enabled: r?.antarpay_enabled === true,
           },
           loadedAt: Date.now(),
         });
@@ -115,4 +117,19 @@ export function useAppSettings() {
   const sendLimits = settings?.send_limits ?? DEFAULT_SEND_LIMITS;
   const waitApologyMinutes = settings?.wait_apology_minutes ?? DEFAULT_WAIT_APOLOGY_MIN;
   return { settings, loading, isEnabled, maxKm, sendLimits, waitApologyMinutes, reload: () => load(true) };
+}
+
+/** Teks tunggal untuk banner/info saat AntarPay dinonaktifkan admin (0088). */
+export const ANTARPAY_OFF_TEXT = 'AntarPay sementara nonaktif — top up, pencairan, dan bayar dengan AntarPay/e-wallet belum tersedia. Silakan bayar tunai.';
+
+/**
+ * Sakelar AntarPay (migrasi 0088, Panel Admin → Gateway/AntarPay).
+ * Berbeda dari sakelar layanan, arah gagal-amannya TERTUTUP: sebelum pengaturan termuat atau bila server
+ * tidak mengirim kunci, AntarPay dianggap NONAKTIF — sesuai default server. Server tetap menolak
+ * top up / pencairan / bayar dompet saat nonaktif, jadi UI hanya mencegah pengguna menabrak tembok itu.
+ */
+export function useAntarPay() {
+  const { settings, loading, reload } = useAppSettings();
+  const enabled = settings?.antarpay_enabled === true;
+  return { enabled, loaded: settings !== null, loading, reload };
 }

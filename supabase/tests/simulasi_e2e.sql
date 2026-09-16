@@ -12,6 +12,8 @@ declare
   s_rad0 jsonb; s_tier0 jsonb; s_dr1 numeric; s_dc1 int; s_dr2 numeric; s_dc2 int; s_km numeric; s_wait numeric; num1 numeric;
   -- Tahap 11 (S34-S37): AntarNow (kode driver), hapus akun → daftar ulang, token push, batas komisi Perpres 27/2026
   c_drv text; c_drv2 text; u_a uuid; u_b uuid; mail11 text; hold11 int; seen boolean; seen2 boolean; left1 int;
+  -- 0088 (S0 & S54): sakelar AntarPay — nilai asli disimpan agar bisa dilaporkan; seluruh simulasi di-ROLLBACK
+  pay_on0 boolean;
 begin
   select id into menu1 from menu_items where merchant_id = merch and is_available limit 1;
   select id into store1 from shop_stores where active and name ilike 'Indomaret%' limit 1;
@@ -46,6 +48,17 @@ begin
       log := log || format('S0 bersih: status mitra uji dipulihkan ke approved (sebelumnya %s)', k1) || E'\n';
     end if;
   exception when others then log := log || 'S0 BUG bersih: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S0 AntarPay dinyalakan untuk simulasi (0088: default produksi NONAKTIF; semua skenario dompet di bawah membutuhkannya aktif) =====
+  begin
+    pay_on0 := antarpay_enabled();
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    insert into admin_security (user_id, pin_hash) select adm, extensions.crypt('123456', extensions.gen_salt('bf')) where not exists (select 1 from admin_security where user_id = adm);
+    update admin_security set pin_hash = extensions.crypt('123456', extensions.gen_salt('bf')), failed = 0, locked_until = null where user_id = adm;
+    perform admin_unlock('123456');
+    r := admin_set_antarpay_enabled(true);
+    log := log || format('S0 %s AntarPay dinyalakan untuk simulasi (nilai produksi=%s → sekarang=%s; dikembalikan oleh S54 & ROLLBACK)', case when antarpay_enabled() then 'OK' else 'BUG' end, pay_on0, r->>'antarpay_enabled') || E'\n';
+  exception when others then log := log || 'S0 BUG sakelar AntarPay: ' || sqlerrm || E'\n'; end;
 
   -- ===== S0 Saldo uji pelanggan (top up manual disetujui admin) =====
   begin
@@ -2262,6 +2275,80 @@ begin
         case when rusak = 0 then 'OK' else 'BUG' end, rusak, case when rusak = 0 then '' else ' → ' || left(rincian, 240) end) || E'\n';
     end;
   exception when others then log := log || 'S53 BUG invarian global: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S54 Sakelar AntarPay (0088): off → top up/pencairan/order dompet ditolak, order tunai tetap jalan; on → top up sukses; kembali off =====
+  begin
+    -- (a) admin mematikan (butuh PIN: tanpa buka kunci harus ditolak ADMIN_LOCKED)
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_lock();
+    begin r := admin_set_antarpay_enabled(false); log := log || 'S54a BUG: sakelar AntarPay bisa diubah tanpa buka kunci PIN' || E'\n';
+    exception when others then log := log || format('S54a %s tanpa PIN ditolak: %s', case when sqlerrm ilike '%ADMIN_LOCKED%' or sqlerrm ilike '%PIN%' then 'OK' else 'BUG' end, left(sqlerrm, 60)) || E'\n'; end;
+    perform admin_unlock('123456');
+    r := admin_set_antarpay_enabled(false);
+    j := app_public_settings(); j1 := gateway_public_config();
+    log := log || format('S54b %s AntarPay dimatikan: antarpay_enabled()=%s app_public_settings=%s gateway_public_config=%s',
+      case when not antarpay_enabled() and (j->>'antarpay_enabled')::boolean = false and (j1->>'antarpay_enabled')::boolean = false then 'OK' else 'BUG' end,
+      antarpay_enabled(), j->>'antarpay_enabled', j1->>'antarpay_enabled') || E'\n';
+    select count(*) into n from audit_logs where action = 'antarpay.toggle' and created_at >= transaction_timestamp();
+    log := log || format('S54c %s log aktivitas antarpay.toggle tercatat (%s baris dalam simulasi: S0 on + S54 off)', case when n >= 2 then 'OK' else 'BUG' end, n) || E'\n';
+
+    -- (b) pelanggan: top up ditolak dengan pesan Indonesia yang jelas
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    begin tp := request_topup(50000, 'bank_transfer', null, 'uji S54'); log := log || 'S54d BUG: request_topup diterima saat AntarPay nonaktif' || E'\n';
+    exception when others then log := log || format('S54d %s top up ditolak: %s', case when sqlerrm like 'AntarPay sedang dinonaktifkan sementara%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
+
+    -- (c) order dengan dompet / e-wallet ditolak; saldo pelanggan tidak berubah
+    select balance into b0 from wallets where user_id = cust;
+    begin
+      o := create_order(jsonb_build_object('service', 'ride_motor', 'vehicle_class', 'motor_economy', 'pickup', jsonb_build_object('lat', 0.4810, 'lng', 101.4349, 'address', 'S54 wallet'), 'dropoff', jsonb_build_object('lat', 0.50, 'lng', 101.44, 'address', 'Plaza Andalas'), 'paid_via', 'wallet'));
+      log := log || format('S54e BUG: order dompet diterima saat AntarPay nonaktif %s', o.code) || E'\n'; perform cancel_order(o.id, 'uji');
+    exception when others then log := log || format('S54e %s order dompet ditolak: %s', case when sqlerrm like 'AntarPay sedang dinonaktifkan sementara%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
+    begin
+      o := create_order(jsonb_build_object('service', 'ride_motor', 'vehicle_class', 'motor_economy', 'pickup', jsonb_build_object('lat', 0.4810, 'lng', 101.4349, 'address', 'S54 gopay'), 'dropoff', jsonb_build_object('lat', 0.50, 'lng', 101.44, 'address', 'Plaza Andalas'), 'paid_via', 'gopay'));
+      log := log || format('S54f BUG: order e-wallet (gopay) diterima saat AntarPay nonaktif %s', o.code) || E'\n'; perform cancel_order(o.id, 'uji');
+    exception when others then log := log || format('S54f %s order e-wallet ditolak: %s', case when sqlerrm like 'AntarPay sedang dinonaktifkan sementara%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
+    select balance into b1 from wallets where user_id = cust;
+    log := log || format('S54g %s saldo pelanggan tidak tersentuh oleh order yang ditolak: %s → %s', case when b0 = b1 then 'OK' else 'BUG' end, b0, b1) || E'\n';
+
+    -- (d) order TUNAI tetap sukses; pembatalan (jalur internal) tetap berjalan
+    o := create_order(jsonb_build_object('service', 'ride_motor', 'vehicle_class', 'motor_economy', 'pickup', jsonb_build_object('lat', 0.4810, 'lng', 101.4349, 'address', 'S54 tunai'), 'dropoff', jsonb_build_object('lat', 0.50, 'lng', 101.44, 'address', 'Plaza Andalas'), 'paid_via', 'cash'));
+    log := log || format('S54h %s order tunai tetap diterima saat AntarPay nonaktif: %s status=%s bayar=%s', case when o.id is not null and o.payment_method = 'cash' then 'OK' else 'BUG' end, o.code, o.status, o.paid_via) || E'\n';
+    o := cancel_order(o.id, 'uji S54');
+    log := log || format('S54i %s pembatalan order tunai tetap berjalan: status=%s', case when o.status = 'cancelled' then 'OK' else 'BUG' end, o.status) || E'\n';
+
+    -- (e) pencairan mitra ditolak; saldo mitra tidak berubah (tidak ada penahanan dana)
+    perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+    select balance into d0 from wallets where user_id = drv;
+    begin w := request_withdrawal(20000, 'BCA', '111', 'Driver'); log := log || 'S54j BUG: request_withdrawal diterima saat AntarPay nonaktif' || E'\n';
+    exception when others then log := log || format('S54j %s pencairan ditolak: %s', case when sqlerrm like 'AntarPay sedang dinonaktifkan sementara%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
+    select balance into d1 from wallets where user_id = drv;
+    log := log || format('S54k %s saldo driver tidak tersentuh: %s → %s', case when d0 = d1 then 'OK' else 'BUG' end, d0, d1) || E'\n';
+
+    -- (f) travel: permintaan carter TANPA payment_method (default fungsi = 'wallet') harus ditolak juga
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    begin
+      tr := travel_request_create(jsonb_build_object('kind', 'charter', 'depart_at', now() + interval '3 days', 'pickup_address', 'S54', 'dropoff_address', 'Padang', 'pickup_lat', 0.4810, 'pickup_lng', 101.4349));
+      log := log || format('S54l BUG: permintaan travel tanpa payment_method (default wallet) diterima %s', tr.code) || E'\n';
+    exception when others then log := log || format('S54l %s permintaan travel dompet ditolak: %s', case when sqlerrm like 'AntarPay sedang dinonaktifkan sementara%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
+
+    -- (g) pelanggan biasa tidak boleh menyalakan sakelar
+    begin r := admin_set_antarpay_enabled(true); log := log || 'S54m BUG: pelanggan bisa menyalakan AntarPay' || E'\n';
+    exception when others then log := log || 'S54m OK non-admin ditolak: ' || left(sqlerrm, 40) || E'\n'; end;
+
+    -- (h) admin menyalakan lagi → top up sukses
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_unlock('123456');
+    r := admin_set_antarpay_enabled(true);
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    tp := request_topup(50000, 'bank_transfer', null, 'uji S54 on');
+    log := log || format('S54n %s AntarPay dinyalakan lagi (antarpay_enabled=%s) → request_topup sukses id=%s status=%s', case when antarpay_enabled() and tp.id is not null then 'OK' else 'BUG' end, r->>'antarpay_enabled', tp.id, tp.status) || E'\n';
+
+    -- (i) kembalikan ke NONAKTIF di akhir (sesuai default produksi; seluruh simulasi juga di-ROLLBACK)
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_unlock('123456');
+    r := admin_set_antarpay_enabled(false);
+    log := log || format('S54o %s sakelar dikembalikan ke nonaktif: antarpay_enabled()=%s (nilai produksi sebelum simulasi=%s)', case when not antarpay_enabled() then 'OK' else 'BUG' end, antarpay_enabled(), pay_on0) || E'\n';
+  exception when others then log := log || 'S54 BUG sakelar AntarPay: ' || sqlerrm || E'\n'; end;
 
   raise exception using message = 'SIMULASI_SELESAI' || log;
 end $sim$;

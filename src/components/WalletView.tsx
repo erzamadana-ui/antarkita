@@ -7,6 +7,8 @@ import { Card, Empty, Row, IconCircle, Badge } from '@/components/ui';
 import { BrandGradient } from '@/components/glass';
 import { AnimatedNumber, Entrance, PressableScale, Skeleton } from '@/components/motion';
 import { useAuth } from '@/store/auth';
+import { useAntarPay } from '@/hooks/useAppSettings';
+import { AntarPayOffBanner } from '@/components/AntarPayNotice';
 import { supabase } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { rupiah, formatDate } from '@/lib/format';
@@ -31,6 +33,8 @@ export function WalletView({ allowWithdraw, bottomSpace = 40 }: { allowWithdraw?
   const [refreshing, setRefreshing] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const uid = session?.user.id;
+  // 0088: saat AntarPay nonaktif, saldo & riwayat tetap terlihat; tombol Top Up / Tarik Saldo disembunyikan (server pun menolak).
+  const { enabled: antarpayOn } = useAntarPay();
 
   const load = useCallback(async () => {
     if (!uid) return;
@@ -57,12 +61,20 @@ export function WalletView({ allowWithdraw, bottomSpace = 40 }: { allowWithdraw?
             <Ionicons name="wallet" size={20} color="rgba(255,255,255,0.8)" />
           </Row>
           <AnimatedNumber value={wallet?.balance ?? 0} format={rupiah} style={{ color: '#fff', fontSize: 30, fontWeight: '700', marginVertical: 8, letterSpacing: -0.5 }} />
-          <Row gap={10} style={{ marginTop: 8 }}>
-            <WalletAction icon="add" label="Top Up" onPress={() => router.push('/pay/topup')} />
-            {allowWithdraw && <WalletAction icon="arrow-up" label="Tarik Saldo" onPress={() => router.push('/pay/withdraw')} />}
-          </Row>
+          {antarpayOn ? (
+            <Row gap={10} style={{ marginTop: 8 }}>
+              <WalletAction icon="add" label="Top Up" onPress={() => router.push('/pay/topup')} />
+              {allowWithdraw && <WalletAction icon="arrow-up" label="Tarik Saldo" onPress={() => router.push('/pay/withdraw')} />}
+            </Row>
+          ) : null}
         </BrandGradient>
       </Entrance>
+
+      {!antarpayOn && (
+        <Entrance index={1}><AntarPayOffBanner style={{ marginTop: 16 }} text={allowWithdraw
+          ? 'Top up dan pencairan saldo belum tersedia. Pendapatan dari order tetap masuk ke saldo Anda dan bisa dicairkan setelah AntarPay diaktifkan kembali.'
+          : 'Top up dan bayar dengan AntarPay/e-wallet belum tersedia — silakan bayar tunai. Saldo yang sudah ada tetap tersimpan; refund otomatis tetap berjalan.'} /></Entrance>
+      )}
 
       {pending.length > 0 && (
         <Entrance index={1}><Card style={{ marginTop: 16, backgroundColor: 'rgba(245,158,11,0.12)', borderColor: 'rgba(245,158,11,0.3)' }}>

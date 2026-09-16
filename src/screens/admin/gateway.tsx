@@ -1,6 +1,6 @@
-// Admin · Payment Gateway (Midtrans): status, konfigurasi kunci, metode aktif, webhook & checklist pengajuan
+// Admin · Payment Gateway (Midtrans): sakelar AntarPay (0088), status, konfigurasi kunci, metode aktif, webhook & checklist pengajuan
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Switch } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { AdminPage, Table, StatCard, adminFont as font, adminTone, adminSpace, adminRadius, AdminCard as Card } from '@/components/admin';
 import { Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
@@ -8,6 +8,7 @@ import { rpc, supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
 import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
+import { useAppSettingsStore } from '@/hooks/useAppSettings';
 import type { GatewayStatus } from '@/lib/types';
 import { fmtDate, fmtAgo, WideTableHint } from './_shared';
 
@@ -35,13 +36,34 @@ export default function AdminGateway() {
   const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
+  // 0088: sakelar AntarPay. null = belum termuat.
+  const [payOn, setPayOn] = useState<boolean | null>(null);
+  const [payBusy, setPayBusy] = useState(false);
 
   const apply = useCallback((g: GatewayStatus) => {
     setSt(g);
     setF((p) => ({ ...p, server_key: '', client_key: g.client_key ?? '', merchant_id: g.merchant_id ?? '', is_production: g.is_production, methods: g.methods ?? [], topup_min: String(g.topup_min), topup_max: String(g.topup_max) }));
   }, []);
-  const load = useCallback(async () => { try { apply(await rpc<GatewayStatus>('admin_gateway_status')); } catch (e) { toast.error((e as Error).message); } }, [apply]);
+  const load = useCallback(async () => {
+    try { apply(await rpc<GatewayStatus>('admin_gateway_status')); } catch (e) { toast.error((e as Error).message); }
+    try { setPayOn((await rpc<boolean>('antarpay_enabled')) === true); } catch { setPayOn(false); }
+  }, [apply]);
   useEffect(() => { load(); }, [load]);
+
+  /** Sakelar AntarPay: butuh panel terbuka kunci PIN (admin_require_unlock) — ADMIN_LOCKED ditangani handleAdminError. */
+  const toggleAntarPay = async (on: boolean) => {
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    const prev = payOn;
+    setPayBusy(true); setPayOn(on);
+    try {
+      const r = await rpc<{ antarpay_enabled: boolean }>('admin_set_antarpay_enabled', { p_enabled: on });
+      const v = r?.antarpay_enabled === true;
+      setPayOn(v);
+      toast.success(v ? 'AntarPay DIAKTIFKAN — top up, pencairan, dan bayar dompet/e-wallet dibuka' : 'AntarPay DINONAKTIFKAN — pelanggan hanya bisa bayar tunai');
+      useAppSettingsStore.getState().load(true);
+    } catch (e) { setPayOn(prev); handleAdminError(e); }
+    finally { setPayBusy(false); }
+  };
 
   const save = async () => {
     const min = Number(f.topup_min), max = Number(f.topup_max);
@@ -76,6 +98,31 @@ export default function AdminGateway() {
   const stats = st?.stats;
   return (
     <AdminPage title="Payment Gateway · Midtrans" subtitle="Top up AntarPay lewat GoPay, ShopeePay, QRIS, VA bank & kartu. Tanpa server key, top up berjalan dalam mode simulasi." onRefresh={load}>
+      <Card style={{ gap: 10, borderColor: payOn ? colors.success + '55' : colors.warning + '66', borderWidth: 1 }}>
+        <Row between style={{ flexWrap: 'wrap', gap: 10 }}>
+          <View style={{ flex: 1, minWidth: 220 }}>
+            <Row gap={8} style={{ alignItems: 'center' }}>
+              <Text style={font.h3}>AntarPay & Payment Gateway</Text>
+              {payOn === null ? <Badge text="Memuat…" color={colors.textMuted} /> : <Badge text={payOn ? 'AKTIF' : 'NONAKTIF'} color={payOn ? colors.success : colors.warning} />}
+            </Row>
+            <Text style={[font.small, { marginTop: 4 }]}>
+              {payOn ? 'AntarPay aktif: pelanggan bisa top up, membayar dengan saldo/e-wallet, dan mitra bisa mencairkan saldo.'
+                : 'AntarPay nonaktif (bawaan sampai pemilik menyalakannya): pelanggan hanya bisa membayar tunai.'}
+            </Text>
+          </View>
+          <Row gap={8} style={{ alignItems: 'center' }}>
+            <Text style={[font.small, { color: adminTone.ink, fontWeight: '700' }]}>{payOn ? 'Aktif' : 'Nonaktif'}</Text>
+            <Switch value={!!payOn} disabled={payBusy || payOn === null} onValueChange={toggleAntarPay} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />
+          </Row>
+        </Row>
+        <View style={[s.note, { backgroundColor: colors.warning + '14', borderColor: colors.warning + '50' }]}>
+          <Text style={font.small}>
+            Saat nonaktif: top-up, pencairan, dan bayar dengan AntarPay/e-wallet ditolak server; pelanggan hanya bisa bayar tunai. Refund otomatis tetap berjalan.
+          </Text>
+          <Text style={[font.tiny, { marginTop: 4 }]}>Mengubah sakelar memerlukan PIN panel admin dan dicatat di log aktivitas. Perubahan terasa di aplikasi pelanggan & mitra dalam hitungan detik (realtime app_settings).</Text>
+        </View>
+      </Card>
+
       <Row gap={adminSpace.lg} style={{ flexWrap: 'wrap' }}>
         <StatCard index={0} icon="card-outline" label="Total transaksi" value={stats?.total ?? 0} hint={`${stats?.last_7d ?? 0} dalam 7 hari · ${stats?.simulated ?? 0} simulasi`} color={adminTone.blue} />
         <StatCard index={1} icon="checkmark-circle-outline" label="Berhasil (settlement)" value={stats?.settlement ?? 0} color={adminTone.green} />

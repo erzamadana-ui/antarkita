@@ -8,6 +8,8 @@ import { Entrance, PressableScale, AnimatedNumber } from '@/components/motion';
 import { BrandGradient } from '@/components/glass';
 import { useAuth } from '@/store/auth';
 import { usePayPrefs, EWALLETS } from '@/store/payprefs';
+import { useAntarPay } from '@/hooks/useAppSettings';
+import { AntarPayOffBanner } from '@/components/AntarPayNotice';
 import { colors, font, radius, glass, shadow } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
 
@@ -28,9 +30,11 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
   const uid = session?.user.id;
   const { prefs, loaded, load, save } = usePayPrefs();
   const nfc = useNfcSupport();
+  const { enabled: antarpayOn } = useAntarPay();
   useEffect(() => { if (uid && !loaded) load(uid); }, [uid, loaded, load]);
   if (!uid) return null;
-  const method = prefs?.default_method ?? 'cash';
+  // 0088: saat AntarPay nonaktif, metode utama efektif = tunai (preferensi lama tidak dihapus, hanya tidak dipakai).
+  const method = antarpayOn ? (prefs?.default_method ?? 'cash') : 'cash';
   const ew = prefs?.ewallet ?? null;
   const pick = async (m: 'cash' | 'wallet' | 'ewallet', wallet?: string) => {
     await save(uid, { default_method: m, ewallet: (wallet ?? ew ?? (m === 'ewallet' ? 'gopay' : null)) as never });
@@ -46,19 +50,21 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
               <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 }}>SALDO ANTARPAY</Text>
               <AnimatedNumber value={wallet?.balance ?? 0} format={rupiah} style={{ color: '#fff', fontSize: 30, fontWeight: '700', letterSpacing: -0.5 }} />
             </View>
-            <Button title="Top up" size="sm" color="#0B1F2A" icon="add" onPress={() => router.push('/pay/gateway' as never)} />
+            {antarpayOn && <Button title="Top up" size="sm" color="#0B1F2A" icon="add" onPress={() => router.push('/pay/gateway' as never)} />}
           </Row>
         </BrandGradient>
       </Entrance>
 
+      {!antarpayOn && <Entrance index={1}><AntarPayOffBanner /></Entrance>}
+
       <Entrance index={1}><Card style={{ gap: 10 }}>
         <Text style={font.label}>Metode utama saat memesan</Text>
         <MethodRow active={method === 'cash'} onPress={() => pick('cash')} icon="cash-outline" color={colors.success} title="Tunai" subtitle="Bayar langsung ke driver" />
-        <MethodRow active={method === 'wallet'} onPress={() => pick('wallet')} icon="wallet-outline" color={colors.primary} title="Saldo AntarPay" subtitle={`Saldo ${rupiah(wallet?.balance ?? 0)} · dipotong otomatis`} />
-        <MethodRow active={method === 'ewallet'} onPress={() => pick('ewallet')} icon="phone-portrait-outline" color={colors.info} title={`E-wallet${ew ? ` · ${EWALLETS.find((e) => e.key === ew)?.label}` : ''}`} subtitle="GoPay/OVO/DANA/ShopeePay/QRIS/VA — via Midtrans, dana masuk AntarPay lalu dipotong" />
+        {antarpayOn && <MethodRow active={method === 'wallet'} onPress={() => pick('wallet')} icon="wallet-outline" color={colors.primary} title="Saldo AntarPay" subtitle={`Saldo ${rupiah(wallet?.balance ?? 0)} · dipotong otomatis`} />}
+        {antarpayOn && <MethodRow active={method === 'ewallet'} onPress={() => pick('ewallet')} icon="phone-portrait-outline" color={colors.info} title={`E-wallet${ew ? ` · ${EWALLETS.find((e) => e.key === ew)?.label}` : ''}`} subtitle="GoPay/OVO/DANA/ShopeePay/QRIS/VA — via Midtrans, dana masuk AntarPay lalu dipotong" />}
       </Card></Entrance>
 
-      <Entrance index={2}><Card style={{ gap: 10 }}>
+      {antarpayOn && <Entrance index={2}><Card style={{ gap: 10 }}>
         <Row between><Text style={font.label}>E-wallet pilihan Anda</Text><Badge text="Midtrans · PCI-DSS" color={colors.info} /></Row>
         <View style={s.grid}>
           {EWALLETS.map((x) => (
@@ -72,7 +78,7 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
           ))}
         </View>
         <Text style={font.tiny}>Saat memesan, bila saldo kurang, halaman bayar {ew ? EWALLETS.find((e) => e.key === ew)?.label : 'e-wallet'} dibuka otomatis untuk kekurangannya. AntarKita tidak menyimpan data akun e-wallet Anda.</Text>
-      </Card></Entrance>
+      </Card></Entrance>}
 
       {!compact && (
         <Entrance index={3}><Card style={{ gap: 8 }}>

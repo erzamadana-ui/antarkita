@@ -10,6 +10,8 @@ import { colors, font, radius, glass, shadow } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
 import type { PaymentMethod, ServiceType } from '@/lib/types';
 import { usePayPrefs, EWALLETS } from '@/store/payprefs';
+import { useAntarPay } from '@/hooks/useAppSettings';
+import { AntarPayOffNote } from '@/components/AntarPayNotice';
 import { useEffect } from 'react';
 
 
@@ -34,8 +36,11 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
   const { wallet, session } = useAuth();
   const router = useRouter();
   const { prefs, loaded, load } = usePayPrefs();
+  const { enabled: antarpayOn } = useAntarPay();
   useEffect(() => { if (session && !loaded) load(session.user.id); }, [session, loaded, load]);
-  useEffect(() => { if (loaded && prefs && !appliedRef.current) { appliedRef.current = true; onMethod(prefs.default_method); } }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (loaded && prefs && !appliedRef.current) { appliedRef.current = true; onMethod(antarpayOn ? prefs.default_method : 'cash'); } }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 0088: AntarPay nonaktif → paksa tunai (server juga menolak paid_via selain cash).
+  useEffect(() => { if (!antarpayOn && method !== 'cash') onMethod('cash'); }, [antarpayOn, method]); // eslint-disable-line react-hooks/exhaustive-deps
   const appliedRef = React.useRef(false);
   const ew = EWALLETS.find((x) => x.key === prefs?.ewallet) ?? EWALLETS[0];
   const [checking, setChecking] = useState(false);
@@ -58,14 +63,16 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
       <Text style={font.label}>Pembayaran</Text>
       <Row gap={8}>
         <PayOption active={method === 'cash'} onPress={() => onMethod('cash')} icon="cash-outline" title="Tunai" subtitle="Ke driver" />
-        <PayOption active={method === 'wallet'} onPress={() => onMethod('wallet')} icon="wallet-outline" title="AntarPay" subtitle={rupiah(wallet?.balance ?? 0)} />
-        <PayOption active={method === 'ewallet'} onPress={() => onMethod('ewallet')} icon="phone-portrait-outline" title={ew.label} subtitle="e-wallet" color={ew.color} />
+        {antarpayOn && <PayOption active={method === 'wallet'} onPress={() => onMethod('wallet')} icon="wallet-outline" title="AntarPay" subtitle={rupiah(wallet?.balance ?? 0)} />}
+        {antarpayOn && <PayOption active={method === 'ewallet'} onPress={() => onMethod('ewallet')} icon="phone-portrait-outline" title={ew.label} subtitle="e-wallet" color={ew.color} />}
       </Row>
-      <PressableScale onPress={() => router.push('/(customer)/pay' as never)} scaleTo={0.98} haptic={false} style={s.gwRow}>
-        <View style={s.gwIcons}>{['#00AA13', '#4C2A86', '#118EEA', '#EE4D2D'].map((c) => <View key={c} style={[s.gwDot, { backgroundColor: c }]} />)}</View>
-        <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>{method === 'ewallet' ? `Bayar dengan ${ew.label} (via Midtrans)` : 'Ganti e-wallet / metode utama'}</Text><Text style={font.tiny}>{method === 'ewallet' ? 'Bila saldo AntarPay kurang, halaman bayar dibuka otomatis untuk kekurangannya.' : 'GoPay · OVO · DANA · ShopeePay · QRIS · VA Bank'}</Text></View>
-        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
-      </PressableScale>
+      {antarpayOn ? (
+        <PressableScale onPress={() => router.push('/(customer)/pay' as never)} scaleTo={0.98} haptic={false} style={s.gwRow}>
+          <View style={s.gwIcons}>{['#00AA13', '#4C2A86', '#118EEA', '#EE4D2D'].map((c) => <View key={c} style={[s.gwDot, { backgroundColor: c }]} />)}</View>
+          <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>{method === 'ewallet' ? `Bayar dengan ${ew.label} (via Midtrans)` : 'Ganti e-wallet / metode utama'}</Text><Text style={font.tiny}>{method === 'ewallet' ? 'Bila saldo AntarPay kurang, halaman bayar dibuka otomatis untuk kekurangannya.' : 'GoPay · OVO · DANA · ShopeePay · QRIS · VA Bank'}</Text></View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+        </PressableScale>
+      ) : <AntarPayOffNote />}
       <Row gap={8}>
         <View style={{ flex: 1 }}>
           <Input placeholder="Kode promo" value={promo} onChangeText={(v) => { onPromo(v.toUpperCase()); setPromoMsg(null); }} autoCapitalize="characters" icon="pricetag-outline" />
