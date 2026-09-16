@@ -17,7 +17,7 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { create } from 'zustand';
 import { rpc, realtimeChannel } from '@/lib/supabase';
-import type { AppPublicSettings, SendLimit, SendLimits, SendVehicle } from '@/lib/types';
+import type { AppPublicSettings, PaymentChannels, SendLimit, SendLimits, SendVehicle } from '@/lib/types';
 
 interface State { settings: AppPublicSettings | null; loading: boolean; loadedAt: number; load: (force?: boolean) => Promise<void> }
 
@@ -33,6 +33,24 @@ export const DEFAULT_SEND_LIMITS: SendLimits = {
   travel: { max_kg: 30, max_cm: 120 },
 };
 const DEFAULT_WAIT_APOLOGY_MIN = 5;
+
+/**
+ * 0089: saluran pembayaran. Nilai bawaan = default server (`payment_channels`):
+ * tunai AKTIF, semua saluran lain NONAKTIF sampai admin menyalakannya.
+ */
+export const DEFAULT_PAYMENT_CHANNELS: PaymentChannels = {
+  cash: true, antarpay: false, emoney_nfc: false,
+  gopay: false, shopeepay: false, qris: false, ovo: false, dana: false, bank_transfer: false, card: false,
+};
+/** Gagal-tertutup: hanya `true` tegas dari server yang menyalakan saluran non-tunai; tunai hanya mati bila server tegas mengirim false. */
+function normalizePaymentChannels(raw: unknown): PaymentChannels {
+  const src = (raw ?? {}) as Record<string, unknown>;
+  const out: PaymentChannels = {};
+  for (const k of Object.keys(DEFAULT_PAYMENT_CHANNELS)) out[k] = k === 'cash' ? src[k] !== false : src[k] === true;
+  // saluran tambahan yang dikirim server (mis. ditambah migrasi berikutnya) ikut dibaca
+  for (const k of Object.keys(src)) if (!(k in out)) out[k] = src[k] === true;
+  return out;
+}
 
 const num = (v: unknown, fallback: number) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : fallback; };
 function normalizeSendLimits(raw: unknown): SendLimits {
@@ -66,6 +84,8 @@ export const useAppSettingsStore = create<State>((set, get) => ({
             wait_apology_minutes: num(r?.wait_apology_minutes, DEFAULT_WAIT_APOLOGY_MIN),
             // 0088: GAGAL-TERTUTUP — hanya true bila server tegas mengirim true (server lama tanpa kunci = nonaktif).
             antarpay_enabled: r?.antarpay_enabled === true,
+            // 0089: saluran per metode — GAGAL-TERTUTUP sama seperti sakelar global.
+            payment_channels: normalizePaymentChannels(r?.payment_channels),
           },
           loadedAt: Date.now(),
         });
@@ -132,4 +152,30 @@ export function useAntarPay() {
   const { settings, loading, reload } = useAppSettings();
   const enabled = settings?.antarpay_enabled === true;
   return { enabled, loaded: settings !== null, loading, reload };
+}
+
+/** Teks tunggal saat sakelar global menyala tetapi admin mematikan semua saluran non-tunai (0089). */
+export const CHANNELS_OFF_TEXT = 'Saat ini hanya pembayaran tunai yang dibuka admin.';
+
+/**
+ * Saluran pembayaran per metode (migrasi 0089, Panel Admin → Gateway → Saluran Pembayaran).
+ * Hierarki sakelar: sakelar global AntarPay (0088) adalah INDUK — bila mati, semua saluran
+ * selain tunai ikut mati apa pun setelan per-saluran. Arah gagal-amannya TERTUTUP seperti `useAntarPay`.
+ * Server tetap sumber kebenaran (`payment_channel_require` di create_order/travel_book/travel_request_create/request_topup);
+ * UI hanya mencegah pengguna menabrak tembok itu.
+ */
+export function usePaymentChannels() {
+  const { settings, loading, reload } = useAppSettings();
+  const antarpayOn = settings?.antarpay_enabled === true;
+  const channels = settings?.payment_channels ?? DEFAULT_PAYMENT_CHANNELS;
+  // Rail saldo: di server SETIAP paid_via selain 'cash' diselesaikan dari saldo AntarPay
+  // (create_order menyetel v_pay = 'wallet'), jadi saluran 'antarpay' adalah induk teknis
+  // semua saluran non-tunai — sama persis dengan payment_channel_require() di 0089.
+  const railOn = antarpayOn && channels.antarpay === true;
+  const isChannelOn = (key: string) =>
+    key === 'cash' ? channels.cash !== false
+    : key === 'antarpay' ? antarpayOn && channels.antarpay === true
+    : railOn && channels[key] === true;
+  const nonCashOn = Object.keys(channels).some((k) => k !== 'cash' && isChannelOn(k));
+  return { channels, isChannelOn, antarpayOn, nonCashOn, cashOn: isChannelOn('cash'), loaded: settings !== null, loading, reload };
 }
