@@ -16,6 +16,8 @@ URL wajib (dari deploy GitHub Pages di domain kustom **`apps.antarkitaindonesia.
 - **Permintaan hapus akun (URL wajib Play): `https://apps.antarkitaindonesia.com/hapus-akun/`** — halaman berdiri sendiri (`docs/rilis/hapus-akun.html`), diterbitkan oleh `.github/workflows/web.yml`. **Baru; belum hidup sampai push berikutnya ke `main`.**
 - Situs web aplikasi: `https://apps.antarkitaindonesia.com/` (Mitra: `/mitra/`)
 - Email kontak developer: `erzamadana@gmail.com`
+- Telepon/WhatsApp kontak (Play Console → Store listing → Contact details, opsional tapi disarankan): `+62 811-7805-600`; alamat usaha (Developer account → Account details, bila diminta): Kahuripan Terrace VII-21 [kota/kode pos: konfirmasi pemilik]
+- Situs pemasaran resmi: `https://antarkitaindonesia.com/` (landing page, repo `antarkita-landing`), sejak 15 Sep 2026
 
 > **Domain (keputusan direksi, Sep 2026):** URL resmi kini `https://apps.antarkitaindonesia.com/` (base path `/`). URL lama `https://erzamadana-ui.github.io/antarkita/…` **tetap berfungsi sebagai alias** — GitHub Pages mengalihkannya (301) ke domain kustom secara otomatis, jadi listing/APK yang masih memuat URL lama tidak 404. Yang diisi di Play Console tetap URL domain kustom. Status "terverifikasi hidup 9 Sep 2026" di atas merujuk ke URL lama; verifikasi ulang di domain baru setelah DNS + *Enforce HTTPS* aktif.
 
