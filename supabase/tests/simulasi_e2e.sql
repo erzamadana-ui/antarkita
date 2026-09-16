@@ -14,6 +14,8 @@ declare
   c_drv text; c_drv2 text; u_a uuid; u_b uuid; mail11 text; hold11 int; seen boolean; seen2 boolean; left1 int;
   -- 0088 (S0 & S54): sakelar AntarPay — nilai asli disimpan agar bisa dilaporkan; seluruh simulasi di-ROLLBACK
   pay_on0 boolean;
+  -- 0089 (S0 & S55): saluran pembayaran per metode — setelan asli disimpan lalu dikembalikan di S55
+  ch0 jsonb;
 begin
   select id into menu1 from menu_items where merchant_id = merch and is_available limit 1;
   select id into store1 from shop_stores where active and name ilike 'Indomaret%' limit 1;
@@ -59,6 +61,19 @@ begin
     r := admin_set_antarpay_enabled(true);
     log := log || format('S0 %s AntarPay dinyalakan untuk simulasi (nilai produksi=%s → sekarang=%s; dikembalikan oleh S54 & ROLLBACK)', case when antarpay_enabled() then 'OK' else 'BUG' end, pay_on0, r->>'antarpay_enabled') || E'\n';
   exception when others then log := log || 'S0 BUG sakelar AntarPay: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S0 Semua saluran pembayaran dinyalakan untuk simulasi (0089: default produksi = hanya tunai;
+  --        skenario dompet/e-wallet di bawah membutuhkan salurannya aktif) =====
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_unlock('123456');
+    ch0 := payment_channels_stored();                    -- setelan produksi, dikembalikan oleh S55 & ROLLBACK
+    foreach k1 in array payment_channel_keys() loop
+      r := admin_set_payment_channel(k1, true);
+    end loop;
+    log := log || format('S0 %s semua saluran pembayaran dinyalakan untuk simulasi (setelan produksi=%s)',
+      case when payment_channel_enabled('cash') and payment_channel_enabled('gopay') and payment_channel_enabled('antarpay') then 'OK' else 'BUG' end, ch0::text) || E'\n';
+  exception when others then log := log || 'S0 BUG saluran pembayaran: ' || sqlerrm || E'\n'; end;
 
   -- ===== S0 Saldo uji pelanggan (top up manual disetujui admin) =====
   begin
@@ -2349,6 +2364,87 @@ begin
     r := admin_set_antarpay_enabled(false);
     log := log || format('S54o %s sakelar dikembalikan ke nonaktif: antarpay_enabled()=%s (nilai produksi sebelum simulasi=%s)', case when not antarpay_enabled() then 'OK' else 'BUG' end, antarpay_enabled(), pay_on0) || E'\n';
   exception when others then log := log || 'S54 BUG sakelar AntarPay: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S55 Saluran pembayaran per metode (0089): tunai aktif → order tunai sukses;
+  --       global ON tetapi saluran gopay OFF → order gopay ditolak dengan pesan menyebut GoPay =====
+  begin
+    -- (a) admin: sakelar global ON, saluran tunai ON, saluran GoPay OFF
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_unlock('123456');
+    r := admin_set_antarpay_enabled(true);
+    r := admin_set_payment_channel('cash', true);
+    r := admin_set_payment_channel('gopay', false);
+    log := log || format('S55a %s global=%s cash=%s gopay=%s (per-saluran mati walau global menyala)',
+      case when antarpay_enabled() and payment_channel_enabled('cash') and not payment_channel_enabled('gopay') then 'OK' else 'BUG' end,
+      antarpay_enabled(), payment_channel_enabled('cash'), payment_channel_enabled('gopay')) || E'\n';
+    log := log || format('S55b %s pg_methods ikut dibersihkan dari gopay: %s',
+      case when not ((r->'pg_methods') @> '"gopay"'::jsonb) then 'OK' else 'BUG' end, r->'pg_methods') || E'\n';
+    j := app_public_settings(); j1 := gateway_public_config();
+    log := log || format('S55c %s status saluran dikirim ke klien: app_public_settings.gopay=%s gateway_public_config.gopay=%s',
+      case when (j->'payment_channels'->>'gopay')::boolean = false and (j1->'payment_channels'->>'gopay')::boolean = false then 'OK' else 'BUG' end,
+      j->'payment_channels'->>'gopay', j1->'payment_channels'->>'gopay') || E'\n';
+
+    -- (b) pelanggan: order TUNAI sukses (saluran cash aktif)
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    o := create_order(jsonb_build_object('service', 'ride_motor', 'vehicle_class', 'motor_economy', 'pickup', jsonb_build_object('lat', 0.4810, 'lng', 101.4349, 'address', 'S55 tunai'), 'dropoff', jsonb_build_object('lat', 0.50, 'lng', 101.44, 'address', 'Plaza Andalas'), 'paid_via', 'cash'));
+    log := log || format('S55d %s saluran tunai aktif → order tunai sukses: %s bayar=%s', case when o.id is not null and o.paid_via = 'cash' then 'OK' else 'BUG' end, o.code, o.paid_via) || E'\n';
+    o := cancel_order(o.id, 'uji S55');
+
+    -- (c) order GoPay ditolak, pesannya menyebut nama salurannya
+    select balance into b0 from wallets where user_id = cust;
+    begin
+      o := create_order(jsonb_build_object('service', 'ride_motor', 'vehicle_class', 'motor_economy', 'pickup', jsonb_build_object('lat', 0.4810, 'lng', 101.4349, 'address', 'S55 gopay'), 'dropoff', jsonb_build_object('lat', 0.50, 'lng', 101.44, 'address', 'Plaza Andalas'), 'paid_via', 'gopay'));
+      log := log || format('S55e BUG: order gopay diterima walau salurannya dimatikan %s', o.code) || E'\n'; perform cancel_order(o.id, 'uji');
+    exception when others then log := log || format('S55e %s order gopay ditolak & pesannya menyebut GoPay: %s',
+      case when sqlerrm like 'Metode pembayaran GoPay sedang dinonaktifkan%' then 'OK' else 'BUG' end, left(sqlerrm, 90)) || E'\n'; end;
+    select balance into b1 from wallets where user_id = cust;
+    log := log || format('S55f %s saldo pelanggan tidak tersentuh oleh order yang ditolak: %s → %s', case when b0 = b1 then 'OK' else 'BUG' end, b0, b1) || E'\n';
+
+    -- (d) saluran dompet dimatikan → order AntarPay ditolak dengan nama salurannya
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_unlock('123456');
+    r := admin_set_payment_channel('antarpay', false);
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    begin
+      o := create_order(jsonb_build_object('service', 'ride_motor', 'vehicle_class', 'motor_economy', 'pickup', jsonb_build_object('lat', 0.4810, 'lng', 101.4349, 'address', 'S55 wallet'), 'dropoff', jsonb_build_object('lat', 0.50, 'lng', 101.44, 'address', 'Plaza Andalas'), 'paid_via', 'wallet'));
+      log := log || format('S55g BUG: order dompet diterima walau saluran AntarPay dimatikan %s', o.code) || E'\n'; perform cancel_order(o.id, 'uji');
+    exception when others then log := log || format('S55g %s order dompet ditolak: %s',
+      case when sqlerrm like 'Metode pembayaran AntarPay%' then 'OK' else 'BUG' end, left(sqlerrm, 90)) || E'\n'; end;
+
+    -- (e) top up lewat saluran yang mati ikut ditolak
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_unlock('123456');
+    r := admin_set_payment_channel('bank_transfer', false);
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    begin tp := request_topup(50000, 'bank_transfer', null, 'uji S55'); log := log || 'S55h BUG: top up diterima walau saluran transfer bank dimatikan' || E'\n';
+    exception when others then log := log || format('S55h %s top up ditolak: %s',
+      case when sqlerrm like 'Metode pembayaran Transfer bank%' then 'OK' else 'BUG' end, left(sqlerrm, 90)) || E'\n'; end;
+
+    -- (f) penjagaan hak akses: tanpa PIN, kunci asing, dan non-admin harus ditolak
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_lock();
+    begin r := admin_set_payment_channel('gopay', true); log := log || 'S55i BUG: saluran bisa diubah tanpa buka kunci PIN' || E'\n';
+    exception when others then log := log || format('S55i %s tanpa PIN ditolak: %s', case when sqlerrm ilike '%ADMIN_LOCKED%' or sqlerrm ilike '%PIN%' then 'OK' else 'BUG' end, left(sqlerrm, 60)) || E'\n'; end;
+    perform admin_unlock('123456');
+    begin r := admin_set_payment_channel('paypal', true); log := log || 'S55j BUG: kunci saluran asing diterima' || E'\n';
+    exception when others then log := log || format('S55j %s kunci asing ditolak: %s', case when sqlerrm like 'Saluran pembayaran tidak dikenal%' then 'OK' else 'BUG' end, left(sqlerrm, 60)) || E'\n'; end;
+    perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+    begin r := admin_set_payment_channel('gopay', true); log := log || 'S55k BUG: pelanggan bisa mengubah saluran pembayaran' || E'\n';
+    exception when others then log := log || format('S55k %s non-admin ditolak: %s', case when sqlerrm like 'Hanya admin%' then 'OK' else 'BUG' end, left(sqlerrm, 40)) || E'\n'; end;
+    select count(*) into n from audit_logs where action = 'payment_channel.toggle' and created_at >= transaction_timestamp();
+    log := log || format('S55l %s log aktivitas payment_channel.toggle tercatat (%s baris dalam simulasi)', case when n >= 4 then 'OK' else 'BUG' end, n) || E'\n';
+
+    -- (g) KEMBALIKAN setelan ke kondisi awal (setelan produksi sebelum simulasi) + sakelar global
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_unlock('123456');
+    for k1 in select jsonb_object_keys(ch0) loop
+      r := admin_set_payment_channel(k1, (ch0->>k1)::boolean);
+    end loop;
+    r := admin_set_antarpay_enabled(coalesce(pay_on0, false));
+    log := log || format('S55m %s setelan dikembalikan: payment_channels=%s antarpay_enabled=%s (nilai produksi sebelum simulasi: %s / %s)',
+      case when payment_channels_stored() = ch0 and antarpay_enabled() = coalesce(pay_on0, false) then 'OK' else 'BUG' end,
+      payment_channels_stored()::text, antarpay_enabled(), ch0::text, pay_on0) || E'\n';
+  exception when others then log := log || 'S55 BUG saluran pembayaran: ' || sqlerrm || E'\n'; end;
 
   raise exception using message = 'SIMULASI_SELESAI' || log;
 end $sim$;
