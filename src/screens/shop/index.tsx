@@ -175,32 +175,32 @@ export default function ShopScreen() {
   const driverCode = useAntarNowCode('shop');
   const order = async () => {
     if (!dropoff || !est) return;
-    // Hemat §5.3: rute sungguhan (GEOMETRI saja) baru diambil DI SINI. Jarak/durasi
-    // tetap angka pratinjau yang menjadi dasar harga yang ditampilkan.
-    const fin = origin
-      ? await finalizeRoute(origin, dropoff, route)
-      : { route_km: route?.distance_km ?? null, duration_min: route?.duration_min ?? null, coords: route?.coords ?? null };
-    const base = {
-      service: 'shop', dropoff: { lat: dropoff.lat, lng: dropoff.lng, address: dropoff.address },
-      route_km: fin.route_km, duration_min: fin.duration_min, route_geometry: fin.coords,
-      payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null, notes: notes || null, shop_vehicle: vehicle, driver_code: driverCode,
-    };
-    let p: Record<string, unknown>;
-    if (free) {
-      if (!pickup) { toast.error('Pilih toko lewat peta dulu'); return; }
-      if (validFree.length === 0) { toast.error('Isi minimal 1 barang'); return; }
-      p = { ...base, pickup: { lat: pickup.lat, lng: pickup.lng, address: pickup.address }, shop_store: pickup.name ?? 'Toko lain', shopping_list: validFree.map((i) => ({ name: i.name.trim(), qty: i.qty, price: i.price || null, unit: 'pcs' })), est_budget: budget };
-    } else {
-      if (!store || cart.length === 0) { toast.error('Keranjang masih kosong'); return; }
-      p = { ...base, shop_store_id: store.id, shopping_list: cart.map((l) => ({ product_id: l.product_id, name: l.name, qty: l.qty, note: l.note ?? null })) };
-    }
+    // Validasi isi keranjang DULU (sebelum ada panggilan jaringan apa pun).
+    if (free && !pickup) return toast.error('Pilih toko lewat peta dulu');
+    if (free && validFree.length === 0) return toast.error('Isi minimal 1 barang');
+    if (!free && (!store || cart.length === 0)) return toast.error('Keranjang masih kosong');
     setOrdering(true);
     try {
+      // Hemat §5.3: rute sungguhan (GEOMETRI saja) baru diambil DI SINI. Jarak/durasi
+      // tetap angka pratinjau yang menjadi dasar harga yang ditampilkan.
+      const fin = origin
+        ? await finalizeRoute(origin, dropoff, route)
+        : { route_km: route?.distance_km ?? null, duration_min: route?.duration_min ?? null, coords: route?.coords ?? null };
+      const base = {
+        service: 'shop', dropoff: { lat: dropoff.lat, lng: dropoff.lng, address: dropoff.address },
+        route_km: fin.route_km, duration_min: fin.duration_min, route_geometry: fin.coords,
+        payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null, notes: notes || null, shop_vehicle: vehicle, driver_code: driverCode,
+      };
+      const p: Record<string, unknown> = free
+        ? { ...base, pickup: { lat: pickup!.lat, lng: pickup!.lng, address: pickup!.address }, shop_store: pickup!.name ?? 'Toko lain', shopping_list: validFree.map((i) => ({ name: i.name.trim(), qty: i.qty, price: i.price || null, unit: 'pcs' })), est_budget: budget }
+        : { ...base, shop_store_id: store!.id, shopping_list: cart.map((l) => ({ product_id: l.product_id, name: l.name, qty: l.qty, note: l.note ?? null })) };
       const o = await createOrder(p);
       await refreshWallet(); useBooking.getState().reset();
       router.replace(`/order/${o.id}` as never);
     } catch (e) { if (!handleShortfall(e, router, payPrefs?.ewallet)) toast.error((e as Error).message); }
-    setOrdering(false);
+    // `finally`: tanpa ini tombol "Pesan" bisa tersangkut memutar selamanya bila ada
+    // kegagalan di luar blok try lama (mis. finalizeRoute) — pengguna harus menutup layar.
+    finally { setOrdering(false); }
   };
 
   const footerTitle = cityBlocked ? cityBlockedLabel(city, 'shop') : blocked ? 'Toko di luar jangkauan' : !ready ? (free ? 'Lengkapi toko & daftar belanja' : store ? (cart.length ? 'Menghitung…' : 'Pilih barang dulu') : 'Pilih toko dulu') : estimating ? 'Menghitung…' : `Pesan AntarShop · ${rupiah(total)}`;
