@@ -10,7 +10,7 @@ import { colors, font, radius, glass, shadow } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
 import type { PaymentMethod, ServiceType } from '@/lib/types';
 import { usePayPrefs, EWALLETS } from '@/store/payprefs';
-import { useAntarPay } from '@/hooks/useAppSettings';
+import { useAntarPay, usePaymentChannels, CHANNELS_OFF_TEXT } from '@/hooks/useAppSettings';
 import { AntarPayOffNote } from '@/components/AntarPayNotice';
 import { useEffect } from 'react';
 
@@ -35,14 +35,27 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
 }) {
   const { wallet, session } = useAuth();
   const router = useRouter();
-  const { prefs, loaded, load } = usePayPrefs();
+  const { prefs, loaded, load, save } = usePayPrefs();
   const { enabled: antarpayOn } = useAntarPay();
+  const { isChannelOn, nonCashOn } = usePaymentChannels();
+  // 0089: saluran yang dimatikan admin tidak ditawarkan (server menolaknya lewat payment_channel_require).
+  const cashOn = isChannelOn('cash');
+  const walletOn = isChannelOn('antarpay');
+  const wallets = EWALLETS.filter((x) => isChannelOn(x.key));
+  const ewalletOn = wallets.length > 0;
+  const allowed = (m: PayChoice) => (m === 'cash' ? cashOn : m === 'wallet' ? walletOn : ewalletOn);
+  const firstAllowed: PayChoice = cashOn ? 'cash' : walletOn ? 'wallet' : 'ewallet';
   useEffect(() => { if (session && !loaded) load(session.user.id); }, [session, loaded, load]);
-  useEffect(() => { if (loaded && prefs && !appliedRef.current) { appliedRef.current = true; onMethod(antarpayOn ? prefs.default_method : 'cash'); } }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
-  // 0088: AntarPay nonaktif → paksa tunai (server juga menolak paid_via selain cash).
-  useEffect(() => { if (!antarpayOn && method !== 'cash') onMethod('cash'); }, [antarpayOn, method]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (loaded && prefs && !appliedRef.current) { appliedRef.current = true; onMethod(antarpayOn && allowed(prefs.default_method) ? prefs.default_method : firstAllowed); } }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 0088/0089: saluran terpilih dimatikan admin → pindah ke saluran pertama yang masih dibuka.
+  useEffect(() => { if (!allowed(method)) onMethod(firstAllowed); }, [antarpayOn, cashOn, walletOn, ewalletOn, method]); // eslint-disable-line react-hooks/exhaustive-deps
+  // e-wallet pilihan lama dimatikan admin → geser ke e-wallet pertama yang aktif supaya paid_via tetap sah.
+  useEffect(() => {
+    if (!session || !loaded || !ewalletOn) return;
+    if (prefs?.ewallet && !wallets.some((x) => x.key === prefs.ewallet)) save(session.user.id, { ewallet: wallets[0].key as never });
+  }, [loaded, ewalletOn, prefs?.ewallet]); // eslint-disable-line react-hooks/exhaustive-deps
   const appliedRef = React.useRef(false);
-  const ew = EWALLETS.find((x) => x.key === prefs?.ewallet) ?? EWALLETS[0];
+  const ew = wallets.find((x) => x.key === prefs?.ewallet) ?? wallets[0] ?? EWALLETS[0];
   const [checking, setChecking] = useState(false);
   const [promoMsg, setPromoMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -62,17 +75,17 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
     <View style={{ gap: 12 }}>
       <Text style={font.label}>Pembayaran</Text>
       <Row gap={8}>
-        <PayOption active={method === 'cash'} onPress={() => onMethod('cash')} icon="cash-outline" title="Tunai" subtitle="Ke driver" />
-        {antarpayOn && <PayOption active={method === 'wallet'} onPress={() => onMethod('wallet')} icon="wallet-outline" title="AntarPay" subtitle={rupiah(wallet?.balance ?? 0)} />}
-        {antarpayOn && <PayOption active={method === 'ewallet'} onPress={() => onMethod('ewallet')} icon="phone-portrait-outline" title={ew.label} subtitle="e-wallet" color={ew.color} />}
+        {cashOn && <PayOption active={method === 'cash'} onPress={() => onMethod('cash')} icon="cash-outline" title="Tunai" subtitle="Ke driver" />}
+        {walletOn && <PayOption active={method === 'wallet'} onPress={() => onMethod('wallet')} icon="wallet-outline" title="AntarPay" subtitle={rupiah(wallet?.balance ?? 0)} />}
+        {ewalletOn && <PayOption active={method === 'ewallet'} onPress={() => onMethod('ewallet')} icon="phone-portrait-outline" title={ew.label} subtitle="e-wallet" color={ew.color} />}
       </Row>
-      {antarpayOn ? (
+      {antarpayOn && nonCashOn ? (
         <PressableScale onPress={() => router.push('/(customer)/pay' as never)} scaleTo={0.98} haptic={false} style={s.gwRow}>
           <View style={s.gwIcons}>{['#00AA13', '#4C2A86', '#118EEA', '#EE4D2D'].map((c) => <View key={c} style={[s.gwDot, { backgroundColor: c }]} />)}</View>
-          <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>{method === 'ewallet' ? `Bayar dengan ${ew.label} (via Midtrans)` : 'Ganti e-wallet / metode utama'}</Text><Text style={font.tiny}>{method === 'ewallet' ? 'Bila saldo AntarPay kurang, halaman bayar dibuka otomatis untuk kekurangannya.' : 'GoPay · OVO · DANA · ShopeePay · QRIS · VA Bank'}</Text></View>
+          <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>{method === 'ewallet' ? `Bayar dengan ${ew.label} (via Midtrans)` : 'Ganti e-wallet / metode utama'}</Text><Text style={font.tiny}>{method === 'ewallet' ? 'Bila saldo AntarPay kurang, halaman bayar dibuka otomatis untuk kekurangannya.' : [walletOn ? 'Saldo AntarPay' : null, ...wallets.map((w) => w.label)].filter(Boolean).join(' · ')}</Text></View>
           <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
         </PressableScale>
-      ) : <AntarPayOffNote />}
+      ) : <AntarPayOffNote text={!cashOn && !walletOn && !ewalletOn ? 'Semua metode pembayaran sedang dinonaktifkan admin — coba lagi nanti.' : antarpayOn ? CHANNELS_OFF_TEXT : undefined} />}
       <Row gap={8}>
         <View style={{ flex: 1 }}>
           <Input placeholder="Kode promo" value={promo} onChangeText={(v) => { onPromo(v.toUpperCase()); setPromoMsg(null); }} autoCapitalize="characters" icon="pricetag-outline" />
