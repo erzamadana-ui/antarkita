@@ -55,15 +55,22 @@ export interface MapConfig {
  * (tile.openstreetmap.org, nominatim.openstreetmap.org, router.project-osrm.org,
  * photon.komoot.io) melarang pemakaian komersial dan dapat memblokir tanpa
  * pemberitahuan — lihat docs/riset/RISET-PETA-DAN-BIAYA.md §2.
+ *
+ * Karena itu cadangan ini memakai 'stadia', SAMA dengan baris map_config di
+ * produksi (keputusan komisaris 16 Sep 2026). Konsekuensinya disengaja: bila
+ * konfigurasi gagal dimuat DAN kunci Stadia belum ada, peta tidak tampil — lebih
+ * baik daripada aplikasi komersial diam-diam memukul endpoint yang melarang
+ * pemakaian komersial. Kunci publik tetap datang dari map_config/map_secrets;
+ * konstanta ini tidak pernah memuat kunci.
  */
 export const DEFAULT_MAP_CONFIG: MapConfig = {
-  tile_provider: 'osm_free',
-  tile_url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-  tile_attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  tile_provider: 'stadia',
+  tile_url: 'https://tiles.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}.png?api_key={key}',
+  tile_attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   tile_max_zoom: 19,
-  geocode_provider: 'osm_free',
+  geocode_provider: 'stadia',
   geocode_key: null,
-  route_provider: 'osm_free',
+  route_provider: 'stadia',
   route_key: null,
   autocomplete_min_chars: 4,
   autocomplete_debounce_ms: 700,
@@ -71,7 +78,7 @@ export const DEFAULT_MAP_CONFIG: MapConfig = {
   refit_min_meters: 150,
   driver_poll_ms: 10000,
   track_max_zoom: 16,
-  uses_free_osm: true,
+  uses_free_osm: false,
 };
 
 const STORAGE_KEY = 'antarkita.map_config.v1';
