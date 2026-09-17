@@ -55,6 +55,11 @@ export default function RideScreen() {
   const [notes, setNotes] = useState('');
   const [showDetails, setShowDetails] = useState(false);
   const [ordering, setOrdering] = useState(false);
+  // Kenapa ada: fare_options pernah gagal diam-diam (.catch(() => null)) sehingga layar
+  // berakhir tanpa daftar kelas DAN tanpa tombol pesan — pelanggan buntu tanpa penjelasan.
+  // Sekarang galatnya disimpan, ditampilkan, dan bisa dicoba ulang.
+  const [fareErr, setFareErr] = useState<string | null>(null);
+  const [fareTry, setFareTry] = useState(0);
   // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
   const driverCode = useAntarNowCode(service);
 
@@ -63,16 +68,19 @@ export default function RideScreen() {
   }, [hasFix]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!pickup || !dropoff) { setRoute(null); setOpts(null); return; }
+    if (!pickup || !dropoff) { setRoute(null); setOpts(null); setFareErr(null); return; }
     let cancelled = false;
     (async () => {
-      setLoading(true);
+      setLoading(true); setFareErr(null);
       const r = await getRoute(pickup, dropoff);
       if (cancelled) return;
       setRoute(r);
-      const o = await rpc<FareOptions>('fare_options', { p_service: service, p_pickup_lat: pickup.lat, p_pickup_lng: pickup.lng, p_drop_lat: dropoff.lat, p_drop_lng: dropoff.lng, p_route_km: r.distance_km, p_helpers: 0 }).catch(() => null);
+      let o: FareOptions | null = null;
+      try { o = await rpc<FareOptions>('fare_options', { p_service: service, p_pickup_lat: pickup.lat, p_pickup_lng: pickup.lng, p_drop_lat: dropoff.lat, p_drop_lng: dropoff.lng, p_route_km: r.distance_km, p_helpers: 0 }); }
+      catch (e) { if (!cancelled) setFareErr((e as Error)?.message || 'Tarif tidak dapat dimuat'); }
       if (cancelled) return;
       setOpts(o);
+      if (o && (o.classes?.length ?? 0) === 0) setFareErr('Server tidak mengirim satu pun kelas kendaraan untuk layanan ini.');
       if (o && !o.classes.some((c) => c.code === cls)) {
         // Default: kelas Standar bila ada driver di sekitar; jika tidak, kelas pertama yang punya driver; terakhir kelas Standar
         const std = o.classes.find((c) => c.rank === 2 && !c.is_ev);
@@ -82,7 +90,7 @@ export default function RideScreen() {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, service]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, service, fareTry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const chosen = useMemo(() => opts?.classes.find((c) => c.code === cls) ?? null, [opts, cls]);
   const total = chosen ? Math.max(0, chosen.total - discount) : 0;
@@ -114,10 +122,16 @@ export default function RideScreen() {
 
   const ready = !!(pickup && dropoff);
   return (
-    <Screen title={def.label} subtitle={def.id === 'ride_car' ? 'Mobil · 1–4 penumpang' : 'Ojek motor · cepat & hemat'} band={def.color} back maxWidth={640} footer={ready && chosen && !serviceOff ? (
+    <Screen title={def.label} subtitle={def.id === 'ride_car' ? 'Mobil · 1–4 penumpang' : 'Ojek motor · cepat & hemat'} band={def.color} back maxWidth={640} footer={ready && !serviceOff ? (
       <View style={{ gap: 10 }}>
         <LimitNotice limit={opts?.limit} actionTitle="Buka AntarTravel" actionIcon="bus-outline" onAction={() => router.push('/travel' as never)} />
-        <Button title={cityBlocked ? cityBlockedLabel(city, service) : blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label} · ${rupiah(total)}`} size="lg" color={accent} loading={ordering} disabled={loading || blocked || cityBlocked} onPress={order} />
+        {chosen ? (
+          <Button title={cityBlocked ? cityBlockedLabel(city, service) : blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label} · ${rupiah(total)}`} size="lg" color={accent} loading={ordering} disabled={loading || blocked || cityBlocked} onPress={order} />
+        ) : (
+          // Tarif belum ada: tombol TETAP tampil supaya layar tidak terlihat buntu, dan
+          // menjadi tombol coba-ulang, bukan tombol mati tanpa keterangan.
+          <Button title={loading ? 'Menghitung tarif…' : 'Tarif gagal dimuat · Coba lagi'} size="lg" color={accent} loading={loading} disabled={loading} onPress={() => setFareTry((n) => n + 1)} />
+        )}
       </View>
     ) : undefined}>
       <View style={{ gap: 14 }}>
@@ -151,6 +165,13 @@ export default function RideScreen() {
             </Row>
             <RoutePreview pickup={pickup} dropoff={dropoff} polyline={route?.coords} accent={accent} />
             <VehicleClassPicker options={opts?.classes ?? []} value={cls} onChange={setCls} accent={accent} loading={loading} />
+            {!loading && !chosen && (
+              <View style={s.fareErr}>
+                <Row gap={8}><Ionicons name="alert-circle" size={18} color={colors.warning} /><Text style={{ fontWeight: '700', color: colors.text }}>Tarif belum bisa ditampilkan</Text></Row>
+                <Text style={font.tiny}>{fareErr ?? 'Daftar kelas kendaraan tidak diterima dari server.'}</Text>
+                <Text style={font.tiny}>Tekan “Coba lagi” di tombol bawah. Kalau tetap gagal, keluar lalu masuk kembali ke akun Anda — sesi login yang kedaluwarsa juga memunculkan pesan ini.</Text>
+              </View>
+            )}
             <SchedulePicker value={when} onChange={setWhen} accent={accent} />
             {chosen && (
               <PressableScale onPress={() => setShowDetails(!showDetails)} scaleTo={0.99} haptic={false}>
@@ -184,5 +205,6 @@ const s = StyleSheet.create({
   smallBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.full, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: glass.border },
   smallBtnText: { fontSize: 12, fontWeight: '700', color: colors.info },
   fareBox: { backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radius.lg, padding: 14, borderWidth: 1, borderColor: glass.border },
+  fareErr: { gap: 6, backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radius.lg, padding: 14, borderWidth: 1, borderColor: colors.warning + '55' },
   chev: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(11,31,42,0.06)', alignItems: 'center', justifyContent: 'center' },
 });
