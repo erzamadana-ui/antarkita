@@ -56,6 +56,9 @@ export default function BoxScreen() {
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState('');
   const [ordering, setOrdering] = useState(false);
+  // Sama seperti AntarRide: fare_options yang gagal tidak boleh membuat layar tanpa tombol.
+  const [fareErr, setFareErr] = useState<string | null>(null);
+  const [fareTry, setFareTry] = useState(0);
 
   useEffect(() => {
     if (!pickup && hasFix) reverseGeocode(location).then((address) => { if (!useBooking.getState().pickup) setPickup({ ...location, address, name: 'Lokasi saya' }); });
@@ -63,21 +66,24 @@ export default function BoxScreen() {
   useEffect(() => { if (purpose === 'pindahan_rumah' && helpers === 0) setHelpers(2); if (purpose === 'pindahan_kost' && helpers === 0) setHelpers(1); }, [purpose]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!pickup || !dropoff) { setRoute(null); setOpts(null); return; }
+    if (!pickup || !dropoff) { setRoute(null); setOpts(null); setFareErr(null); return; }
     let cancelled = false;
     (async () => {
-      setLoading(true);
+      setLoading(true); setFareErr(null);
       const r = route && route.distance_km > 0 ? route : await getRoute(pickup, dropoff);
       if (cancelled) return;
       setRoute(r);
-      const o = await rpc<FareOptions>('fare_options', { p_service: 'box', p_pickup_lat: pickup.lat, p_pickup_lng: pickup.lng, p_drop_lat: dropoff.lat, p_drop_lng: dropoff.lng, p_route_km: r.distance_km, p_helpers: helpers }).catch(() => null);
+      let o: FareOptions | null = null;
+      try { o = await rpc<FareOptions>('fare_options', { p_service: 'box', p_pickup_lat: pickup.lat, p_pickup_lng: pickup.lng, p_drop_lat: dropoff.lat, p_drop_lng: dropoff.lng, p_route_km: r.distance_km, p_helpers: helpers }); }
+      catch (e) { if (!cancelled) setFareErr((e as Error)?.message || 'Tarif tidak dapat dimuat'); }
       if (cancelled) return;
       setOpts(o);
+      if (o && (o.classes?.length ?? 0) === 0) setFareErr('Server tidak mengirim satu pun kelas kendaraan untuk layanan ini.');
       if (o && !o.classes.some((c) => c.code === cls)) setCls((purpose === 'pindahan_rumah' ? o.classes.find((c) => c.code === 'box_van') : o.classes[0])?.code ?? null);
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, helpers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, helpers, fareTry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const chosen = useMemo(() => opts?.classes.find((c) => c.code === cls) ?? null, [opts, cls]);
   const total = chosen ? Math.max(0, chosen.total - discount) : 0;
@@ -108,10 +114,14 @@ export default function BoxScreen() {
   };
 
   return (
-    <Screen title="AntarBox" subtitle="Mobil box & pick up" band={colors.box} back maxWidth={640} footer={ready && chosen && !serviceOff ? (
+    <Screen title="AntarBox" subtitle="Mobil box & pick up" band={colors.box} back maxWidth={640} footer={ready && !serviceOff ? (
       <View style={{ gap: 10 }}>
         <LimitNotice limit={opts?.limit} />
-        <Button title={cityBlocked ? cityBlockedLabel(city, 'box') : blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label}${helpers ? ` + ${helpers} pembantu` : ''} · ${rupiah(total)}`} size="lg" color={colors.box} loading={ordering} disabled={loading || blocked || cityBlocked} onPress={order} />
+        {chosen ? (
+          <Button title={cityBlocked ? cityBlockedLabel(city, 'box') : blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label}${helpers ? ` + ${helpers} pembantu` : ''} · ${rupiah(total)}`} size="lg" color={colors.box} loading={ordering} disabled={loading || blocked || cityBlocked} onPress={order} />
+        ) : (
+          <Button title={loading ? 'Menghitung tarif…' : 'Tarif gagal dimuat · Coba lagi'} size="lg" color={colors.box} loading={loading} disabled={loading} onPress={() => setFareTry((n) => n + 1)} />
+        )}
       </View>
     ) : undefined}>
       <View style={{ gap: 14 }}>
