@@ -68,6 +68,11 @@ export default function ShopScreen() {
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [est, setEst] = useState<ShoppingEstimate | null>(null);
   const [estimating, setEstimating] = useState(false);
+  // Kenapa ada: shopping_estimate pernah gagal diam-diam (.catch(() => null)) sehingga tombol
+  // "Menghitung…" mati selamanya tanpa penjelasan (pola sama dengan AntarRide, f8dae58).
+  // Sekarang galatnya disimpan, ditampilkan, dan bisa dicoba ulang lewat fareTry.
+  const [fareErr, setFareErr] = useState<string | null>(null);
+  const [fareTry, setFareTry] = useState(0);
   const [method, setMethod] = useState<PayChoice>('wallet');
   const [promo, setPromo] = useState(''); const [discount, setDiscount] = useState(0); const [notes, setNotes] = useState('');
   const [ordering, setOrdering] = useState(false);
@@ -149,17 +154,21 @@ export default function ShopScreen() {
 
   // estimasi biaya (debounce saat subtotal/kendaraan berubah)
   useEffect(() => {
-    if (!origin || !dropoff) { setEst(null); setEstimating(false); return; }
+    if (!origin || !dropoff) { setEst(null); setEstimating(false); setFareErr(null); return; }
     let cancelled = false;
-    setEstimating(true);
+    setEstimating(true); setFareErr(null);
     const t = setTimeout(async () => {
-      const r = await rpc<ShoppingEstimate>('shopping_estimate', { p_service: 'shop', p_pickup_lat: origin.lat, p_pickup_lng: origin.lng, p_drop_lat: dropoff.lat, p_drop_lng: dropoff.lng, p_subtotal: Math.round(subtotal), p_vehicle: vehicle, p_route_km: route?.distance_km ?? null }).catch(() => null);
+      let r: ShoppingEstimate | null = null;
+      try { r = await rpc<ShoppingEstimate>('shopping_estimate', { p_service: 'shop', p_pickup_lat: origin.lat, p_pickup_lng: origin.lng, p_drop_lat: dropoff.lat, p_drop_lng: dropoff.lng, p_subtotal: Math.round(subtotal), p_vehicle: vehicle, p_route_km: route?.distance_km ?? null }); }
+      catch (e) { if (!cancelled) setFareErr((e as Error)?.message || 'Estimasi biaya tidak dapat dimuat'); }
       if (cancelled) return;
-      setEst(r); setEstimating(false);
+      setEst(r);
+      if (!r) setFareErr((prev) => prev ?? 'Server tidak mengirim estimasi biaya untuk rute ini.');
+      setEstimating(false);
       if (r && !vehicleManual.current) setVehicle(subtotal >= r.car_min_budget ? 'car' : 'motor');
     }, 400);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [origin?.lat, origin?.lng, dropoff?.lat, dropoff?.lng, subtotal, vehicle, route?.distance_km]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [origin?.lat, origin?.lng, dropoff?.lat, dropoff?.lng, subtotal, vehicle, route?.distance_km, fareTry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const total = est ? Math.max(0, est.fare + est.platform_fee + est.service_fee - discount) + subtotal : 0;
   const blocked = limitBlocked(est?.limit);
@@ -169,6 +178,8 @@ export default function ShopScreen() {
   // Daftar toko & harga TETAP bisa ditelusuri walau kota belum dilayani.
   const cityBlocked = cityBlockedFor('shop');
   const ready = !!dropoff && !!est && !blocked && !cityBlocked && (free ? !!pickup && validFree.length > 0 : !!store && cart.length > 0);
+  // Estimasi gagal (bukan sedang menghitung): tombol utama berubah jadi tombol coba-ulang.
+  const fareFailed = !!origin && !!dropoff && !estimating && !est && !!fareErr;
   const pickVehicle = (v: Vehicle) => { vehicleManual.current = true; setVehicle(v); };
 
   // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
@@ -211,7 +222,12 @@ export default function ShopScreen() {
       footer={serviceOff ? undefined : (
         <View style={{ gap: 10 }}>
           <LimitNotice limit={est?.limit} />
-          <Button title={footerTitle} size="lg" disabled={!ready || ordering} loading={ordering} onPress={order} />
+          {fareFailed ? (
+            // Estimasi gagal: tombol TETAP tampil dan menjadi tombol coba-ulang, bukan tombol mati tanpa keterangan.
+            <Button title={estimating ? 'Menghitung…' : 'Tarif gagal dimuat · Coba lagi'} size="lg" loading={estimating} disabled={estimating} onPress={() => setFareTry((n) => n + 1)} />
+          ) : (
+            <Button title={footerTitle} size="lg" disabled={!ready || ordering} loading={ordering} onPress={order} />
+          )}
         </View>
       )}>
       {serviceOff ? <ServiceDisabledEmpty onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))} /> : (
@@ -381,6 +397,13 @@ export default function ShopScreen() {
         {origin && dropoff && (
           <Card solid>
             {est ? <PriceSummary rows={[{ label: free ? 'Anggaran belanja (perkiraan)' : 'Belanja', value: subtotal }, { label: 'Jasa belanja', value: est.service_fee }, { label: `Ongkir ${vehicle === 'car' ? 'mobil' : 'motor'} (${km(est.distance_km)})`, value: est.fare }, { label: 'Biaya layanan', value: est.platform_fee }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />
+              : fareFailed ? (
+                <View style={s.fareErr}>
+                  <Row gap={8}><Ionicons name="alert-circle" size={18} color={colors.warning} /><Text style={{ fontWeight: '700', color: colors.text }}>Estimasi biaya belum bisa ditampilkan</Text></Row>
+                  <Text style={font.tiny}>{fareErr}</Text>
+                  <Text style={font.tiny}>Tekan “Coba lagi” di tombol bawah. Kalau tetap gagal, keluar lalu masuk kembali ke akun Anda — sesi login yang kedaluwarsa juga memunculkan pesan ini.</Text>
+                </View>
+              )
               : <View style={{ gap: 8 }}><Skeleton width="60%" height={14} /><Skeleton width="40%" height={14} /><Skeleton width="70%" height={14} /></View>}
             {est ? <LimitInfo limit={est.limit} service="shop" style={{ marginTop: 8 }} /> : null}
           </Card>
@@ -439,4 +462,5 @@ const s = StyleSheet.create({
   miniBtn: { width: 26, height: 26, borderRadius: 13, borderWidth: 1.5, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   input: { height: 46, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: '#fff', paddingHorizontal: 12, color: colors.text },
   del: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
+  fareErr: { gap: 6, backgroundColor: '#fff', borderRadius: radius.lg, padding: 14, borderWidth: 1, borderColor: colors.warning + '55' },
 });
