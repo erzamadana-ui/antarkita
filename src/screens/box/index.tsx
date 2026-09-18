@@ -66,21 +66,26 @@ export default function BoxScreen() {
   useEffect(() => { if (purpose === 'pindahan_rumah' && helpers === 0) setHelpers(2); if (purpose === 'pindahan_kost' && helpers === 0) setHelpers(1); }, [purpose]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!pickup || !dropoff) { setRoute(null); setOpts(null); setFareErr(null); return; }
+    if (!pickup || !dropoff) { setRoute(null); setOpts(null); setFareErr(null); setLoading(false); return; }
     let cancelled = false;
     (async () => {
       setLoading(true); setFareErr(null);
-      const r = route && route.distance_km > 0 ? route : await getRoute(pickup, dropoff);
-      if (cancelled) return;
-      setRoute(r);
-      let o: FareOptions | null = null;
-      try { o = await rpc<FareOptions>('fare_options', { p_service: 'box', p_pickup_lat: pickup.lat, p_pickup_lng: pickup.lng, p_drop_lat: dropoff.lat, p_drop_lng: dropoff.lng, p_route_km: r.distance_km, p_helpers: helpers }); }
-      catch (e) { if (!cancelled) setFareErr((e as Error)?.message || 'Tarif tidak dapat dimuat'); }
-      if (cancelled) return;
-      setOpts(o);
-      if (o && (o.classes?.length ?? 0) === 0) setFareErr('Server tidak mengirim satu pun kelas kendaraan untuk layanan ini.');
-      if (o && !o.classes.some((c) => c.code === cls)) setCls((purpose === 'pindahan_rumah' ? o.classes.find((c) => c.code === 'box_van') : o.classes[0])?.code ?? null);
-      setLoading(false);
+      try {
+        const r = route && route.distance_km > 0 ? route : await getRoute(pickup, dropoff);
+        if (cancelled) return;
+        setRoute(r);
+        let o: FareOptions | null = null;
+        try { o = await rpc<FareOptions>('fare_options', { p_service: 'box', p_pickup_lat: pickup.lat, p_pickup_lng: pickup.lng, p_drop_lat: dropoff.lat, p_drop_lng: dropoff.lng, p_route_km: r.distance_km, p_helpers: helpers }); }
+        catch (e) { if (!cancelled) setFareErr((e as Error)?.message || 'Tarif tidak dapat dimuat'); }
+        if (cancelled) return;
+        setOpts(o);
+        const classes = o?.classes ?? [];
+        if (o && classes.length === 0) setFareErr('Server tidak mengirim satu pun kelas kendaraan untuk layanan ini.');
+        if (o && !classes.some((c) => c.code === cls)) setCls((purpose === 'pindahan_rumah' ? classes.find((c) => c.code === 'box_van') : classes[0])?.code ?? null);
+      } finally {
+        // Selalu lepaskan status memuat (juga saat ada galat tak terduga) agar tombol "Coba lagi" tidak macet.
+        if (!cancelled) setLoading(false);
+      }
     })();
     return () => { cancelled = true; };
   }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, helpers, fareTry]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -90,6 +95,9 @@ export default function BoxScreen() {
   const ready = !!(pickup && dropoff);
   const blocked = limitBlocked(opts?.limit);
   const serviceOff = opts?.service_enabled === false || !isEnabled('box');
+  // Tarif "sedang dalam proses" juga mencakup frame pertama sebelum efek sempat menyalakan `loading`,
+  // supaya panel/tombol galat tidak berkedip saat layar dibuka dengan kedua titik sudah terisi.
+  const farePending = loading || (ready && !opts && !fareErr);
 
   // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
   const driverCode = useAntarNowCode('box');
@@ -117,10 +125,14 @@ export default function BoxScreen() {
     <Screen title="AntarBox" subtitle="Mobil box & pick up" band={colors.box} back maxWidth={640} footer={ready && !serviceOff ? (
       <View style={{ gap: 10 }}>
         <LimitNotice limit={opts?.limit} />
-        {chosen ? (
-          <Button title={cityBlocked ? cityBlockedLabel(city, 'box') : blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label}${helpers ? ` + ${helpers} pembantu` : ''} · ${rupiah(total)}`} size="lg" color={colors.box} loading={ordering} disabled={loading || blocked || cityBlocked} onPress={order} />
+        {cityBlocked ? (
+          // Kota diblokir: keterangan wilayah menang atas tombol pesan maupun tombol coba-ulang.
+          <Button title={cityBlockedLabel(city, 'box')} size="lg" color={colors.box} disabled />
+        ) : chosen ? (
+          <Button title={blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label}${helpers ? ` + ${helpers} pembantu` : ''} · ${rupiah(total)}`} size="lg" color={colors.box} loading={ordering} disabled={farePending || blocked} onPress={order} />
         ) : (
-          <Button title={loading ? 'Menghitung tarif…' : 'Tarif gagal dimuat · Coba lagi'} size="lg" color={colors.box} loading={loading} disabled={loading} onPress={() => setFareTry((n) => n + 1)} />
+          // Tarif belum ada: tombol TETAP tampil dan menjadi tombol coba-ulang.
+          <Button title={farePending ? 'Menghitung tarif…' : 'Tarif gagal dimuat · Coba lagi'} size="lg" color={colors.box} loading={farePending} disabled={farePending} onPress={() => setFareTry((n) => n + 1)} />
         )}
       </View>
     ) : undefined}>
@@ -152,6 +164,13 @@ export default function BoxScreen() {
             <Row gap={8} style={{ flexWrap: 'wrap' }}><Badge text={loading || !route ? 'Menghitung rute…' : `${km(route.distance_km)} · ${minutes(route.duration_min)}`} color={colors.info} /></Row>
             <RoutePreview pickup={pickup} dropoff={dropoff} polyline={route?.coords} accent={colors.box} />
             <VehicleClassPicker options={opts?.classes ?? []} value={cls} onChange={setCls} accent={colors.box} loading={loading} />
+            {!farePending && !chosen && (
+              <View style={s.fareErr}>
+                <Row gap={8}><Ionicons name="alert-circle" size={18} color={colors.warning} /><Text style={{ fontWeight: '700', color: colors.text }}>Tarif belum bisa ditampilkan</Text></Row>
+                <Text style={font.tiny}>{fareErr ?? 'Daftar kelas kendaraan tidak diterima dari server.'}</Text>
+                <Text style={font.tiny}>Tekan “Coba lagi” di tombol bawah. Kalau tetap gagal, keluar lalu masuk kembali ke akun Anda — sesi login yang kedaluwarsa juga memunculkan pesan ini.</Text>
+              </View>
+            )}
             <View style={s.group}>
               <Row between>
                 <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text }}>Pembantu angkat</Text><Text style={font.tiny}>{rupiah(opts?.helpers_fee && helpers ? opts.helpers_fee / helpers : 50000)}/orang · bantu muat & bongkar (maks. 3)</Text></View>
@@ -175,4 +194,5 @@ const s = StyleSheet.create({
   hero: { backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radius.lg, padding: 12, borderWidth: 1, borderColor: glass.border },
   group: { gap: 10, backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radius.lg, padding: 12, borderWidth: 1, borderColor: glass.border },
   purpose: { flexBasis: '46%', flexGrow: 1, minWidth: 150, gap: 3, padding: 10, borderRadius: radius.md, borderWidth: 1.5, borderColor: glass.border, backgroundColor: 'rgba(255,255,255,0.92)' },
+  fareErr: { gap: 6, backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radius.lg, padding: 14, borderWidth: 1, borderColor: colors.warning + '55' },
 });

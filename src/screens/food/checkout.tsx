@@ -35,6 +35,12 @@ export default function Checkout() {
   const { isEnabled } = useAppSettings();
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [fare, setFare] = useState<FareEstimate | null>(null);
+  const [loadingFare, setLoadingFare] = useState(false);
+  // Kenapa ada: estimate_fare pernah gagal diam-diam (.catch(() => null)) sehingga tombol
+  // "Menghitung ongkir…" mati selamanya tanpa penjelasan (pola sama dengan AntarRide, f8dae58).
+  // Sekarang galatnya disimpan, ditampilkan, dan bisa dicoba ulang lewat fareTry.
+  const [fareErr, setFareErr] = useState<string | null>(null);
+  const [fareTry, setFareTry] = useState(0);
   const [method, setMethod] = useState<PayChoice>('cash');
   const payPrefs = usePayPrefs((st) => st.prefs);
   const [promo, setPromo] = useState('');
@@ -48,17 +54,23 @@ export default function Checkout() {
   }, [hasFix]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!m || !dropoff || m.lat == null || m.lng == null) return;
+    if (!m || !dropoff || m.lat == null || m.lng == null) { setFareErr(null); return; }
     let cancelled = false;
     (async () => {
+      setLoadingFare(true); setFareErr(null);
       const r = await getRoute({ lat: m.lat!, lng: m.lng! }, dropoff);
       if (cancelled) return;
       setRoute(r);
-      const f = await rpc<FareEstimate>('estimate_fare', { p_service: 'food', p_pickup_lat: m.lat, p_pickup_lng: m.lng, p_drop_lat: dropoff.lat, p_drop_lng: dropoff.lng, p_route_km: r.distance_km }).catch(() => null);
-      if (!cancelled) setFare(f);
+      let f: FareEstimate | null = null;
+      try { f = await rpc<FareEstimate>('estimate_fare', { p_service: 'food', p_pickup_lat: m.lat, p_pickup_lng: m.lng, p_drop_lat: dropoff.lat, p_drop_lng: dropoff.lng, p_route_km: r.distance_km }); }
+      catch (e) { if (!cancelled) setFareErr((e as Error)?.message || 'Ongkir tidak dapat dimuat'); }
+      if (cancelled) return;
+      setFare(f);
+      if (!f) setFareErr((prev) => prev ?? 'Server tidak mengirim tarif untuk rute ini.');
+      setLoadingFare(false);
     })();
     return () => { cancelled = true; };
-  }, [m?.id, dropoff?.lat, dropoff?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [m?.id, dropoff?.lat, dropoff?.lng, fareTry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
   const driverCode = useAntarNowCode('food');
@@ -68,6 +80,8 @@ export default function Checkout() {
   const total = fare ? Math.max(0, subtotal + fare.fare + fare.platform_fee - discount) : subtotal;
   const blocked = limitBlocked(fare?.limit);
   const serviceOff = fare?.service_enabled === false || !isEnabled('food');
+  // Estimasi gagal (bukan sedang menghitung): tombol utama berubah jadi tombol coba-ulang.
+  const fareFailed = !!dropoff && !loadingFare && !fare && !!fareErr;
   if (serviceOff) {
     return <Screen title="Checkout" back ambient="amber"><ServiceDisabledEmpty onBack={() => router.replace('/food')} /></Screen>;
   }
@@ -93,7 +107,12 @@ export default function Checkout() {
     <Screen title="Checkout" back ambient="amber" footer={(
       <View style={{ gap: 10 }}>
         <LimitNotice limit={fare?.limit} />
-        <Button title={cityBlocked ? cityBlockedLabel(city, 'food') : blocked ? 'Merchant di luar jangkauan' : fare ? `Pesan Sekarang · ${rupiah(total)}` : 'Menghitung ongkir…'} size="lg" color={colors.food} disabled={!fare || !dropoff || blocked || cityBlocked} onPress={order} />
+        {fareFailed ? (
+          // Tarif gagal: tombol TETAP tampil dan menjadi tombol coba-ulang, bukan tombol mati tanpa keterangan.
+          <Button title={loadingFare ? 'Menghitung ongkir…' : 'Tarif gagal dimuat · Coba lagi'} size="lg" color={colors.food} loading={loadingFare} disabled={loadingFare} onPress={() => setFareTry((n) => n + 1)} />
+        ) : (
+          <Button title={cityBlocked ? cityBlockedLabel(city, 'food') : blocked ? 'Merchant di luar jangkauan' : fare ? `Pesan Sekarang · ${rupiah(total)}` : 'Menghitung ongkir…'} size="lg" color={colors.food} disabled={!fare || !dropoff || blocked || cityBlocked} onPress={order} />
+        )}
       </View>
     )}>
       <View style={{ gap: 16 }}>
@@ -135,6 +154,13 @@ export default function Checkout() {
           <Text style={[font.label, { marginBottom: 10 }]}>Rincian pembayaran</Text>
           <PriceSummary rows={[{ label: 'Harga makanan', value: subtotal }, { label: `Ongkos kirim (${fare ? km(fare.distance_km) : '…'})`, value: fare?.fare ?? 0 }, { label: 'Biaya layanan', value: fare?.platform_fee ?? 0 }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />
           <LimitInfo limit={fare?.limit} service="food" style={{ marginTop: 8 }} />
+          {fareFailed && (
+            <View style={s.fareErr}>
+              <Row gap={8}><Ionicons name="alert-circle" size={18} color={colors.warning} /><Text style={{ fontWeight: '700', color: colors.text }}>Ongkir belum bisa ditampilkan</Text></Row>
+              <Text style={font.tiny}>{fareErr}</Text>
+              <Text style={font.tiny}>Tekan “Coba lagi” di tombol bawah. Kalau tetap gagal, keluar lalu masuk kembali ke akun Anda — sesi login yang kedaluwarsa juga memunculkan pesan ini.</Text>
+            </View>
+          )}
         </Card></Entrance>
 
         <Entrance index={3}><Card>
@@ -150,4 +176,5 @@ const s = StyleSheet.create({
   addr: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 6 },
   line: { borderTopWidth: 1, borderTopColor: 'rgba(11,31,42,0.07)', paddingVertical: 10, gap: 6 },
   noteInput: { backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: glass.border, borderRadius: radius.sm, paddingHorizontal: 10, height: 36, fontSize: 14, color: colors.text },
+  fareErr: { gap: 6, marginTop: 10, backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radius.lg, padding: 14, borderWidth: 1, borderColor: colors.warning + '55' },
 });

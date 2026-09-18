@@ -68,26 +68,31 @@ export default function RideScreen() {
   }, [hasFix]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!pickup || !dropoff) { setRoute(null); setOpts(null); setFareErr(null); return; }
+    if (!pickup || !dropoff) { setRoute(null); setOpts(null); setFareErr(null); setLoading(false); return; }
     let cancelled = false;
     (async () => {
       setLoading(true); setFareErr(null);
-      const r = await getRoute(pickup, dropoff);
-      if (cancelled) return;
-      setRoute(r);
-      let o: FareOptions | null = null;
-      try { o = await rpc<FareOptions>('fare_options', { p_service: service, p_pickup_lat: pickup.lat, p_pickup_lng: pickup.lng, p_drop_lat: dropoff.lat, p_drop_lng: dropoff.lng, p_route_km: r.distance_km, p_helpers: 0 }); }
-      catch (e) { if (!cancelled) setFareErr((e as Error)?.message || 'Tarif tidak dapat dimuat'); }
-      if (cancelled) return;
-      setOpts(o);
-      if (o && (o.classes?.length ?? 0) === 0) setFareErr('Server tidak mengirim satu pun kelas kendaraan untuk layanan ini.');
-      if (o && !o.classes.some((c) => c.code === cls)) {
-        // Default: kelas Standar bila ada driver di sekitar; jika tidak, kelas pertama yang punya driver; terakhir kelas Standar
-        const std = o.classes.find((c) => c.rank === 2 && !c.is_ev);
-        const withDriver = (std && (std.drivers_nearby ?? 0) > 0) ? std : o.classes.find((c) => (c.drivers_nearby ?? 0) > 0 && !c.is_ev);
-        setCls((withDriver ?? std ?? o.classes[0])?.code ?? null);
+      try {
+        const r = await getRoute(pickup, dropoff);
+        if (cancelled) return;
+        setRoute(r);
+        let o: FareOptions | null = null;
+        try { o = await rpc<FareOptions>('fare_options', { p_service: service, p_pickup_lat: pickup.lat, p_pickup_lng: pickup.lng, p_drop_lat: dropoff.lat, p_drop_lng: dropoff.lng, p_route_km: r.distance_km, p_helpers: 0 }); }
+        catch (e) { if (!cancelled) setFareErr((e as Error)?.message || 'Tarif tidak dapat dimuat'); }
+        if (cancelled) return;
+        setOpts(o);
+        const classes = o?.classes ?? [];
+        if (o && classes.length === 0) setFareErr('Server tidak mengirim satu pun kelas kendaraan untuk layanan ini.');
+        if (o && !classes.some((c) => c.code === cls)) {
+          // Default: kelas Standar bila ada driver di sekitar; jika tidak, kelas pertama yang punya driver; terakhir kelas Standar
+          const std = classes.find((c) => c.rank === 2 && !c.is_ev);
+          const withDriver = (std && (std.drivers_nearby ?? 0) > 0) ? std : classes.find((c) => (c.drivers_nearby ?? 0) > 0 && !c.is_ev);
+          setCls((withDriver ?? std ?? classes[0])?.code ?? null);
+        }
+      } finally {
+        // Selalu lepaskan status memuat (juga saat ada galat tak terduga) agar tombol "Coba lagi" tidak macet.
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, service, fareTry]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -121,16 +126,22 @@ export default function RideScreen() {
   };
 
   const ready = !!(pickup && dropoff);
+  // Tarif "sedang dalam proses" juga mencakup frame pertama sebelum efek sempat menyalakan `loading`,
+  // supaya panel/tombol galat tidak berkedip saat layar dibuka dengan kedua titik sudah terisi.
+  const farePending = loading || (ready && !opts && !fareErr);
   return (
     <Screen title={def.label} subtitle={def.id === 'ride_car' ? 'Mobil · 1–4 penumpang' : 'Ojek motor · cepat & hemat'} band={def.color} back maxWidth={640} footer={ready && !serviceOff ? (
       <View style={{ gap: 10 }}>
         <LimitNotice limit={opts?.limit} actionTitle="Buka AntarTravel" actionIcon="bus-outline" onAction={() => router.push('/travel' as never)} />
-        {chosen ? (
-          <Button title={cityBlocked ? cityBlockedLabel(city, service) : blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label} · ${rupiah(total)}`} size="lg" color={accent} loading={ordering} disabled={loading || blocked || cityBlocked} onPress={order} />
+        {cityBlocked ? (
+          // Kota diblokir: keterangan wilayah menang atas tombol pesan maupun tombol coba-ulang.
+          <Button title={cityBlockedLabel(city, service)} size="lg" color={accent} disabled />
+        ) : chosen ? (
+          <Button title={blocked ? 'Di luar jangkauan layanan' : `${when ? 'Booking' : 'Pesan'} ${chosen.label} · ${rupiah(total)}`} size="lg" color={accent} loading={ordering} disabled={farePending || blocked} onPress={order} />
         ) : (
           // Tarif belum ada: tombol TETAP tampil supaya layar tidak terlihat buntu, dan
           // menjadi tombol coba-ulang, bukan tombol mati tanpa keterangan.
-          <Button title={loading ? 'Menghitung tarif…' : 'Tarif gagal dimuat · Coba lagi'} size="lg" color={accent} loading={loading} disabled={loading} onPress={() => setFareTry((n) => n + 1)} />
+          <Button title={farePending ? 'Menghitung tarif…' : 'Tarif gagal dimuat · Coba lagi'} size="lg" color={accent} loading={farePending} disabled={farePending} onPress={() => setFareTry((n) => n + 1)} />
         )}
       </View>
     ) : undefined}>
@@ -165,7 +176,7 @@ export default function RideScreen() {
             </Row>
             <RoutePreview pickup={pickup} dropoff={dropoff} polyline={route?.coords} accent={accent} />
             <VehicleClassPicker options={opts?.classes ?? []} value={cls} onChange={setCls} accent={accent} loading={loading} />
-            {!loading && !chosen && (
+            {!farePending && !chosen && (
               <View style={s.fareErr}>
                 <Row gap={8}><Ionicons name="alert-circle" size={18} color={colors.warning} /><Text style={{ fontWeight: '700', color: colors.text }}>Tarif belum bisa ditampilkan</Text></Row>
                 <Text style={font.tiny}>{fareErr ?? 'Daftar kelas kendaraan tidak diterima dari server.'}</Text>

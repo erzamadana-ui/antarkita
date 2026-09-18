@@ -74,6 +74,11 @@ export default function MarketScreen() {
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [est, setEst] = useState<ShoppingEstimate | null>(null);
   const [estimating, setEstimating] = useState(false);
+  // Kenapa ada: shopping_estimate pernah gagal diam-diam (.catch(() => null)) sehingga tombol
+  // "Pesan ke pasar" mati selamanya dengan total "Menghitung…" tanpa penjelasan (pola sama
+  // dengan AntarRide, f8dae58). Sekarang galatnya disimpan, ditampilkan, dan bisa dicoba ulang.
+  const [fareErr, setFareErr] = useState<string | null>(null);
+  const [fareTry, setFareTry] = useState(0);
   const [method, setMethod] = useState<PayChoice>('wallet');
   const [promo, setPromo] = useState(''); const [discount, setDiscount] = useState(0); const [notes, setNotes] = useState('');
   const [ordering, setOrdering] = useState(false);
@@ -164,17 +169,21 @@ export default function MarketScreen() {
   }, [market?.lat, market?.lng, dropoff?.lat, dropoff?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!market || !dropoff) { setEst(null); setEstimating(false); return; }
+    if (!market || !dropoff) { setEst(null); setEstimating(false); setFareErr(null); return; }
     let cancelled = false;
-    setEstimating(true);
+    setEstimating(true); setFareErr(null);
     const t = setTimeout(async () => {
-      const r = await rpc<ShoppingEstimate>('shopping_estimate', { p_service: 'market', p_pickup_lat: market.lat, p_pickup_lng: market.lng, p_drop_lat: dropoff.lat, p_drop_lng: dropoff.lng, p_subtotal: Math.round(subtotal), p_vehicle: vehicle, p_route_km: route?.distance_km ?? null }).catch(() => null);
+      let r: ShoppingEstimate | null = null;
+      try { r = await rpc<ShoppingEstimate>('shopping_estimate', { p_service: 'market', p_pickup_lat: market.lat, p_pickup_lng: market.lng, p_drop_lat: dropoff.lat, p_drop_lng: dropoff.lng, p_subtotal: Math.round(subtotal), p_vehicle: vehicle, p_route_km: route?.distance_km ?? null }); }
+      catch (e) { if (!cancelled) setFareErr((e as Error)?.message || 'Estimasi biaya tidak dapat dimuat'); }
       if (cancelled) return;
-      setEst(r); setEstimating(false);
+      setEst(r);
+      if (!r) setFareErr((prev) => prev ?? 'Server tidak mengirim estimasi biaya untuk rute ini.');
+      setEstimating(false);
       if (r && !vehicleManual.current) setVehicle(subtotal >= r.car_min_budget ? 'car' : 'motor');
     }, 400);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [market?.lat, market?.lng, dropoff?.lat, dropoff?.lng, subtotal, vehicle, route?.distance_km]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [market?.lat, market?.lng, dropoff?.lat, dropoff?.lng, subtotal, vehicle, route?.distance_km, fareTry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const total = est ? Math.max(0, est.fare + est.platform_fee + est.service_fee - discount) + subtotal : 0;
   const blocked = limitBlocked(est?.limit);
@@ -182,6 +191,8 @@ export default function MarketScreen() {
   // Gerbang wilayah — daftar pasar & harga acuan tetap bisa ditelusuri di kota mana pun.
   const cityBlocked = cityBlockedFor('market');
   const ready = !!market && !!dropoff && !!est && chosenCount > 0 && !blocked && !cityBlocked;
+  // Estimasi gagal (bukan sedang menghitung): tombol utama berubah jadi tombol coba-ulang.
+  const fareFailed = !!market && !!dropoff && !estimating && !est && !!fareErr;
   const pickVehicle = (v: Vehicle) => { vehicleManual.current = true; setVehicle(v); };
 
   // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
@@ -222,7 +233,12 @@ export default function MarketScreen() {
         </View>
         <Badge text="Dana ditahan · sisa kembali" color={colors.primary} style={{ flexShrink: 0 }} />
       </Row>
-      <Button title={cityBlocked ? cityBlockedLabel(city, 'market') : blocked ? 'Pasar di luar jangkauan' : chosenCount === 0 ? 'Pilih bahan belanja dulu' : 'Pesan ke pasar'} size="lg" disabled={!ready || ordering} loading={ordering} onPress={order} />
+      {fareFailed ? (
+        // Estimasi gagal: tombol TETAP tampil dan menjadi tombol coba-ulang, bukan tombol mati tanpa keterangan.
+        <Button title={estimating ? 'Menghitung…' : 'Tarif gagal dimuat · Coba lagi'} size="lg" loading={estimating} disabled={estimating} onPress={() => setFareTry((n) => n + 1)} />
+      ) : (
+        <Button title={cityBlocked ? cityBlockedLabel(city, 'market') : blocked ? 'Pasar di luar jangkauan' : chosenCount === 0 ? 'Pilih bahan belanja dulu' : 'Pesan ke pasar'} size="lg" disabled={!ready || ordering} loading={ordering} onPress={order} />
+      )}
     </View>
   );
 
@@ -429,6 +445,13 @@ export default function MarketScreen() {
         {market && dropoff && (
           <Card solid style={{ gap: 8 }}>
             {est ? <PriceSummary rows={[{ label: 'Belanja (acuan)', value: subtotal }, { label: 'Jasa belanja driver', value: est.service_fee }, { label: `Ongkir ${vehicle === 'car' ? 'mobil' : 'motor'} (${km(est.distance_km)})`, value: est.fare }, { label: 'Biaya layanan', value: est.platform_fee }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />
+              : fareFailed ? (
+                <View style={s.fareErr}>
+                  <Row gap={8}><Ionicons name="alert-circle" size={18} color={colors.warning} /><Text style={{ fontWeight: '700', color: colors.text }}>Estimasi biaya belum bisa ditampilkan</Text></Row>
+                  <Text style={font.tiny}>{fareErr}</Text>
+                  <Text style={font.tiny}>Tekan “Coba lagi” di tombol bawah. Kalau tetap gagal, keluar lalu masuk kembali ke akun Anda — sesi login yang kedaluwarsa juga memunculkan pesan ini.</Text>
+                </View>
+              )
               : <View style={{ gap: 8 }}><Skeleton width="60%" height={14} /><Skeleton width="40%" height={14} /><Skeleton width="70%" height={14} /></View>}
             {est ? <LimitInfo limit={est.limit} service="market" /> : null}
             <Text style={font.tiny}>Dana yang ditahan = acuan + cadangan 10%. Setelah driver mengirim nota, total disesuaikan dengan harga riil dan sisanya dikembalikan ke AntarPay.</Text>
@@ -463,4 +486,5 @@ const s = StyleSheet.create({
   vendorImg: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.tint },
   vendorItem: { padding: 10, borderRadius: 16, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border },
   vendorThumb: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.tint },
+  fareErr: { gap: 6, backgroundColor: '#fff', borderRadius: radius.lg, padding: 14, borderWidth: 1, borderColor: colors.warning + '55' },
 });
