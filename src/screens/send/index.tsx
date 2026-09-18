@@ -73,7 +73,14 @@ export default function SendScreen() {
   const [via, setVia] = useState<'warehouse' | 'travel'>('warehouse');
   const [destAddress, setDestAddress] = useState('');
   const [ic, setIc] = useState<IntercityEstimate | null>(null);
+  const [loadingIc, setLoadingIc] = useState(false);
   const [ordering, setOrdering] = useState(false);
+  // Kenapa ada: estimate_fare / estimate_intercity pernah gagal diam-diam (.catch(() => null))
+  // sehingga footer kosong dan pelanggan buntu tanpa penjelasan (pola sama dengan AntarRide, f8dae58).
+  // Sekarang galatnya disimpan, ditampilkan, dan bisa dicoba ulang lewat fareTry.
+  const [fareErr, setFareErr] = useState<string | null>(null);
+  const [icErr, setIcErr] = useState<string | null>(null);
+  const [fareTry, setFareTry] = useState(0);
 
   const wKg = num(weightKg);
   const sCm = num(sizeCm);
@@ -110,22 +117,33 @@ export default function SendScreen() {
   const legDrop = scope === 'intercity' ? (originWh?.lat != null && originWh.lng != null ? { lat: originWh.lat, lng: originWh.lng, address: originWh.name } : null) : dropoff;
 
   useEffect(() => {
-    if (!pickup || !legDrop) { setRoute(null); setFare(null); return; }
+    if (!pickup || !legDrop) { setRoute(null); setFare(null); setFareErr(null); return; }
     let cancelled = false;
     (async () => {
-      setLoadingEst(true);
+      setLoadingEst(true); setFareErr(null);
       const r = await getRoute(pickup, legDrop);
       if (cancelled) return;
       setRoute(r);
-      const f = await rpc<FareEstimate>('estimate_fare', { p_service: 'send', p_pickup_lat: pickup.lat, p_pickup_lng: pickup.lng, p_drop_lat: legDrop.lat, p_drop_lng: legDrop.lng, p_route_km: r.distance_km }).catch(() => null);
-      if (!cancelled) { setFare(f); setLoadingEst(false); }
+      let f: FareEstimate | null = null;
+      try { f = await rpc<FareEstimate>('estimate_fare', { p_service: 'send', p_pickup_lat: pickup.lat, p_pickup_lng: pickup.lng, p_drop_lat: legDrop.lat, p_drop_lng: legDrop.lng, p_route_km: r.distance_km }); }
+      catch (e) { if (!cancelled) setFareErr((e as Error)?.message || 'Ongkir tidak dapat dimuat'); }
+      if (cancelled) return;
+      setFare(f);
+      if (!f) setFareErr((prev) => prev ?? 'Server tidak mengirim tarif untuk rute ini.');
+      setLoadingEst(false);
     })();
     return () => { cancelled = true; };
-  }, [pickup?.lat, pickup?.lng, legDrop?.lat, legDrop?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pickup?.lat, pickup?.lng, legDrop?.lat, legDrop?.lng, fareTry]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (scope !== 'intercity' || !originCity || !destCity) { setIc(null); return; }
-    rpc<IntercityEstimate | null>('estimate_intercity', { p_from_city: originCity.id, p_to_city: destCity.id, p_weight_kg: wKg || 1 }).then(setIc).catch(() => setIc(null));
-  }, [scope, originCity?.id, destCity?.id, wKg]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (scope !== 'intercity' || !originCity || !destCity) { setIc(null); setIcErr(null); setLoadingIc(false); return; }
+    let cancelled = false;
+    setLoadingIc(true); setIcErr(null);
+    rpc<IntercityEstimate | null>('estimate_intercity', { p_from_city: originCity.id, p_to_city: destCity.id, p_weight_kg: wKg || 1 })
+      .then((r) => { if (cancelled) return; setIc(r); if (!r) setIcErr('Server tidak mengirim tarif antar kota untuk rute ini.'); })
+      .catch((e: Error) => { if (!cancelled) { setIc(null); setIcErr(e?.message || 'Tarif antar kota tidak dapat dimuat'); } })
+      .finally(() => { if (!cancelled) setLoadingIc(false); });
+    return () => { cancelled = true; };
+  }, [scope, originCity?.id, destCity?.id, wKg, fareTry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const icFare = ic?.fare ?? 0;
   const total = fare ? Math.max(0, fare.fare + fare.platform_fee + icFare - discount) : 0;
@@ -150,7 +168,13 @@ export default function SendScreen() {
     : recipient.name.trim().length < 2 ? 'Isi nama penerima'
     : !phoneOk ? 'Isi nomor HP penerima'
     : !fare ? 'Menghitung ongkir…'
+    : scope === 'intercity' && !ic ? 'Menghitung tarif antar kota…'
     : null;
+  // Estimasi gagal (bukan sedang menghitung): tombol utama berubah jadi tombol coba-ulang.
+  const fareFailed = !!pickup && !!legDrop && !loadingEst && !fare && !!fareErr && !overLimit;
+  const icFailed = scope === 'intercity' && !!originCity && !!destCity && !loadingIc && !ic && !!icErr;
+  const estFailed = fareFailed || icFailed;
+  const estLoading = loadingEst || loadingIc;
 
   // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
   const driverCode = useAntarNowCode('send');
@@ -190,10 +214,15 @@ export default function SendScreen() {
   });
 
   return (
-    <Screen title="AntarSend" subtitle="Kirim paket dalam kota & antar kota" band={colors.send} back maxWidth={640} footer={pickup && !serviceOff && (fare || overLimit) ? (
+    <Screen title="AntarSend" subtitle="Kirim paket dalam kota & antar kota" band={colors.send} back maxWidth={640} footer={pickup && !serviceOff && (fare || overLimit || estFailed) ? (
       <View style={{ gap: 10 }}>
         <LimitNotice limit={fare?.limit} actionTitle="Pakai AntarSend Antar Kota" actionIcon="airplane-outline" onAction={() => setScope('intercity')} />
-        <Button title={hint ?? `${when ? 'Booking' : 'Kirim'} ${scope === 'intercity' ? 'antar kota' : 'sekarang'} · ${rupiah(total)}`} size="lg" color={colors.send} loading={ordering} disabled={!valid} onPress={order} />
+        {estFailed ? (
+          // Tarif gagal: tombol TETAP tampil supaya footer tidak kosong, dan menjadi tombol coba-ulang.
+          <Button title={estLoading ? 'Menghitung ongkir…' : 'Tarif gagal dimuat · Coba lagi'} size="lg" color={colors.send} loading={estLoading} disabled={estLoading} onPress={() => setFareTry((n) => n + 1)} />
+        ) : (
+          <Button title={hint ?? `${when ? 'Booking' : 'Kirim'} ${scope === 'intercity' ? 'antar kota' : 'sekarang'} · ${rupiah(total)}`} size="lg" color={colors.send} loading={ordering} disabled={!valid} onPress={order} />
+        )}
       </View>
     ) : undefined}>
       <View style={{ gap: 14 }}>
@@ -327,6 +356,13 @@ export default function SendScreen() {
               {fare && <Badge text={`Ongkir ${rupiah(fare.fare + fare.platform_fee + icFare)}`} color={colors.send} />}
             </Row>
             <RoutePreview pickup={pickup} dropoff={legDrop} polyline={route?.coords} accent={colors.send} />
+            {estFailed && (
+              <View style={s.fareErr}>
+                <Row gap={8}><Ionicons name="alert-circle" size={18} color={colors.warning} /><Text style={{ fontWeight: '700', color: colors.text }}>Ongkir belum bisa ditampilkan</Text></Row>
+                <Text style={font.tiny}>{fareFailed ? fareErr : icErr}</Text>
+                <Text style={font.tiny}>Tekan “Coba lagi” di tombol bawah. Kalau tetap gagal, keluar lalu masuk kembali ke akun Anda — sesi login yang kedaluwarsa juga memunculkan pesan ini.</Text>
+              </View>
+            )}
             <View style={s.group}>
               <Text style={font.label}>Penerima</Text>
               <Input placeholder="Nama penerima" icon="person-outline" value={recipient.name} onChangeText={(v) => setRecipient({ ...recipient, name: v })} />
@@ -389,4 +425,5 @@ const s = StyleSheet.create({
   routeIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   needBox: { alignItems: 'center', padding: 10, borderRadius: radius.md, borderWidth: 1 },
   overBox: { backgroundColor: colors.dangerLight, borderRadius: radius.md, padding: 12, borderWidth: 1, borderColor: colors.danger + '33' },
+  fareErr: { gap: 6, backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radius.lg, padding: 14, borderWidth: 1, borderColor: colors.warning + '55' },
 });
