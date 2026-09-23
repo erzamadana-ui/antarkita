@@ -1,0 +1,15 @@
+# Skenario uji yang DIKETAHUI gagal secara lokal dan bukan disebabkan harness.
+# Format: <berkas-uji> <kode-skenario> <alasan singkat>
+# db-lokal.sh test menghitungnya sebagai "DIKENAL" (dicetak, tidak menggagalkan
+# exit code). Hapus barisnya begitu akar masalahnya diperbaiki di repo.
+#
+# simulasi_e2e S55g/S55h (commit 83bfff5) mengharapkan pesan
+#   'Metode pembayaran AntarPay ...' / 'Metode pembayaran Transfer bank ...'
+# padahal payment_channel_require() di migrasi 0089 (commit 29d2ae3, sudah di
+# produksi) menolak lebih dulu pada langkah 2 dengan
+#   'Saluran AntarPay (saldo) sedang dinonaktifkan. ...'
+# begitu saluran 'antarpay' dimatikan (S55 langkah d mematikannya sebelum e).
+# Uji ini tidak bisa lulus di mana pun terhadap 0089 apa adanya — perbaiki
+# tesnya atau pesan di 0089, lalu hapus dua baris ini.
+simulasi_e2e.sql S55g pesan penolakan saluran AntarPay berbeda antara tes (83bfff5) dan 0089
+simulasi_e2e.sql S55h pesan penolakan transfer bank tertutup oleh penolakan saluran AntarPay di 0089

@@ -1,0 +1,16 @@
+-- =====================================================================
+-- pra/seed.sql — kompatibilitas seed.sql dengan skema akhir (harness LOKAL)
+-- Dijalankan scripts/db-lokal.sh `seed` di transaksi yang sama, tepat
+-- sebelum supabase/seed.sql; pasangannya pasca/seed.sql merapikan kembali.
+--
+-- Masalah: supabase/seed.sql baris 50 masih menulis kolom
+--   drivers.license_number
+-- padahal migrasi 0004_review_fixes.sql memindahkannya ke
+-- driver_documents.license_number dan MENGHAPUS kolom itu dari drivers:
+--   ERROR:  column "license_number" of relation "drivers" does not exist
+--   LINE 1: ...ype, vehicle_brand, vehicle_plate, vehicle_color, license_nu...
+-- seed.sql tidak boleh diubah dari harness ini (lihat docs/UJI-DB-LOKAL.md),
+-- jadi kolom sementara ditambahkan di sini dan dipindahkan+dihapus di
+-- pasca/seed.sql agar skema akhir tetap identik dengan hasil migrasi.
+-- =====================================================================
+alter table public.drivers add column if not exists license_number text;
