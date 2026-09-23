@@ -1,4 +1,5 @@
--- Uji Skema Bisnis v2 (migrasi 0098 + 0099): aturan per layanan, buku besar order, alokasi dompet.
+-- Uji Skema Bisnis v2 (migrasi 0098–0103): aturan per layanan, buku besar order, alokasi dompet,
+-- bayar per order via gateway + biaya PKS (0100), iklan (0101), biaya tetap kota/payout/rekonsiliasi (0102), laporan v2 (0103).
 -- Spesifikasi: docs/SKEMA-BISNIS-V2-SPEK.md §10.1. Dijalankan dalam SATU transaksi lalu di-ROLLBACK
 -- (blok DO sengaja diakhiri RAISE 'SIMULASI_SELESAI' + log). Cara pakai lokal:
 --   scripts/db-lokal.sh test supabase/tests/uji_skema_bisnis_v2.sql
@@ -11,6 +12,22 @@
 -- ride_motor komisi ≤ 8 %, batal → refund + fase ledger, ledger_simulate = baris order nyata, pg_fee saluran gateway.
 
 -- Pembantu sementara (pg_temp: hilang saat sesi berakhir; tidak menulis apa pun yang bertahan).
+-- 0100: bayar satu pesanan awaiting_payment lewat gateway tiruan = alur midtrans-create (order_payment_prepare +
+-- baris payments purpose='order') lalu midtrans-webhook (payment_settle settlement dengan saluran terpetakan).
+create or replace function pg_temp.v2_bayar_gateway(p_order uuid, p_channel text default null, p_status text default 'settlement')
+returns payments language plpgsql as $$
+declare o orders; q jsonb; ext text := 'AKPAY-V2-' || left(md5(random()::text), 12); pay payments; v_claims text := current_setting('request.jwt.claims', true);
+begin
+  select * into o from orders where id = p_order;
+  perform set_config('request.jwt.claims', json_build_object('sub', o.customer_id, 'role', 'authenticated')::text, true);
+  q := order_payment_prepare(p_order, p_channel);
+  insert into payments (user_id, order_id, purpose, amount, method, provider, status, external_id, pg_channel)
+  values (o.customer_id, o.id, 'order', (q->>'gross')::bigint, q->>'channel', 'simulated', 'pending', ext, q->>'channel');
+  pay := payment_settle(ext, p_status, jsonb_build_object('uji', 'v2', 'payment_type', q->>'channel', 'transaction_status', p_status), q->>'channel', now());
+  perform set_config('request.jwt.claims', coalesce(v_claims, ''), true);
+  return pay;
+end $$;
+
 -- Menjalankan satu order dari awal sampai selesai, berganti peran lewat request.jwt.claims (transaction-local).
 create or replace function pg_temp.v2_jalankan(p_service text, p_pay text, p_promo text, p_opsi jsonb default '{}'::jsonb)
 returns orders language plpgsql as $$
@@ -46,6 +63,11 @@ begin
   p := p || jsonb_build_object('paid_via', p_pay, 'client_request_id', 'v2-' || p_service || '-' || p_pay || '-' || coalesce(p_promo, 'x') || '-' || md5(random()::text));
   if p_promo is not null then p := p || jsonb_build_object('promo_code', p_promo); end if;
   o := create_order(p);
+  -- 0100: saluran gateway → awaiting_payment; tiru webhook Midtrans settlement (payments + payment_settle) kecuali diminta tidak dibayar
+  if o.status::text = 'awaiting_payment' and not coalesce((p_opsi->>'tanpa_bayar')::boolean, false) then
+    perform pg_temp.v2_bayar_gateway(o.id, null);
+    select * into o from orders where id = o.id;
+  end if;
   if coalesce((p_opsi->>'hanya_buat')::boolean, false) then return o; end if;
 
   if p_service = 'food' then
@@ -68,6 +90,24 @@ begin
     o := add_tip(o.id, (p_opsi->>'tip')::bigint);
     perform set_config('request.jwt.claims', json_build_object('sub', v_drv, 'role', 'authenticated')::text, true);
   end if;
+  o := driver_update_order_status(o.id, 'in_progress', v_pin);
+  o := driver_update_order_status(o.id, 'completed', null);
+  return o;
+end $$;
+
+-- 0100: selesaikan pesanan non-food/non-belanja yang sudah 'searching' (driver terima → tiba → PIN → selesai)
+create or replace function pg_temp.v2_selesaikan(p_order uuid)
+returns orders language plpgsql as $$
+declare o orders; v_pin text; v_drv uuid;
+begin
+  select * into o from orders where id = p_order;
+  v_drv := case o.service when 'ride_car' then 'a0000000-0000-4000-8000-000000000004'::uuid
+                          when 'box' then (select id from drivers where vehicle_type in ('box','pickup') order by (status = 'approved') desc, created_at limit 1)
+                          else 'a0000000-0000-4000-8000-000000000003'::uuid end;
+  perform set_config('request.jwt.claims', json_build_object('sub', v_drv, 'role', 'authenticated')::text, true);
+  perform driver_selfie_check('https://x/selfie.jpg'); perform driver_set_online(true, 0.4810, 101.4349);
+  select pin into v_pin from order_pins where order_id = o.id;
+  o := driver_accept_order(o.id); o := driver_update_order_status(o.id, 'arrived', null);
   o := driver_update_order_status(o.id, 'in_progress', v_pin);
   o := driver_update_order_status(o.id, 'completed', null);
   return o;
@@ -391,8 +431,9 @@ begin
     perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
     lc := ledger_check(o.id);
     select f.fee, f.ppn into fee_q, ppn_q from pg_fee_calc('card', o.fare_delivery + o.platform_fee) f;
-    log := log || format('S45 %s ride_car via card, policy=customer: total=%s = ongkir %s + biaya platform %s + biaya pembayaran %s (fee %s + ppn %s); pelanggan Δ%s; revenue=%s (= platform fee + komisi − bonus: %s) seimbang=%s%s',
-      case when o.total = o.fare_delivery + o.platform_fee + fee_q + ppn_q and c1 - c0 = -o.total and (lc->>'balanced')::boolean
+    -- 0100: kartu = saluran gateway → dibayar lewat Midtrans per order, saldo AntarPay pelanggan TIDAK dipotong (Δ 0)
+    log := log || format('S45 %s ride_car via card, policy=customer: total=%s = ongkir %s + biaya platform %s + biaya pembayaran %s (fee %s + ppn %s); saldo pelanggan Δ%s (gateway → 0); revenue=%s (= platform fee + komisi − bonus: %s) seimbang=%s%s',
+      case when o.total = o.fare_delivery + o.platform_fee + fee_q + ppn_q and c1 = c0 and o.payment_status = 'paid' and fee_q > 0 and (lc->>'balanced')::boolean
                 and (lc->>'platform_revenue')::bigint = o.platform_fee + (lc->>'driver_commission')::bigint - (lc->>'bonus')::bigint
                 and (fee_q = 0 or (o.pg_fee_borne_by = 'customer' and (lc->>'pg_fee_customer')::bigint = fee_q + ppn_q)) then 'OK' else 'BUG' end,
       o.total, o.fare_delivery, o.platform_fee, o.pg_fee + o.pg_fee_ppn, o.pg_fee, o.pg_fee_ppn, c1 - c0, lc->>'platform_revenue', o.platform_fee + (lc->>'driver_commission')::bigint - (lc->>'bonus')::bigint, lc->>'balanced',
@@ -587,6 +628,404 @@ begin
       case when to_regclass('public.payment_channel_fees') is not null or (fee_q = 0 and ppn_q = 0) then 'OK' else 'BUG' end,
       fee_q, ppn_q, case when to_regclass('public.payment_channel_fees') is null then 'belum ada → harus 0/0' else 'ada' end) || E'\n';
   exception when others then reset role; log := log || 'S51 BUG pengerasan akses: ' || sqlerrm || E'\n'; end;
+
+  -- =====================================================================================================
+  -- S60+ (migrasi 0100–0103): bayar per order via gateway, biaya PKS, iklan, biaya tetap kota, payout, rekonsiliasi, laporan v2
+  -- =====================================================================================================
+
+  -- ===== S60 QRIS per order: awaiting_payment → payment_settle → paid/searching; fee 0,7 % termasuk PPN; batal → refund saldo =====
+  begin
+    declare pay payments; ext text; q jsonb; v_hold interval;
+    begin
+      c0 := pg_temp.v2_saldo(cust);
+      o := pg_temp.v2_jalankan('ride_motor', 'qris', null, '{"hanya_buat": true, "tanpa_bayar": true}');
+      c1 := pg_temp.v2_saldo(cust);
+      n := (select count(*) from order_ledger where order_id = o.id and phase = 'created');
+      log := log || format('S60a %s qris %s dibuat: status=%s bayar=%s pg_channel=%s saldo pelanggan Δ%s (harus 0, tidak ada rail saldo) ledger created=%s baris',
+        case when o.status::text = 'awaiting_payment' and o.payment_status = 'unpaid' and o.pg_channel = 'qris' and c1 = c0 and n > 0 then 'OK' else 'BUG' end,
+        o.code, o.status, o.payment_status, o.pg_channel, c1 - c0, n) || E'\n';
+      -- driver tidak boleh menerima pesanan yang belum dibayar
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      perform driver_selfie_check('https://x/selfie.jpg'); perform driver_set_online(true, 0.4810, 101.4349);
+      begin perform driver_accept_order(o.id); log := log || 'S60b BUG driver bisa menerima pesanan awaiting_payment' || E'\n';
+      exception when others then log := log || format('S60b OK driver menerima pesanan belum dibayar ditolak: %s', left(sqlerrm, 60)) || E'\n'; end;
+      -- midtrans-create: order_payment_prepare (JWT pelanggan) → payments(order) → webhook settlement
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      q := order_payment_prepare(o.id, null);
+      ext := 'AKORD-V2-' || left(md5(random()::text), 10);
+      insert into payments (user_id, order_id, purpose, amount, method, provider, status, external_id, pg_channel)
+      values (cust, o.id, 'order', (q->>'gross')::bigint, 'qris', 'simulated', 'pending', ext, 'qris');
+      pay := payment_settle(ext, 'settlement', '{"payment_type": "qris", "acquirer": "gopay", "issuer": "dana"}'::jsonb, 'qris', now());
+      select * into o from orders where id = o.id;
+      c1 := pg_temp.v2_saldo(cust);
+      v_hold := pay.hold_until - pay.settlement_time;
+      log := log || format('S60c %s settlement qris: order status=%s bayar=%s | pg_fee=%s ppn=%s (harus round(total %s × 0,7%%)=%s, PPN termasuk=0) payments.pg_fee=%s hold=%s (H+1) | ledger created pg_fee=%s, event paid=%s, saldo pelanggan Δ%s',
+        case when o.status::text = 'searching' and o.payment_status = 'paid' and o.pg_fee = round(o.total * 0.007) and o.pg_fee > 0 and o.pg_fee_ppn = 0
+                  and pay.pg_fee = o.pg_fee and pay.pg_channel = 'qris' and v_hold = interval '1 day' and pg_temp.v2_led(o.id, 'pg_fee', 'created') = o.pg_fee
+                  and exists (select 1 from order_events where order_id = o.id and status = 'paid') and c1 = c0 and (q->>'gross')::bigint = o.total then 'OK' else 'BUG' end,
+        o.status, o.payment_status, o.pg_fee, o.pg_fee_ppn, o.total, round(o.total * 0.007), pay.pg_fee, v_hold, pg_temp.v2_led(o.id, 'pg_fee', 'created'),
+        exists (select 1 from order_events where order_id = o.id and status = 'paid'), c1 - c0) || E'\n';
+      -- notifikasi ganda (idempoten) tidak memproses dua kali
+      n := (select count(*) from order_events where order_id = o.id);
+      pay := payment_settle(ext, 'settlement', '{"payment_type": "qris"}'::jsonb, 'qris', now());
+      log := log || format('S60d %s webhook settlement ganda: event tetap %s→%s, saldo tetap Δ%s', case when (select count(*) from order_events where order_id = o.id) = n and pg_temp.v2_saldo(cust) = c1 then 'OK' else 'BUG' end,
+        n, (select count(*) from order_events where order_id = o.id), pg_temp.v2_saldo(cust) - c1) || E'\n';
+      -- pelanggan membatalkan pesanan yang sudah dibayar via gateway → refund ke saldo AntarPay (closed-loop) + ledger refunded
+      o := cancel_order(o.id, 'uji S60 batal setelah bayar qris');
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      lc := ledger_check(o.id);
+      log := log || format('S60e %s batal setelah bayar qris: bayar=%s saldo pelanggan Δ%s (= total %s) ledger fase=%s refund=%s',
+        case when o.payment_status = 'refunded' and pg_temp.v2_saldo(cust) - c1 = o.total and lc->>'phase' = 'refunded' and (lc->>'refund')::bigint = o.total then 'OK' else 'BUG' end,
+        o.payment_status, pg_temp.v2_saldo(cust) - c1, o.total, lc->>'phase', lc->>'refund') || E'\n';
+      -- alur penuh sampai selesai (food via qris): dompet driver & merchant dikreditkan dari ledger, ledger seimbang, contribution = revenue − pg
+      d0 := pg_temp.v2_saldo(drv); m0 := pg_temp.v2_saldo(mown); c0 := pg_temp.v2_saldo(cust);
+      o := pg_temp.v2_jalankan('food', 'qris', null);
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      lc := ledger_check(o.id);
+      log := log || format('S60f %s food qris %s selesai: pg_fee=%s (0,7%% × %s) driver Δ%s=payable %s merchant Δ%s=payable %s saldo pelanggan Δ%s | seimbang=%s contribution=%s = revenue %s − pg %s',
+        case when o.status = 'completed' and o.pg_fee = round(o.total * 0.007) and (lc->>'balanced')::boolean and pg_temp.v2_saldo(drv) - d0 = (lc->>'driver_payable')::bigint
+                  and pg_temp.v2_saldo(mown) - m0 = (lc->>'merchant_payable')::bigint and pg_temp.v2_saldo(cust) = c0
+                  and (lc->>'contribution')::bigint = (lc->>'platform_revenue')::bigint - o.pg_fee then 'OK' else 'BUG' end,
+        o.code, o.pg_fee, o.total, pg_temp.v2_saldo(drv) - d0, lc->>'driver_payable', pg_temp.v2_saldo(mown) - m0, lc->>'merchant_payable', pg_temp.v2_saldo(cust) - c0,
+        lc->>'balanced', lc->>'contribution', lc->>'platform_revenue', o.pg_fee) || E'\n';
+    end;
+  exception when others then log := log || 'S60 BUG qris per order: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S61 VA (bank_transfer, BSI): biaya Rp4.000 + PPN 440, hold H+2, ledger seimbang sampai selesai =====
+  begin
+    declare pay payments; ext text; q jsonb;
+    begin
+      o := pg_temp.v2_jalankan('send', 'bank_transfer', null, '{"hanya_buat": true, "tanpa_bayar": true}');
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      q := order_payment_prepare(o.id, null);
+      ext := 'AKORD-V2-' || left(md5(random()::text), 10);
+      insert into payments (user_id, order_id, purpose, amount, method, provider, status, external_id, pg_channel)
+      values (cust, o.id, 'order', (q->>'gross')::bigint, 'bank_transfer', 'simulated', 'pending', ext, 'bank_transfer');
+      pay := payment_settle(ext, 'settlement', '{"payment_type": "bank_transfer", "va_numbers": [{"bank": "bsi", "va_number": "123"}]}'::jsonb, 'bank_transfer', now());
+      o := pg_temp.v2_selesaikan(o.id);
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      lc := ledger_check(o.id);
+      log := log || format('S61 %s send VA BSI %s: pg_fee=%s ppn=%s (harus 4.000 + 440) hold=%s (BSI H+2) ledger pg_fee=%s pg_fee_ppn=%s seimbang=%s contribution=%s = revenue %s − 4.440',
+        case when o.pg_fee = 4000 and o.pg_fee_ppn = 440 and pay.hold_until - pay.settlement_time = interval '2 days' and pg_temp.v2_led(o.id, 'pg_fee') = 4000
+                  and pg_temp.v2_led(o.id, 'pg_fee_ppn') = 440 and (lc->>'balanced')::boolean and (lc->>'contribution')::bigint = (lc->>'platform_revenue')::bigint - 4440 then 'OK' else 'BUG' end,
+        o.code, o.pg_fee, o.pg_fee_ppn, pay.hold_until - pay.settlement_time, pg_temp.v2_led(o.id, 'pg_fee'), pg_temp.v2_led(o.id, 'pg_fee_ppn'), lc->>'balanced', lc->>'contribution', lc->>'platform_revenue') || E'\n';
+    end;
+  exception when others then log := log || 'S61 BUG VA: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S62 pg_fee_policy=customer: "Biaya pembayaran" baris terpisah di total; ganti saluran saat bayar menghitung ulang =====
+  begin
+    declare q jsonb; v_base bigint;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      se := admin_set_service_economics('send', '{"pg_fee_policy": "customer"}');
+      o := pg_temp.v2_jalankan('send', 'qris', null, '{"hanya_buat": true, "tanpa_bayar": true}');
+      v_base := o.fare_delivery + o.platform_fee - o.discount;
+      ok := o.total = v_base + round(v_base * 0.007) and o.pg_fee_borne_by = 'customer';
+      alasan := format('qris: total %s = dasar %s + biaya pembayaran %s', o.total, v_base, o.total - v_base);
+      -- pelanggan ganti ke VA saat membayar → biaya pembayaran jadi 4.000 + 440
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      q := order_payment_prepare(o.id, 'bank_transfer');
+      select * into o from orders where id = o.id;
+      ok := ok and (q->>'customer_payment_fee')::bigint = 4440 and o.total = v_base + 4440 and o.pg_channel = 'bank_transfer' and (q->>'gross')::bigint = o.total;
+      perform pg_temp.v2_bayar_gateway(o.id, 'bank_transfer');
+      o := pg_temp.v2_selesaikan(o.id);
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      lc := ledger_check(o.id);
+      log := log || format('S62 %s policy customer %s: %s; ganti VA → customer_payment_fee=%s total=%s (dasar %s + 4.440) | ledger pg_fee_customer=%s pg_fee_platform=%s revenue=%s (= biaya platform %s − promo, tidak dikurangi PG) seimbang=%s',
+        case when ok and (lc->>'pg_fee_customer')::bigint = 4440 and (lc->>'pg_fee_platform')::bigint = 0 and (lc->>'platform_revenue')::bigint = o.platform_fee
+                  and (lc->>'balanced')::boolean and o.payment_status = 'paid' then 'OK' else 'BUG' end,
+        o.code, alasan, q->>'customer_payment_fee', o.total, v_base, lc->>'pg_fee_customer', lc->>'pg_fee_platform', lc->>'platform_revenue', o.platform_fee, lc->>'balanced') || E'\n';
+      se := admin_set_service_economics('send', '{"pg_fee_policy": "platform"}');
+    end;
+  exception when others then log := log || 'S62 BUG policy customer: ' || sqlerrm || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    begin se := admin_set_service_economics('send', '{"pg_fee_policy": "platform"}'); exception when others then null; end;
+  end;
+
+  -- ===== S63 expire_unpaid_orders: > 15 menit tanpa bayar → batal otomatis; pembayaran terlambat → refund ke saldo =====
+  begin
+    declare pay payments; ext text; v_n int; v_used int;
+    begin
+      o := pg_temp.v2_jalankan('ride_motor', 'gopay', 'V2PLATFORM', '{"hanya_buat": true, "tanpa_bayar": true}');
+      v_used := (select used_count from promos where code = 'V2PLATFORM');
+      o2 := pg_temp.v2_jalankan('ride_motor', 'gopay', null, '{"hanya_buat": true, "tanpa_bayar": true}');   -- masih dalam batas waktu → tetap
+      perform set_config('antaraja.bypass', 'on', true);
+      update orders set created_at = now() - interval '16 minutes' where id = o.id;
+      perform set_config('antaraja.bypass', 'off', true);
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      v_n := expire_unpaid_orders();
+      select * into o from orders where id = o.id; select * into o2 from orders where id = o2.id;
+      lc := ledger_check(o.id);
+      log := log || format('S63a %s expire_unpaid_orders=%s: %s (16 menit) status=%s alasan="%s" ledger fase=%s promo used %s→%s | %s (baru) status=%s',
+        case when v_n >= 1 and o.status = 'cancelled' and lc->>'phase' = 'cancelled' and (select used_count from promos where code = 'V2PLATFORM') = v_used - 1
+                  and o2.status::text = 'awaiting_payment' then 'OK' else 'BUG' end,
+        v_n, o.code, o.status, o.cancel_reason, lc->>'phase', v_used, (select used_count from promos where code = 'V2PLATFORM'), o2.code, o2.status) || E'\n';
+      -- non-admin tidak boleh memicu
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      set local role authenticated;
+      begin perform expire_unpaid_orders(); reset role; log := log || 'S63b BUG pelanggan bisa memanggil expire_unpaid_orders' || E'\n';
+      exception when others then reset role; log := log || format('S63b %s expire_unpaid_orders dari klien ditolak: %s', case when sqlerrm ilike '%permission denied%' then 'OK' else 'BUG' end, left(sqlerrm, 50)) || E'\n'; end;
+      reset role;
+      -- dana gateway datang setelah pesanan kedaluwarsa → kembali ke saldo pelanggan (ref = external_id)
+      c0 := pg_temp.v2_saldo(cust);
+      ext := 'AKORD-V2-' || left(md5(random()::text), 10);
+      insert into payments (user_id, order_id, purpose, amount, method, provider, status, external_id, pg_channel)
+      values (cust, o.id, 'order', o.total, 'gopay', 'simulated', 'pending', ext, 'gopay');
+      pay := payment_settle(ext, 'settlement', '{"payment_type": "gopay"}'::jsonb, 'gopay', now());
+      select * into o from orders where id = o.id;
+      log := log || format('S63c %s pembayaran terlambat Rp%s untuk pesanan batal: saldo Δ%s (refund closed-loop), status tetap %s, mutasi ref=%s baris, pg_fee gopay 2%%=%s',
+        case when pg_temp.v2_saldo(cust) - c0 = o.total and o.status = 'cancelled' and (select count(*) from wallet_transactions where ref = ext and type = 'refund') = 1
+                  and pay.pg_fee = round(o.total * 0.02) then 'OK' else 'BUG' end,
+        o.total, pg_temp.v2_saldo(cust) - c0, o.status, (select count(*) from wallet_transactions where ref = ext), pay.pg_fee) || E'\n';
+      -- bersihkan pesanan kedua (menunggu bayar) agar tidak menghalangi batas 3 pesanan aktif
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      o2 := cancel_order(o2.id, 'uji S63 bersih');
+      log := log || format('S63d %s pelanggan membatalkan pesanan awaiting_payment: status=%s bayar=%s', case when o2.status = 'cancelled' and o2.payment_status = 'unpaid' then 'OK' else 'BUG' end, o2.status, o2.payment_status) || E'\n';
+    end;
+  exception when others then reset role; log := log || 'S63 BUG expire: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S64 Iklan: merchant beli boost dari saldo → ads_revenue di ledger, boosted di atas + label Iklan; batal + refund → bersih 0 =====
+  begin
+    declare a merchant_ads; a2 merchant_ads; v_first jsonb; v_lat double precision; v_lng double precision;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      perform wallet_apply(mown, 'earning', 100000, null, 'uji v2: saldo pendapatan merchant untuk iklan');
+      m0 := pg_temp.v2_saldo(mown);
+      perform set_config('request.jwt.claims', json_build_object('sub', mown, 'role', 'authenticated')::text, true);
+      a := merchant_ad_request('boost_nearby', 3);
+      m1 := pg_temp.v2_saldo(mown);
+      select lat, lng into v_lat, v_lng from merchants where id = merch;
+      perform set_config('request.jwt.claims', '', true);
+      select to_jsonb(x) into v_first from nearby_merchants_v2(v_lat + 0.01, v_lng + 0.01, 15, null, null) x limit 1;
+      log := log || format('S64a %s boost_nearby 3 hari: harga=%s (3 × 15.000) status=%s saldo merchant Δ%s | ledger ads_revenue=%s (source merchant_ads) | nearby_merchants_v2 teratas=%s boosted=%s label=%s',
+        case when a.price_paid = 45000 and a.status = 'active' and m1 - m0 = -45000
+                  and (select sum(amount) from order_ledger where source = 'merchant_ads' and source_id = a.id and entry = 'ads_revenue') = 45000
+                  and (v_first->>'id')::uuid = merch and (v_first->>'boosted')::boolean and v_first->>'ad_label' = 'Iklan' then 'OK' else 'BUG' end,
+        a.price_paid, a.status, m1 - m0, (select sum(amount) from order_ledger where source = 'merchant_ads' and source_id = a.id), v_first->>'name', v_first->>'boosted', v_first->>'ad_label') || E'\n';
+      -- saldo kurang → ditolak
+      perform set_config('request.jwt.claims', json_build_object('sub', mown, 'role', 'authenticated')::text, true);
+      begin a2 := merchant_ad_request('featured_home', 90); log := log || 'S64b BUG iklan melebihi saldo diterima' || E'\n';
+      exception when others then log := log || format('S64b %s iklan 90 hari (Rp2.250.000) melebihi saldo ditolak: %s', case when sqlerrm ilike 'Saldo pendapatan tidak cukup%' then 'OK' else 'BUG' end, left(sqlerrm, 60)) || E'\n'; end;
+      -- bukan pemilik merchant → ditolak
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      begin a2 := merchant_ad_request('boost_nearby', 1); log := log || 'S64c BUG pelanggan bisa membeli iklan' || E'\n';
+      exception when others then log := log || format('S64c %s non-merchant ditolak: %s', case when sqlerrm like 'Hanya pemilik merchant%' then 'OK' else 'BUG' end, left(sqlerrm, 50)) || E'\n'; end;
+      -- iklan kedua lalu dibatalkan admin dengan refund (belum mulai tayang → refund penuh) → ads_revenue bersih 0
+      perform set_config('request.jwt.claims', json_build_object('sub', mown, 'role', 'authenticated')::text, true);
+      a2 := merchant_ad_request('featured_home', 1);
+      m0 := pg_temp.v2_saldo(mown);
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      a2 := admin_set_merchant_ad(merch, null, null, null, 'cancelled', a2.id, null, true);
+      log := log || format('S64d %s featured_home dibatalkan admin + refund: refunded=%s saldo Δ%s ledger ads bersih=%s; admin_merchant_ads(active) berisi boost=%s; merchant_my_ads=%s iklan',
+        case when a2.refunded = 25000 and pg_temp.v2_saldo(mown) - m0 = 25000
+                  and (select sum(amount) from order_ledger where source = 'merchant_ads' and source_id = a2.id) = 0
+                  and exists (select 1 from jsonb_array_elements(admin_merchant_ads('active')) x where (x->>'id')::uuid = a.id and (x->>'is_live')::boolean) then 'OK' else 'BUG' end,
+        a2.refunded, pg_temp.v2_saldo(mown) - m0, (select sum(amount) from order_ledger where source = 'merchant_ads' and source_id = a2.id),
+        exists (select 1 from jsonb_array_elements(admin_merchant_ads('active')) x where (x->>'id')::uuid = a.id),
+        (select jsonb_array_length(merchant_my_ads()->'ads'))) || E'\n';
+      -- produk iklan: ubah harga butuh PIN + audit
+      perform admin_lock();
+      begin perform admin_set_ad_product('boost_nearby', '{"price": 20000}'); log := log || 'S64e BUG harga iklan bisa diubah tanpa PIN' || E'\n';
+      exception when others then perform admin_unlock('123456');
+        perform admin_set_ad_product('boost_nearby', '{"price": 20000}');
+        log := log || format('S64e %s harga iklan tanpa PIN ditolak (%s); dengan PIN → %s, audit=%s', case when sqlerrm ilike '%ADMIN_LOCKED%' and (select price from ad_products where code = 'boost_nearby') = 20000
+            and exists (select 1 from audit_logs where action = 'ads.product_updated' and entity_id = 'boost_nearby') then 'OK' else 'BUG' end, left(sqlerrm, 30),
+          (select price from ad_products where code = 'boost_nearby'), exists (select 1 from audit_logs where action = 'ads.product_updated' and entity_id = 'boost_nearby')) || E'\n';
+        perform admin_set_ad_product('boost_nearby', '{"price": 15000}');
+      end;
+    end;
+  exception when others then log := log || 'S64 BUG iklan: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S65 Biaya PG: admin_set_payment_channel_fee (PIN, validasi, audit before/after) =====
+  begin
+    declare f payment_channel_fees;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      begin f := admin_set_payment_channel_fee('qris', '{"fee_pct": 50}'); log := log || 'S65a BUG fee_pct 50% diterima' || E'\n';
+      exception when others then log := log || format('S65a %s fee_pct di luar rentang ditolak: %s', case when sqlerrm like 'fee_pct harus%' then 'OK' else 'BUG' end, left(sqlerrm, 40)) || E'\n'; end;
+      f := admin_set_payment_channel_fee('qris', '{"fee_pct": 0.8}');
+      select x.fee into fee_q from pg_fee_calc('qris', 100000) x;
+      log := log || format('S65b %s qris 0,7 → %s%%: pg_fee_calc(100.000)=%s; audit pg_fee.updated before=%s after=%s; admin_payment_channel_fees=%s saluran',
+        case when fee_q = 800 and (select detail->'before'->>'fee_pct' from audit_logs where action = 'pg_fee.updated' order by id desc limit 1) = '0.70'
+                  and (select count(*) from admin_payment_channel_fees()) >= 14 then 'OK' else 'BUG' end,
+        f.fee_pct, fee_q, (select detail->'before'->>'fee_pct' from audit_logs where action = 'pg_fee.updated' order by id desc limit 1),
+        (select detail->'after'->>'fee_pct' from audit_logs where action = 'pg_fee.updated' order by id desc limit 1), (select count(*) from admin_payment_channel_fees())) || E'\n';
+      f := admin_set_payment_channel_fee('qris', '{"fee_pct": 0.7}');
+      perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
+      begin f := admin_set_payment_channel_fee('qris', '{"fee_pct": 0}'); log := log || 'S65c BUG pelanggan bisa mengubah biaya PG' || E'\n';
+      exception when others then log := log || format('S65c %s non-admin ditolak: %s', case when sqlerrm like 'Hanya admin%' then 'OK' else 'BUG' end, left(sqlerrm, 30)) || E'\n'; end;
+    end;
+  exception when others then log := log || 'S65 BUG biaya PG: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S66 exec_report_v2: take rate & contribution = hitungan tangan dari kolom orders (layanan send + ride_car) =====
+  begin
+    declare v_from date := date_trunc('month', now() at time zone 'Asia/Jakarta')::date; v_to date := (date_trunc('month', now() at time zone 'Asia/Jakarta') + interval '1 month' - interval '1 day')::date;
+      tok text; j jsonb; h record; ja jsonb;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      insert into exec_access (user_id, level, pin_hash, active) select adm, 'vp', extensions.crypt('654321', extensions.gen_salt('bf')), true where not exists (select 1 from exec_access where user_id = adm);
+      update exec_access set pin_hash = extensions.crypt('654321', extensions.gen_salt('bf')), active = true where user_id = adm;
+      tok := exec_login('654321')->>'token';
+      j := exec_report_v2(tok, v_from, v_to, '{"service": ["send", "ride_car"]}'::jsonb);
+      -- hitungan tangan (tanpa order_ledger): komisi kotor = ongkir − driver_earning dasar; bonus = final − dasar − tip − extras − jasa
+      select count(*) n, coalesce(sum(items_subtotal + fare_delivery + intercity_fare), 0) gmv,
+        coalesce(sum(platform_fee + (fare_delivery - driver_earning) + (service_fee - driver_service_share)
+                     - case when coalesce(promo_funded_by, 'platform') = 'platform' then discount else 0 end), 0) rn,
+        coalesce(sum(coalesce(driver_earning_final, driver_earning) - driver_earning - tip - extras_total - driver_service_share), 0) inc,
+        coalesce(sum(case when pg_fee_borne_by = 'platform' then pg_fee + pg_fee_ppn else 0 end), 0) pgp
+      into h from orders
+      where service in ('send', 'ride_car') and status = 'completed' and payment_status <> 'refunded'
+        and (completed_at at time zone 'Asia/Jakarta')::date between v_from and v_to;
+      log := log || format('S66a %s exec_report_v2(send, ride_car): orders=%s/%s gmv_net=%s/%s revenue_net=%s/%s take_rate=%s%%/%s%% insentif=%s/%s pg platform=%s/%s contribution=%s/%s per order=%s/%s (laporan/tangan)',
+        case when (j->'summary'->>'orders')::bigint = h.n and (j->'summary'->>'gmv_net')::bigint = h.gmv and (j->'summary'->>'revenue_net')::bigint = h.rn
+                  and (j->'summary'->>'take_rate_net_pct')::numeric = round(100.0 * h.rn / h.gmv, 2) and (j->'summary'->>'incentives_total')::bigint = h.inc
+                  and (j->'summary'->>'pg_fee_platform')::bigint = h.pgp and (j->'summary'->>'contribution_total')::bigint = h.rn - h.inc - h.pgp
+                  and (j->'summary'->>'contribution_per_order')::numeric = round((h.rn - h.inc - h.pgp)::numeric / h.n) and h.n > 0 and h.pgp > 0 then 'OK' else 'BUG' end,
+        j->'summary'->>'orders', h.n, j->'summary'->>'gmv_net', h.gmv, j->'summary'->>'revenue_net', h.rn, j->'summary'->>'take_rate_net_pct', round(100.0 * h.rn / h.gmv, 2),
+        j->'summary'->>'incentives_total', h.inc, j->'summary'->>'pg_fee_platform', h.pgp, j->'summary'->>'contribution_total', h.rn - h.inc - h.pgp,
+        j->'summary'->>'contribution_per_order', round((h.rn - h.inc - h.pgp)::numeric / h.n)) || E'\n';
+      -- identitas internal + bentuk keluaran
+      ja := admin_exec_report_v2(v_from, v_to, '{}'::jsonb);
+      log := log || format('S66b %s identitas: Σ sumber − promo platform = revenue_net (%s = %s); contribution = revenue_net − insentif − pg − refund pg − variable_ops − payout (%s); iklan=%s (≥ 45.000 dari S64); by_month=%s; gerbang=%s; label take_rate_target=%s',
+        case when (ja->'summary'->'platform_revenue'->>'total')::bigint - (ja->'summary'->'promo'->>'platform')::bigint = (ja->'summary'->>'revenue_net')::bigint
+                  and (ja->'summary'->>'contribution_total')::bigint = (ja->'summary'->>'revenue_net')::bigint - (ja->'summary'->>'incentives_total')::bigint
+                      - (ja->'summary'->>'pg_fee_platform')::bigint - (ja->'summary'->>'refund_pg_cost')::bigint - (ja->'summary'->>'variable_ops_total')::bigint - (ja->'summary'->>'payout_fee_total')::bigint
+                  and (ja->'summary'->'platform_revenue'->>'ads')::bigint >= 45000 and jsonb_array_length(ja->'by_month') = 12
+                  and ja->'gates' ? 'contribution_positive_8w' and ja->'gates' ? 'reconciliation_diff_zero' and ja->'gates' ? 'payout_on_time'
+                  and ja->'gates' ? 'retention_30d_driver' and ja->'gates' ? 'fraud_refund' and ja->'labels'->'take_rate_target_pct'->>'label' = 'FAKTA SUMBER'
+                  and (ja->'summary'->>'refund_pg_cost')::bigint > 0 then 'OK' else 'BUG' end,
+        (ja->'summary'->'platform_revenue'->>'total')::bigint - (ja->'summary'->'promo'->>'platform')::bigint, ja->'summary'->>'revenue_net', ja->'summary'->>'contribution_total',
+        ja->'summary'->'platform_revenue'->>'ads', jsonb_array_length(ja->'by_month'),
+        (select string_agg(e.key || '=' || coalesce(e.value->>'status', e.value::text), ' ') from jsonb_each(ja->'gates') e), ja->'labels'->'take_rate_target_pct'->>'label') || E'\n';
+      -- satu definisi pendapatan: dashboard admin & exec_report_data = ledger
+      r := admin_dashboard_stats();
+      log := log || format('S66c %s pendapatan diselaraskan: admin_dashboard_stats.revenue_month=%s = ledger revenue_net bulan berjalan=%s; exec_report_data(1).summary.revenue=%s',
+        case when (r->>'revenue_month')::bigint = (admin_exec_report_v2(v_from, (now() at time zone 'Asia/Jakarta')::date, '{}'::jsonb)->'summary'->>'revenue_net')::bigint
+                  and (exec_report_data(1)->'summary'->>'revenue')::bigint = (r->>'revenue_month')::bigint then 'OK' else 'BUG' end,
+        r->>'revenue_month', admin_exec_report_v2(v_from, (now() at time zone 'Asia/Jakarta')::date, '{}'::jsonb)->'summary'->>'revenue_net', exec_report_data(1)->'summary'->>'revenue') || E'\n';
+      -- admin_finance_cascade (order_economics_v2): net_margin = revenue − promo − gateway = Σ contribution ledger order selesai
+      select * into o from orders where status = 'completed' and pg_fee > 0 and created_at >= transaction_timestamp() order by created_at desc limit 1;
+      r := admin_finance_cascade((now() at time zone 'Asia/Jakarta')::date - 1, (now() at time zone 'Asia/Jakarta')::date + 1, 'service', null);
+      log := log || format('S66d %s admin_finance_cascade via order_economics_v2: totals net_margin=%s = Σ ledger contribution order selesai=%s; admin_order_split cocok=%s',
+        case when (r->'totals'->>'net_margin')::bigint = (select sum((ledger_check(id)->>'contribution')::bigint) from orders where status = 'completed' and created_at >= transaction_timestamp())
+                  and (admin_order_split(o.id)->>'net_margin')::bigint = (ledger_check(o.id)->>'contribution')::bigint then 'OK' else 'BUG' end,
+        r->'totals'->>'net_margin', (select sum((ledger_check(id)->>'contribution')::bigint) from orders where status = 'completed' and created_at >= transaction_timestamp()),
+        (admin_order_split(o.id)->>'net_margin')::bigint = (ledger_check(o.id)->>'contribution')::bigint) || E'\n';
+      -- token palsu & filter tidak valid
+      begin j := exec_report_v2('token-palsu', v_from, v_to, '{}'::jsonb); log := log || 'S66e BUG token palsu diterima' || E'\n';
+      exception when others then log := log || format('S66e %s token palsu ditolak: %s', case when sqlerrm like 'EXEC_SESSION_EXPIRED%' then 'OK' else 'BUG' end, left(sqlerrm, 30)) || E'\n'; end;
+      begin j := exec_report_v2(tok, v_from, v_to, '{"cash_digital": "kripto"}'::jsonb); log := log || 'S66f BUG filter tidak valid diterima' || E'\n';
+      exception when others then log := log || format('S66f %s filter cash_digital tidak valid ditolak: %s', case when sqlerrm like 'cash_digital harus%' then 'OK' else 'BUG' end, left(sqlerrm, 40)) || E'\n'; end;
+      -- filter saluran: qris hanya menghitung order qris; tunai + digital = semua order
+      j := exec_report_v2(tok, v_from, v_to, '{"payment_method": "qris"}'::jsonb);
+      log := log || format('S66g %s filter payment_method=qris: orders=%s (tangan %s); cash %s + digital %s = semua %s',
+        case when (j->'summary'->>'orders')::bigint = (select count(*) from orders where pg_channel = 'qris' and status = 'completed' and payment_status <> 'refunded' and (completed_at at time zone 'Asia/Jakarta')::date between v_from and v_to)
+                  and (exec_report_v2(tok, v_from, v_to, '{"cash_digital": "cash"}')->'summary'->>'orders')::bigint + (exec_report_v2(tok, v_from, v_to, '{"cash_digital": "digital"}')->'summary'->>'orders')::bigint
+                      = (ja->'summary'->>'orders')::bigint then 'OK' else 'BUG' end,
+        j->'summary'->>'orders', (select count(*) from orders where pg_channel = 'qris' and status = 'completed' and payment_status <> 'refunded' and (completed_at at time zone 'Asia/Jakarta')::date between v_from and v_to),
+        exec_report_v2(tok, v_from, v_to, '{"cash_digital": "cash"}')->'summary'->>'orders', exec_report_v2(tok, v_from, v_to, '{"cash_digital": "digital"}')->'summary'->>'orders', ja->'summary'->>'orders') || E'\n';
+    end;
+  exception when others then log := log || 'S66 BUG exec_report_v2: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S67 Biaya tetap kota → EBITDA kota; variable_ops mengurangi contribution =====
+  begin
+    declare v_from date := date_trunc('month', now() at time zone 'Asia/Jakarta')::date; v_to date := (date_trunc('month', now() at time zone 'Asia/Jakarta') + interval '1 month' - interval '1 day')::date;
+      v_city uuid; j0 jsonb; j1 jsonb; c city_fixed_costs; x0 jsonb; x1 jsonb;
+    begin
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      select city_id into v_city from orders where service = 'ride_motor' and status = 'completed' and created_at >= transaction_timestamp() and city_id is not null limit 1;
+      j0 := admin_exec_report_v2(v_from, v_to, '{}'::jsonb);
+      select x into x0 from jsonb_array_elements(j0->'by_city') x where (x->>'city_id')::uuid = v_city;
+      c := admin_set_city_fixed_cost(v_city, v_from, 'tim', 3000000, 'uji v2 tim kota');
+      c := admin_set_city_fixed_cost(v_city, v_from + 9, 'variable_ops', 100000, 'uji v2 support/cloud');   -- tanggal apa pun → dinormalkan ke tanggal 1
+      j1 := admin_exec_report_v2(v_from, v_to, '{}'::jsonb);
+      select x into x1 from jsonb_array_elements(j1->'by_city') x where (x->>'city_id')::uuid = v_city;
+      log := log || format('S67a %s kota %s: contribution %s → %s (− variable_ops 100.000) biaya tetap=%s ebitda_city=%s (= contribution − 3.000.000) | summary ebitda=%s bulan c.month=%s',
+        case when (x1->>'fixed_costs')::bigint = 3000000 and (x1->>'contribution')::bigint = (x0->>'contribution')::bigint - 100000
+                  and (x1->>'ebitda_city')::bigint = (x1->>'contribution')::bigint - 3000000
+                  and (j1->'summary'->>'ebitda')::bigint = (j1->'summary'->>'contribution_total')::bigint - (j1->'summary'->>'fixed_costs_total')::bigint
+                  and c.month = v_from then 'OK' else 'BUG' end,
+        x1->>'city', x0->>'contribution', x1->>'contribution', x1->>'fixed_costs', x1->>'ebitda_city', j1->'summary'->>'ebitda', c.month) || E'\n';
+      r := admin_city_fixed_costs(v_from);
+      log := log || format('S67b %s admin_city_fixed_costs: total_fixed=%s variable_ops=%s baris=%s ebitda kota tersedia=%s; audit city_cost.updated=%s',
+        case when (r->>'total_fixed')::bigint = 3000000 and (r->>'total_variable_ops')::bigint = 100000 and jsonb_array_length(r->'rows') = 2 and jsonb_array_length(r->'ebitda') > 0
+                  and (select count(*) from audit_logs where action = 'city_cost.updated' and created_at >= transaction_timestamp()) = 2 then 'OK' else 'BUG' end,
+        r->>'total_fixed', r->>'total_variable_ops', jsonb_array_length(r->'rows'), jsonb_array_length(r->'ebitda'),
+        (select count(*) from audit_logs where action = 'city_cost.updated' and created_at >= transaction_timestamp())) || E'\n';
+      begin c := admin_set_city_fixed_cost(v_city, v_from, 'hiburan', 1, null); log := log || 'S67c BUG kategori asing diterima' || E'\n';
+      exception when others then log := log || format('S67c %s kategori asing ditolak: %s', case when sqlerrm like 'Kategori harus%' then 'OK' else 'BUG' end, left(sqlerrm, 40)) || E'\n'; end;
+    end;
+  exception when others then log := log || 'S67 BUG biaya tetap kota: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S68 Payout: approved ≠ settled; admin_mark_withdrawal_settled (PIN) =====
+  begin
+    declare w withdrawal_requests;
+    begin
+      perform set_config('antaraja.bypass', 'on', true);
+      insert into bank_accounts (user_id, bank_name, account_no, holder, verified) values (drv, 'BCA', '111222333', 'Driver Uji', true)
+      on conflict (user_id) do update set bank_name = 'BCA', account_no = '111222333', holder = 'Driver Uji', verified = true;
+      perform set_config('antaraja.bypass', 'off', true);
+      perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
+      w := request_withdrawal(20000, 'BCA', '111222333', 'Driver Uji');
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      if w.status = 'pending' then w := admin_review_withdrawal(w.id, true, 'uji v2'); end if;
+      r := admin_reconciliation((now() at time zone 'Asia/Jakarta')::date, (now() at time zone 'Asia/Jakarta')::date);
+      ok := w.status = 'approved' and w.settled_at is null
+            and exists (select 1 from jsonb_array_elements(r->'payouts'->'approved_unsettled'->'items') x where (x->>'id')::uuid = w.id);
+      begin perform admin_mark_withdrawal_settled(w.id, ' '); ok := false; exception when others then null; end;   -- ref kosong ditolak
+      w := admin_mark_withdrawal_settled(w.id, 'BCA-TRF-V2-0001');
+      begin perform admin_mark_withdrawal_settled(w.id, 'BCA-TRF-V2-0002'); ok := false; alasan := 'settle ganda diterima';
+      exception when others then alasan := left(sqlerrm, 40); end;
+      r := admin_reconciliation((now() at time zone 'Asia/Jakarta')::date, (now() at time zone 'Asia/Jakarta')::date);
+      log := log || format('S68 %s penarikan %s approved (belum settled, tampil di rekonsiliasi) → settled_at terisi ref=%s oleh admin; settle ulang ditolak (%s); settled hari ini=%s, audit=%s',
+        case when ok and w.settled_at is not null and w.provider_ref = 'BCA-TRF-V2-0001' and w.settled_by = adm and (r->'payouts'->'settled'->>'count')::int >= 1
+                  and not exists (select 1 from jsonb_array_elements(r->'payouts'->'approved_unsettled'->'items') x where (x->>'id')::uuid = w.id)
+                  and exists (select 1 from audit_logs where action = 'withdrawal.settled' and entity_id = w.id::text) then 'OK' else 'BUG' end,
+        w.id, w.provider_ref, alasan, r->'payouts'->'settled'->>'count', exists (select 1 from audit_logs where action = 'withdrawal.settled' and entity_id = w.id::text)) || E'\n';
+    end;
+  exception when others then log := log || 'S68 BUG payout: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S69 Rekonsiliasi harian: diff = 0 (pesanan gateway + top up + refund pembayaran terlambat); top up mencatat pg_fee =====
+  begin
+    declare pay payments; ext text;
+    begin
+      -- top up via QRIS (purpose=topup): saldo +penuh, wallet_transactions.pg_fee = 0,7 %
+      ext := 'AKPAY-V2-' || left(md5(random()::text), 10);
+      insert into payments (user_id, order_id, purpose, amount, method, provider, status, external_id) values (cust, null, 'topup', 200000, 'qris', 'simulated', 'pending', ext);
+      c0 := pg_temp.v2_saldo(cust);
+      pay := payment_settle(ext, 'settlement', null);   -- pemanggil lama (3 argumen) tetap jalan; saluran dari method
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+      r := admin_reconciliation((now() at time zone 'Asia/Jakarta')::date, (now() at time zone 'Asia/Jakarta')::date);
+      log := log || format('S69 %s rekonsiliasi hari ini: settlement=%s gross pesanan digital=%s top up=%s refund terlambat=%s pg_fee_total=%s (= Σ payments %s) diff=%s | top up 200.000 saldo Δ%s pg_fee top up=%s (0,7%%)',
+        case when (r->'totals'->>'diff')::bigint = 0 and (r->'totals'->>'abs_diff')::bigint = 0 and (r->'totals'->>'payments_settled')::bigint > 0
+                  and (r->'totals'->>'late_payment_refunds')::bigint > 0 and (r->'totals'->>'topups_credited')::bigint >= 200000
+                  and (r->'totals'->>'pg_fee_total')::bigint = (select sum(pg_fee + pg_fee_ppn) from payments where status = 'settlement' and (settlement_time at time zone 'Asia/Jakarta')::date = (now() at time zone 'Asia/Jakarta')::date)
+                  and pg_temp.v2_saldo(cust) - c0 = 200000 and (select pg_fee from wallet_transactions where ref = ext) = 1400
+                  and (admin_exec_report_v2((now() at time zone 'Asia/Jakarta')::date, (now() at time zone 'Asia/Jakarta')::date, '{}')->'gates'->'reconciliation_diff_zero'->>'status') = 'pass' then 'OK' else 'BUG' end,
+        r->'totals'->>'payments_settled', r->'totals'->>'gross_customer_digital', r->'totals'->>'topups_credited', r->'totals'->>'late_payment_refunds', r->'totals'->>'pg_fee_total',
+        (select sum(pg_fee + pg_fee_ppn) from payments where status = 'settlement' and (settlement_time at time zone 'Asia/Jakarta')::date = (now() at time zone 'Asia/Jakarta')::date),
+        r->'totals'->>'diff', pg_temp.v2_saldo(cust) - c0, (select pg_fee from wallet_transactions where ref = ext)) || E'\n';
+    end;
+  exception when others then log := log || 'S69 BUG rekonsiliasi: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S70 Mitra travel: batas saldo minus (driver_debt_limit) menolak jadwal & penawaran baru =====
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    p0 := pg_temp.v2_saldo(drv2);
+    perform admin_adjust_wallet(drv2, -(p0 + 150000), 'uji v2: saldo mitra travel -150.000');
+    update app_settings set value = '-100000'::jsonb where key = 'driver_debt_limit';
+    perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
+    ok := true; alasan := '';
+    begin tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '4 days')::text, 'seats_total', 6, 'seat_price', 150000)); ok := false; alasan := 'jadwal diterima';
+    exception when others then alasan := left(sqlerrm, 60); if sqlerrm not like 'Saldo minus melebihi batas (Rp100.000)%' then ok := false; end if; end;
+    update app_settings set value = '-500000'::jsonb where key = 'driver_debt_limit';
+    tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '4 days')::text, 'seats_total', 6, 'seat_price', 150000));
+    perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
+    perform admin_adjust_wallet(drv2, p0 + 150000, 'uji v2: pulihkan saldo mitra travel');
+    log := log || format('S70 %s mitra travel saldo -150.000: batas -100.000 → travel_trip_create ditolak (%s); batas -500.000 → jadwal dibuat=%s', case when ok and tt.id is not null then 'OK' else 'BUG' end, alasan, tt.id is not null) || E'\n';
+  exception when others then log := log || 'S70 BUG batas saldo mitra travel: ' || sqlerrm || E'\n';
+    update app_settings set value = '-500000'::jsonb where key = 'driver_debt_limit';
+  end;
 
   -- ===== S50 Invarian global: semua order v2 selesai dalam simulasi seimbang; dompet = jumlah mutasi =====
   begin

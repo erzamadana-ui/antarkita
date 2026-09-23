@@ -1,8 +1,15 @@
-// Edge Function: buat transaksi Midtrans Snap (top up AntarPay) — plug-and-play.
+// Edge Function: buat transaksi Midtrans Snap — top up AntarPay ATAU bayar satu pesanan (purpose='order').
 // Kunci dibaca dari (1) secret MIDTRANS_SERVER_KEY / MIDTRANS_CLIENT_KEY / MIDTRANS_IS_PRODUCTION, atau
 // (2) tabel gateway_secrets yang diisi admin dari Panel Admin → Payment Gateway (tanpa CLI).
 // Tanpa keduanya → mode simulasi agar alur tetap bisa diuji.
 // Aksi khusus: { action: "status" } (admin) → cek koneksi ke Midtrans dengan kunci yang tersimpan.
+//
+// Bayar per order (Skema Bisnis v2, migrasi 0100; PKS Midtrans Pasal 7.4b — bukan isi saldo):
+//   body { purpose: "order", order_id, method? }  (method = kunci saluran gateway; default saluran saat create_order)
+//   → RPC order_payment_prepare (JWT pelanggan): pesanan milik pemanggil & berstatus awaiting_payment, saluran aktif,
+//     biaya PG dihitung ulang (pg_fee_calc; pg_fee_policy='customer' → "Biaya pembayaran" ditambahkan ke total)
+//   → payments(purpose='order', order_id, amount = gross) → Snap dengan enabled_payments saluran itu
+//   → webhook settlement → payment_settle: orders.payment_status='paid', status 'searching', buku besar.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -12,6 +19,11 @@ const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { sta
 // Label saluran (0089) — sama dengan payment_channel_label() di server, untuk pesan penolakan berbahasa Indonesia.
 const CHANNEL_LABEL: Record<string, string> = { gopay: "GoPay", shopeepay: "ShopeePay", qris: "QRIS", ovo: "OVO", dana: "DANA", bank_transfer: "Transfer bank (VA)", card: "Kartu kredit/debit" };
 const METHODS: Record<string, string[]> = { gopay: ["gopay"], shopeepay: ["shopeepay"], qris: ["other_qris"], bank_transfer: ["bank_transfer", "echannel", "permata_va", "bca_va", "bni_va", "bri_va", "cimb_va"], ovo: ["other_qris"], dana: ["other_qris"], card: ["credit_card"], any: [] };
+
+type OrderQuote = {
+  order_id: string; code: string; service: string; channel: string; channel_label: string; gross: number;
+  pg_fee: number; pg_fee_ppn: number; pg_fee_borne_by: string | null; customer_payment_fee: number; expires_at: string; timeout_min: number;
+};
 
 async function loadKeys(admin: ReturnType<typeof createClient>) {
   const env = { server: Deno.env.get("MIDTRANS_SERVER_KEY") ?? "", client: Deno.env.get("MIDTRANS_CLIENT_KEY") ?? "", prod: (Deno.env.get("MIDTRANS_IS_PRODUCTION") ?? "false") === "true", source: "secret" };
@@ -45,12 +57,64 @@ Deno.serve(async (req) => {
       return json({ configured: true, source: keys.source, is_production: keys.prod, reachable: ok, http: res.status, message: ok ? "Kunci valid, Midtrans dapat dihubungi" : res.status === 401 ? "Server key ditolak Midtrans (401) — periksa kunci & mode sandbox/production" : `Respons Midtrans: ${res.status}` });
     }
 
+    const purpose: string = body.purpose === "order" ? "order" : "topup";
+    const { data: prof } = await admin.from("profiles").select("full_name, email, phone").eq("id", user.id).single();
+    const provider = keys.server ? "midtrans" : "simulated";
+    const customer = { first_name: prof?.full_name ?? "Pengguna", email: prof?.email ?? user.email, phone: prof?.phone ?? undefined };
+
+    // =================== Bayar satu pesanan (purpose='order') ===================
+    if (purpose === "order") {
+      const orderId = typeof body.order_id === "string" ? body.order_id : "";
+      if (!/^[0-9a-f-]{36}$/i.test(orderId)) return json({ error: "order_id wajib diisi" }, 400);
+      const method = typeof body.method === "string" && body.method !== "any" ? body.method : null;
+      // Validasi kepemilikan, status awaiting_payment, saluran aktif & hitung gross — di server (JWT pelanggan → auth.uid()).
+      const { data: quote, error: qErr } = await supa.rpc("order_payment_prepare", { p_order: orderId, p_channel: method });
+      if (qErr || !quote) return json({ error: qErr?.message ?? "Pesanan tidak dapat dibayar" }, 400);
+      const q = quote as OrderQuote;
+      const gross = Math.round(Number(q.gross));
+      if (!gross || gross <= 0) return json({ error: "Total pesanan tidak valid" }, 400);
+      const minutesLeft = Math.max(1, Math.floor((new Date(q.expires_at).getTime() - Date.now()) / 60000));
+
+      // Transaksi Snap yang masih menunggu untuk pesanan & nominal yang sama → pakai ulang (ketuk ganda / buka ulang layar)
+      const { data: pending } = await admin.from("payments").select("*")
+        .eq("order_id", q.order_id).eq("purpose", "order").eq("status", "pending").eq("amount", gross).eq("pg_channel", q.channel)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (pending && (pending.snap_token || provider === "simulated")) {
+        return json({ payment: pending, reused: true, simulated: provider === "simulated", snap_token: pending.snap_token, redirect_url: pending.redirect_url, client_key: keys.client || null, is_production: keys.prod, order: q });
+      }
+
+      const externalId = `AKORD-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+      const { data: pay, error } = await admin.from("payments").insert({ user_id: user.id, order_id: q.order_id, purpose: "order", amount: gross, method: q.channel, pg_channel: q.channel, provider, external_id: externalId }).select("*").single();
+      if (error) return json({ error: error.message }, 500);
+      if (!keys.server) return json({ payment: pay, simulated: true, order: q, message: "Mode simulasi: isi Server Key Midtrans di Panel Admin → Payment Gateway untuk transaksi asli." });
+
+      // item_details harus berjumlah = gross_amount. Biaya pembayaran (policy=customer) tampil sebagai baris terpisah (§9).
+      const fee = Math.max(0, Math.round(Number(q.customer_payment_fee ?? 0)));
+      const items = fee > 0 && fee < gross
+        ? [{ id: q.code, price: gross - fee, quantity: 1, name: `Pesanan ${q.code}` }, { id: "payment_fee", price: fee, quantity: 1, name: "Biaya pembayaran" }]
+        : [{ id: q.code, price: gross, quantity: 1, name: `Pesanan ${q.code}` }];
+      const snapBody = {
+        transaction_details: { order_id: externalId, gross_amount: gross },
+        item_details: items,
+        customer_details: customer,
+        enabled_payments: METHODS[q.channel]?.length ? METHODS[q.channel] : undefined,
+        expiry: { unit: "minutes", duration: minutesLeft },
+        custom_field1: user.id, custom_field2: "order", custom_field3: q.code,
+      };
+      const res = await fetch(`${base}/snap/v1/transactions`, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: "Basic " + btoa(keys.server + ":") }, body: JSON.stringify(snapBody) });
+      const snap = await res.json();
+      if (!res.ok || !snap.token) { await admin.from("payments").update({ status: "failure", raw: snap }).eq("id", pay.id); return json({ error: snap.error_messages?.join(", ") ?? "Midtrans menolak transaksi" }, 502); }
+      const { data: updated } = await admin.from("payments").update({ snap_token: snap.token, redirect_url: snap.redirect_url, raw: snap }).eq("id", pay.id).select("*").single();
+      return json({ payment: updated, simulated: false, snap_token: snap.token, redirect_url: snap.redirect_url, client_key: keys.client || null, is_production: keys.prod, order: q });
+    }
+
+    // =================== Top up AntarPay (alur lama) ===================
     // ---- Sakelar AntarPay (migrasi 0088): saat nonaktif, tidak ada transaksi Snap baru yang dibuat ----
     const { data: antarpayOn, error: toggleErr } = await admin.rpc("antarpay_enabled");
     if (toggleErr) return json({ error: "Status AntarPay tidak dapat diperiksa — coba lagi" }, 503);
     if (antarpayOn !== true) return json({ error: "AntarPay sedang dinonaktifkan sementara. Gunakan pembayaran tunai.", antarpay_enabled: false }, 403);
 
-    const { amount, method = "any", purpose = "topup", order_id = null } = body;
+    const { amount, method = "any" } = body;
     const amt = Math.round(Number(amount));
     const { data: cfg } = await admin.rpc("gateway_public_config");
     const min = Number(cfg?.topup_min ?? 10000), max = Number(cfg?.topup_max ?? 10000000);
@@ -58,8 +122,8 @@ Deno.serve(async (req) => {
     const allowed: string[] = Array.isArray(cfg?.methods) ? cfg.methods : [];
     if (method !== "any" && allowed.length && !allowed.includes(method)) return json({ error: "Metode pembayaran tidak diaktifkan admin" }, 400);
     // ---- Saluran pembayaran per metode (migrasi 0089): sumber kebenaran, tidak bergantung pada pg_methods yang bisa kosong ----
-    // Saldo AntarPay adalah rail semua pembayaran non-tunai: kalau saluran 'antarpay' mati,
-    // top up pun ditutup supaya pelanggan tidak menyetor dana ke dompet yang tak bisa dipakai.
+    // Saldo AntarPay adalah rail top up: kalau saluran 'antarpay' mati, top up ditutup supaya pelanggan
+    // tidak menyetor dana ke dompet yang tak bisa dipakai.
     {
       const { data: apOn, error: apErr } = await admin.rpc("payment_channel_enabled", { p_key: "antarpay" });
       if (apErr) return json({ error: "Status saluran pembayaran tidak dapat diperiksa — coba lagi" }, 503);
@@ -71,20 +135,18 @@ Deno.serve(async (req) => {
       if (chOn !== true) return json({ error: `Metode pembayaran ${CHANNEL_LABEL[method] ?? method} sedang dinonaktifkan. Pilih metode lain.`, channel: method }, 403);
     }
 
-    const { data: prof } = await admin.from("profiles").select("full_name, email, phone").eq("id", user.id).single();
     const externalId = `AKPAY-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-    const provider = keys.server ? "midtrans" : "simulated";
-    const { data: pay, error } = await admin.from("payments").insert({ user_id: user.id, order_id, purpose, amount: amt, method, provider, external_id: externalId }).select("*").single();
+    const { data: pay, error } = await admin.from("payments").insert({ user_id: user.id, order_id: null, purpose: "topup", amount: amt, method, pg_channel: method !== "any" ? method : null, provider, external_id: externalId }).select("*").single();
     if (error) return json({ error: error.message }, 500);
     if (!keys.server) return json({ payment: pay, simulated: true, message: "Mode simulasi: isi Server Key Midtrans di Panel Admin → Payment Gateway untuk transaksi asli." });
 
     const snapBody = {
       transaction_details: { order_id: externalId, gross_amount: amt },
-      item_details: [{ id: purpose, price: amt, quantity: 1, name: purpose === "topup" ? "Top up AntarPay" : "Pembayaran pesanan AntarKita" }],
-      customer_details: { first_name: prof?.full_name ?? "Pengguna", email: prof?.email ?? user.email, phone: prof?.phone ?? undefined },
+      item_details: [{ id: "topup", price: amt, quantity: 1, name: "Top up AntarPay" }],
+      customer_details: customer,
       enabled_payments: METHODS[method]?.length ? METHODS[method] : undefined,
       expiry: { unit: "minutes", duration: 30 },
-      custom_field1: user.id, custom_field2: purpose,
+      custom_field1: user.id, custom_field2: "topup",
     };
     const res = await fetch(`${base}/snap/v1/transactions`, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: "Basic " + btoa(keys.server + ":") }, body: JSON.stringify(snapBody) });
     const snap = await res.json();
