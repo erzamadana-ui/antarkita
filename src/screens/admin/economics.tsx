@@ -3,6 +3,8 @@
 // rpc('admin_service_economics'), diubah per layanan lewat rpc('admin_set_service_economics')
 // (PIN panel + log aktivitas economics.updated). Panel simulasi memanggil rpc('ledger_simulate')
 // sehingga rincian alokasi yang tampil = rumus yang sama dengan buku besar order sungguhan.
+// 0104: panel "Ambang & parameter" — rpc('admin_business_settings') (nilai/default/rentang/satuan/label), simpan kunci
+// yang berubah lewat rpc('admin_set_settings', { p: {kunci: angka} }) (PIN panel, validasi rentang di server, audit).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -13,7 +15,7 @@ import { rpc, supabase } from '@/lib/supabase';
 import { rupiah, serviceLabel } from '@/lib/format';
 import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import { channelLabel } from '@/store/payprefs';
-import type { LedgerSimulation, PgFeePolicy, PromoFunder, ServiceEconomics, ServiceType } from '@/lib/types';
+import type { AdminBusinessSettings, BusinessSetting, LedgerSimulation, PgFeePolicy, PromoFunder, ServiceEconomics, ServiceType } from '@/lib/types';
 import { ErrorNote, LabelPill, SERVICE_KEYS, entryLabel, fmtDate, labelTags, parseNum, partyLabel, FUNDER_LABEL, WideTableHint } from './_shared';
 
 type NumKey = 'driver_commission_pct' | 'merchant_fee_pct' | 'customer_platform_fee' | 'service_fee_pct' | 'service_fee_min' | 'service_fee_driver_share_pct';
@@ -183,6 +185,9 @@ export default function AdminEconomics() {
       </Panel>
       <WideTableHint what="kolom Catatan & Simpan" />
 
+      {/* Hanya perbarui pagar komisi di atas — jangan muat ulang tabel aturan supaya draf yang belum disimpan tidak hilang. */}
+      <BusinessThresholds onSaved={(p) => { if (p.commission_cap_two_wheel != null) setCap(p.commission_cap_two_wheel); }} />
+
       <Simulator rules={rows} channels={channels} />
 
       <FootNote lines={[
@@ -192,6 +197,134 @@ export default function AdminEconomics() {
         'Perubahan berlaku untuk pesanan BARU; pesanan lama memakai snapshot persentase saat dibuat (orders.driver_commission_pct_snap / merchant_fee_pct_snap).',
       ]} />
     </AdminPage>
+  );
+}
+
+/* ───────────────────────── Ambang & parameter (0104) ───────────────────────── */
+
+/** Nama ramah untuk kunci yang dikenal; kunci lain yang dikirim RPC tetap tampil dengan nama kuncinya. */
+const SETTING_NAME: Record<string, string> = {
+  take_rate_north_star_pct: 'Take rate north-star',
+  gate_contribution_weeks: 'Gerbang: contribution > 0 berturut-turut',
+  gate_payout_on_time_pct: 'Gerbang: pencairan tepat SLA',
+  gate_retention_driver_pct: 'Gerbang: retensi driver 30 hari',
+  gate_retention_merchant_pct: 'Gerbang: retensi merchant 30 hari',
+  gate_refund_max_pct: 'Gerbang: batas refund',
+  payout_sla_hours: 'SLA pencairan',
+  payout_fee_per_withdrawal: 'Biaya transfer per pencairan',
+  order_payment_timeout_min: 'Batas waktu bayar pesanan gateway',
+  driver_debt_limit: 'Batas saldo minus driver/mitra',
+  commission_cap_two_wheel: 'Batas komisi roda dua',
+};
+const fmtSetting = (n: number | null | undefined, unit: string) => {
+  if (n == null || !Number.isFinite(Number(n))) return '—';
+  if (unit === 'Rp') return rupiah(Number(n));
+  return `${Number(n).toLocaleString('id-ID')}${unit === '%' ? '%' : unit ? ` ${unit}` : ''}`;
+};
+
+function BusinessThresholds({ onSaved }: { onSaved?: (saved: Record<string, number>) => void }) {
+  const [rows, setRows] = useState<BusinessSetting[]>([]);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await rpc<AdminBusinessSettings>('admin_business_settings');
+      const list = (r?.settings ?? []).map((x) => ({ ...x, value: Number(x.value), default: Number(x.default), min: Number(x.min), max: Number(x.max) }));
+      setRows(list);
+      setDraft(Object.fromEntries(list.map((x) => [x.key, String(x.value)])));
+      setErr(null);
+    } catch (e) { setErr(`Ambang & parameter: ${(e as Error).message}`); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  /** Validasi satu isian terhadap spesifikasi RPC → angka atau pesan galat. */
+  const check = (r: BusinessSetting, text: string | undefined): { n?: number; error?: string } => {
+    const n = parseNum(text);
+    const name = SETTING_NAME[r.key] ?? r.key;
+    if (!Number.isFinite(n)) return { error: `${name} harus berupa angka` };
+    if (r.integer && !Number.isInteger(n)) return { error: `${name} harus bilangan bulat` };
+    if (n < r.min || n > r.max) return { error: `${name} harus ${fmtSetting(r.min, r.unit)} s.d. ${fmtSetting(r.max, r.unit)}` };
+    return { n };
+  };
+  const changed = rows.filter((r) => draft[r.key] !== undefined && parseNum(draft[r.key]) !== r.value);
+
+  const save = async () => {
+    const p: Record<string, number> = {};
+    for (const r of changed) {
+      const c = check(r, draft[r.key]);
+      if (c.error) return toast.error(c.error);
+      p[r.key] = c.n as number;
+    }
+    if (!Object.keys(p).length) return toast.show('Tidak ada perubahan untuk disimpan');
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    setSaving(true);
+    try {
+      await rpc('admin_set_settings', { p });
+      toast.success(`Ambang bisnis disimpan (${Object.keys(p).length} parameter)`);
+      await load();
+      onSaved?.(p);
+    } catch (e) { handleAdminError(e); }
+    finally { setSaving(false); }
+  };
+  const reset = () => setDraft(Object.fromEntries(rows.map((x) => [x.key, String(x.value)])));
+
+  return (
+    <Panel title="Ambang & parameter" subtitle="Ambang bisnis (admin_business_settings) — gerbang scale-up, SLA & biaya pencairan, batas bayar, batas saldo minus, batas komisi. Simpan butuh PIN panel; server memeriksa rentang dan mencatat before/after."
+      icon="speedometer-outline" padded={false}
+      right={<>
+        {changed.length ? <Button size="sm" variant="ghost" title="Batalkan" onPress={reset} /> : null}
+        <Button size="sm" title={changed.length ? `Simpan (${changed.length})` : 'Simpan'} variant={changed.length ? 'primary' : 'outline'} disabled={!changed.length} loading={saving} onPress={save} />
+      </>}>
+      {err ? <View style={{ padding: adminSpace.lg }}><ErrorNote text={err} onRetry={load} /></View> : null}
+      <ScrollView horizontal showsHorizontalScrollIndicator>
+        <View style={{ minWidth: 1040, flex: 1 }}>
+          <Row gap={8} style={st.th}>
+            <Text style={[font.label, { width: 360 }]}>Parameter</Text>
+            <Text style={[font.label, { width: 116 }]}>Label</Text>
+            <Text style={[font.label, { width: 150, textAlign: 'right' }]}>Nilai</Text>
+            <Text style={[font.label, { width: 120, textAlign: 'right' }]}>Default</Text>
+            <Text style={[font.label, { width: 190, textAlign: 'right' }]}>Rentang</Text>
+            <Text style={[font.label, { width: 60 }]} />
+          </Row>
+          {loading && rows.length === 0 ? <Text style={[font.small, { padding: adminSpace.lg }]}>Memuat ambang…</Text> : null}
+          {!loading && rows.length === 0 && !err ? <Text style={[font.small, { padding: adminSpace.lg }]}>Belum ada ambang — migrasi 0104 belum diterapkan?</Text> : null}
+          {rows.map((r, i) => {
+            const text = draft[r.key] ?? '';
+            const c = check(r, text);
+            const dirty = parseNum(text) !== r.value;
+            const tags = labelTags(`[${r.label}]`);
+            return (
+              <Row key={r.key} gap={8} style={[st.tr, i % 2 ? st.trAlt : null, { minHeight: 64 }]}>
+                <View style={{ width: 360, gap: 2 }}>
+                  <Text style={font.bodyStrong} numberOfLines={1}>{SETTING_NAME[r.key] ?? r.key}</Text>
+                  <Text style={font.tiny} numberOfLines={1}>{r.key}{r.stored ? '' : ' · belum disetel (memakai default)'}</Text>
+                  {r.note ? <Text style={font.tiny} numberOfLines={2}>{r.note}</Text> : null}
+                </View>
+                <View style={{ width: 116 }}>{tags.length ? <LabelPill text={tags[0]} /> : <Pill text={r.label || '—'} tone="neutral" />}</View>
+                <Input value={text} keyboardType={r.min < 0 ? 'numbers-and-punctuation' : r.integer ? 'number-pad' : 'decimal-pad'}
+                  error={c.error ? ' ' : undefined}
+                  onChangeText={(t) => setDraft((d) => ({ ...d, [r.key]: t }))} containerStyle={{ width: 150 }}
+                  right={<Text style={font.tiny}>{r.unit}</Text>}
+                  style={{ textAlign: 'right', paddingVertical: 6, color: c.error ? adminTone.red : dirty ? adminTone.blue : undefined, fontWeight: dirty ? '700' : undefined }} />
+                <Text style={[font.mono, { width: 120, textAlign: 'right' }]}>{fmtSetting(r.default, r.unit)}</Text>
+                <Text style={[font.small, { width: 190, textAlign: 'right' }]}>{fmtSetting(r.min, r.unit)} – {fmtSetting(r.max, r.unit)}{r.integer ? ' · bulat' : ''}</Text>
+                <View style={{ width: 60 }}>
+                  {text !== String(r.default) ? <Button size="sm" variant="ghost" title="Default" onPress={() => setDraft((d) => ({ ...d, [r.key]: String(r.default) }))} /> : null}
+                </View>
+              </Row>
+            );
+          })}
+        </View>
+      </ScrollView>
+      <Text style={[font.tiny, { padding: adminSpace.lg, paddingTop: adminSpace.sm }]}>
+        [FAKTA SUMBER] = dari dokumen keputusan/PKS/regulasi; [ASUMSI] = usulan yang bisa diubah dari panel. Batas komisi roda dua ditolak server bila lebih rendah dari komisi roda dua yang berlaku — turunkan komisinya dulu di tabel di atas. Perubahan dicatat sebagai settings.business_updated.
+      </Text>
+    </Panel>
   );
 }
 

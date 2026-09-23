@@ -2,6 +2,8 @@
 // status, konfigurasi kunci, webhook & checklist pengajuan.
 // Daftar saluran (0089) menggantikan Chip "Metode aktif" lama supaya tidak ada dua kontrol yang bertabrakan:
 // admin_set_payment_channel ikut menulis pg_methods, dan Simpan konfigurasi mengirim metode hasil daftar ini.
+// 0104: sakelar terpisah "Bayar per pesanan lewat gateway" (admin_set_gateway_order_payment) — saluran gateway boleh
+// dipakai membayar SATU pesanan walau AntarPay/top up mati (PKS Midtrans Pasal 7.4b: stored value tetap mati).
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Switch } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -43,6 +45,9 @@ export default function AdminGateway() {
   // 0089: sakelar per saluran pembayaran (nilai MENTAH yang disetel admin, bukan status efektif).
   const [chan, setChan] = useState<PaymentChannels | null>(null);
   const [chanBusy, setChanBusy] = useState<string | null>(null);
+  // 0104: sakelar bayar per pesanan lewat gateway. null = belum termuat.
+  const [gwOrderOn, setGwOrderOn] = useState<boolean | null>(null);
+  const [gwOrderBusy, setGwOrderBusy] = useState(false);
 
   const apply = useCallback((g: GatewayStatus) => {
     setSt(g);
@@ -51,7 +56,11 @@ export default function AdminGateway() {
   const load = useCallback(async () => {
     try { apply(await rpc<GatewayStatus>('admin_gateway_status')); } catch (e) { toast.error((e as Error).message); }
     try { setPayOn((await rpc<boolean>('antarpay_enabled')) === true); } catch { setPayOn(false); }
-    try { setChan((await rpc<AdminPaymentChannels>('admin_payment_channels'))?.payment_channels ?? null); } catch (e) { handleAdminError(e); }
+    try {
+      const pc = await rpc<AdminPaymentChannels>('admin_payment_channels');
+      setChan(pc?.payment_channels ?? null);
+      setGwOrderOn(pc?.gateway_order_payment_enabled === true);
+    } catch (e) { handleAdminError(e); }
   }, [apply]);
   useEffect(() => { load(); }, [load]);
 
@@ -84,6 +93,22 @@ export default function AdminGateway() {
       useAppSettingsStore.getState().load(true);
     } catch (e) { setChan(prev); handleAdminError(e); }
     finally { setChanBusy(null); }
+  };
+
+  /** 0104: sakelar bayar per pesanan lewat gateway — PIN panel (admin_require_unlock) + audit gateway_order_payment.toggle. */
+  const toggleGatewayOrder = async (on: boolean) => {
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    const prev = gwOrderOn;
+    setGwOrderBusy(true); setGwOrderOn(on);
+    try {
+      const r = await rpc<{ gateway_order_payment_enabled: boolean; antarpay_enabled: boolean }>('admin_set_gateway_order_payment', { p_enabled: on });
+      const v = r?.gateway_order_payment_enabled === true;
+      setGwOrderOn(v);
+      if (typeof r?.antarpay_enabled === 'boolean') setPayOn(r.antarpay_enabled);
+      toast.success(v ? 'Bayar per pesanan lewat gateway DIAKTIFKAN — top up AntarPay tidak ikut menyala' : 'Bayar per pesanan lewat gateway DINONAKTIFKAN');
+      useAppSettingsStore.getState().load(true);
+    } catch (e) { setGwOrderOn(prev); handleAdminError(e); }
+    finally { setGwOrderBusy(false); }
   };
 
   const save = async () => {
@@ -144,6 +169,35 @@ export default function AdminGateway() {
         </View>
       </Card>
 
+      {/* 0104: bayar per pesanan lewat gateway — terpisah dari AntarPay (top up / saldo). */}
+      <Card style={{ gap: 10, borderColor: gwOrderOn ? colors.success + '55' : adminTone.border, borderWidth: 1 }}>
+        <Row between style={{ flexWrap: 'wrap', gap: 10 }}>
+          <View style={{ flex: 1, minWidth: 220 }}>
+            <Row gap={8} style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+              <Text style={font.h3}>Bayar per pesanan lewat gateway</Text>
+              {gwOrderOn === null ? <Badge text="Memuat…" color={colors.textMuted} /> : <Badge text={gwOrderOn ? 'AKTIF' : 'NONAKTIF'} color={gwOrderOn ? colors.success : colors.textMuted} />}
+            </Row>
+            <Text style={[font.small, { marginTop: 4 }]}>
+              {gwOrderOn
+                ? `Pelanggan bisa membayar satu pesanan langsung lewat saluran gateway yang menyala (GoPay/ShopeePay/QRIS/VA/kartu)${payOn === false ? ' walau AntarPay nonaktif' : ''}. Pesanan baru dicarikan driver setelah pembayaran masuk.`
+                : 'Nonaktif: saluran gateway hanya bisa dipakai bila AntarPay aktif (perilaku lama).'}
+            </Text>
+          </View>
+          <Row gap={8} style={{ alignItems: 'center' }}>
+            <Text style={[font.small, { color: adminTone.ink, fontWeight: '700' }]}>{gwOrderOn ? 'Aktif' : 'Nonaktif'}</Text>
+            <Switch value={!!gwOrderOn} disabled={gwOrderBusy || gwOrderOn === null} onValueChange={toggleGatewayOrder} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />
+          </Row>
+        </Row>
+        <View style={[s.note, { backgroundColor: adminTone.blue + '12', borderColor: adminTone.blue + '40' }]}>
+          <Text style={font.small}>
+            Bayar per pesanan lewat gateway tetap berfungsi walau <Text style={{ fontWeight: '700' }}>AntarPay/top up NONAKTIF</Text>: dana langsung untuk transaksi itu (purpose=order) dan tidak disimpan sebagai saldo. Sakelar ini tidak menyalakan AntarPay, top up, maupun pencairan.
+          </Text>
+          <Text style={[font.tiny, { marginTop: 4 }]}>
+            Sesuai PKS Midtrans Pasal 7 ayat 4(b), fitur uang elektronik/dompet (stored value, isi saldo) tanpa izin Bank Indonesia dapat membuat layanan dihentikan — top up AntarPay tetap mati sampai ada izin BI/review legal. Mengubah sakelar memerlukan PIN panel admin dan dicatat di log aktivitas (gateway_order_payment.toggle).
+          </Text>
+        </View>
+      </Card>
+
       {/* 0089: sakelar aktif/nonaktif SETIAP saluran pembayaran (gaya daftar halaman bayar Alfagift). */}
       <Card style={{ gap: 4 }}>
         <Row between style={{ flexWrap: 'wrap', gap: 8 }}>
@@ -151,11 +205,15 @@ export default function AdminGateway() {
             <Text style={font.h3}>Saluran Pembayaran</Text>
             <Text style={[font.small, { marginTop: 2 }]}>Nyalakan/matikan tiap saluran satu per satu. Pelanggan hanya melihat saluran yang menyala; server menolak pesanan dengan saluran yang mati.</Text>
           </View>
-          {chan === null ? <Badge text="Memuat…" color={colors.textMuted} /> : <Badge text={`${PAYMENT_CHANNELS.filter((c) => (c.key === 'cash' ? chan[c.key] !== false : chan[c.key] === true) && (c.key === 'cash' || payOn)).length}/${PAYMENT_CHANNELS.length} aktif`} color={adminTone.blue} />}
+          {chan === null ? <Badge text="Memuat…" color={colors.textMuted} /> : <Badge text={`${PAYMENT_CHANNELS.filter((c) => (c.key === 'cash' ? chan[c.key] !== false : chan[c.key] === true) && (c.key === 'cash' || payOn || (gwOrderOn === true && GATEWAY_CHANNELS.includes(c.key)))).length}/${PAYMENT_CHANNELS.length} aktif`} color={adminTone.blue} />}
         </Row>
         {payOn === false ? (
           <View style={[s.note, { backgroundColor: colors.warning + '14', borderColor: colors.warning + '50', marginVertical: 6 }]}>
-            <Text style={font.small}>Sakelar AntarPay global sedang nonaktif — semua saluran non-tunai ikut nonaktif.</Text>
+            <Text style={font.small}>
+              {gwOrderOn
+                ? 'Sakelar AntarPay global sedang nonaktif — saldo AntarPay & e-money nonaktif; saluran gateway tetap bisa dipakai untuk bayar per pesanan.'
+                : 'Sakelar AntarPay global sedang nonaktif — semua saluran non-tunai ikut nonaktif.'}
+            </Text>
           </View>
         ) : null}
         <View style={{ marginTop: 6 }}>
@@ -165,10 +223,12 @@ export default function AdminGateway() {
             // Dua induk: (1) sakelar global AntarPay 0088, (2) saluran 'antarpay' itu sendiri —
             // di server SETIAP pembayaran non-tunai diselesaikan lewat saldo AntarPay.
             const railOn = chan !== null && chan.antarpay === true && payOn === true;
-            const dimGlobal = !isCash && payOn === false;
-            const dimRail = !isCash && c.key !== 'antarpay' && payOn === true && chan !== null && chan.antarpay !== true;
+            // 0104: saluran gateway + sakelar bayar per pesanan → tidak bergantung pada AntarPay (per pesanan saja).
+            const perOrder = gwOrderOn === true && GATEWAY_CHANNELS.includes(c.key);
+            const dimGlobal = !isCash && !perOrder && payOn === false;
+            const dimRail = !isCash && !perOrder && c.key !== 'antarpay' && payOn === true && chan !== null && chan.antarpay !== true;
             const dim = dimGlobal || dimRail;
-            const effective = stored && (isCash || (c.key === 'antarpay' ? payOn === true : railOn));
+            const effective = stored && (isCash || perOrder || (c.key === 'antarpay' ? payOn === true : railOn));
             return (
               <Row key={c.key} between style={[s.chRow, dim && { opacity: 0.45 }]}>
                 <Row gap={10} style={{ flex: 1, minWidth: 0, alignItems: 'center' }}>
@@ -177,7 +237,7 @@ export default function AdminGateway() {
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[font.body, { color: adminTone.ink, fontWeight: '700' }]} numberOfLines={1}>{c.label}</Text>
-                    <Text style={font.tiny} numberOfLines={2}>{dimGlobal ? 'Nonaktif karena sakelar AntarPay global mati' : dimRail ? 'Nonaktif karena saluran AntarPay (saldo) dimatikan' : c.hint}</Text>
+                    <Text style={font.tiny} numberOfLines={2}>{dimGlobal ? 'Nonaktif karena sakelar AntarPay global mati' : dimRail ? 'Nonaktif karena saluran AntarPay (saldo) dimatikan' : perOrder && payOn === false ? `${c.hint} · bayar per pesanan` : c.hint}</Text>
                   </View>
                 </Row>
                 <Switch

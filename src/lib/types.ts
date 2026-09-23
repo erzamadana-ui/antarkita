@@ -101,6 +101,7 @@ export interface Promo {
   code: string; description: string | null; discount_type: 'fixed' | 'percent'; value: number; max_discount: number | null;
   min_total: number; service: ServiceType | null; quota: number | null; used_count: number; valid_from: string | null;
   valid_to: string | null; is_active: boolean; title?: string | null; image_url?: string | null; sort_order?: number;
+  /** 0099: pemilik biaya promo */ funded_by?: PromoFunder | null;
 }
 export interface SavedPlace { id: string; user_id: string; label: string; address: string; lat: number; lng: number }
 
@@ -253,7 +254,15 @@ export interface AppPublicSettings {
 /** 0089: peta saluran pembayaran → aktif/tidak (`payment_channels_public()`). */
 export type PaymentChannels = Record<string, boolean>;
 /** 0089: balasan `admin_set_payment_channel()` / `admin_payment_channels()`. */
-export interface AdminPaymentChannels { payment_channels: PaymentChannels; effective: PaymentChannels; antarpay_enabled: boolean; pg_methods: string[] }
+export interface AdminPaymentChannels { payment_channels: PaymentChannels; effective: PaymentChannels; antarpay_enabled: boolean; pg_methods: string[];
+  /** 0104: sakelar bayar PER PESANAN lewat gateway (terpisah dari AntarPay/top up) */ gateway_order_payment_enabled?: boolean;
+  /** 0104: saluran yang boleh dipakai membayar satu pesanan */ order_payment_channels?: PaymentChannels }
+/** Satu baris `admin_business_settings().settings` (0104) — ambang bisnis yang bisa diubah lewat admin_set_settings (PIN). */
+export interface BusinessSetting {
+  key: string; value: number; default: number; min: number; max: number; integer: boolean;
+  unit: string; label: string; note: string | null; stored: boolean;
+}
+export interface AdminBusinessSettings { settings: BusinessSetting[] | null; requires_pin: boolean; gateway_order_payment_enabled: boolean; antarpay_enabled: boolean }
 
 // ---------- Tahap 9: dispatch driver (prioritas rating, tolak order, titipan travel) ----------
 /** Hasil `rpc('driver_priority_info')` — antrean prioritas driver berdasarkan rating. */
