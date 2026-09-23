@@ -9,9 +9,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import type { StyleProp, TextStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { adminFont, adminTone, adminSpace, adminRadius, adminIcon } from '@/components/admin';
+import { adminFont, adminTone, adminSpace, adminRadius, adminIcon, Pill, TONE, type ToneKey } from '@/components/admin';
 import { Row } from '@/components/ui';
-import { formatDate, timeAgo } from '@/lib/format';
+import { formatDate, timeAgo, rupiah } from '@/lib/format';
+import type { LedgerEntry, LedgerParty, ServiceType } from '@/lib/types';
 
 /**
  * Tanggal aman untuk tabel admin. Kolom tanggal di basis data boleh NULL
@@ -141,7 +142,88 @@ export function Pager<T>({ p, noun = 'baris', hint }: { p: Paged<T>; noun?: stri
   );
 }
 
+/* ───────────────────── Skema Bisnis v2 (0098–0103): potongan bersama ───────────────────── */
+
+/** Urutan layanan baku di layar Skema Bisnis. */
+export const SERVICE_KEYS: ServiceType[] = ['ride_motor', 'ride_car', 'food', 'send', 'shop', 'market', 'box', 'travel'];
+
+/** Label Indonesia untuk enum `ledger_entry` (0099). */
+export const ENTRY_LABEL: Record<LedgerEntry, string> = {
+  gross_customer: 'Dibayar pelanggan', items_subtotal: 'Nilai barang', delivery_fee: 'Ongkir / tarif jasa',
+  customer_platform_fee: 'Biaya platform pelanggan', service_fee: 'Jasa belanja', intercity_fare: 'Tarif antar kota',
+  tip: 'Tip', extras: 'Biaya tambahan (parkir/tol/tunggu)',
+  promo_platform: 'Promo · ditanggung platform', promo_merchant: 'Promo · ditanggung merchant', promo_sponsor: 'Promo · ditanggung sponsor',
+  driver_commission: 'Komisi dari ongkir', merchant_fee: 'Fee merchant',
+  driver_payable: 'Hak driver', merchant_payable: 'Hak merchant', vendor_payable: 'Penggantian belanja (ditalangi driver)', partner_payable: 'Hak mitra travel',
+  platform_revenue: 'Pendapatan platform bersih', pg_fee: 'Biaya payment gateway', pg_fee_ppn: 'PPN biaya gateway',
+  driver_receivable: 'Setoran tunai ke platform', refund: 'Refund', adjustment: 'Penyesuaian / bonus sesi', ads_revenue: 'Pendapatan iklan',
+};
+export const entryLabel = (e: string) => ENTRY_LABEL[e as LedgerEntry] ?? e;
+/** Label Indonesia pihak (`party_role`) di buku besar. */
+export const PARTY_LABEL: Record<LedgerParty, string> = {
+  customer: 'Pelanggan', driver: 'Driver', merchant: 'Merchant', vendor: 'Vendor (via driver)', partner: 'Mitra travel',
+  platform: 'Platform', gateway: 'Payment gateway', sponsor: 'Sponsor',
+};
+export const partyLabel = (p?: string | null) => (p ? PARTY_LABEL[p as LedgerParty] ?? p : '—');
+export const FUNDER_LABEL: Record<string, string> = { platform: 'Platform', merchant: 'Merchant', sponsor: 'Sponsor', customer: 'Pelanggan' };
+
+/** Angka dari isian teks: koma desimal diterima, kosong → NaN. */
+export const parseNum = (v: string | number | null | undefined) => {
+  const t = String(v ?? '').trim().replace(/\s/g, '').replace(',', '.');
+  return t === '' ? NaN : Number(t);
+};
+
+/** Tag label angka di teks catatan: "[FAKTA SUMBER] … [ASUMSI] …" → ['FAKTA SUMBER', 'ASUMSI']. */
+export function labelTags(text?: string | null): string[] {
+  const out: string[] = [];
+  for (const m of String(text ?? '').matchAll(/\[(FAKTA[^\]]*|ASUMSI[^\]]*|HASIL PILOT[^\]]*)\]/gi)) {
+    const t = m[1].trim().toUpperCase().replace(/\s+/g, ' ');
+    if (!out.includes(t)) out.push(t);
+  }
+  return out;
+}
+/** Warna label angka: FAKTA = hijau, ASUMSI = kuning, HASIL PILOT = biru. */
+export const labelTone = (t: string): ToneKey => (/^FAKTA/i.test(t) ? 'ok' : /^ASUMSI/i.test(t) ? 'wait' : /^HASIL/i.test(t) ? 'info' : 'neutral');
+export function LabelPill({ text }: { text: string }) {
+  return <Pill text={text} tone={labelTone(text)} />;
+}
+
+/** Kotak galat di dalam halaman (bukan hanya toast) — dipakai saat memuat data gagal. */
+export function ErrorNote({ text, onRetry }: { text: string | null | undefined; onRetry?: () => void }) {
+  if (!text) return null;
+  return (
+    <View style={[s.err]}>
+      <Row gap={8} style={{ alignItems: 'flex-start' }}>
+        <Ionicons name="close-circle-outline" size={adminIcon.md} color={adminTone.red} />
+        <Text selectable style={[adminFont.small, { color: adminTone.red, flex: 1 }]}>{text}</Text>
+        {onRetry ? <Pressable onPress={onRetry} hitSlop={6}><Text style={[adminFont.small, { color: adminTone.teal, fontWeight: '700' }]}>Coba lagi</Text></Pressable> : null}
+      </Row>
+    </View>
+  );
+}
+
+/** Kolom uang untuk DataTable (rata kanan, tabular). */
+export const moneyCol = (key: string, label: string, width = 116, color?: string | ((r: Record<string, unknown>) => string | undefined)) => ({
+  key, label, width, align: 'right' as const, mono: true,
+  render: (r: Record<string, unknown>) => {
+    const v = Number(r[key] ?? 0);
+    const c = typeof color === 'function' ? color(r) : color;
+    return <Text style={[adminFont.mono, c ? { color: c } : null]} numberOfLines={1}>{rupiah(v)}</Text>;
+  },
+});
+/** Kolom hitungan (bilangan bulat). */
+export const countCol = (key: string, label: string, width = 80) => ({
+  key, label, width, align: 'right' as const, mono: true,
+  render: (r: Record<string, unknown>) => <Text style={adminFont.mono}>{Number(r[key] ?? 0).toLocaleString('id-ID')}</Text>,
+});
+/** Kolom persen. */
+export const pctCol = (key: string, label: string, width = 88) => ({
+  key, label, width, align: 'right' as const, mono: true,
+  render: (r: Record<string, unknown>) => <Text style={adminFont.mono}>{`${Number(r[key] ?? 0).toLocaleString('id-ID', { maximumFractionDigits: 2 })}%`}</Text>,
+});
+
 const s = StyleSheet.create({
+  err: { borderWidth: 1, borderColor: TONE.bad.border, backgroundColor: TONE.bad.bg, borderRadius: adminRadius.card, padding: adminSpace.md },
   bar: {
     flexDirection: 'row', flexWrap: 'wrap', gap: adminSpace.md, alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: adminSpace.md, paddingVertical: adminSpace.sm,

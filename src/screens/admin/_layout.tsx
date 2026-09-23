@@ -48,6 +48,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/(admin)/pricing', label: 'Tarif & Promo', icon: 'pricetags-outline', iconActive: 'pricetags' },
       { href: '/(admin)/pricing-intel', label: 'Intelijen Harga', icon: 'trending-up-outline', iconActive: 'trending-up' },
       { href: '/(admin)/blast', label: 'Blast Promo', icon: 'megaphone-outline', iconActive: 'megaphone' },
+      { href: '/(admin)/ads', label: 'Iklan & Boost', icon: 'rocket-outline', iconActive: 'rocket' },
     ],
   },
   {
@@ -56,6 +57,13 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/(admin)/finance', label: 'Keuangan', icon: 'cash-outline', iconActive: 'cash' },
       { href: '/(admin)/finance-report', label: 'Laporan Keuangan', icon: 'document-text-outline', iconActive: 'document-text' },
       { href: '/(admin)/gateway', label: 'Payment Gateway', icon: 'card-outline', iconActive: 'card' },
+      // Skema Bisnis v2 (0098–0103)
+      { href: '/(admin)/economics', label: 'Aturan Bisnis', icon: 'options-outline', iconActive: 'options' },
+      { href: '/(admin)/pg-fees', label: 'Biaya Payment Gateway', icon: 'swap-horizontal-outline', iconActive: 'swap-horizontal' },
+      { href: '/(admin)/ledger', label: 'Buku Besar Order', icon: 'book-outline', iconActive: 'book' },
+      { href: '/(admin)/reconciliation', label: 'Rekonsiliasi & Payout', icon: 'git-compare-outline', iconActive: 'git-compare' },
+      { href: '/(admin)/economics-report', label: 'Laporan Skema Bisnis', icon: 'analytics-outline', iconActive: 'analytics' },
+      { href: '/(admin)/city-costs', label: 'Biaya Tetap Kota', icon: 'business-outline', iconActive: 'business' },
     ],
   },
   {

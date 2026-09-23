@@ -344,3 +344,148 @@ export interface AdminCityRow {
 export interface AdminWaitlistRow { id: string; name: string | null; phone: string | null; services: string[] | null; note: string | null; created_at: string }
 /** Pilihan Perwakilan Kota dari `rpc('admin_city_manager_options')`. */
 export interface AdminManagerOption { id: string; name: string | null; phone: string | null }
+
+/* ───────────────── Skema Bisnis v2 (migrasi 0098–0103) — bentuk data RPC Panel Admin ───────────────── */
+
+export type PgFeePolicy = 'platform' | 'customer';
+export type PromoFunder = 'platform' | 'merchant' | 'sponsor';
+
+/** Satu baris `service_economics` (0098) — `rpc('admin_service_economics')` / hasil `admin_set_service_economics`. */
+export interface ServiceEconomics {
+  service: ServiceType;
+  driver_commission_pct: number; merchant_fee_pct: number; customer_platform_fee: number;
+  service_fee_pct: number; service_fee_min: number; service_fee_driver_share_pct: number;
+  pg_fee_policy: PgFeePolicy; promo_default_funded_by: PromoFunder;
+  notes: string | null; updated_at: string | null; updated_by: string | null;
+}
+
+/** Enum `ledger_entry` (0099). */
+export type LedgerEntry =
+  | 'gross_customer' | 'items_subtotal' | 'delivery_fee' | 'customer_platform_fee' | 'service_fee' | 'intercity_fare' | 'tip' | 'extras'
+  | 'promo_platform' | 'promo_merchant' | 'promo_sponsor' | 'driver_commission' | 'merchant_fee'
+  | 'driver_payable' | 'merchant_payable' | 'vendor_payable' | 'partner_payable'
+  | 'platform_revenue' | 'pg_fee' | 'pg_fee_ppn' | 'driver_receivable' | 'refund' | 'adjustment' | 'ads_revenue';
+export type LedgerParty = 'customer' | 'driver' | 'merchant' | 'vendor' | 'partner' | 'platform' | 'gateway' | 'sponsor';
+export type LedgerPhase = 'created' | 'completed' | 'cancelled' | 'refunded' | 'settled' | 'adjusted';
+
+/** Satu baris `entries` dari `ledger_calc` / `ledger_simulate` (0099). */
+export interface LedgerCalcEntry { entry: LedgerEntry; amount: number; party_role: LedgerParty; party_id?: string | null; funded_by?: string | null; note?: string | null }
+
+/** `rpc('ledger_simulate', …)` (0099) = keluaran `ledger_calc` + penanda simulasi. */
+export interface LedgerSimulation {
+  gross_customer: number; components_total: number; total: number;
+  delivery_fee: number; customer_platform_fee: number; items_subtotal: number; service_fee: number; driver_service_share: number;
+  intercity_fare: number; tip: number; extras: number; discount: number;
+  driver_commission_pct: number; driver_commission: number; bonus: number; merchant_fee_pct: number; merchant_fee: number;
+  promo_funded_by: PromoFunder; promo_platform: number; promo_merchant: number; promo_sponsor: number;
+  driver_payable: number; merchant_payable: number; vendor_payable: number; partner_payable: number;
+  platform_revenue: number; pg_fee: number; pg_fee_ppn: number; pg_fee_borne_by: PgFeePolicy; pg_channel: string | null;
+  contribution: number; driver_receivable: number; payment_method: PaymentMethod; has_driver: boolean;
+  balanced: boolean; diff: number; diff_components: number;
+  entries: LedgerCalcEntry[];
+  simulated: true; service: ServiceType; channel: string; rules: ServiceEconomics | null;
+}
+
+/** Satu baris tabel `order_ledger` (0099). */
+export interface OrderLedgerRow {
+  id: number; order_id: string | null; source: 'orders' | 'travel_bookings' | 'travel_requests' | 'merchant_ads'; source_id: string | null;
+  service: ServiceType | null; city_id: string | null; city: string | null; entry: LedgerEntry; amount: number;
+  party_role: LedgerParty | null; party_id: string | null; funded_by: string | null; phase: LedgerPhase;
+  pg_channel: string | null; note: string | null; created_at: string;
+}
+
+/** `rpc('ledger_check', { p_order })` (0099). Kolom yang ada bergantung pada `verdict`/fase. */
+export interface LedgerCheck {
+  order_id: string; code?: string; service?: ServiceType; phase?: LedgerPhase; status?: OrderStatus;
+  verdict: 'balanced' | 'unbalanced' | 'refund_ok' | 'refund_short' | 'no_ledger' | 'not_found';
+  balanced: boolean | null; ledger_version?: number;
+  diff?: number; diff_components?: number; gross_customer?: number; allocated?: number; components_total?: number; formula?: string;
+  driver_payable?: number; merchant_payable?: number; vendor_payable?: number; partner_payable?: number;
+  platform_revenue?: number; pg_fee_platform?: number; pg_fee_customer?: number; contribution?: number;
+  driver_commission?: number; bonus?: number; merchant_fee?: number;
+  promo_platform?: number; promo_merchant?: number; promo_sponsor?: number; driver_receivable?: number;
+  refund?: number; reimburse?: number; penalty?: number; paid?: number; rows?: number;
+}
+
+/** Satu baris `payment_channel_fees` (0100) — `rpc('admin_payment_channel_fees')`. */
+export interface PaymentChannelFee {
+  channel: string; provider: string; label: string | null;
+  fee_pct: number; fee_fixed: number; ppn_included: boolean; ppn_pct: number;
+  hold_days: number; hold_days_by_bank: Record<string, number>; min_auto_disburse: number;
+  source: string | null; notes: string | null; active: boolean; updated_at: string; updated_by: string | null;
+}
+
+export type AdUnit = 'per_day' | 'per_week' | 'per_order';
+export type AdPlacement = 'featured_home' | 'boost_nearby' | 'banner_category';
+export type MerchantAdStatus = 'draft' | 'pending_payment' | 'active' | 'expired' | 'cancelled';
+/** Satu baris `ad_products` (0101). */
+export interface AdProduct { code: string; name: string; description: string | null; unit: AdUnit; price: number; placement: AdPlacement; active: boolean; updated_at: string; updated_by: string | null }
+/** Satu butir `rpc('admin_merchant_ads', { p_status })` (0101). */
+export interface AdminMerchantAd {
+  id: string; merchant_id: string; merchant_name: string; owner_id: string | null;
+  product_code: string; product_name: string; placement: AdPlacement; unit: AdUnit;
+  starts_at: string; ends_at: string; price_paid: number; refunded: number;
+  status: MerchantAdStatus; paid_via: string | null; created_at: string; note: string | null; is_live: boolean;
+}
+
+export type CityCostCategory = 'tim' | 'akuisisi' | 'kantor' | 'legal' | 'teknologi' | 'lainnya' | 'variable_ops';
+/** Satu baris `by_city` dari laporan v2 (0103) — juga `admin_city_fixed_costs().ebitda`. */
+export interface SkemaCityRow { city_id: string | null; city: string; orders: number; gmv_net: number; revenue: number; contribution: number; fixed_costs: number; ebitda_city: number; take_rate_pct: number }
+/** `rpc('admin_city_fixed_costs', { p_month })` (0102, diperluas 0103). */
+export interface AdminCityFixedCosts {
+  month: string;
+  rows: { id: string; city_id: string; city: string; category: CityCostCategory; amount: number; note: string | null; updated_at: string }[];
+  by_city: { city_id: string; city: string; fixed: number; variable_ops: number; total: number }[];
+  total_fixed: number; total_variable_ops: number;
+  ebitda: SkemaCityRow[] | null;
+  summary: { contribution_total: number | null; fixed_costs_total: number | null; ebitda: number | null } | null;
+}
+
+/** Satu hari `v_reconciliation_daily` (0102). */
+export interface ReconciliationDay {
+  day: string; payments_count: number; order_payments: number; payments_settled: number; gross_customer_digital: number;
+  topups_credited: number; late_payment_refunds: number; pg_fee: number; pg_fee_ppn: number; pg_fee_total: number;
+  net_settlement: number; held_amount: number; diff: number;
+}
+/** Satu butir penarikan approved yang belum settled (0102). */
+export interface UnsettledPayout { id: string; user_id: string; name: string | null; amount: number; bank_name: string; bank_account: string; account_name: string; auto: boolean | null; approved_at: string; created_at: string }
+/** `rpc('admin_reconciliation', { p_from, p_to })` (0102). */
+export interface AdminReconciliation {
+  from: string; to: string; days: ReconciliationDay[];
+  totals: { payments_settled: number; gross_customer_digital: number; topups_credited: number; late_payment_refunds: number; pg_fee_total: number; net_settlement: number; held_amount: number; diff: number; abs_diff: number; days_with_diff: number };
+  payouts: {
+    sla_hours: number;
+    approved_unsettled: { count: number; amount: number; overdue: number; items: UnsettledPayout[] };
+    settled: { count: number; amount: number; on_time: number };
+    approved_in_range: number;
+  };
+  labels: Record<string, string>;
+}
+
+export type GateStatus = 'pass' | 'fail' | 'no_data';
+export type NumberLabelKind = 'FAKTA SUMBER' | 'ASUMSI' | 'HASIL PILOT';
+export type SkemaGate = { status: GateStatus } & Record<string, unknown>;
+/** `rpc('admin_exec_report_v2', { p_from, p_to, p_filters })` (0103). */
+export interface SkemaReport {
+  generated_at: string; from: string; to: string; level: string;
+  filters: { service: string[] | null; city_id: string[] | null; merchant_cohort: string; payment_method: string | null; cash_digital: string; promo_owner: string | null };
+  definitions: Record<string, string>;
+  summary: {
+    orders: number; gmv_net: number;
+    platform_revenue: { merchant_fee: number; customer_platform_fee: number; driver_commission: number; service_fee_platform: number; ads: number; other: number; total: number };
+    promo: { platform: number; merchant: number; sponsor: number; total: number };
+    revenue_net: number; take_rate_net_pct: number; take_rate_target_pct: number; incentives_total: number;
+    pg_fee_total: number; pg_fee_platform: number; pg_fee_customer: number; pg_fee_topup: number;
+    payout_fee_total: number; payouts_settled: number; refund_total: number; refund_pg_cost: number; variable_ops_total: number;
+    contribution_total: number; contribution_per_order: number; fixed_costs_total: number; ebitda: number; legacy_units: number;
+  };
+  by_city: SkemaCityRow[];
+  by_service: { service: ServiceType; orders: number; gmv_net: number; revenue: number; contribution: number; pg_fee: number; take_rate_pct: number }[];
+  by_payment: { channel: string; label: string; orders: number; gmv_net: number; revenue: number; pg_fee: number; pg_fee_platform: number; contribution: number }[];
+  by_month: { month: string; orders: number; gmv_net: number; revenue: number; contribution: number; fixed_costs: number; ebitda: number; take_rate_pct: number }[];
+  cohort: { cohort: string; merchants: number; orders: number; gmv_net: number; revenue: number }[];
+  weeks: { week: string; from: string; orders: number; contribution: number }[];
+  /** Tiap gerbang = objek {status, …angka}; ditambah `scale_up_ready` (boolean). */
+  gates: Record<string, SkemaGate | boolean>;
+  labels: Record<string, { value?: number; label: NumberLabelKind; note?: string }>;
+}
