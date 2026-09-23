@@ -1240,6 +1240,7 @@ begin
   exception when others then log := log || 'S37 BUG batas komisi: ' || sqlerrm || E'\n'; end;
 
   -- ===== S38 QC UANG — identitas bagi hasil tiap layanan (bayar AntarPay/dompet) =====
+  -- Sejak 0099 (skema bisnis v2): pendapatan AKHIR driver dibaca dari orders.driver_earning_final (driver_earning = dasar ongkir−komisi, tidak ditimpa lagi).
   -- Aturan uji: total yang dipotong dari pelanggan HARUS persis = kredit driver + kredit merchant + sisa platform,
   -- dan sisa platform tidak boleh negatif. Semua angka nyata dicetak agar bisa diperiksa manual.
   begin
@@ -1283,9 +1284,9 @@ begin
       select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
       plat := o.total - (dr1 - dr0);
       log := log || format('S38a %s ride_motor dompet %s: total=%s | pelanggan %s→%s (Δ%s, harus -%s) | driver Δ%s (harus %s) | platform=%s | komisi dasar %s%% dari fare %s → driver_awal %s (batas Perpres %s%%)',
-        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning and plat >= 0
+        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning_final and plat >= 0
                and de0 = o.fare_delivery - floor(o.fare_delivery * komisi / 100.0) and komisi <= commission_cap_two_wheel() then 'OK' else 'BUG' end,
-        o.code, o.total, c0, c1, c1 - c0, o.total, dr1 - dr0, o.driver_earning, plat, komisi, o.fare_delivery, de0, commission_cap_two_wheel()) || E'\n';
+        o.code, o.total, c0, c1, c1 - c0, o.total, dr1 - dr0, o.driver_earning_final, plat, komisi, o.fare_delivery, de0, commission_cap_two_wheel()) || E'\n';
 
       -- (b) AntarRide mobil
       perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
@@ -1302,8 +1303,8 @@ begin
       select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv2;
       plat := o.total - (dr1 - dr0);
       log := log || format('S38b %s ride_car dompet %s: total=%s pelanggan Δ%s (harus -%s) driver Δ%s (harus %s) platform=%s (fare=%s biaya jasa aplikasi=%s)',
-        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning and plat = o.total - o.driver_earning and plat >= 0 then 'OK' else 'BUG' end,
-        o.code, o.total, c1 - c0, o.total, dr1 - dr0, o.driver_earning, plat, o.fare_delivery, o.platform_fee) || E'\n';
+        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning_final and plat = o.total - o.driver_earning_final and plat >= 0 then 'OK' else 'BUG' end,
+        o.code, o.total, c1 - c0, o.total, dr1 - dr0, o.driver_earning_final, plat, o.fare_delivery, o.platform_fee) || E'\n';
 
       -- (c) AntarFood: pelanggan = driver + merchant + platform
       perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
@@ -1322,9 +1323,9 @@ begin
       select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv; select balance into mo1 from wallets where user_id = mown;
       plat := o.total - (dr1 - dr0) - (mo1 - mo0);
       log := log || format('S38c %s food dompet %s: total=%s (ongkir %s + jasa %s + makanan %s) | pelanggan Δ%s | driver Δ%s (harus %s) | merchant Δ%s (harus %s = %s - komisi merchant) | platform=%s',
-        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning and mo1 - mo0 = o.merchant_earning and plat >= 0
+        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning_final and mo1 - mo0 = o.merchant_earning and plat >= 0
                and o.total = (dr1 - dr0) + (mo1 - mo0) + plat then 'OK' else 'BUG' end,
-        o.code, o.total, o.fare_delivery, o.platform_fee, o.items_subtotal, c1 - c0, dr1 - dr0, o.driver_earning, mo1 - mo0, o.merchant_earning, o.items_subtotal, plat) || E'\n';
+        o.code, o.total, o.fare_delivery, o.platform_fee, o.items_subtotal, c1 - c0, dr1 - dr0, o.driver_earning_final, mo1 - mo0, o.merchant_earning, o.items_subtotal, plat) || E'\n';
 
       -- (d) AntarSend dalam kota
       perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
@@ -1341,8 +1342,8 @@ begin
       select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
       plat := o.total - (dr1 - dr0);
       log := log || format('S38d %s send dompet %s: total=%s pelanggan Δ%s driver Δ%s (harus %s) platform=%s',
-        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning and plat >= 0 then 'OK' else 'BUG' end,
-        o.code, o.total, c1 - c0, dr1 - dr0, o.driver_earning, plat) || E'\n';
+        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning_final and plat >= 0 then 'OK' else 'BUG' end,
+        o.code, o.total, c1 - c0, dr1 - dr0, o.driver_earning_final, plat) || E'\n';
 
       -- (e) AntarBox (driver box + helper)
       perform set_config('request.jwt.claims', json_build_object('sub', dbox, 'role', 'authenticated')::text, true);
@@ -1359,8 +1360,8 @@ begin
       select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = dbox;
       plat := o.total - (dr1 - dr0);
       log := log || format('S38e %s box dompet %s: total=%s (fare %s termasuk 2 helper) pelanggan Δ%s driver Δ%s (harus %s) platform=%s',
-        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning and plat >= 0 then 'OK' else 'BUG' end,
-        o.code, o.total, o.fare_delivery, c1 - c0, dr1 - dr0, o.driver_earning, plat) || E'\n';
+        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning_final and plat >= 0 then 'OK' else 'BUG' end,
+        o.code, o.total, o.fare_delivery, c1 - c0, dr1 - dr0, o.driver_earning_final, plat) || E'\n';
 
       -- (f) AntarShop: driver harus menerima penggantian belanja + jasa belanja
       perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
@@ -1377,9 +1378,9 @@ begin
       select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
       plat := o.total - (dr1 - dr0);
       log := log || format('S38f %s shop dompet %s: anggaran=%s belanja riil=%s jasa belanja=%s (bagian driver %s) total=%s | pelanggan Δ%s (harus -%s) | driver Δ%s (harus %s = pendapatan %s + ganti belanja %s) | platform=%s',
-        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning + o.items_subtotal and plat >= 0 then 'OK' else 'BUG' end,
+        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning_final + o.items_subtotal and plat >= 0 then 'OK' else 'BUG' end,
         o.code, o.est_budget, o.items_subtotal, o.service_fee, o.driver_service_share, o.total, c1 - c0, o.total,
-        dr1 - dr0, o.driver_earning + o.items_subtotal, o.driver_earning, o.items_subtotal, plat) || E'\n';
+        dr1 - dr0, o.driver_earning_final + o.items_subtotal, o.driver_earning_final, o.items_subtotal, plat) || E'\n';
 
       -- (g) AntarMarket
       perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
@@ -1396,8 +1397,8 @@ begin
       select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
       plat := o.total - (dr1 - dr0);
       log := log || format('S38g %s market dompet %s: belanja riil=%s jasa=%s total=%s pelanggan Δ%s driver Δ%s (harus %s) platform=%s',
-        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning + o.items_subtotal and plat >= 0 then 'OK' else 'BUG' end,
-        o.code, o.items_subtotal, o.service_fee, o.total, c1 - c0, dr1 - dr0, o.driver_earning + o.items_subtotal, plat) || E'\n';
+        case when c1 - c0 = -o.total and dr1 - dr0 = o.driver_earning_final + o.items_subtotal and plat >= 0 then 'OK' else 'BUG' end,
+        o.code, o.items_subtotal, o.service_fee, o.total, c1 - c0, dr1 - dr0, o.driver_earning_final + o.items_subtotal, plat) || E'\n';
     end;
   exception when others then log := log || 'S38 BUG identitas bagi hasil dompet: ' || sqlerrm || E'\n'; end;
 
@@ -1420,8 +1421,8 @@ begin
       select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
       sisa := o.total + (dr1 - dr0);
       log := log || format('S39a %s ride_motor tunai %s: pelanggan bayar tunai %s (saldo pelanggan Δ%s harus 0) | potongan wallet driver Δ%s | sisa di tangan driver=%s (harus = pendapatan %s)',
-        case when c1 = c0 and sisa = o.driver_earning then 'OK' else 'BUG' end,
-        o.code, o.total, c1 - c0, dr1 - dr0, sisa, o.driver_earning) || E'\n';
+        case when c1 = c0 and sisa = o.driver_earning_final then 'OK' else 'BUG' end,
+        o.code, o.total, c1 - c0, dr1 - dr0, sisa, o.driver_earning_final) || E'\n';
 
       perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
       select balance into dr0 from wallets where user_id = drv;
@@ -1435,7 +1436,7 @@ begin
       select balance into dr1 from wallets where user_id = drv;
       sisa := o.total + (dr1 - dr0);
       log := log || format('S39b %s send tunai %s: tunai %s potongan wallet Δ%s sisa=%s (harus %s)',
-        case when sisa = o.driver_earning then 'OK' else 'BUG' end, o.code, o.total, dr1 - dr0, sisa, o.driver_earning) || E'\n';
+        case when sisa = o.driver_earning_final then 'OK' else 'BUG' end, o.code, o.total, dr1 - dr0, sisa, o.driver_earning_final) || E'\n';
 
       -- (c) AntarShop tunai: driver menalangi belanja, harus balik modal persis
       perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
@@ -1452,7 +1453,7 @@ begin
       select balance into dr1 from wallets where user_id = drv;
       sisa := o.total - o.items_subtotal + (dr1 - dr0);
       log := log || format('S39c %s shop tunai %s: tunai diterima %s - modal belanja %s + potongan wallet %s = %s (harus = pendapatan %s)',
-        case when sisa = o.driver_earning then 'OK' else 'BUG' end, o.code, o.total, o.items_subtotal, dr1 - dr0, sisa, o.driver_earning) || E'\n';
+        case when sisa = o.driver_earning_final then 'OK' else 'BUG' end, o.code, o.total, o.items_subtotal, dr1 - dr0, sisa, o.driver_earning_final) || E'\n';
     end;
   exception when others then log := log || 'S39 BUG order tunai: ' || sqlerrm || E'\n'; end;
 
@@ -1479,9 +1480,9 @@ begin
       select balance into dr1 from wallets where user_id = drv;
       sisa := o.total + (dr1 - dr0);
       log := log || format('S40 %s promo pada order TUNAI %s: diskon=%s total tunai=%s potongan platform=%s sisa driver=%s (harus %s). Selisih=%s → %s',
-        case when sisa = o.driver_earning then 'OK' else 'BUG' end, o.code, o.discount, o.total, dr1 - dr0, sisa, o.driver_earning,
-        o.driver_earning - sisa,
-        case when sisa = o.driver_earning then 'diskon ditanggung platform' else 'diskon dipotong dari pendapatan driver' end) || E'\n';
+        case when sisa = o.driver_earning_final then 'OK' else 'BUG' end, o.code, o.discount, o.total, dr1 - dr0, sisa, o.driver_earning_final,
+        o.driver_earning_final - sisa,
+        case when sisa = o.driver_earning_final then 'diskon ditanggung platform' else 'diskon dipotong dari pendapatan driver' end) || E'\n';
     end;
   exception when others then log := log || 'S40 BUG promo tunai: ' || sqlerrm || E'\n'; end;
 
@@ -1504,8 +1505,8 @@ begin
       select balance into dr1 from wallets where user_id = drv;
       sisa := o.total + (dr1 - dr0);
       log := log || format('S41 %s send antar kota TUNAI %s: ongkir kota=%s + jasa=%s + ongkir antar kota=%s → tunai %s | potongan platform=%s | sisa driver=%s (harus %s) | selisih=%s',
-        case when sisa = o.driver_earning then 'OK' else 'BUG' end, o.code, o.fare_delivery, o.platform_fee, o.intercity_fare, o.total,
-        dr1 - dr0, sisa, o.driver_earning, sisa - o.driver_earning) || E'\n';
+        case when sisa = o.driver_earning_final then 'OK' else 'BUG' end, o.code, o.fare_delivery, o.platform_fee, o.intercity_fare, o.total,
+        dr1 - dr0, sisa, o.driver_earning_final, sisa - o.driver_earning_final) || E'\n';
       log := log || format('S41b catatan: ongkir antar kota %s dipakai membayar mitra travel/gudang di sisi platform; bila tidak ditagih ke driver order tunai, platform membayar tanpa pernah menerima.', o.intercity_fare) || E'\n';
     end;
   exception when others then log := log || 'S41 BUG send antar kota tunai: ' || sqlerrm || E'\n'; end;
@@ -1530,8 +1531,8 @@ begin
       select balance into dr1 from wallets where user_id = drv; select balance into mo1 from wallets where user_id = mown;
       sisa := o.total - o.merchant_earning + (dr1 - dr0);
       log := log || format('S42 %s food TUNAI %s: tunai %s (makanan %s) | driver bayar merchant tunai %s | potongan platform=%s | sisa driver=%s (harus %s) | saldo merchant Δ%s (tunai: wajar 0)',
-        case when sisa = o.driver_earning then 'OK' else 'BUG' end, o.code, o.total, o.items_subtotal, o.merchant_earning,
-        dr1 - dr0, sisa, o.driver_earning, mo1 - mo0) || E'\n';
+        case when sisa = o.driver_earning_final then 'OK' else 'BUG' end, o.code, o.total, o.items_subtotal, o.merchant_earning,
+        dr1 - dr0, sisa, o.driver_earning_final, mo1 - mo0) || E'\n';
     end;
   exception when others then log := log || 'S42 BUG food tunai: ' || sqlerrm || E'\n'; end;
 
@@ -2137,8 +2138,8 @@ begin
       o := add_tip(o.id, 7000);
       select balance into c1 from wallets where user_id = cust; select balance into dr1 from wallets where user_id = drv;
       log := log || format('S51a %s tip Rp7.000 setelah selesai: pelanggan Δ%s (harus -%s) driver Δ%s (harus %s) tip di order=%s pendapatan driver=%s',
-        case when c1 - c0 = -(tot + 7000) and dr1 - dr0 = o.driver_earning and o.tip = 7000 then 'OK' else 'BUG' end,
-        c1 - c0, tot + 7000, dr1 - dr0, o.driver_earning, o.tip, o.driver_earning) || E'\n';
+        case when c1 - c0 = -(tot + 7000) and dr1 - dr0 = o.driver_earning_final and o.tip = 7000 then 'OK' else 'BUG' end,
+        c1 - c0, tot + 7000, dr1 - dr0, o.driver_earning_final, o.tip, o.driver_earning_final) || E'\n';
 
       -- (b) tip melebihi saldo harus ditolak, tidak boleh membuat saldo minus
       select balance into c0 from wallets where user_id = cust;
@@ -2204,7 +2205,7 @@ begin
       o := driver_update_order_status(o.id, 'in_progress', v_pin); o := driver_update_order_status(o.id, 'completed', null);
       select balance into dr1 from wallets where user_id = drv;
       log := log || format('S52a %s order TUNAI dengan saldo driver Rp%s: potongan platform Rp%s membuat saldo menjadi %s (boleh minus sebagai utang deposit)',
-        case when dr1 = dr0 - (o.total - o.driver_earning) then 'OK' else 'BUG' end, dr0, o.total - o.driver_earning, dr1) || E'\n';
+        case when dr1 = dr0 - (o.total - o.driver_earning_final) then 'OK' else 'BUG' end, dr0, o.total - o.driver_earning_final, dr1) || E'\n';
 
       -- ambang -500.000: driver tidak boleh menerima order baru
       perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
