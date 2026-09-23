@@ -1,4 +1,4 @@
-import type { OrderStatus, ServiceType, MerchantOrderStatus } from './types';
+import type { Order, OrderStatus, ServiceType, MerchantOrderStatus, PromoFunder } from './types';
 
 // Nilai negatif ditulis "-Rp420.000", bukan "Rp-420.000" — bentuk kedua sulit dibaca sekilas
 // dan pernah membuat driver tidak sadar saldonya minus.
@@ -41,6 +41,7 @@ export const serviceLabel: Record<ServiceType, string> = {
 
 export function statusLabel(status: OrderStatus, service: ServiceType, merchantStatus?: MerchantOrderStatus | null): string {
   switch (status) {
+    case 'awaiting_payment': return 'Menunggu pembayaran';
     case 'scheduled': return 'Terjadwal';
     case 'searching': return service === 'food' && merchantStatus === 'pending' ? 'Menunggu merchant & driver' : 'Mencari driver';
     case 'accepted': return service === 'food' ? 'Driver menuju merchant' : service === 'shop' ? 'Driver menuju toko' : 'Driver menuju lokasi jemput';
@@ -56,7 +57,7 @@ export const merchantStatusLabel: Record<MerchantOrderStatus, string> = {
 };
 
 export const statusColor = (status: OrderStatus) =>
-  status === 'completed' ? '#1FA363' : status === 'cancelled' ? '#E5484D' : status === 'searching' ? '#D97706' : status === 'scheduled' ? '#8B5CF6' : '#2F80ED';
+  status === 'completed' ? '#1FA363' : status === 'cancelled' ? '#E5484D' : status === 'searching' || status === 'awaiting_payment' ? '#D97706' : status === 'scheduled' ? '#8B5CF6' : '#2F80ED';
 
 export const initials = (name?: string | null) =>
   (name ?? '?').split(' ').filter(Boolean).slice(0, 2).map((s) => s[0]?.toUpperCase()).join('') || '?';
@@ -79,7 +80,22 @@ export const vehicleTypeLabel: Record<string, string> = { motor: 'Motor', car: '
 export const vehicleConditionLabel: Record<string, string> = { standar: 'Standar', baik: 'Baik', sangat_baik: 'Sangat baik' };
 export const classShort = (code?: string | null) => code ? ({ motor_economy: 'Hemat', motor_standard: 'Standar', motor_ev: 'Listrik', car_economy: 'Hemat', car_standard: 'Standar', car_premium: 'Premium', car_ev: 'Listrik', car_ev_premium: 'Listrik Premium', box_pickup: 'Pick Up', box_van: 'Mobil Box' } as Record<string, string>)[code] ?? code : '';
 export const ewalletLabel: Record<string, string> = { gopay: 'GoPay', ovo: 'OVO', dana: 'DANA', shopeepay: 'ShopeePay', qris: 'QRIS', bank_transfer: 'VA Bank' };
-export const paidViaLabel = (v?: string | null) => v === 'cash' || !v ? 'Tunai' : v === 'wallet' ? 'AntarPay' : `${ewalletLabel[v] ?? v} (via AntarPay)`;
+export const paidViaLabel = (v?: string | null) => v === 'cash' || !v ? 'Tunai' : v === 'wallet' || v === 'antarpay' ? 'AntarPay' : ewalletLabel[v] ?? v;
+
+// ---- Skema Bisnis v2 (0099–0101) ----
+/** Siapa yang menanggung promo — ditampilkan di rincian harga ("ditanggung platform/merchant/sponsor"). */
+export const promoFunderLabel: Record<PromoFunder, string> = { platform: 'ditanggung platform', merchant: 'ditanggung merchant', sponsor: 'ditanggung sponsor' };
+/** Layanan yang ongkirnya 100 % hak driver (platform tidak memotong komisi dari ongkir, §0.1). */
+export const ONGKIR_FULL_DRIVER: ServiceType[] = ['food', 'send', 'shop', 'market'];
+/**
+ * Pendapatan driver yang benar untuk ditampilkan. Sejak 0099 `driver_earning` = pendapatan DASAR
+ * (ongkir − komisi) dan TIDAK ditimpa saat selesai; pendapatan akhir (tip, extras, jasa belanja, bonus)
+ * ada di `driver_earning_final`. Order lama (ledger v1) tidak punya kolom itu → `driver_earning` sudah final.
+ */
+export const driverEarningOf = (o: Pick<Order, 'status' | 'driver_earning'> & { driver_earning_final?: number | null }) =>
+  o.status === 'completed' ? o.driver_earning_final ?? o.driver_earning : o.driver_earning;
+/** Persen gaya Indonesia: 8 → "8 %", 2.5 → "2,5 %". */
+export const pctLabel = (n: number | null | undefined) => `${(Number(n) || 0).toLocaleString('id-ID', { maximumFractionDigits: 2 })} %`;
 export const formatSchedule = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('id-ID', { weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' WIB' : '');
 export const shortMonth = (ym: string) => { const [y, m] = ym.split('-'); return ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][Number(m) - 1] + ' ' + y.slice(2); };
 export const execLevelLabel: Record<string, string> = { vp: 'Vice President', ceo: 'CEO', cfo: 'CFO', shareholder: 'Pemegang Saham' };

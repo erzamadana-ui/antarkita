@@ -8,7 +8,7 @@ import { Screen, Button, Row, Badge, Input, Chip, Stepper, Avatar, Empty, Card, 
 import { PressableScale, Skeleton, Entrance, ProgressBar } from '@/components/motion';
 import { Dropdown } from '@/components/Dropdown';
 import { LocationFields } from '@/components/LocationField';
-import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
+import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, useServiceEconomics, checkoutRows, type PayChoice } from '@/components/BookingSheet';
 import { ServiceIllustration } from '@/components/ServiceArt';
 import { useCities, useTravelSearch, useMyTravelBookings, useTravelRequests } from '@/hooks/useTravel';
 import { usePayPrefs } from '@/store/payprefs';
@@ -56,7 +56,7 @@ export default function TravelScreen() {
   const [names, setNames] = useState('');
   const [method, setMethod] = useState<PayChoice>('cash');
   const payPrefs = usePayPrefs((st) => st.prefs);
-  const [promo, setPromo] = useState(''); const [discount, setDiscount] = useState(0); const [notes, setNotes] = useState('');
+  const [promo, setPromo] = useState(''); const [, setDiscount] = useState(0); const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const { bookings } = useMyTravelBookings(session?.user.id);
 
@@ -72,8 +72,11 @@ export default function TravelScreen() {
 
   const route = result?.route ?? null;
   const price = trip ? (priv ? trip.private_price : trip.seat_price * pax) : 0;
-  const fee = 5000;
-  const total = trip ? Math.max(0, price + fee - discount) : 0;
+  // §9: biaya platform travel dari service_economics('travel') (0099; travel_book membaca sumber yang sama) — bukan konstanta klien.
+  // travel_book tidak menerima kode promo, jadi rincian & total tanpa promo (kolom promo disembunyikan).
+  const { econ: travelEcon, error: econErr } = useServiceEconomics('travel');
+  const fee = travelEcon?.customer_platform_fee ?? 0;
+  const total = trip ? Math.max(0, price + fee) : 0;
   const fromCity = cities.find((c) => c.id === from), toCity = cities.find((c) => c.id === to);
 
   const book = async () => {
@@ -211,8 +214,13 @@ export default function TravelScreen() {
             </View>
             <LocationFields pickup={pickup} dropoff={null} pickupLabel="Jemput di (rumah/kantor)" dropoffLabel="—" lockDropoff accent={colors.travel} />
             <Input placeholder={`Alamat tujuan di ${toCity?.name ?? 'kota tujuan'} (diantar sampai alamat)`} icon="flag-outline" value={dropAddr} onChangeText={setDropAddr} />
-            <View style={s.group}><PriceSummary rows={[{ label: priv ? `Carter private (${trip.partner.model})` : `${pax} kursi × ${rupiah(trip.seat_price)}`, value: price }, { label: 'Biaya layanan', value: fee }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} /></View>
-            <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={price} service="ride_car" onDiscount={setDiscount} notesPlaceholder="Catatan untuk mitra travel (bawaan, jam jemput)" />
+            <View style={s.group}><PriceSummary total={total}
+              note={econErr ? `Biaya platform belum termuat (${econErr}). Total final dihitung server saat memesan.` : method === 'ewallet' ? 'AntarTravel dibayar dari saldo AntarPay; bila kurang, halaman bayar dibuka untuk kekurangannya.' : null}
+              rows={checkoutRows({
+                service: 'travel', ongkir: price, ongkirLabel: priv ? `Tarif carter private (${trip.partner.model})` : `Tarif ${pax} kursi × ${rupiah(trip.seat_price)}`,
+                ongkirHint: 'Tarif mitra AntarTravel (fee mitra sesuai kontrak)', platformFee: fee, discount: 0,
+              })} /></View>
+            <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={price} service="ride_car" onDiscount={setDiscount} hidePromo notesPlaceholder="Catatan untuk mitra travel (bawaan, jam jemput)" />
             <Text style={font.tiny}>Mobil berangkat bila minimal {trip.min_pax} penumpang terkumpul (kecuali private). Pembatalan gratis s.d. 3 jam sebelum berangkat. Penumpang dijemput di alamat masing-masing ±1 jam sebelum jadwal.</Text>
           </Animated.View>
         )}

@@ -48,7 +48,7 @@ export default function CustomerHome() {
 
   const loadExtras = async () => {
     const [{ data: m }, { data: p }, { data: f }] = await Promise.all([
-      supabase.rpc('nearby_merchants', { p_lat: location.lat, p_lng: location.lng, p_radius_km: 25 }),
+      supabase.rpc('nearby_merchants_v2', { p_lat: location.lat, p_lng: location.lng, p_radius_km: 25 }),   // 0101: boosted di atas + ad_label
       supabase.from('promos').select('*').eq('is_active', true).order('sort_order').limit(20),
       supabase.rpc('customer_frequent', { p_limit: 6 }),
     ]);
@@ -240,7 +240,7 @@ export default function CustomerHome() {
               </Row>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 16, paddingBottom: 6 }}>
                 {merchants === null ? [0, 1, 2].map((i) => <Skeleton key={i} width={170} height={230} radius={24} />) : merchants.map((m) => (
-                  <DestinationCard key={m.id} image={m.image_url} title={m.name} subtitle={`${m.distance_km} km · ${m.is_halal ? 'Halal' : 'Non-halal'}`} rating={m.rating_avg} width={170} height={230} accent={colors.food} onPress={() => router.push(`/food/${m.id}` as never)} />
+                  <DestinationCard key={m.id} image={m.image_url} title={m.name} subtitle={`${m.distance_km} km · ${m.is_halal ? 'Halal' : 'Non-halal'}`} rating={m.rating_avg} adLabel={m.ad_label ?? (m.boosted || m.featured ? 'Iklan' : null)} width={170} height={230} accent={colors.food} onPress={() => router.push(`/food/${m.id}` as never)} />
                 ))}
                 {merchants && merchants.length === 0 && <Text style={font.small}>Belum ada merchant di sekitar lokasi Anda.</Text>}
               </ScrollView>

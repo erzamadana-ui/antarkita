@@ -24,6 +24,7 @@ import { useBooking } from '@/store/booking';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors, font, radius, motion, shadow } from '@/lib/theme';
 import { statusLabel, statusColor, rupiah, serviceLabel } from '@/lib/format';
+import { channelLabel } from '@/store/payprefs';
 import { serviceDef } from '@/lib/services';
 import type { Order, OrderStatus } from '@/lib/types';
 
@@ -100,8 +101,11 @@ export default function OrderTracking() {
   if (!order) return <View style={{ flex: 1 }}><AmbientBackground /><SafeAreaView style={{ flex: 1 }}><Empty icon="alert-circle-outline" title="Pesanan tidak ditemukan" subtitle="Pesanan tidak ada atau Anda tidak memiliki akses." action={<Button title="Kembali" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />} /></SafeAreaView></View>;
   const def = serviceDef(order.service);
   const active = !['completed', 'cancelled'].includes(order.status);
-  const canCancel = ['scheduled', 'searching', 'accepted', 'arrived'].includes(order.status);
+  const canCancel = ['awaiting_payment', 'scheduled', 'searching', 'accepted', 'arrived'].includes(order.status);
   const scheduled = order.status === 'scheduled';
+  // 0100: pesanan lewat saluran gateway menunggu dibayar (Midtrans Snap per pesanan) sebelum driver dicarikan
+  const awaitingPay = order.status === 'awaiting_payment';
+  const payChannel = order.pg_channel ?? order.paid_via ?? '';
   const sc = statusColor(order.status);
   const searching = order.status === 'searching';
   // AntarNow: order masih ditahan khusus untuk driver berkode (masa tahan belum habis)
@@ -135,6 +139,14 @@ export default function OrderTracking() {
       initiallyExpanded={!active}
     >
       <Animated.View layout={LinearTransition.springify().stiffness(280).damping(18)} style={{ gap: 14 }}>
+        {awaitingPay && (
+          <Animated.View entering={FadeIn.duration(motion.slow)} exiting={FadeOut.duration(motion.fast)} style={s.radarBox}>
+            <View style={s.iconTint}><Ionicons name="card-outline" size={32} color={colors.warning} /></View>
+            <Text style={[font.h3, { marginTop: 6 }]}>Menunggu pembayaran</Text>
+            <Text style={[font.small, { textAlign: 'center' }]}>Selesaikan pembayaran {rupiah(order.total)} via {channelLabel(payChannel)}. Driver dicarikan otomatis setelah pembayaran diterima; pesanan batal otomatis bila tidak dibayar dalam batas waktu.</Text>
+            <Button title="Bayar sekarang" icon="card-outline" style={{ alignSelf: 'stretch', marginTop: 8 }} onPress={() => router.push({ pathname: '/pay/gateway', params: { purpose: 'order', order_id: order.id, method: payChannel } } as never)} />
+          </Animated.View>
+        )}
         {scheduled && (
           <Animated.View entering={FadeIn.duration(motion.slow)} exiting={FadeOut.duration(motion.fast)} style={s.radarBox}>
             <View style={s.iconTint}><Ionicons name="calendar-outline" size={32} color={colors.primary} /></View>
@@ -222,6 +234,7 @@ export default function OrderTracking() {
 
 function subtitle(order: Order) {
   switch (order.status) {
+    case 'awaiting_payment': return 'Selesaikan pembayaran agar driver dicarikan';
     case 'scheduled': return order.scheduled_at ? `Jemput ${new Date(order.scheduled_at).toLocaleString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} WIB` : 'Booking terjadwal';
     case 'searching': return 'Kami sedang mencarikan driver terdekat';
     case 'accepted': return 'Driver sedang menuju lokasi';

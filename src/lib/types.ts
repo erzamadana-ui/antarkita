@@ -5,7 +5,7 @@ export type ServiceType = 'ride_motor' | 'ride_car' | 'food' | 'send' | 'shop' |
 export type Locale = 'id' | 'en' | 'zh' | 'ar';
 export interface OrderExtra { id: string; kind: 'parking' | 'toll' | 'waiting' | 'other'; amount: number; note?: string | null; status: 'pending' | 'approved' | 'rejected'; created_at: string; responded_at?: string }
 export interface ShoppingItem { name: string; qty: number; note?: string; product_id?: string; item_id?: string; unit?: string; price?: number; ref_price?: number }
-export type OrderStatus = 'scheduled' | 'searching' | 'accepted' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
+export type OrderStatus = 'awaiting_payment' | 'scheduled' | 'searching' | 'accepted' | 'arrived' | 'in_progress' | 'completed' | 'cancelled';
 export type MerchantOrderStatus = 'pending' | 'accepted' | 'ready' | 'rejected';
 export type PaymentMethod = 'cash' | 'wallet';
 
@@ -44,6 +44,8 @@ export interface Merchant {
   lat: number | null; lng: number | null; image_url: string | null; is_open: boolean; status: ApprovalStatus;
   rating_avg: number; rating_count: number; prep_minutes: number; opening_hours: string | null; created_at: string;
   distance_km?: number; delivery_fee?: number; is_halal?: boolean; halal_verified?: boolean;
+  /** nearby_merchants_v2 (0101): iklan boost/featured yang sedang tayang — WAJIB diberi label "Iklan" di UI. */
+  boosted?: boolean; featured?: boolean; ad_label?: string | null;
 }
 export interface MerchantDocuments {
   merchant_id: string; owner_phone: string | null; npwp_no: string | null; npwp_url: string | null; license_no: string | null; license_url: string | null;
@@ -76,6 +78,10 @@ export interface Order {
   shop_store_id?: string | null; market_id?: string | null; shop_vehicle?: 'motor' | 'car'; service_fee?: number; driver_service_share?: number; actual_items?: ShoppingItem[] | null;
   // tahap 9: titipan AntarSend antar kota yang dibawa mitra travel
   travel_partner_id?: string | null;
+  // Skema Bisnis v2 (0099/0100): snapshot aturan, pemilik promo, biaya payment gateway, pendapatan akhir driver
+  driver_earning_final?: number | null; ledger_version?: number | null; promo_funded_by?: PromoFunder | null;
+  driver_commission_pct_snap?: number | null; merchant_fee_pct_snap?: number | null;
+  pg_channel?: string | null; pg_fee?: number | null; pg_fee_ppn?: number | null; pg_fee_borne_by?: PgFeePolicy | null;
   // tahap 11 (0030): AntarNow — driver tujuan langsung dari kode driver (null = pencarian normal)
   preferred_driver_id?: string | null;
   cancel_reason: string | null; created_at: string; accepted_at: string | null; arrived_at: string | null; started_at: string | null;
@@ -85,7 +91,7 @@ export interface Order {
 }
 
 export interface ServiceLimit { ok: boolean; max_km: number | null; same_city_required: boolean; same_city: boolean; message?: string | null }
-export interface FareEstimate { distance_km: number; straight_km: number; fare: number; platform_fee: number; total: number; duration_min: number; limit?: ServiceLimit | null; service_enabled?: boolean; demand?: { multiplier: number; demand: number; supply: number } | null; session?: { name: string; level: 'low' | 'middle' | 'high'; multiplier: number } | null }
+export interface FareEstimate { distance_km: number; straight_km: number; fare: number; platform_fee: number; /** 0099: biaya platform pelanggan dari service_economics (= platform_fee). */ customer_platform_fee?: number; total: number; duration_min: number; limit?: ServiceLimit | null; service_enabled?: boolean; demand?: { multiplier: number; demand: number; supply: number } | null; session?: { name: string; level: 'low' | 'middle' | 'high'; multiplier: number } | null }
 
 export interface Pricing {
   service: ServiceType; base_fare: number; per_km: number; per_min: number; min_fare: number; platform_fee: number;
@@ -489,3 +495,45 @@ export interface SkemaReport {
   gates: Record<string, SkemaGate | boolean>;
   labels: Record<string, { value?: number; label: NumberLabelKind; note?: string }>;
 }
+
+/* ───────────────── Skema Bisnis v2 — bentuk data RPC aplikasi Pelanggan & Mitra ───────────────── */
+
+/** `rpc('service_economics_public', { p_service })` (0098). `pg_fee_policy` belum dibuka server — opsional. */
+export interface ServiceEconomicsPublic {
+  service: ServiceType; customer_platform_fee: number; service_fee_pct: number; service_fee_min: number; driver_commission_pct: number;
+  pg_fee_policy?: PgFeePolicy | null;
+}
+
+/** `order_payment_prepare` (0100) — juga `order` pada balasan edge function midtrans-create (purpose='order'). */
+export interface OrderPaymentQuote {
+  order_id: string; code: string; service: ServiceType; channel: string; channel_label: string; gross: number;
+  pg_fee: number; pg_fee_ppn: number; pg_fee_borne_by: PgFeePolicy | null; customer_payment_fee: number; expires_at: string; timeout_min: number;
+}
+
+/** `rpc('driver_order_breakdown', { p_order })` (0099). `phase` null = order lama (sebelum buku besar). */
+export interface DriverOrderBreakdown {
+  order_id: string; code: string; service: ServiceType; status: OrderStatus; phase: LedgerPhase | null; ledger_version: number | null;
+  payment_method: PaymentMethod; paid_via?: string | null;
+  ongkir: number; komisi_pct: number | null; komisi: number | null; tip: number; extras: number; service_share: number | null; bonus: number | null;
+  bersih: number; penggantian_belanja?: number; receivable: number | null; memegang_tunai: number; setor_merchant_tunai?: number; keterangan?: string;
+}
+
+/** `rpc('merchant_order_breakdown', { p_order })` (0099). */
+export interface MerchantOrderBreakdown {
+  order_id: string; code: string; status: OrderStatus; phase: LedgerPhase | null; ledger_version: number | null;
+  nilai_pesanan: number; fee_pct: number | null; fee: number; promo_merchant: number; diterima: number; payment_method: PaymentMethod; keterangan?: string;
+}
+
+/** Satu butir `merchant_my_ads().ads` (0101). */
+export interface MerchantAdRow {
+  id: string; merchant_id: string; merchant_name: string; product_code: string; product_name: string; placement: AdPlacement;
+  starts_at: string; ends_at: string; price_paid: number; refunded: number; status: MerchantAdStatus; paid_via: string | null; is_live: boolean;
+}
+/** `rpc('merchant_my_ads')` (0101). */
+export interface MerchantMyAds {
+  ads: MerchantAdRow[];
+  products: { code: string; name: string; description: string | null; unit: AdUnit; price: number; placement: AdPlacement }[];
+  balance: number;
+}
+/** `rpc('ad_price', { p_product, p_days })` (0101). */
+export interface AdPriceQuote { product: string; name: string; unit: AdUnit; units: number; days: number; unit_price: number; price: number; placement: AdPlacement; active: boolean }

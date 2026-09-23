@@ -5,7 +5,7 @@ import { Entrance, PressableScale } from '@/components/motion';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Card, Row, Stepper, Button, Badge, Empty, toast } from '@/components/ui';
-import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
+import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, goAfterOrder, useCheckoutFees, checkoutRows, checkoutNote, type PayChoice } from '@/components/BookingSheet';
 import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
 import { CityNotice, cityBlockedLabel } from '@/components/city';
@@ -21,7 +21,7 @@ import { rpc } from '@/lib/supabase';
 import { createOrder } from '@/lib/orders';
 import { colors, font, radius, glass } from '@/lib/theme';
 import { rupiah, km, minutes } from '@/lib/format';
-import type { FareEstimate, PaymentMethod } from '@/lib/types';
+import type { FareEstimate, PaymentMethod, PromoFunder } from '@/lib/types';
 
 export default function Checkout() {
   const router = useRouter();
@@ -45,6 +45,7 @@ export default function Checkout() {
   const payPrefs = usePayPrefs((st) => st.prefs);
   const [promo, setPromo] = useState('');
   const [discount, setDiscount] = useState(0);
+  const [promoFunder, setPromoFunder] = useState<PromoFunder | null>(null);
   const [notes, setNotes] = useState('');
   const m = cart.merchant;
   const subtotal = cart.subtotal();
@@ -74,10 +75,14 @@ export default function Checkout() {
 
   // AntarNow (Tahap 11): kode driver yang sudah divalidasi & cocok dengan layanan ini (null bila tidak dipakai)
   const driverCode = useAntarNowCode('food');
+  // §9: biaya platform dari estimate_fare (customer_platform_fee, 0099) — bukan konstanta klien
+  const platformFee = fare ? fare.customer_platform_fee ?? fare.platform_fee : 0;
+  const baseTotal = fare ? Math.max(0, subtotal + fare.fare + platformFee - discount) : subtotal;
+  const fees = useCheckoutFees({ service: 'food', method, ewallet: payPrefs?.ewallet, amount: fare ? baseTotal : 0 });
   if (!m || cart.lines.length === 0) {
     return <Screen title="Keranjang" back><Empty icon="cart-outline" title="Keranjang kosong" subtitle="Pilih menu dari merchant AntarFood." action={<Button title="Cari makanan" onPress={() => router.replace('/food')} />} /></Screen>;
   }
-  const total = fare ? Math.max(0, subtotal + fare.fare + fare.platform_fee - discount) : subtotal;
+  const total = fare ? baseTotal + fees.payFee : subtotal;
   const blocked = limitBlocked(fare?.limit);
   const serviceOff = fare?.service_enabled === false || !isEnabled('food');
   // Estimasi gagal (bukan sedang menghitung): tombol utama berubah jadi tombol coba-ulang.
@@ -99,7 +104,7 @@ export default function Checkout() {
         driver_code: driverCode,
       });
       cart.clear(); await refreshWallet(); useBooking.getState().reset();
-      router.replace(`/order/${o.id}` as never);
+      goAfterOrder(router, o);
     } catch (e) { if (!handleShortfall(e, router, payPrefs?.ewallet)) toast.error((e as Error).message); }
   };
 
@@ -152,7 +157,11 @@ export default function Checkout() {
 
         <Entrance index={2}><Card>
           <Text style={[font.label, { marginBottom: 10 }]}>Rincian pembayaran</Text>
-          <PriceSummary rows={[{ label: 'Harga makanan', value: subtotal }, { label: `Ongkos kirim (${fare ? km(fare.distance_km) : '…'})`, value: fare?.fare ?? 0 }, { label: 'Biaya layanan', value: fare?.platform_fee ?? 0 }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />
+          <PriceSummary total={total} note={checkoutNote(fees.pay, fees.econError)} rows={checkoutRows({
+            service: 'food', econ: fees.econ, ongkir: fare?.fare ?? 0, ongkirLabel: `Ongkir (${fare ? km(fare.distance_km) : '…'})`,
+            items: subtotal, itemsLabel: 'Nilai barang (makanan)', itemsHint: `Harga menu ${m.name}`,
+            platformFee, pay: fees.pay, discount, promoCode: promo || null, promoFunder, hasMerchant: true,
+          })} />
           <LimitInfo limit={fare?.limit} service="food" style={{ marginTop: 8 }} />
           {fareFailed && (
             <View style={s.fareErr}>
@@ -165,7 +174,7 @@ export default function Checkout() {
 
         <Entrance index={3}><Card>
           <AntarNowSection service="food" accent={colors.food} />
-          <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={subtotal + (fare?.fare ?? 0)} service="food" onDiscount={setDiscount} notesPlaceholder="Catatan untuk driver (mis. patokan rumah)" />
+          <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={subtotal + (fare?.fare ?? 0)} service="food" onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} notesPlaceholder="Catatan untuk driver (mis. patokan rumah)" />
         </Card></Entrance>
       </View>
     </Screen>

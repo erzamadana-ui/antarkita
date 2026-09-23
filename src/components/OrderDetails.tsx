@@ -9,8 +9,10 @@ import { CallButton } from '@/components/call/IncomingCall';
 import { ModerationMenu } from '@/components/moderation';
 import type { CallPeer } from '@/lib/call';
 import { PriceSummary } from '@/components/BookingSheet';
+import { DriverEarningBreakdown } from '@/components/EarningBreakdown';
+import { channelLabel } from '@/store/payprefs';
 import { colors, font, radius, glass, shadow } from '@/lib/theme';
-import { rupiah, km, formatTime, merchantStatusLabel, phoneDisplay, phoneMasked, extraKindLabel } from '@/lib/format';
+import { rupiah, km, formatTime, merchantStatusLabel, phoneDisplay, phoneMasked, extraKindLabel, promoFunderLabel, paidViaLabel } from '@/lib/format';
 import type { Driver, Order, OrderEvent, Profile, ShoppingItem } from '@/lib/types';
 
 /** Kartu driver (untuk customer) atau kartu customer (untuk driver). */
@@ -51,7 +53,7 @@ export function RouteBlock({ order }: { order: Order }) {
         <View style={[s.dot, { backgroundColor: colors.danger, borderRadius: 2, marginTop: 4 }]} />
         <View style={{ flex: 1 }}><Text style={font.tiny}>{order.service === 'send' ? 'Antar ke' : 'Tujuan'}</Text><Text style={s.addr}>{order.dropoff_address}</Text></View>
       </Row>
-      <Row gap={8}><Badge text={km(order.distance_km)} color={colors.info} /><Badge text={`±${order.duration_min} mnt`} color={colors.info} /><Badge text={order.payment_method === 'wallet' ? 'AntarPay' : 'Tunai'} color={colors.textSecondary} /></Row>
+      <Row gap={8}><Badge text={km(order.distance_km)} color={colors.info} /><Badge text={`±${order.duration_min} mnt`} color={colors.info} /><Badge text={order.payment_method === 'cash' ? 'Tunai' : paidViaLabel(order.paid_via ?? 'wallet')} color={colors.textSecondary} /></Row>
     </View>
   );
 }
@@ -145,13 +147,24 @@ export function ShoppingListBlock({ order }: { order: Order }) {
 }
 
 export function PriceBlock({ order, forDriver }: { order: Order; forDriver?: boolean }) {
-  if (forDriver) {
-    return (
-      <PriceSummary rows={[{ label: 'Tarif perjalanan', value: order.fare_delivery }, { label: 'Biaya tambahan disetujui', value: order.extras_total ?? 0 }, { label: 'Tip pelanggan', value: order.tip ?? 0 }, { label: 'Potongan platform', value: Math.max(0, order.fare_delivery - (order.driver_earning - (order.status === 'completed' ? (order.tip ?? 0) + (order.extras_total ?? 0) : 0))), minus: true }]} total={order.status === 'completed' ? order.driver_earning : order.driver_earning + (order.tip ?? 0) + (order.extras_total ?? 0)} />
-    );
-  }
+  // Driver: rincian dari buku besar (driver_order_breakdown, 0099) — bukan rekonstruksi dari driver_earning.
+  if (forDriver) return <DriverEarningBreakdown orderId={order.id} status={order.status} title={null} />;
+  // Pelanggan (§9): Ongkir · Nilai barang · Biaya platform · Biaya layanan · Biaya pembayaran · Promo (pemilik biaya) · Total
+  const shopping = order.service === 'shop' || order.service === 'market';
+  const payFee = order.pg_fee_borne_by === 'customer' ? (order.pg_fee ?? 0) + (order.pg_fee_ppn ?? 0) : 0;
+  const funder = order.discount > 0 ? order.promo_funded_by ?? null : null;
   return (
-    <PriceSummary rows={[{ label: order.service === 'shop' || order.service === 'market' ? 'Belanja' : 'Harga makanan', value: order.items_subtotal }, { label: 'Jasa belanja', value: order.service === 'shop' || order.service === 'market' ? (order.service_fee ?? 0) : 0 }, { label: order.service === 'food' || order.service === 'send' ? 'Ongkos kirim' : order.service === 'shop' || order.service === 'market' ? `Ongkir${order.shop_vehicle === 'car' ? ' (mobil)' : ''}` : 'Tarif perjalanan', value: order.fare_delivery }, { label: 'Biaya layanan', value: order.platform_fee }, { label: 'Biaya tambahan', value: order.extras_total ?? 0 }, { label: 'Tip driver', value: order.tip ?? 0 }, { label: `Diskon${order.promo_code ? ` (${order.promo_code})` : ''}`, value: order.discount, minus: true }]} total={order.total + (order.tip ?? 0)} />
+    <PriceSummary rows={[
+      { label: shopping ? `Ongkir${order.shop_vehicle === 'car' ? ' (mobil)' : ''}` : 'Ongkir', value: order.fare_delivery, keep: true },
+      { label: 'Ongkir antar kota', value: order.intercity_fare ?? 0 },
+      { label: order.service === 'food' ? 'Nilai barang (makanan)' : 'Nilai barang', value: order.items_subtotal },
+      { label: 'Biaya platform', value: order.platform_fee, keep: true },
+      { label: 'Biaya layanan', value: shopping ? (order.service_fee ?? 0) : 0 },
+      { label: `Biaya pembayaran${order.pg_channel ? ` ${channelLabel(order.pg_channel)}` : ''}`, value: payFee },
+      { label: 'Biaya tambahan', value: order.extras_total ?? 0 },
+      { label: 'Tip driver', value: order.tip ?? 0 },
+      { label: `Promo${order.promo_code ? ` (${order.promo_code})` : ''}`, value: order.discount, minus: true, hint: funder ? promoFunderLabel[funder] : null },
+    ]} total={order.total + (order.tip ?? 0)} />
   );
 }
 

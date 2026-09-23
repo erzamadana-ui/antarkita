@@ -109,7 +109,7 @@ export function useMyOrders(kind: 'customer' | 'driver' | 'merchant', id: string
     if (kind === 'customer') q = q.eq('customer_id', id);
     if (kind === 'driver') q = q.eq('driver_id', id);
     if (kind === 'merchant') q = q.eq('merchant_id', id);
-    if (activeOnly) q = q.in('status', ['searching', 'accepted', 'arrived', 'in_progress']);
+    if (activeOnly) q = q.in('status', ['awaiting_payment', 'searching', 'accepted', 'arrived', 'in_progress']);
     const { data } = await q;
     setOrders((data as unknown as Order[]) ?? []);
     setLoading(false);

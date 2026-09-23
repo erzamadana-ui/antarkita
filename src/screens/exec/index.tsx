@@ -2,7 +2,7 @@
 // Tata letak mengikuti sistem desain panel admin (kartu putih, tipografi berjenjang, angka tabular-nums)
 // agar terbaca profesional di layar 1024 ke atas. Bagian `pnl` (laba rugi) bersifat opsional —
 // halaman tetap berfungsi penuh bila server belum mengirimkannya.
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -20,7 +20,8 @@ import { useAuth } from '@/store/auth';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors, font, shadow, glass, motion } from '@/lib/theme';
 import { rupiah, serviceLabel, shortMonth, execLevelLabel, formatDate } from '@/lib/format';
-import type { ExecAccess, ExecReport, ReportRun, Recommendation, ServiceType } from '@/lib/types';
+import type { ExecAccess, ExecReport, ReportRun, Recommendation, ServiceType, SkemaReport } from '@/lib/types';
+import { SkemaReportView } from '@/screens/admin/_skema-report';
 
 /* ───────────────────── Bagian `pnl` (opsional, migrasi 0026) ───────────────────── */
 
@@ -67,14 +68,25 @@ export default function ExecPortal() {
   const [months, setMonths] = useState(6);
   const [report, setReport] = useState<ExecReport | null>(null);
   const [runs, setRuns] = useState<ReportRun[] | null>(null);
+  const [runsErr, setRunsErr] = useState<string | null>(null);
+  // Tab "Skema Bisnis" (0103): unit economics dari buku besar order lewat exec_report_v2 (token sesi eksekutif).
+  const [tab, setTab] = useState<'ringkasan' | 'skema'>('ringkasan');
   const { style: shake, shake: doShake } = useShake();
+  const fetchSkema = useCallback(async (from: string, to: string, filters: Record<string, unknown>) => {
+    if (!sess) throw new Error('Sesi eksekutif berakhir, masuk lagi');
+    try { return await rpc<SkemaReport>('exec_report_v2', { p_token: sess.token, p_from: from, p_to: to, p_filters: filters }); }
+    catch (e) {
+      if (String((e as Error).message).includes('EXEC_SESSION')) { SESSION = null; setSess(null); toast.error('Sesi eksekutif berakhir, masuk lagi'); }
+      throw e;
+    }
+  }, [sess]);
 
   useEffect(() => { if (session) supabase.from('exec_access').select('user_id, level, active, last_login_at').eq('user_id', session.user.id).maybeSingle().then(({ data }) => setAccess((data as ExecAccess) ?? null)); }, [session]);
   useEffect(() => {
     if (!sess) return;
     rpc<ExecReport>('exec_report', { p_token: sess.token, p_months: months }).then(setReport).catch((e) => { if (String((e as Error).message).includes('EXEC_SESSION')) { SESSION = null; setSess(null); toast.error('Sesi eksekutif berakhir, masuk lagi'); } else toast.error((e as Error).message); });
   }, [sess, months]);
-  useEffect(() => { if (sess) rpc<ReportRun[]>('report_runs_list', { p_limit: 10 }).then((r) => setRuns(r ?? [])).catch(() => setRuns([])); }, [sess]);
+  useEffect(() => { if (sess) rpc<ReportRun[]>('report_runs_list', { p_limit: 10 }).then((r) => { setRuns(r ?? []); setRunsErr(null); }, (e: Error) => { setRuns([]); setRunsErr(e.message); }); }, [sess]);
 
   const login = async () => {
     if (pin.length < 6) return doShake();
@@ -125,17 +137,27 @@ export default function ExecPortal() {
           <Row between style={{ flexWrap: 'wrap', gap: 12 }}>
             <View style={{ flexShrink: 1, minWidth: 260, gap: 3 }}>
               <Text style={s.heroKicker} numberOfLines={2}>LAPORAN MANAJEMEN & PEMEGANG SAHAM · {execLevelLabel[sess.level].toUpperCase()}</Text>
-              <Text style={s.heroTitle} numberOfLines={2}>AntarKita — {months} bulan terakhir</Text>
+              <Text style={s.heroTitle} numberOfLines={2}>{tab === 'skema' ? 'AntarKita — Skema Bisnis (unit economics)' : `AntarKita — ${months} bulan terakhir`}</Text>
               <Text style={s.heroSub} numberOfLines={2}>Dibuat {r ? fmtDate(r.generated_at) : '…'} · sesi berlaku s.d. {new Date(sess.expires_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</Text>
             </View>
-            <Row gap={6} style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {tab === 'ringkasan' && <Row gap={6} style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               {[3, 6, 12].map((m) => <Chip key={m} label={`${m} bln`} active={months === m} onPress={() => setMonths(m)} color={colors.accent} />)}
               {Platform.OS === 'web' && <Button size="sm" title="CSV" icon="download-outline" color="#fff" variant="glass" onPress={exportCsv} />}
-            </Row>
+            </Row>}
           </Row>
         </BrandGradient>
 
-        {!r ? <Text style={af.small}>Menyusun laporan…</Text> : (
+        <Row gap={8} style={{ flexWrap: 'wrap' }}>
+          <Chip label="Ringkasan manajemen" active={tab === 'ringkasan'} onPress={() => setTab('ringkasan')} color="#0B1F2A" />
+          <Chip label="Skema Bisnis" active={tab === 'skema'} onPress={() => setTab('skema')} color="#0B1F2A" />
+        </Row>
+
+        {tab === 'skema' ? (
+          <Animated.View entering={FadeInDown.duration(motion.base)} style={{ gap: adminSpace.lg }}>
+            <SectionHead title="Skema Bisnis" hint="GMV bersih, pendapatan platform per sumber, take rate bersih vs target, contribution per order, EBITDA kota, dan gerbang scale-up — dari buku besar order (exec_report_v2)" />
+            <SkemaReportView fetchReport={fetchSkema} />
+          </Animated.View>
+        ) : !r ? <Text style={af.small}>Menyusun laporan…</Text> : (
           <Animated.View entering={FadeInDown.duration(motion.base)} style={{ gap: adminSpace.lg }}>
 
             {/* ── Ringkasan kinerja ── */}
@@ -386,8 +408,9 @@ export default function ExecPortal() {
 
             {/* ── Arsip laporan otomatis ── */}
             <SectionHead title="Laporan otomatis" hint="Arsip laporan terjadwal yang dibuat sistem" />
+            {runsErr ? <Text style={[af.small, { color: adminTone.red }]}>Arsip laporan belum bisa dimuat: {runsErr}</Text> : null}
             {runs === null ? <Text style={af.small}>Memuat arsip laporan…</Text> : runs.length === 0 ? (
-              <AdminCard><Empty icon="document-text-outline" title="Belum ada laporan terjadwal" subtitle="Admin dapat menambah jadwal laporan di Panel Admin → Otomasi." /></AdminCard>
+              runsErr ? null : <AdminCard><Empty icon="document-text-outline" title="Belum ada laporan terjadwal" subtitle="Admin dapat menambah jadwal laporan di Panel Admin → Otomasi." /></AdminCard>
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: adminSpace.md, paddingBottom: 4 }}>
                 {runs.map((x) => {

@@ -10,7 +10,7 @@ import { useAuth } from '@/store/auth';
 import { useMyOrders } from '@/hooks/useOrder';
 import { serviceDef } from '@/lib/services';
 import { colors, font, radius, shadow } from '@/lib/theme';
-import { rupiah, formatDate, serviceLabel, statusLabel, statusColor } from '@/lib/format';
+import { rupiah, formatDate, serviceLabel, statusLabel, statusColor, driverEarningOf } from '@/lib/format';
 import type { Order } from '@/lib/types';
 
 type Filter = 'all' | 'active' | 'completed' | 'cancelled';
@@ -25,7 +25,8 @@ export default function DriverHistory() {
   const [filter, setFilter] = useState<Filter>('all');
 
   const completed = useMemo(() => orders.filter((o) => o.status === 'completed'), [orders]);
-  const earned = useMemo(() => completed.reduce((a, o) => a + (o.driver_earning ?? 0), 0), [completed]);
+  // 0099: pendapatan akhir = driver_earning_final (tip, extras, jasa belanja, bonus); order lama → driver_earning
+  const earned = useMemo(() => completed.reduce((a, o) => a + (driverEarningOf(o) ?? 0), 0), [completed]);
   const list = useMemo(() => orders.filter((o) => filter === 'all' ? true : filter === 'completed' ? o.status === 'completed' : filter === 'cancelled' ? o.status === 'cancelled' : !['completed', 'cancelled'].includes(o.status)), [orders, filter]);
 
   return (
@@ -71,7 +72,7 @@ function HistoryRow({ order: o, onPress }: { order: Order; onPress: () => void }
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Row between>
           <Text style={[font.body, { fontWeight: '700', flex: 1 }]} numberOfLines={1}>{serviceLabel[o.service]}</Text>
-          <Text style={{ fontWeight: '700', color: colors.primary }}>{rupiah(o.driver_earning)}</Text>
+          <Text style={{ fontWeight: '700', color: colors.primary }}>{rupiah(driverEarningOf(o))}</Text>
         </Row>
         <Row gap={4}><Ionicons name="location-outline" size={12} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>{o.merchant?.name ?? o.dropoff_address}</Text></Row>
         <Row between>

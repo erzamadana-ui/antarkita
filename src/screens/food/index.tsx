@@ -47,7 +47,8 @@ export default function FoodHome() {
   useEffect(() => {
     const t = setTimeout(async () => {
       setLoading(true);
-      const { data, error } = await supabase.rpc('nearby_merchants', { p_lat: location.lat, p_lng: location.lng, p_radius_km: 30, p_q: q || null, p_halal: halal === 'all' ? null : halal === 'halal' });
+      // 0101: nearby_merchants_v2 — merchant yang di-boost diurutkan di atas oleh server dan WAJIB berlabel 'Iklan'
+      const { data, error } = await supabase.rpc('nearby_merchants_v2', { p_lat: location.lat, p_lng: location.lng, p_radius_km: 30, p_q: q || null, p_halal: halal === 'all' ? null : halal === 'halal' });
       setLoadError(error ? friendlyError(error.message) : null);
       setList((data as Merchant[]) ?? []);
       setLoading(false);
@@ -127,6 +128,7 @@ export default function FoodHome() {
                       title={m.name}
                       subtitle={`${m.distance_km} km · ${m.is_halal ? (m.halal_verified ? 'Halal terverifikasi' : 'Halal') : 'Non-halal'}`}
                       rating={m.rating_avg}
+                      adLabel={m.ad_label ?? (m.boosted || m.featured ? 'Iklan' : null)}
                       width={colW}
                       height={200}
                       accent={colors.food}

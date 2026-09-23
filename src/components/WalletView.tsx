@@ -25,7 +25,7 @@ const txMeta: Record<WalletTx['type'], { label: string; icon: string; color: str
 };
 
 /** Tampilan dompet yang dipakai customer & driver/merchant. */
-export function WalletView({ allowWithdraw, bottomSpace = 40 }: { allowWithdraw?: boolean; bottomSpace?: number }) {
+export function WalletView({ allowWithdraw, bottomSpace = 40, header }: { allowWithdraw?: boolean; bottomSpace?: number; /** Konten di atas kartu saldo, ikut tergulir (mis. ringkasan & rincian pendapatan driver). */ header?: React.ReactNode }) {
   const router = useRouter();
   const { wallet, refreshWallet, session } = useAuth();
   const [txs, setTxs] = useState<WalletTx[]>([]);
@@ -53,6 +53,7 @@ export function WalletView({ allowWithdraw, bottomSpace = 40 }: { allowWithdraw?
   return (
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: bottomSpace, maxWidth: 720, width: '100%', alignSelf: 'center' }} showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} />}>
+      {header}
       <Entrance index={0} from="zoom">
         <BrandGradient colors={[colors.primary, colors.primaryDark]} style={[s.balance, shadow.glow(colors.primary)]}>
           <View style={s.orb} /><View style={[s.orb, { right: -60, top: 30, width: 160, height: 160, opacity: 0.12 }]} />

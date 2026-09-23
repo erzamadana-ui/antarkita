@@ -38,6 +38,7 @@ export default function MerchantStore() {
   if (!merchant) return null;
   const items: Item[] = [
     { icon: 'document-text-outline', title: 'Sertifikasi & dokumen usaha', subtitle: 'NPWP, izin usaha, sertifikat halal, rekening', onPress: () => router.push('/merchant/documents' as never) },
+    { icon: 'megaphone-outline', color: colors.food, title: 'Iklan & Boost', subtitle: 'Tampil paling atas di daftar pelanggan · bayar dari saldo', onPress: () => router.push('/merchant/ads' as never) },
     { icon: 'chatbubbles-outline', color: colors.info, title: 'Bantuan & tiket aduan', subtitle: 'Hubungi CS online', onPress: () => router.push('/support' as never) },
     { icon: 'person-outline', title: 'Edit profil pemilik', onPress: () => router.push('/account/edit') },
     { icon: 'language-outline', title: 'Bahasa / Language', onPress: () => router.push('/account/language') },

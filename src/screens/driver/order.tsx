@@ -9,7 +9,8 @@ import type { MapMarker } from '@/components/map';
 import { Button, Row, Badge, Loading, toast, Empty } from '@/components/ui';
 import { MapScreen } from '@/components/MapScreen';
 import { PressableScale, AnimatedNumber } from '@/components/motion';
-import { PersonCard, RouteBlock, OrderExtras, PriceBlock, Timeline, customerSubtitle } from '@/components/OrderDetails';
+import { PersonCard, RouteBlock, OrderExtras, Timeline, customerSubtitle } from '@/components/OrderDetails';
+import { DriverEarningBreakdown } from '@/components/EarningBreakdown';
 import { ExtraRequest } from '@/components/TipExtras';
 import { ShopTotalCard } from '@/components/ShopTotal';
 import { CallButton } from '@/components/call/IncomingCall';
@@ -19,7 +20,7 @@ import { useAuth } from '@/store/auth';
 import { useCurrentLocation, useWatchLocation } from '@/hooks/useLocation';
 import { rpc } from '@/lib/supabase';
 import { colors, font, radius, shadow, motion } from '@/lib/theme';
-import { statusLabel, statusColor, rupiah, serviceLabel, merchantStatusLabel } from '@/lib/format';
+import { statusLabel, statusColor, rupiah, serviceLabel, merchantStatusLabel, driverEarningOf, paidViaLabel } from '@/lib/format';
 import type { OrderStatus } from '@/lib/types';
 
 const STEPS: { key: OrderStatus; label: string }[] = [
@@ -59,7 +60,7 @@ export default function DriverOrder() {
   };
   const complete = () => {
     if (!order) return;
-    const msg = order.payment_method === 'cash' ? `Pastikan Anda sudah menerima tunai ${rupiah(order.total)} dari pelanggan.` : 'Pesanan dibayar AntarPay. Selesaikan order?';
+    const msg = order.payment_method === 'cash' ? `Pastikan Anda sudah menerima tunai ${rupiah(order.total)} dari pelanggan.` : `Pesanan sudah dibayar (${paidViaLabel(order.paid_via ?? 'wallet')}). Selesaikan order?`;
     if (Platform.OS === 'web') { if (confirm(msg)) update('completed'); return; }
     Alert.alert('Selesaikan order?', msg, [{ text: 'Belum' }, { text: 'Selesai', onPress: () => update('completed') }]);
   };
@@ -127,10 +128,10 @@ export default function DriverOrder() {
           <Row between>
             <Row gap={12} style={{ flex: 1, minWidth: 0 }}>
               <View style={s.earnIcon}><Ionicons name="cash-outline" size={24} color={colors.primary} /></View>
-              <View style={{ flex: 1, minWidth: 0 }}><Text style={font.tiny}>Pendapatan Anda</Text><AnimatedNumber value={order.driver_earning} format={rupiah} style={{ color: colors.primary, fontSize: 24, fontWeight: '700', letterSpacing: -0.5 }} duration={600} /></View>
+              <View style={{ flex: 1, minWidth: 0 }}><Text style={font.tiny}>{order.status === 'completed' ? 'Pendapatan bersih Anda' : 'Pendapatan Anda (sebelum tip)'}</Text><AnimatedNumber value={driverEarningOf(order)} format={rupiah} style={{ color: colors.primary, fontSize: 24, fontWeight: '700', letterSpacing: -0.5 }} duration={600} /></View>
             </Row>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={font.tiny}>{order.payment_method === 'cash' ? 'Tagih tunai' : 'Dibayar AntarPay'}</Text>
+              <Text style={font.tiny}>{order.payment_method === 'cash' ? 'Tagih tunai' : `Dibayar ${paidViaLabel(order.paid_via ?? 'wallet')}`}</Text>
               {order.payment_method === 'cash' ? <Text style={{ color: colors.text, fontWeight: '700', fontSize: 18 }}>{rupiah(order.total)}</Text> : <Row gap={4}><Ionicons name="checkmark-circle" size={16} color={colors.success} /><Text style={{ color: colors.success, fontWeight: '700', fontSize: 16 }}>Lunas</Text></Row>}
             </View>
           </Row>
@@ -170,7 +171,7 @@ export default function DriverOrder() {
           {(order.status === 'accepted' || order.status === 'arrived') && <Button title="Lepas order" variant="ghost" color={colors.danger} onPress={cancel} />}
           {active && <Button title="Laporkan masalah / insiden" variant="ghost" color={colors.textSecondary} icon="flag-outline" onPress={() => router.push({ pathname: '/support/new', params: { order_id: order.id, category: 'order' } } as never)} />}
         </Animated.View>
-        <View style={s.block}><PriceBlock order={order} forDriver /></View>
+        <View style={s.block}><DriverEarningBreakdown orderId={order.id} status={order.status} /></View>
         <View style={s.block}><Timeline events={events} /></View>
       </Animated.View>
     </MapScreen>

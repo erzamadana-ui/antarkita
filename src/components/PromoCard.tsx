@@ -51,17 +51,22 @@ const s = StyleSheet.create({
 });
 
 /** Kartu destinasi gaya kit: gambar tinggi, badge rating kiri-atas, tombol panah kanan-atas, lokasi + judul di atas gradien. */
-export function DestinationCard({ image, title, subtitle, rating, badge, onPress, width = 210, height = 270, accent = colors.primary, art }: {
+export function DestinationCard({ image, title, subtitle, rating, badge, onPress, width = 210, height = 270, accent = colors.primary, art, adLabel }: {
   image?: string | null; title: string; subtitle?: string | null; rating?: number | null; badge?: string | null; onPress?: () => void; width?: number; height?: number; accent?: string; art?: React.ReactNode;
+  /** Label transparansi iklan (nearby_merchants_v2.ad_label, 0101) — mis. "Iklan" untuk merchant yang di-boost. */
+  adLabel?: string | null;
 }) {
   return (
     <PressableScale onPress={onPress} scaleTo={0.97} style={[d.card, { width, height }, shadow.card]}>
       {image ? <Image source={{ uri: image }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : <BrandGradient colors={[accent, '#1B474C']} style={StyleSheet.absoluteFill} />}
       {!image && art ? <View style={d.art}>{art}</View> : null}
       <BrandGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.05)', 'rgba(0,0,0,0.72)']} angle="vertical" style={d.shade} />
-      {rating != null && (
-        <View style={d.rating}><Ionicons name="star" size={12} color="#F5A524" /><Text style={d.ratingText}>{Number(rating).toFixed(1)}</Text></View>
-      )}
+      {rating != null || adLabel ? (
+        <View style={d.topLeft}>
+          {rating != null && <View style={d.rating}><Ionicons name="star" size={12} color="#F5A524" /><Text style={d.ratingText}>{Number(rating).toFixed(1)}</Text></View>}
+          {adLabel ? <View style={d.ad}><Text style={d.adText}>{adLabel}</Text></View> : null}
+        </View>
+      ) : null}
       <View style={d.arrow}><Ionicons name="arrow-up-outline" size={16} color="#fff" style={{ transform: [{ rotate: '45deg' }] }} /></View>
       <View style={d.body}>
         {badge || subtitle ? <View style={d.loc}>{badge ? <View style={d.dot} /> : <Ionicons name="location-outline" size={12} color="#fff" />}<Text style={d.locText} numberOfLines={1}>{badge ?? subtitle}</Text></View> : null}
@@ -74,7 +79,10 @@ const d = StyleSheet.create({
   card: { borderRadius: 24, overflow: 'hidden', backgroundColor: colors.primaryDark },
   art: { position: 'absolute', right: 12, top: 44 },
   shade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '65%' },
-  rating: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(16,31,33,0.72)', borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 4 },
+  topLeft: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  rating: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(16,31,33,0.72)', borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 4 },
+  ad: { backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 3 },
+  adText: { color: '#0B1F2A', fontSize: 12, fontWeight: '700' },
   ratingText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   arrow: { position: 'absolute', top: 12, right: 12, width: 34, height: 34, borderRadius: 17, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.85)', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.14)' },
   body: { position: 'absolute', left: 14, right: 14, bottom: 14, gap: 6 },

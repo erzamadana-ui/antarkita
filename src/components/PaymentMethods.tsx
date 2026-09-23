@@ -69,7 +69,7 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
         <Text style={font.label}>Metode utama saat memesan</Text>
         {isChannelOn('cash') && <MethodRow active={method === 'cash'} onPress={() => pick('cash')} icon="cash-outline" color={colors.success} title="Tunai" subtitle="Bayar langsung ke driver" />}
         {walletOn && <MethodRow active={method === 'wallet'} onPress={() => pick('wallet')} icon="wallet-outline" color={colors.primary} title="Saldo AntarPay" subtitle={`Saldo ${rupiah(wallet?.balance ?? 0)} · dipotong otomatis`} />}
-        {ewalletOn && <MethodRow active={method === 'ewallet'} onPress={() => pick('ewallet', wallets.some((w) => w.key === ew) ? (ew as string) : wallets[0].key)} icon="phone-portrait-outline" color={colors.info} title={`E-wallet${ew && wallets.some((w) => w.key === ew) ? ` · ${wallets.find((e) => e.key === ew)?.label}` : ''}`} subtitle={`${wallets.map((w) => w.label).join(' · ')} — via Midtrans, dana masuk AntarPay lalu dipotong`} />}
+        {ewalletOn && <MethodRow active={method === 'ewallet'} onPress={() => pick('ewallet', wallets.some((w) => w.key === ew) ? (ew as string) : wallets[0].key)} icon="phone-portrait-outline" color={colors.info} title={`E-wallet${ew && wallets.some((w) => w.key === ew) ? ` · ${wallets.find((e) => e.key === ew)?.label}` : ''}`} subtitle={`${wallets.map((w) => w.label).join(' · ')} — via Midtrans, dibayar langsung per pesanan`} />}
         {antarpayOn && !nonCashOn && <Text style={font.tiny}>{CHANNELS_OFF_TEXT}</Text>}
       </Card></Entrance>
 
@@ -86,7 +86,7 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
             </View>
           ))}
         </View>
-        <Text style={font.tiny}>Saat memesan, bila saldo kurang, halaman bayar {ew ? wallets.find((e) => e.key === ew)?.label ?? 'e-wallet' : 'e-wallet'} dibuka otomatis untuk kekurangannya. AntarKita tidak menyimpan data akun e-wallet Anda.</Text>
+        <Text style={font.tiny}>Saat memesan, pesanan dibayar langsung lewat {ew ? wallets.find((e) => e.key === ew)?.label ?? 'e-wallet' : 'e-wallet'} (Midtrans) — tidak melalui saldo. Biaya pembayaran, bila dibebankan, tampil di rincian sebelum Anda membayar. AntarKita tidak menyimpan data akun e-wallet Anda.</Text>
       </Card></Entrance>}
 
       {!compact && emoneyOn && (

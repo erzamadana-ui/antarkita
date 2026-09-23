@@ -3,7 +3,8 @@ import { View, Text, ScrollView, RefreshControl, StyleSheet } from 'react-native
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
-import { Entrance, LiveDot, Skeleton } from '@/components/motion';
+import { Entrance, LiveDot, Skeleton, PressableScale } from '@/components/motion';
+import { MerchantOrderBreakdown } from '@/components/EarningBreakdown';
 import { TAB_BAR_SPACE } from '@/components/GlassTabBar';
 import { CallButton } from '@/components/call/IncomingCall';
 import { Screen, Row, Badge, Button, Chip, Empty, toast } from '@/components/ui';
@@ -29,9 +30,11 @@ export default function MerchantOrders() {
   const [refreshing, setRefreshing] = useState(false);
 
   const isActive = (o: Order) => !['completed', 'cancelled'].includes(o.status);
+  // 0100: pesanan gateway yang belum dibayar pelanggan (awaiting_payment) belum boleh disiapkan — muncul setelah lunas.
+  const paid = (o: Order) => o.status !== 'awaiting_payment';
   const lists = {
-    new: orders.filter((o) => isActive(o) && o.merchant_status === 'pending'),
-    process: orders.filter((o) => isActive(o) && (o.merchant_status === 'accepted' || o.merchant_status === 'ready')),
+    new: orders.filter((o) => isActive(o) && paid(o) && o.merchant_status === 'pending'),
+    process: orders.filter((o) => isActive(o) && paid(o) && (o.merchant_status === 'accepted' || o.merchant_status === 'ready')),
     done: orders.filter((o) => !isActive(o)),
   };
   // Laporan penjualan ringkas (hari ini & 7 hari) dari order yang sudah dimuat — merchant sebelumnya
@@ -97,8 +100,18 @@ export default function MerchantOrders() {
                   <Text style={font.tiny}>{sales.weekCount} pesanan selesai</Text>
                 </View>
               </Row>
-              <Text style={[font.tiny, { marginTop: 8 }]}>Angka di atas adalah pendapatan bersih Anda (setelah potongan platform) dari 50 pesanan terakhir. Rincian saldo & penarikan ada di tab Toko.</Text>
+              <Text style={[font.tiny, { marginTop: 8 }]}>Angka di atas adalah dana yang Anda terima (nilai pesanan − fee platform − promo yang Anda tanggung) dari 50 pesanan terakhir. Rincian saldo & penarikan ada di tab Toko.</Text>
             </View>
+          )}
+          {tab === 'done' && (
+            <PressableScale onPress={() => router.push('/merchant/ads' as never)} scaleTo={0.98} haptic={false} style={s.adsBanner}>
+              <Ionicons name="megaphone-outline" size={20} color={colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: '700', color: colors.text }}>Iklan & Boost</Text>
+                <Text style={font.tiny}>Tampil di urutan atas beranda pelanggan (berlabel "Iklan"), dibayar dari saldo pendapatan.</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+            </PressableScale>
           )}
           {lists[tab].length === 0 && <Empty icon="receipt-outline" title={tab === 'new' ? 'Belum ada pesanan baru' : 'Kosong'} subtitle="Pesanan baru akan muncul otomatis." />}
           {lists[tab].map((o, i) => {
@@ -115,7 +128,7 @@ export default function MerchantOrders() {
                       <Text style={font.tiny} numberOfLines={1}>{formatTime(o.created_at)}</Text>
                       <Row gap={4} style={{ minWidth: 0 }}>
                         <Ionicons name={o.payment_method === 'cash' ? 'cash-outline' : 'wallet-outline'} size={12} color={o.payment_method === 'cash' ? colors.warning : colors.primary} />
-                        <Text style={[font.tiny, { fontWeight: '700', flexShrink: 1, color: o.payment_method === 'cash' ? colors.warning : colors.primary }]} numberOfLines={2}>{o.payment_method === 'cash' ? 'Tunai — driver bayar di kasir' : 'Dibayar AntarPay'}</Text>
+                        <Text style={[font.tiny, { fontWeight: '700', flexShrink: 1, color: o.payment_method === 'cash' ? colors.warning : colors.primary }]} numberOfLines={2}>{o.payment_method === 'cash' ? 'Tunai — driver bayar di kasir' : 'Dibayar non-tunai'}</Text>
                       </Row>
                     </View>
                   </Row>
@@ -125,8 +138,13 @@ export default function MerchantOrders() {
                 </Row>
                 <View style={s.items}>
                   {o.order_items?.map((it) => <Row key={it.id} between style={{ alignItems: 'flex-start' }}><Text style={[font.body, { flex: 1 }]}>{it.qty}× {it.name}{it.notes ? <Text style={font.tiny}>  ({it.notes})</Text> : null}</Text><Text style={{ fontWeight: '600', color: colors.text }}>{rupiah(it.price * it.qty)}</Text></Row>)}
-                  <Row between style={s.total}><Text style={font.small}>Pendapatan bersih Anda</Text><Text style={{ fontWeight: '700', color: colors.primary, fontSize: 16 }}>{rupiah(o.merchant_earning)}</Text></Row>
                 </View>
+                {/* §9: Nilai pesanan · Fee platform x % · Promo ditanggung merchant · Diterima — dari buku besar (merchant_order_breakdown) */}
+                {o.status !== 'cancelled' && (
+                  <View style={s.breakdown}>
+                    <MerchantOrderBreakdown orderId={o.id} status={o.status} auto={tab !== 'done' || i < 8} />
+                  </View>
+                )}
                 <Row between style={{ marginTop: 10 }}>
                   <Row gap={4} style={{ flex: 1, minWidth: 0 }}><Ionicons name="bicycle-outline" size={16} color={colors.textMuted} /><Text style={font.tiny} numberOfLines={1}>Driver: {DRIVER_STAGE[o.status] ?? statusLabel(o.status, o.service).toLowerCase()}</Text></Row>
                   {isActive(o) && (
@@ -157,7 +175,8 @@ const s = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: radius.lg, padding: 14, borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   icon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
   items: { marginTop: 12, gap: 6, padding: 12, borderRadius: radius.md, backgroundColor: colors.bgSoft },
-  total: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8, marginTop: 4 },
+  breakdown: { marginTop: 10, padding: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
+  adsBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: radius.lg, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.primary + '33' },
   report: { backgroundColor: '#fff', borderRadius: radius.lg, padding: 14, borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   reportBox: { flex: 1, gap: 2, padding: 12, borderRadius: radius.md, backgroundColor: colors.tint },
 });

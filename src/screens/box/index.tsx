@@ -8,7 +8,7 @@ import { Screen, Button, Row, Badge, Input, Chip, Stepper, toast } from '@/compo
 import { PressableScale } from '@/components/motion';
 import { LocationFields } from '@/components/LocationField';
 import { DestinationSuggestions, VehicleClassPicker, SchedulePicker, RoutePreview } from '@/components/BookingExtras';
-import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
+import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, goAfterOrder, useCheckoutFees, checkoutRows, checkoutNote, type PayChoice } from '@/components/BookingSheet';
 import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { ServiceArt } from '@/components/ServiceArt';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
@@ -24,7 +24,7 @@ import { rpc } from '@/lib/supabase';
 import { createOrder } from '@/lib/orders';
 import { colors, font, radius, motion, glass } from '@/lib/theme';
 import { rupiah, km, minutes } from '@/lib/format';
-import type { FareOptions } from '@/lib/types';
+import type { FareOptions, PromoFunder } from '@/lib/types';
 
 const PURPOSES = [
   { key: 'barang', label: 'Kirim barang besar', icon: 'cube', desc: 'Lemari, kasur, kulkas, motor, dsb.' },
@@ -53,6 +53,7 @@ export default function BoxScreen() {
   const payPrefs = usePayPrefs((st) => st.prefs);
   const [promo, setPromo] = useState('');
   const [discount, setDiscount] = useState(0);
+  const [promoFunder, setPromoFunder] = useState<PromoFunder | null>(null);
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState('');
   const [ordering, setOrdering] = useState(false);
@@ -91,7 +92,11 @@ export default function BoxScreen() {
   }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, helpers, fareTry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const chosen = useMemo(() => opts?.classes.find((c) => c.code === cls) ?? null, [opts, cls]);
-  const total = chosen ? Math.max(0, chosen.total - discount) : 0;
+  // §9: biaya platform dari fare_options (customer_platform_fee, 0099) — bukan konstanta klien
+  const platformFee = opts?.customer_platform_fee ?? opts?.platform_fee ?? 0;
+  const baseTotal = chosen ? Math.max(0, chosen.fare + platformFee - discount) : 0;
+  const fees = useCheckoutFees({ service: 'box', method, ewallet: payPrefs?.ewallet, amount: baseTotal });
+  const total = chosen ? baseTotal + fees.payFee : 0;
   const ready = !!(pickup && dropoff);
   const blocked = limitBlocked(opts?.limit);
   const serviceOff = opts?.service_enabled === false || !isEnabled('box');
@@ -116,7 +121,7 @@ export default function BoxScreen() {
         driver_code: driverCode,
       });
       await refreshWallet(); useBooking.getState().reset();
-      router.replace(`/order/${o.id}` as never);
+      goAfterOrder(router, o);
     } catch (e) { if (!handleShortfall(e, router, payPrefs?.ewallet)) toast.error((e as Error).message); }
     finally { setOrdering(false); }
   };
@@ -179,9 +184,13 @@ export default function BoxScreen() {
               <Input placeholder="Daftar barang: mis. kasur 1, lemari 2, kardus 10" icon="list-outline" value={items} onChangeText={setItems} />
             </View>
             <SchedulePicker value={when} onChange={setWhen} accent={colors.box} />
-            {chosen && <View style={s.group}><PriceSummary rows={[{ label: `${chosen.label} (${km(opts?.distance_km ?? 0)})`, value: chosen.fare - (opts?.helpers_fee ?? 0) }, ...(opts?.helpers_fee ? [{ label: `Pembantu angkat ×${helpers}`, value: opts.helpers_fee }] : []), { label: 'Biaya layanan', value: opts?.platform_fee ?? 0 }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} /><LimitInfo limit={opts?.limit} service="box" /></View>}
+            {chosen && <View style={s.group}><PriceSummary total={total} note={checkoutNote(fees.pay, fees.econError)} rows={checkoutRows({
+              service: 'box', econ: fees.econ, ongkir: chosen.fare - (opts?.helpers_fee ?? 0), ongkirLabel: `Ongkir · ${chosen.label} (${km(opts?.distance_km ?? 0)})`,
+              extra: opts?.helpers_fee ? [{ label: `Pembantu angkat ×${helpers}`, value: opts.helpers_fee }] : undefined,
+              platformFee, pay: fees.pay, discount, promoCode: promo || null, promoFunder,
+            })} /><LimitInfo limit={opts?.limit} service="box" /></View>}
             <AntarNowSection service="box" accent={colors.box} />
-            <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={chosen?.fare ?? 0} service="box" onDiscount={setDiscount} notesPlaceholder="Catatan: lantai berapa, ada lift, jam bongkar" />
+            <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={chosen?.fare ?? 0} service="box" onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} notesPlaceholder="Catatan: lantai berapa, ada lift, jam bongkar" />
             <Text style={font.tiny}>Driver membantu muat/bongkar ringan. Barang pecah belah harap dikemas. Pick up ±1 ton, mobil box ±2 ton.</Text>
           </Animated.View>
         )}
