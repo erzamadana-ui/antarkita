@@ -19,6 +19,7 @@ import { useCurrentLocation } from '@/hooks/useLocation';
 import { getRoute, reverseGeocode, finalizeRoute, type RouteResult } from '@/lib/geo';
 import { rpc } from '@/lib/supabase';
 import { createOrder } from '@/lib/orders';
+import { adCampaignFor } from '@/lib/ads';
 import { colors, font, radius, glass } from '@/lib/theme';
 import { rupiah, km, minutes } from '@/lib/format';
 import type { FareEstimate, PaymentMethod, PromoFunder } from '@/lib/types';
@@ -102,7 +103,7 @@ export default function Checkout() {
         route_km: fin.route_km, duration_min: fin.duration_min, route_geometry: fin.coords, payment_method: method === 'ewallet' ? 'wallet' : method, paid_via: paidViaOf(method, payPrefs?.ewallet), promo_code: promo || null, notes: notes || null,
         items: cart.lines.map((l) => ({ menu_item_id: l.item.id, qty: l.qty, notes: l.notes || null })),
         driver_code: driverCode,
-      });
+      }, { adCampaignId: adCampaignFor(m.id) });
       cart.clear(); await refreshWallet(); useBooking.getState().reset();
       goAfterOrder(router, o);
     } catch (e) { if (!handleShortfall(e, router, payPrefs?.ewallet)) toast.error((e as Error).message); }
@@ -159,7 +160,7 @@ export default function Checkout() {
           <Text style={[font.label, { marginBottom: 10 }]}>Rincian pembayaran</Text>
           <PriceSummary total={total} note={checkoutNote(fees.pay, fees.econError)} rows={checkoutRows({
             service: 'food', econ: fees.econ, ongkir: fare?.fare ?? 0, ongkirLabel: `Ongkir (${fare ? km(fare.distance_km) : '…'})`,
-            items: subtotal, itemsLabel: 'Nilai barang (makanan)', itemsHint: `Harga menu ${m.name}`,
+            items: subtotal, itemsLabel: 'Harga makanan', itemsHint: `Harga menu ${m.name}`,
             platformFee, pay: fees.pay, discount, promoCode: promo || null, promoFunder, hasMerchant: true,
           })} />
           <LimitInfo limit={fare?.limit} service="food" style={{ marginTop: 8 }} />
@@ -174,7 +175,7 @@ export default function Checkout() {
 
         <Entrance index={3}><Card>
           <AntarNowSection service="food" accent={colors.food} />
-          <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={subtotal + (fare?.fare ?? 0)} service="food" onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} notesPlaceholder="Catatan untuk driver (mis. patokan rumah)" />
+          <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={subtotal + (fare?.fare ?? 0)} service="food" feeBase={fare ? baseTotal : 0} onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} notesPlaceholder="Catatan untuk driver (mis. patokan rumah)" />
         </Card></Entrance>
       </View>
     </Screen>

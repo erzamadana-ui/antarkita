@@ -198,7 +198,7 @@ export default function RideScreen() {
                   {showDetails && (
                     <Animated.View entering={FadeInDown.duration(motion.fast)} style={{ marginTop: 10 }}>
                       <PriceSummary total={total} note={checkoutNote(fees.pay, fees.econError)} rows={checkoutRows({
-                        service, econ: fees.econ, ongkir: chosen.fare, ongkirLabel: `Ongkir · ${chosen.label} (${km(opts?.distance_km ?? 0)})`,
+                        service, econ: fees.econ, ongkir: chosen.fare, ongkirLabel: `Tarif perjalanan · ${chosen.label} (${km(opts?.distance_km ?? 0)})`,
                         platformFee, pay: fees.pay, discount, promoCode: promo || null, promoFunder,
                       })} />
                     </Animated.View>
@@ -208,7 +208,7 @@ export default function RideScreen() {
               </PressableScale>
             )}
             <AntarNowSection service={service} accent={accent} />
-            <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={chosen?.fare ?? 0} service={service} onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} />
+            <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={chosen?.fare ?? 0} service={service} feeBase={baseTotal} onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} />
             <MerchantAds near={dropoff} title="Lapar sesampainya? Merchant dekat tujuan" />
           </Animated.View>
         )}

@@ -25,6 +25,8 @@ import { ActiveOrderBubbles } from '@/components/ActiveOrderBubbles';
 import { useT } from '@/lib/i18n';
 import { useNotifications } from '@/hooks/useNotifications';
 import { TAB_BAR_SPACE } from '@/components/GlassTabBar';
+import { SponsoredRow } from '@/components/SponsoredRow';
+import { isSponsoredMerchant } from '@/lib/ads';
 
 export default function CustomerHome() {
   const router = useRouter();
@@ -32,6 +34,7 @@ export default function CustomerHome() {
   const { orders: active, reload } = useMyOrders('customer', session?.user.id, true);
   const { location, hasFix } = useCurrentLocation();
   const [merchants, setMerchants] = useState<Merchant[] | null>(null);
+  const [sponsored, setSponsored] = useState<Merchant[]>([]);
   const [promos, setPromos] = useState<Promo[]>([]);
   const [freq, setFreq] = useState<FrequentData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,11 +51,14 @@ export default function CustomerHome() {
 
   const loadExtras = async () => {
     const [{ data: m }, { data: p }, { data: f }] = await Promise.all([
-      supabase.rpc('nearby_merchants_v2', { p_lat: location.lat, p_lng: location.lng, p_radius_km: 25 }),   // 0101: boosted di atas + ad_label
+      supabase.rpc('nearby_merchants_v2', { p_lat: location.lat, p_lng: location.lng, p_radius_km: 25 }),   // organik + ad_label/campaign_id (§7)
       supabase.from('promos').select('*').eq('is_active', true).order('sort_order').limit(20),
       supabase.rpc('customer_frequent', { p_limit: 6 }),
     ]);
-    setMerchants(((m as Merchant[]) ?? []).slice(0, 8));
+    // Ranking organik (jarak) — merchant berbayar tidak "menyusup" ke daftar ini; mereka tampil di blok Sponsored.
+    const all = (m as Merchant[]) ?? [];
+    setSponsored(all.filter(isSponsoredMerchant));
+    setMerchants([...all].sort((a, b) => (a.distance_km ?? 0) - (b.distance_km ?? 0)).slice(0, 8));
     setPromos((p as Promo[]) ?? []);
     setFreq((f as FrequentData) ?? null);
   };
@@ -184,6 +190,13 @@ export default function CustomerHome() {
               </Entrance>
             )}
 
+            {/* Iklan v3 (§7): banner_home — blok Sponsored terpisah, bukan bagian konten organik */}
+            <Entrance index={12}>
+              <View style={{ marginTop: 22 }}>
+                <SponsoredRow placement="banner_home" near={location} limit={1} variant="banner" title="Sponsored" />
+              </View>
+            </Entrance>
+
             {/* Promo — kartu destinasi tinggi */}
             {promos.length > 0 && (
               <Entrance index={13}>
@@ -232,7 +245,14 @@ export default function CustomerHome() {
               </Entrance>
             )}
 
-            {/* Merchant laris — kartu destinasi dengan rating */}
+            {/* featured_home: merchant bersponsor (termasuk hasil nearby_merchants_v2 berlabel) di blok terpisah */}
+            <Entrance index={15}>
+              <View style={{ marginTop: 24 }}>
+                <SponsoredRow placement="featured_home" near={location} organic={sponsored} title="Merchant bersponsor" />
+              </View>
+            </Entrance>
+
+            {/* Merchant laris — kartu destinasi dengan rating (organik, tanpa label iklan) */}
             <Entrance index={15}>
               <Row between style={{ marginTop: 24, marginBottom: 12 }}>
                 <Text style={font.h3}>{t('trending_food')}</Text>
@@ -240,7 +260,7 @@ export default function CustomerHome() {
               </Row>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingRight: 16, paddingBottom: 6 }}>
                 {merchants === null ? [0, 1, 2].map((i) => <Skeleton key={i} width={170} height={230} radius={24} />) : merchants.map((m) => (
-                  <DestinationCard key={m.id} image={m.image_url} title={m.name} subtitle={`${m.distance_km} km · ${m.is_halal ? 'Halal' : 'Non-halal'}`} rating={m.rating_avg} adLabel={m.ad_label ?? (m.boosted || m.featured ? 'Iklan' : null)} width={170} height={230} accent={colors.food} onPress={() => router.push(`/food/${m.id}` as never)} />
+                  <DestinationCard key={m.id} image={m.image_url} title={m.name} subtitle={`${m.distance_km} km · ${m.is_halal ? 'Halal' : 'Non-halal'}`} rating={m.rating_avg} width={170} height={230} accent={colors.food} onPress={() => router.push(`/food/${m.id}` as never)} />
                 ))}
                 {merchants && merchants.length === 0 && <Text style={font.small}>Belum ada merchant di sekitar lokasi Anda.</Text>}
               </ScrollView>

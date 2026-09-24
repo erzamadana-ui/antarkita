@@ -12,7 +12,8 @@ import { AntarPayOffBanner } from '@/components/AntarPayNotice';
 import { supabase } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { rupiah, formatDate } from '@/lib/format';
-import type { WalletTx, TopupRequest, WithdrawalRequest } from '@/lib/types';
+import { loadMyWithdrawals, payoutOf, payoutMeta, type MyWithdrawal } from '@/lib/mitra';
+import type { WalletTx, TopupRequest } from '@/lib/types';
 
 const txMeta: Record<WalletTx['type'], { label: string; icon: string; color: string }> = {
   topup: { label: 'Top up', icon: 'arrow-down-circle', color: colors.success },
@@ -29,25 +30,29 @@ export function WalletView({ allowWithdraw, bottomSpace = 40, header }: { allowW
   const router = useRouter();
   const { wallet, refreshWallet, session } = useAuth();
   const [txs, setTxs] = useState<WalletTx[]>([]);
-  const [pending, setPending] = useState<(TopupRequest | WithdrawalRequest)[]>([]);
+  const [pending, setPending] = useState<TopupRequest[]>([]);
+  // Mitra (allowWithdraw): penarikan dari my_withdrawals() (Finpay v3 §8) — status payout, referensi transfer, biaya, alasan gagal.
+  const [withdrawals, setWithdrawals] = useState<MyWithdrawal[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [showAllWd, setShowAllWd] = useState(false);
   const uid = session?.user.id;
   // 0088: saat AntarPay nonaktif, saldo & riwayat tetap terlihat; tombol Top Up / Tarik Saldo disembunyikan (server pun menolak).
   const { enabled: antarpayOn } = useAntarPay();
 
   const load = useCallback(async () => {
     if (!uid) return;
-    const [{ data: t }, { data: tp }, { data: wd }] = await Promise.all([
+    const [{ data: t }, { data: tp }, wd] = await Promise.all([
       supabase.from('wallet_transactions').select('*').eq('user_id', uid).order('created_at', { ascending: false }).limit(50),
       supabase.from('topup_requests').select('*').eq('user_id', uid).eq('status', 'pending'),
-      supabase.from('withdrawal_requests').select('*').eq('user_id', uid).eq('status', 'pending'),
+      allowWithdraw ? loadMyWithdrawals(uid) : Promise.resolve({ rows: [] as MyWithdrawal[], v3: false }),
     ]);
     setTxs((t as WalletTx[]) ?? []);
-    setPending([...((tp as TopupRequest[]) ?? []), ...((wd as WithdrawalRequest[]) ?? [])]);
+    setPending((tp as TopupRequest[]) ?? []);
+    setWithdrawals(wd.rows);
     setLoaded(true);
     await refreshWallet();
-  }, [uid, refreshWallet]);
+  }, [uid, refreshWallet, allowWithdraw]);
   useEffect(() => { load(); }, [load]);
 
   return (
@@ -89,6 +94,16 @@ export function WalletView({ allowWithdraw, bottomSpace = 40, header }: { allowW
         </Card></Entrance>
       )}
 
+      {allowWithdraw && withdrawals.length > 0 && (
+        <Entrance index={2}>
+          <Text style={[font.label, { marginTop: 20, marginBottom: 8 }]}>Penarikan ke rekening</Text>
+          <Card padded={false}>
+            {withdrawals.slice(0, showAllWd ? undefined : 5).map((w, i) => <WithdrawalRow key={w.id} w={w} first={i === 0} />)}
+            {withdrawals.length > 5 ? <PressableScale onPress={() => setShowAllWd((v) => !v)} haptic={false} style={{ padding: 12, alignItems: 'center', borderTopWidth: 1, borderTopColor: 'rgba(11,31,42,0.07)' }}><Text style={{ color: colors.primary, fontWeight: '700' }}>{showAllWd ? 'Tampilkan lebih sedikit' : `Lihat semua (${withdrawals.length})`}</Text></PressableScale> : null}
+          </Card>
+        </Entrance>
+      )}
+
       <Entrance index={2}><Text style={[font.label, { marginTop: 20, marginBottom: 8 }]}>Riwayat transaksi</Text></Entrance>
       {!loaded ? (
         <Card padded={false}>{[0, 1, 2].map((i) => <Row key={i} gap={12} style={{ padding: 14 }}><Skeleton width={38} height={38} radius={19} /><View style={{ flex: 1, gap: 6 }}><Skeleton width="60%" height={14} /><Skeleton width="35%" height={11} /></View><Skeleton width={70} height={14} /></Row>)}</Card>
@@ -120,6 +135,30 @@ export function WalletView({ allowWithdraw, bottomSpace = 40, header }: { allowW
         <Badge text="Top up manual via transfer bank, diverifikasi admin ≤ 1×24 jam" color={colors.textSecondary} />
       </View>
     </ScrollView>
+  );
+}
+
+/** Satu penarikan: nominal, biaya, rekening, status payout, referensi transfer, waktu cair / alasan gagal. */
+function WithdrawalRow({ w, first }: { w: MyWithdrawal; first: boolean }) {
+  const st = payoutOf(w);
+  const meta = payoutMeta[st];
+  const fee = Number(w.fee ?? 0);
+  const failed = st === 'PAYOUT_FAILED';
+  return (
+    <View style={{ padding: 14, gap: 4, borderTopWidth: first ? 0 : 1, borderTopColor: 'rgba(11,31,42,0.07)' }}>
+      <Row between style={{ alignItems: 'flex-start' }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ fontWeight: '700', color: colors.text }}>{rupiah(w.amount)}</Text>
+          <Text style={font.tiny} numberOfLines={1}>{[w.bank_name, w.bank_account ? `••${String(w.bank_account).slice(-4)}` : null, w.account_name].filter(Boolean).join(' · ')}</Text>
+        </View>
+        <Badge text={meta.label} color={meta.color} />
+      </Row>
+      {fee > 0 ? <Text style={font.tiny}>Biaya transfer {rupiah(fee)} · diterima {rupiah(Math.max(0, w.amount - fee))}</Text> : null}
+      <Text style={font.tiny}>Diajukan {formatDate(w.created_at)}{w.settled_at ? ` · cair ${formatDate(w.settled_at)}` : ''}{w.provider ? ` · via ${w.provider === 'finpay' ? 'Finpay' : w.provider === 'manual' ? 'transfer manual' : w.provider}` : ''}</Text>
+      {w.provider_ref ? <Text style={font.tiny} selectable>Ref. transfer: {w.provider_ref}</Text> : null}
+      {failed && (w.failed_reason || w.review_note) ? <Text style={[font.tiny, { color: colors.danger }]}>Alasan: {w.failed_reason ?? w.review_note}</Text> : null}
+      {failed ? <Text style={font.tiny}>Nominal penarikan sudah dikembalikan ke saldo AntarPay Anda.</Text> : null}
+    </View>
   );
 }
 

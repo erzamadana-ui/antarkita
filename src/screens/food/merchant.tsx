@@ -13,6 +13,7 @@ import { useCart } from '@/store/cart';
 import { supabase } from '@/lib/supabase';
 import { colors, font, radius, shadow, motion } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
+import { useAdAttribution } from '@/lib/ads';
 import type { Merchant, MenuItem } from '@/lib/types';
 import { HalalBadge } from '@/components/MerchantStatus';
 import { ReportContentButton } from '@/components/moderation';
@@ -21,7 +22,7 @@ type Tab = 'menu' | 'info' | 'ulasan';
 const TABS: { key: Tab; label: string }[] = [{ key: 'menu', label: 'Menu' }, { key: 'info', label: 'Info' }, { key: 'ulasan', label: 'Ulasan' }];
 
 export default function MerchantScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, ad } = useLocalSearchParams<{ id: string; ad?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -32,6 +33,8 @@ export default function MerchantScreen() {
   const [tab, setTab] = useState<Tab>('menu');
   const [fav, setFav] = useState(false);
   const heroH = Math.round(height * 0.46);
+  // Iklan v3 (§7): datang dari kartu Sponsored → ingat kampanye untuk merchant ini sampai pesanan dibuat.
+  useEffect(() => { if (id && ad) useAdAttribution.getState().set(id, ad); }, [id, ad]);
 
   useEffect(() => {
     (async () => {

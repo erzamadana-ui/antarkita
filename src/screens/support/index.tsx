@@ -10,12 +10,17 @@ import { useAuth } from '@/store/auth';
 import { useMode } from '@/store/mode';
 import { supabase } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
-import { timeAgo, ticketStatusLabel, ticketStatusColor, ticketCategoryLabel, ticketPriorityColor } from '@/lib/format';
+import { timeAgo, ticketStatusLabel, ticketStatusColor, ticketCategoryLabel, ticketPriorityColor, rupiah, disputeKindLabel, disputeStatusLabel, disputeStatusColor } from '@/lib/format';
+import { fetchMyDisputes } from '@/lib/payments';
+import { IS_CUSTOMER_APP } from '@/lib/app';
+import { useT } from '@/lib/i18n';
+import type { DisputeRow } from '@/lib/types';
 
 const FAQ = [
   ['Bagaimana cara top up AntarPay?', 'AntarPay > Top Up: instan lewat GoPay/OVO/DANA/QRIS/VA, atau transfer manual + bukti (verifikasi admin maks. 1×24 jam).'],
   ['Bagaimana tarif dihitung?', 'Tarif = tarif per km × jarak rute (minimal tarif berlaku) + biaya layanan, dikali pengali sesi (jam sibuk/sepi). Rincian tampil sebelum memesan.'],
-  ['Bisakah membatalkan pesanan?', 'Bisa selama driver belum memulai perjalanan. Pembayaran AntarPay dikembalikan otomatis ke saldo.'],
+  ['Bisakah membatalkan pesanan?', 'Bisa selama driver belum memulai perjalanan. Pembayaran AntarPay dikembalikan otomatis ke saldo. Pesanan yang dibayar lewat e-wallet/QRIS/VA dan dibatalkan/ditolak: buka detail pesanan → "Ajukan pengembalian dana".'],
+  ['Apa itu kode bantuan CS (AK-xxxxxx)?', 'Kode unik setiap pembayaran. Sebutkan kode ini saat menghubungi CS agar transaksi Anda cepat ditemukan. Ada di detail pesanan, bukti transaksi, dan riwayat pembayaran.'],
   ['Apa itu PIN penjemputan?', 'Kode 4 digit di layar lacak pesanan. Sebutkan ke driver sebelum berangkat agar Anda naik kendaraan yang benar.'],
   ['Bagaimana menjadi mitra driver/merchant?', 'Menu Akun > Daftar jadi Mitra. Lengkapi dokumen (KTP, SIM/NPWP, foto), tunggu verifikasi admin.'],
 ];
@@ -27,6 +32,10 @@ export default function Support() {
   const { tickets, loading, openCount, waiting } = useMyTickets(uid);
   const [phone, setPhone] = useState<string | null>(null);
   useEffect(() => { supabase.from('app_settings').select('value').eq('key', 'support_phone').maybeSingle().then(({ data }) => setPhone((data?.value as string) ?? null)); }, []);
+  const t = useT();
+  const [disputes, setDisputes] = useState<DisputeRow[] | null>(IS_CUSTOMER_APP ? null : []);
+  const [disputesErr, setDisputesErr] = useState<string | null>(null);
+  useEffect(() => { if (IS_CUSTOMER_APP && uid) fetchMyDisputes().then(setDisputes, (e: Error) => { setDisputesErr(e.message); setDisputes([]); }); }, [uid]);
   const hour = new Date().getHours();
   const csOnline = hour >= 7 && hour < 22;
 
@@ -70,6 +79,26 @@ export default function Support() {
             </Entrance>
           ))}
         </Entrance>
+
+        {/* v3 §4: laporan masalah pembayaran (dispute_open dari detail pesanan) — hanya aplikasi Pelanggan */}
+        {IS_CUSTOMER_APP && (
+          <Entrance index={2}>
+            <Text style={[font.label, { marginBottom: 8 }]}>{t('payment_disputes')}</Text>
+            {disputes === null ? <Skeleton height={64} radius={radius.lg} /> : disputes.length === 0 ? (
+              <Text style={font.small}>{disputesErr ?? `${t('payment_disputes_empty')}. Laporkan dari detail pesanan → "${t('report_payment_issue')}".`}</Text>
+            ) : disputes.map((d) => (
+              <PressableScale key={d.id} onPress={() => router.push(`/order/${d.order_id}` as never)} scaleTo={0.98} haptic={false} style={s.ticket}>
+                <View style={[s.catIcon, { backgroundColor: disputeStatusColor(d.status) + '14' }]}><Ionicons name="card-outline" size={20} color={disputeStatusColor(d.status)} /></View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Row between><Text style={{ fontWeight: '700', color: colors.text, flex: 1 }} numberOfLines={1}>{disputeKindLabel[d.kind] ?? d.kind}</Text><Badge text={disputeStatusLabel[d.status] ?? d.status} color={disputeStatusColor(d.status)} /></Row>
+                  <Text style={font.tiny} numberOfLines={1}>{d.order_code ? `${d.order_code} · ` : ''}{d.amount ? `${rupiah(d.amount)} · ` : ''}{timeAgo(d.created_at)}{d.support_ref ? ` · ${d.support_ref}` : ''}</Text>
+                  {d.resolution ? <Text style={font.tiny} numberOfLines={2}>{d.resolution}</Text> : null}
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+              </PressableScale>
+            ))}
+          </Entrance>
+        )}
 
         <Entrance index={3}>
           <Card solid padded={false}>

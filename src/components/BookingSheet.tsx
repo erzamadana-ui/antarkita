@@ -7,9 +7,11 @@ import { useAuth } from '@/store/auth';
 import { useRouter } from 'expo-router';
 import { supabase, rpc, friendlyError } from '@/lib/supabase';
 import { colors, font, radius, glass, shadow } from '@/lib/theme';
-import { rupiah, promoFunderLabel, pctLabel, ONGKIR_FULL_DRIVER } from '@/lib/format';
-import type { Order, PaymentMethod, PromoFunder, ServiceEconomicsPublic, ServiceType } from '@/lib/types';
-import { usePayPrefs, EWALLETS, GATEWAY_CHANNELS, channelLabel } from '@/store/payprefs';
+import { rupiah, promoOwnerLabel } from '@/lib/format';
+import type { Order, PaymentMethod, PromoFunder, ProviderChannel, ServiceEconomicsPublic, ServiceType } from '@/lib/types';
+import { usePayPrefs, EWALLETS, GATEWAY_CHANNELS, PAYMENT_CHANNELS, channelLabel } from '@/store/payprefs';
+import { buildCheckoutRows, checkoutNoteText, channelFeeText, estimatePgFee, useProviderPublic, type PriceRow, type PayFeeEstimate } from '@/lib/payments';
+import { useAdAttribution } from '@/lib/ads';
 import { useAntarPay, usePaymentChannels, CHANNELS_OFF_TEXT } from '@/hooks/useAppSettings';
 import { AntarPayOffNote } from '@/components/AntarPayNotice';
 import { useEffect } from 'react';
@@ -31,10 +33,12 @@ export function handleShortfall(e: unknown, router: ReturnType<typeof useRouter>
 
 /**
  * Setelah `create_order` berhasil. Sejak 0100, paid_via saluran gateway (GoPay/QRIS/VA/…) membuat pesanan
- * berstatus `awaiting_payment` — saldo TIDAK dipotong; pelanggan membayar pesanan itu lewat Midtrans Snap
- * (purpose='order'). Pesanan lain langsung ke layar pelacakan.
+ * berstatus `awaiting_payment` — saldo TIDAK dipotong; pelanggan membayar pesanan itu lewat provider aktif
+ * (edge `pay-create`, purpose='order'). Pesanan lain langsung ke layar pelacakan.
+ * Atribusi iklan untuk merchant pesanan ini dilepas (konversi sudah tercatat server lewat create_order).
  */
 export function goAfterOrder(router: ReturnType<typeof useRouter>, o: Order, successText?: string) {
+  if (o.merchant_id) useAdAttribution.getState().clear(o.merchant_id);
   if (o.status === 'awaiting_payment') {
     const ch = o.pg_channel ?? o.paid_via ?? '';
     toast.show(`Pesanan ${o.code} dibuat — selesaikan pembayaran ${channelLabel(ch)}`);
@@ -45,7 +49,7 @@ export function goAfterOrder(router: ReturnType<typeof useRouter>, o: Order, suc
   router.replace(`/order/${o.id}` as never);
 }
 
-/* ───────────── Rincian harga transparan (Skema Bisnis v2 §9) ───────────── */
+/* ───────────── Rincian harga transparan (§0.4 v3) — logika di src/lib/payments.ts ───────────── */
 
 // Satu permintaan per layanan per sesi aplikasi: aturan bisnis jarang berubah dan dipakai di banyak layar.
 const econCache = new Map<ServiceType, Promise<ServiceEconomicsPublic>>();
@@ -66,116 +70,89 @@ export function useServiceEconomics(service: ServiceType) {
   return { econ, error };
 }
 
-/** Estimasi biaya pembayaran gateway sebelum pesanan dibuat. `policy` 'unknown' = server belum memberi tahu siapa penanggungnya. */
-export type PayFeeEstimate = { channel: string; label: string; policy: 'customer' | 'platform' | 'unknown'; fee: number; error: string | null };
+export type { PriceRow, PayFeeEstimate };
+/** Nama lama — sekarang `buildCheckoutRows` di lib/payments. */
+export const checkoutRows = buildCheckoutRows;
+/** Nama lama — sekarang `checkoutNoteText` di lib/payments. */
+export const checkoutNote = checkoutNoteText;
 
 /**
- * Rincian biaya checkout yang datang dari server: aturan layanan + estimasi biaya pembayaran untuk saluran gateway
- * yang dipilih (`pg_fee_calc(channel, amount)`) — hanya bila kebijakan layanan membebankannya ke pelanggan.
+ * Rincian biaya checkout dari server: aturan layanan (`service_economics_public`), provider aktif
+ * (`payment_provider_public`) dan estimasi biaya metode pembayaran (`pg_fee_estimate`) untuk kanal terpilih.
  * `amount` = total sebelum biaya pembayaran (dasar yang sama dengan create_order).
+ * `pay` selalu terisi: tunai/AntarPay → Rp0; kanal gateway → biaya pelanggan (0 bila ditanggung AntarKita).
  */
 export function useCheckoutFees({ service, method, ewallet, amount }: { service: ServiceType; method: PayChoice; ewallet?: string | null; amount: number }) {
   const { econ, error: econError } = useServiceEconomics(service);
+  const { provider, providerName } = useProviderPublic();
   const channel = method === 'ewallet' ? paidViaOf(method, ewallet) : null;
-  const gateway = !!channel && GATEWAY_CHANNELS.includes(channel);
-  const policy: PayFeeEstimate['policy'] = econ?.pg_fee_policy === 'customer' ? 'customer' : econ?.pg_fee_policy === 'platform' ? 'platform' : 'unknown';
+  const provCh = channel ? provider?.channels.find((c) => c.key === channel) ?? null : null;
+  const gateway = !!channel && (!!provCh || GATEWAY_CHANNELS.includes(channel));
   const base = Math.max(0, Math.round(amount || 0));
-  const [fee, setFee] = useState(0);
-  const [feeErr, setFeeErr] = useState<string | null>(null);
+  const [est, setEst] = useState<{ fee: number; policy: PayFeeEstimate['policy']; error: string | null }>({ fee: 0, policy: 'unknown', error: null });
   useEffect(() => {
-    if (!gateway || policy !== 'customer' || base <= 0) { setFee(0); setFeeErr(null); return; }
+    if (!gateway || !channel || base <= 0) { setEst({ fee: 0, policy: provCh && !provCh.pass_to_customer ? 'platform' : 'unknown', error: null }); return; }
     let live = true;
     const t = setTimeout(async () => {
-      const { data, error } = await supabase.rpc('pg_fee_calc', { p_channel: channel, p_amount: base });
-      if (!live) return;
-      if (error) { setFee(0); setFeeErr(`Biaya pembayaran belum bisa dihitung: ${friendlyError(error.message)}`); return; }
-      const row = (Array.isArray(data) ? data[0] : data) as { fee?: number; ppn?: number } | null;
-      setFee(Number(row?.fee ?? 0) + Number(row?.ppn ?? 0)); setFeeErr(null);
+      try {
+        const e = await estimatePgFee(service, channel, base);
+        if (!live) return;
+        const cust = Math.max(0, Number(e?.customer_fee) || 0);
+        setEst({ fee: cust, policy: cust > 0 ? 'customer' : 'platform', error: null });
+      } catch (e) {
+        if (!live) return;
+        // Tanpa estimasi server: kanal yang tidak dibebankan ke pelanggan tetap Rp0 (ditanggung AntarKita).
+        if (provCh && !provCh.pass_to_customer) setEst({ fee: 0, policy: 'platform', error: null });
+        else setEst({ fee: 0, policy: 'unknown', error: `Biaya metode pembayaran belum bisa dihitung: ${friendlyError((e as Error).message)}` });
+      }
     }, 250);
     return () => { live = false; clearTimeout(t); };
-  }, [gateway, policy, channel, base]);
-  const pay: PayFeeEstimate | null = gateway && channel ? { channel, label: channelLabel(channel), policy, fee: policy === 'customer' ? fee : 0, error: feeErr } : null;
-  /** Biaya pembayaran yang menambah total (0 bila ditanggung platform / belum diketahui). */
-  const payFee = pay?.policy === 'customer' ? pay.fee : 0;
+  }, [gateway, channel, base, service, provCh?.pass_to_customer]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pay: PayFeeEstimate = gateway && channel
+    ? { kind: 'gateway', channel, label: provCh?.label ?? channelLabel(channel), provider: provider?.provider ?? null, providerName, policy: est.policy, fee: est.policy === 'customer' ? est.fee : 0, error: est.error }
+    : { kind: method === 'wallet' ? 'wallet' : 'cash', channel: null, label: method === 'wallet' ? 'AntarPay' : 'Tunai', provider: null, providerName: null, policy: 'platform', fee: 0, error: null };
+  /** Biaya pembayaran yang menambah total (0 bila ditanggung AntarKita / belum diketahui). */
+  const payFee = pay.policy === 'customer' ? pay.fee : 0;
   return { econ, econError, pay, payFee };
 }
-
-export type PriceRow = { label: string; value: number; minus?: boolean; hint?: string | null; estimate?: boolean; keep?: boolean };
-
-/**
- * Baris rincian checkout yang seragam untuk semua layanan (§9):
- * Ongkir · Nilai barang · Biaya platform · Biaya layanan (shop/market) · Biaya pembayaran (estimasi) · Promo (−, pemilik biaya).
- */
-export function checkoutRows(p: {
-  service: ServiceType; econ?: ServiceEconomicsPublic | null;
-  ongkir: number; ongkirLabel?: string; ongkirHint?: string | null;
-  extra?: PriceRow[];
-  items?: number | null; itemsLabel?: string; itemsHint?: string | null;
-  platformFee: number; serviceFee?: number;
-  pay?: PayFeeEstimate | null;
-  discount: number; promoCode?: string | null; promoFunder?: PromoFunder | null; hasMerchant?: boolean;
-}): PriceRow[] {
-  const full = ONGKIR_FULL_DRIVER.includes(p.service);
-  const comm = p.econ?.driver_commission_pct;
-  const rows: PriceRow[] = [{
-    label: p.ongkirLabel ?? 'Ongkir', value: p.ongkir, keep: true,
-    hint: p.ongkirHint !== undefined ? p.ongkirHint : full ? '100 % untuk driver — platform tidak memotong ongkir'
-      : comm != null ? `Driver menerima ongkir dikurangi komisi platform ${pctLabel(comm)}` : null,
-  }];
-  if (p.extra) rows.push(...p.extra);
-  if (p.items != null) rows.push({ label: p.itemsLabel ?? 'Nilai barang', value: p.items, hint: p.itemsHint ?? null });
-  rows.push({ label: 'Biaya platform', value: p.platformFee, keep: true, hint: 'Biaya aplikasi AntarKita, terpisah dari ongkir' });
-  if (p.serviceFee) rows.push({ label: 'Biaya layanan', value: p.serviceFee, hint: 'Jasa belanja oleh driver (dibagi driver & platform)' });
-  if (p.pay?.policy === 'customer') rows.push({ label: `Biaya pembayaran ${p.pay.label}`, value: p.pay.fee, estimate: true, keep: true, hint: 'Biaya Midtrans untuk saluran ini — nilai final tampil di halaman bayar' });
-  if (p.discount > 0) {
-    // create_order: promo "merchant" tanpa merchant (ride/send/…) otomatis ditanggung platform
-    const funder: PromoFunder | null = p.promoFunder === 'merchant' && !p.hasMerchant ? 'platform' : p.promoFunder ?? null;
-    rows.push({ label: `Promo${p.promoCode ? ` (${p.promoCode})` : ''}`, value: p.discount, minus: true, hint: funder ? promoFunderLabel[funder] : null });
-  }
-  return rows;
-}
-
-/** Keterangan di bawah rincian untuk saluran gateway (bayar per pesanan lewat Midtrans). */
-export function checkoutNote(pay: PayFeeEstimate | null | undefined, econError?: string | null): string | null {
-  if (econError) return `Aturan biaya layanan belum termuat (${econError}). Total final dihitung server saat memesan.`;
-  if (!pay) return null;
-  if (pay.error) return pay.error;
-  if (pay.policy === 'customer') return `Dibayar per pesanan lewat Midtrans (${pay.label}). Halaman bayar terbuka setelah Anda menekan Pesan.`;
-  if (pay.policy === 'platform') return `Dibayar per pesanan lewat Midtrans (${pay.label}). Biaya pembayaran ditanggung AntarKita.`;
-  return `Dibayar per pesanan lewat Midtrans (${pay.label}). Bila ada biaya pembayaran, nilainya ditampilkan di halaman bayar sebelum Anda membayar.`;
-}
-
-export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNotes, subtotal, service, onDiscount, notesPlaceholder, hidePromo }: {
+export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNotes, subtotal, service, onDiscount, notesPlaceholder, hidePromo, feeBase }: {
   method: PayChoice; onMethod: (m: PayChoice) => void; promo: string; onPromo: (v: string) => void;
   notes: string; onNotes: (v: string) => void; subtotal: number; service: ServiceType;
   /** `funder` = pemilik biaya promo (promos.funded_by) untuk keterangan "ditanggung …" di rincian. */
   onDiscount: (d: number, funder?: PromoFunder | null) => void; notesPlaceholder?: string;
   /** Sembunyikan kode promo bila RPC pemesanannya tidak menerima promo (mis. travel_book). */
   hidePromo?: boolean;
+  /** Total sebelum biaya pembayaran — untuk label biaya per kanal ("+Rp3.500" / "gratis"). */
+  feeBase?: number;
 }) {
   const { wallet, session } = useAuth();
   const router = useRouter();
   const { prefs, loaded, load, save } = usePayPrefs();
   const { enabled: antarpayOn } = useAntarPay();
   const { isChannelOn, nonCashOn } = usePaymentChannels();
-  // 0089: saluran yang dimatikan admin tidak ditawarkan (server menolaknya lewat payment_channel_require).
+  // v3 §1: kanal gateway + biayanya dari payment_provider_public() (hanya `enabled`). Bila RPC gagal → daftar lama (0089).
+  const { provider, channels: provChannels, providerName } = useProviderPublic();
   const cashOn = isChannelOn('cash');
   const walletOn = isChannelOn('antarpay');
-  const wallets = EWALLETS.filter((x) => isChannelOn(x.key));
+  const wallets: { key: string; label: string; color: string; icon: string; ch: ProviderChannel | null }[] = provider
+    ? provChannels.map((c) => { const meta = PAYMENT_CHANNELS.find((x) => x.key === c.key); return { key: c.key, label: c.label || channelLabel(c.key), color: meta?.color ?? colors.info, icon: meta?.icon ?? channelIcon(c.key), ch: c }; })
+    : EWALLETS.filter((x) => isChannelOn(x.key)).map((x) => ({ key: x.key, label: x.label, color: x.color, icon: x.icon, ch: null }));
   const ewalletOn = wallets.length > 0;
   const allowed = (m: PayChoice) => (m === 'cash' ? cashOn : m === 'wallet' ? walletOn : ewalletOn);
   const firstAllowed: PayChoice = cashOn ? 'cash' : walletOn ? 'wallet' : 'ewallet';
+  const appliedRef = React.useRef(false);
   useEffect(() => { if (session && !loaded) load(session.user.id); }, [session, loaded, load]);
-  useEffect(() => { if (loaded && prefs && !appliedRef.current) { appliedRef.current = true; onMethod(antarpayOn && allowed(prefs.default_method) ? prefs.default_method : firstAllowed); } }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (loaded && prefs && !appliedRef.current) { appliedRef.current = true; onMethod(allowed(prefs.default_method) ? prefs.default_method : firstAllowed); } }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
   // 0088/0089: saluran terpilih dimatikan admin → pindah ke saluran pertama yang masih dibuka.
   useEffect(() => { if (!allowed(method)) onMethod(firstAllowed); }, [antarpayOn, cashOn, walletOn, ewalletOn, method]); // eslint-disable-line react-hooks/exhaustive-deps
-  // e-wallet pilihan lama dimatikan admin → geser ke e-wallet pertama yang aktif supaya paid_via tetap sah.
+  // Kanal pilihan lama tidak aktif lagi → geser ke kanal aktif pertama supaya paid_via tetap sah.
   useEffect(() => {
     if (!session || !loaded || !ewalletOn) return;
-    if (prefs?.ewallet && !wallets.some((x) => x.key === prefs.ewallet)) save(session.user.id, { ewallet: wallets[0].key as never });
-  }, [loaded, ewalletOn, prefs?.ewallet]); // eslint-disable-line react-hooks/exhaustive-deps
-  const appliedRef = React.useRef(false);
-  const ew = wallets.find((x) => x.key === prefs?.ewallet) ?? wallets[0] ?? EWALLETS[0];
+    if (!prefs?.ewallet || !wallets.some((x) => x.key === prefs.ewallet)) save(session.user.id, { ewallet: wallets[0].key as never });
+  }, [loaded, ewalletOn, prefs?.ewallet, provider?.provider]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ew = wallets.find((x) => x.key === prefs?.ewallet) ?? wallets[0] ?? null;
+  const feeText = (x: typeof wallets[number]) => (x.ch ? channelFeeText(x.ch, feeBase ?? 0) : 'biaya tampil saat bayar');
+  const pickChannel = (key: string) => { if (session) save(session.user.id, { ewallet: key as never }); onMethod('ewallet'); };
   const [checking, setChecking] = useState(false);
   const [promoMsg, setPromoMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -193,7 +170,7 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
     setChecking(false);
     const funder = prErr ? null : ((pr as { funded_by?: PromoFunder | null } | null)?.funded_by ?? null);
     onDiscount(d, funder);
-    setPromoMsg({ ok: true, text: `Hemat ${rupiah(d)}${funder ? ` · ${promoFunderLabel[funder]}` : prErr ? ' · pemilik biaya promo belum termuat' : ''}` });
+    setPromoMsg({ ok: true, text: `Hemat ${rupiah(d)}${funder ? ` · ${promoOwnerLabel[funder]}` : prErr ? ' · penanggung promo belum termuat' : ''}` });
     toast.success('Promo diterapkan');
   };
 
@@ -203,12 +180,28 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
       <Row gap={8}>
         {cashOn && <PayOption active={method === 'cash'} onPress={() => onMethod('cash')} icon="cash-outline" title="Tunai" subtitle="Ke driver" />}
         {walletOn && <PayOption active={method === 'wallet'} onPress={() => onMethod('wallet')} icon="wallet-outline" title="AntarPay" subtitle={rupiah(wallet?.balance ?? 0)} />}
-        {ewalletOn && <PayOption active={method === 'ewallet'} onPress={() => onMethod('ewallet')} icon="phone-portrait-outline" title={ew.label} subtitle="e-wallet" color={ew.color} />}
+        {ewalletOn && ew && <PayOption active={method === 'ewallet'} onPress={() => onMethod('ewallet')} icon={ew.icon as never} title={ew.label} subtitle={feeText(ew)} color={ew.color} />}
       </Row>
-      {antarpayOn && nonCashOn ? (
+      {method === 'ewallet' && ewalletOn && wallets.length > 1 ? (
+        <View style={s.chGrid}>
+          {wallets.map((x) => {
+            const on = x.key === ew?.key;
+            return (
+              <PressableScale key={x.key} onPress={() => pickChannel(x.key)} scaleTo={0.96} haptic={false} style={[s.ch, on && { borderColor: x.color, backgroundColor: x.color + '12' }]}>
+                <Ionicons name={x.icon as never} size={16} color={on ? x.color : colors.textSecondary} />
+                <Text style={{ fontWeight: '700', color: colors.text, fontSize: 12, flexShrink: 1 }} numberOfLines={1}>{x.label}</Text>
+                <Text style={[font.tiny, { color: x.ch?.pass_to_customer ? colors.textSecondary : colors.success, fontWeight: '700' }]} numberOfLines={1}>{feeText(x)}</Text>
+              </PressableScale>
+            );
+          })}
+        </View>
+      ) : null}
+      {method === 'ewallet' && ew ? (
+        <Text style={font.tiny}>Dibayar langsung per pesanan lewat {providerName ?? 'payment gateway'} ({ew.label}) — tidak lewat saldo. Halaman bayar terbuka setelah Anda menekan Pesan; biaya metode pembayaran tampil di rincian.</Text>
+      ) : (antarpayOn && nonCashOn) || ewalletOn ? (
         <PressableScale onPress={() => router.push('/(customer)/pay' as never)} scaleTo={0.98} haptic={false} style={s.gwRow}>
-          <View style={s.gwIcons}>{['#00AA13', '#4C2A86', '#118EEA', '#EE4D2D'].map((c) => <View key={c} style={[s.gwDot, { backgroundColor: c }]} />)}</View>
-          <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>{method === 'ewallet' ? `Bayar dengan ${ew.label} (via Midtrans)` : 'Ganti e-wallet / metode utama'}</Text><Text style={font.tiny}>{method === 'ewallet' ? 'Dibayar langsung per pesanan (tidak lewat saldo) — halaman bayar terbuka setelah Anda menekan Pesan.' : [walletOn ? 'Saldo AntarPay' : null, ...wallets.map((w) => w.label)].filter(Boolean).join(' · ')}</Text></View>
+          <View style={s.gwIcons}>{wallets.slice(0, 4).map((w) => <View key={w.key} style={[s.gwDot, { backgroundColor: w.color }]} />)}</View>
+          <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>Ganti metode utama</Text><Text style={font.tiny} numberOfLines={2}>{[walletOn ? 'Saldo AntarPay' : null, ...wallets.map((w) => w.label)].filter(Boolean).join(' · ')}</Text></View>
           <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
         </PressableScale>
       ) : <AntarPayOffNote text={!cashOn && !walletOn && !ewalletOn ? 'Semua metode pembayaran sedang dinonaktifkan admin — coba lagi nanti.' : antarpayOn ? CHANNELS_OFF_TEXT : undefined} />}
@@ -227,6 +220,16 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
       </View>
     </View>
   );
+}
+
+/** Ikon untuk kanal yang tidak ada di daftar lama (gerai ritel, paylater, dll.). */
+function channelIcon(key: string): string {
+  if (key === 'qris') return 'qr-code-outline';
+  if (key === 'card') return 'card-outline';
+  if (key === 'bank_transfer' || key.startsWith('va_') || key === 'instant_payment') return 'business-outline';
+  if (key.startsWith('retail_')) return 'storefront-outline';
+  if (key.startsWith('paylater_')) return 'time-outline';
+  return 'phone-portrait-outline';
 }
 
 function PayOption({ active, onPress, icon, title, subtitle, color = colors.primary }: { active: boolean; onPress: () => void; icon: React.ComponentProps<typeof Ionicons>['name']; title: string; subtitle: string; color?: string }) {
@@ -272,4 +275,6 @@ const s = StyleSheet.create({
   gwDot: { width: 14, height: 14, borderRadius: 4 },
   notes: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.92)', borderWidth: 1, borderColor: glass.border, borderRadius: radius.md, paddingHorizontal: 12 },
   notesInput: { flex: 1, height: 44, color: colors.text, fontSize: 14 },
+  chGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  ch: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.md, borderWidth: 1.5, borderColor: glass.border, backgroundColor: 'rgba(255,255,255,0.92)', maxWidth: '100%' },
 });

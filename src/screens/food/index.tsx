@@ -15,6 +15,8 @@ import { supabase, friendlyError } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
 import type { Merchant } from '@/lib/types';
+import { isSponsoredMerchant } from '@/lib/ads';
+import { SponsoredRow } from '@/components/SponsoredRow';
 
 const CATS: { label: string; icon: IconName }[] = [
   { label: 'Semua', icon: 'grid-outline' },
@@ -47,7 +49,7 @@ export default function FoodHome() {
   useEffect(() => {
     const t = setTimeout(async () => {
       setLoading(true);
-      // 0101: nearby_merchants_v2 — merchant yang di-boost diurutkan di atas oleh server dan WAJIB berlabel 'Iklan'
+      // nearby_merchants_v2: merchant berbayar membawa ad_label + campaign_id → ditampilkan di blok Sponsored terpisah (§7 v3)
       const { data, error } = await supabase.rpc('nearby_merchants_v2', { p_lat: location.lat, p_lng: location.lng, p_radius_km: 30, p_q: q || null, p_halal: halal === 'all' ? null : halal === 'halal' });
       setLoadError(error ? friendlyError(error.message) : null);
       setList((data as Merchant[]) ?? []);
@@ -56,9 +58,12 @@ export default function FoodHome() {
     return () => clearTimeout(t);
   }, [q, halal, location.lat, location.lng, reloadTick]);
 
+  // Ranking organik: jarak (default/Terdekat) atau rating — iklan TIDAK memengaruhi urutan ini (§7).
   const shown = list
     .filter((m) => cat === 'Semua' || m.category === cat)
-    .sort((a, b) => (filter === 'near' ? (a.distance_km ?? 0) - (b.distance_km ?? 0) : filter === 'rating' ? b.rating_avg - a.rating_avg : 0));
+    .sort((a, b) => (filter === 'rating' ? b.rating_avg - a.rating_avg : (a.distance_km ?? 0) - (b.distance_km ?? 0)));
+  const paid = list.filter(isSponsoredMerchant).filter((m) => cat === 'Semua' || m.category === cat);
+  const adPlacement = q ? 'search_top' as const : cat !== 'Semua' ? 'banner_category' as const : 'boost_nearby' as const;
   const colW = Math.floor((Math.min(width, 720) - 32 - 12) / 2);
 
   return (
@@ -105,6 +110,14 @@ export default function FoodHome() {
             </Row>
           </Entrance>
 
+          {!loadError && (
+            <View style={{ marginTop: 18 }}>
+              <SponsoredRow placement={adPlacement} near={location} q={q || null} category={cat !== 'Semua' ? cat : null}
+                organic={adPlacement === 'banner_category' ? undefined : paid} variant={adPlacement === 'banner_category' ? 'banner' : 'row'}
+                title={q ? `Sponsored untuk "${q}"` : cat !== 'Semua' ? `Sponsored · ${cat}` : 'Merchant bersponsor'} />
+            </View>
+          )}
+
           <Row between style={{ marginTop: 22, marginBottom: 12 }}>
             <Text style={font.h3}>{q ? `Hasil "${q}"` : 'Merchant di sekitar'}</Text>
             {!loading && <Text style={font.tiny}>{shown.length} tempat</Text>}
@@ -128,7 +141,6 @@ export default function FoodHome() {
                       title={m.name}
                       subtitle={`${m.distance_km} km · ${m.is_halal ? (m.halal_verified ? 'Halal terverifikasi' : 'Halal') : 'Non-halal'}`}
                       rating={m.rating_avg}
-                      adLabel={m.ad_label ?? (m.boosted || m.featured ? 'Iklan' : null)}
                       width={colW}
                       height={200}
                       accent={colors.food}

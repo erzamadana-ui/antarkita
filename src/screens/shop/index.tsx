@@ -403,7 +403,7 @@ export default function ShopScreen() {
           <Card solid>
             {est ? <PriceSummary total={total} note={checkoutNote(fees.pay, fees.econError)} rows={checkoutRows({
               service: 'shop', econ: fees.econ, ongkir: est.fare, ongkirLabel: `Ongkir ${vehicle === 'car' ? 'mobil' : 'motor'} (${km(est.distance_km)})`,
-              items: subtotal, itemsLabel: free ? 'Nilai barang (anggaran perkiraan)' : 'Nilai barang', itemsHint: 'Dibayar driver ke toko sesuai nota; disesuaikan dengan harga riil',
+              items: subtotal, itemsLabel: free ? 'Harga barang (anggaran perkiraan)' : 'Harga barang', itemsHint: 'Dibayar driver ke toko sesuai nota; disesuaikan dengan harga riil',
               platformFee, serviceFee: est.service_fee, pay: fees.pay, discount, promoCode: promo || null, promoFunder,
             })} />
               : fareFailed ? (
@@ -419,7 +419,7 @@ export default function ShopScreen() {
         )}
         <Card solid>
           <AntarNowSection service="shop" accent={colors.shop} />
-          <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={est?.fare ?? 0} service="shop" onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} notesPlaceholder="Catatan (mis. merek pengganti jika kosong)" />
+          <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={est?.fare ?? 0} service="shop" feeBase={baseTotal} onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} notesPlaceholder="Catatan (mis. merek pengganti jika kosong)" />
         </Card>
         <Text style={font.tiny}>Driver mengirim foto nota. Barang yang tidak tersedia dikonfirmasi lewat chat/telepon dan tidak ditagihkan.</Text>
       </View>

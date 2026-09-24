@@ -44,8 +44,10 @@ export interface Merchant {
   lat: number | null; lng: number | null; image_url: string | null; is_open: boolean; status: ApprovalStatus;
   rating_avg: number; rating_count: number; prep_minutes: number; opening_hours: string | null; created_at: string;
   distance_km?: number; delivery_fee?: number; is_halal?: boolean; halal_verified?: boolean;
-  /** nearby_merchants_v2 (0101): iklan boost/featured yang sedang tayang — WAJIB diberi label "Iklan" di UI. */
+  /** nearby_merchants_v2 (0101/v3): iklan berbayar yang sedang tayang — ditampilkan di blok "Sponsored" terpisah, bukan di ranking organik. */
   boosted?: boolean; featured?: boolean; ad_label?: string | null;
+  /** v3 (§7): kampanye berbayar yang membuat merchant ini berlabel 'Sponsored' (null = organik). */
+  campaign_id?: string | null;
 }
 export interface MerchantDocuments {
   merchant_id: string; owner_phone: string | null; npwp_no: string | null; npwp_url: string | null; license_no: string | null; license_url: string | null;
@@ -82,6 +84,8 @@ export interface Order {
   driver_earning_final?: number | null; ledger_version?: number | null; promo_funded_by?: PromoFunder | null;
   driver_commission_pct_snap?: number | null; merchant_fee_pct_snap?: number | null;
   pg_channel?: string | null; pg_fee?: number | null; pg_fee_ppn?: number | null; pg_fee_borne_by?: PgFeePolicy | null;
+  // Finpay v3 (§2, §7): kode bantuan CS pembayaran, status penyelesaian dana, kampanye iklan yang menghasilkan pesanan
+  payment_support_ref?: string | null; settlement_status?: 'ORDER_COMPLETED' | 'PAYOUT_PENDING' | 'PAYOUT_SETTLED' | 'RECONCILED' | null; ad_campaign_id?: string | null;
   // tahap 11 (0030): AntarNow — driver tujuan langsung dari kode driver (null = pencarian normal)
   preferred_driver_id?: string | null;
   cancel_reason: string | null; created_at: string; accepted_at: string | null; arrived_at: string | null; started_at: string | null;
@@ -546,3 +550,97 @@ export interface MerchantMyAds {
 }
 /** `rpc('ad_price', { p_product, p_days })` (0101). */
 export interface AdPriceQuote { product: string; name: string; unit: AdUnit; units: number; days: number; unit_price: number; price: number; placement: AdPlacement; active: boolean }
+
+/* ───────────────── Finpay v3 (KONTRAK-API-V3 §1–§4, §7, §9) — bentuk data RPC/edge untuk aplikasi Pelanggan ───────────────── */
+
+/** Status kanonik pembayaran (`payments.pay_status`, §2–§3). */
+export type PayStatus = 'PENDING' | 'PAID' | 'FAILED' | 'EXPIRED' | 'REFUND_REQUESTED' | 'PARTIALLY_REFUNDED' | 'REFUNDED' | 'DISPUTED' | 'RECONCILED';
+/** Provider pembayaran. Label tampil TIDAK di-hard-code per provider di layar — lihat `providerLabel()` (lib/payments). */
+export type PayProvider = 'midtrans' | 'finpay' | 'simulated' | (string & {});
+
+/** Satu kanal dari `payment_provider_public().channels` (§1). */
+export interface ProviderChannel {
+  key: string; label: string; fee_label: string | null; fee_pct: number; fee_fixed: number;
+  /** true HANYA bila `pass_to_customer` && `pass_to_customer_legal_ok` di server (QRIS selalu false). */
+  pass_to_customer: boolean; enabled: boolean;
+}
+/** `rpc('payment_provider_public')` (§1, anon). */
+export interface ProviderPublic { provider: PayProvider; env: 'sandbox' | 'production' | (string & {}); simulation: boolean; channels: ProviderChannel[]; /** Nama tampil dari server (0105). */ provider_label?: string | null }
+
+/** `rpc('pg_fee_estimate', { p_service, p_channel, p_amount })` (0104; v3 memakai provider aktif). */
+export interface PgFeeEstimate {
+  service: ServiceType; channel: string; channel_label: string; is_gateway: boolean; amount: number;
+  fee: number; ppn: number; total_fee: number; borne_by: PgFeePolicy | null; policy: PgFeePolicy;
+  /** Bagian biaya PG yang DITAMBAHKAN ke total pelanggan (0 = ditanggung AntarKita). */
+  customer_fee: number; total_with_fee: number; estimate: boolean; note?: string | null; provider?: PayProvider | null;
+}
+
+/** `order_payment_prepare(p_order, p_channel)` v3 — OrderPaymentQuote + kolom baru (§2). */
+export interface OrderPaymentPrepareV3 extends OrderPaymentQuote {
+  /** Biaya metode pembayaran yang dibebankan ke pelanggan (0 = ditanggung AntarKita). */
+  pg_fee_customer?: number | null; provider?: PayProvider | null; support_ref?: string | null;
+  /** Opsional: pajak yang dibebankan (baris tampil hanya bila > 0). */ tax?: number | null;
+  /** 0105 */ provider_label?: string | null; pg_fee_label?: string | null;
+}
+
+/** Balasan edge function `pay-create` (§9). `reused` opsional: server mengembalikan intent PENDING yang sama. */
+export interface PayCreateResult {
+  payment_id: string; external_id: string; provider: PayProvider;
+  checkout_url?: string | null; checkout_token?: string | null; qr_string?: string | null; payment_code?: string | null;
+  expires_at: string | null; support_ref: string | null;
+  /** Opsional (bukan kontrak): URL gambar QR bila provider menyediakannya. */
+  qr_image_url?: string | null; reused?: boolean; channel?: string | null; amount?: number | null; pay_status?: PayStatus | null;
+  error?: string; message?: string;
+}
+
+/** `rpc('my_payment_status', { p_order })` (§2, pemilik saja). null = belum ada tagihan untuk pesanan ini. */
+export interface MyPaymentStatus {
+  pay_status: PayStatus; provider: PayProvider; channel: string | null; checkout_url: string | null; qr_string: string | null;
+  payment_code: string | null; expires_at: string | null; paid_at: string | null; amount: number; support_ref: string | null; refunded_amount: number;
+  /** Opsional (bukan kontrak). */ payment_id?: string | null; external_id?: string | null; qr_image_url?: string | null; channel_label?: string | null;
+  /** 0105: tambahan server. */ provider_label?: string | null; order_status?: OrderStatus | null; payment_status?: string | null; late_paid?: boolean | null;
+}
+
+/** Satu baris `rpc('my_payment_history', { p_limit })` (§2). Kolom selain yang dikontrakkan diperlakukan opsional. */
+export interface PaymentHistoryRow {
+  id: string; purpose: 'order' | 'topup' | (string & {}); order_id: string | null; amount: number; pay_status: PayStatus;
+  provider: PayProvider; channel: string | null; support_ref: string | null; created_at: string;
+  order_code?: string | null; service?: ServiceType | null; paid_at?: string | null; refunded_amount?: number | null; channel_label?: string | null;
+  provider_label?: string | null; expires_at?: string | null;
+}
+
+/** Satu baris rincian bukti transaksi / pratinjau refund. */
+export interface ReceiptLine { label: string; amount: number; key?: string | null; kind?: string | null; hint?: string | null; note?: string | null; minus?: boolean | null; funded_by?: string | null; borne_by?: string | null }
+/** `rpc('my_receipt', { p_order })` (§2) — jsonb; hanya `lines`/`total`/`refundable_note` yang wajib dipakai UI. */
+export interface Receipt {
+  order_id: string; code?: string | null; service?: ServiceType | null; status?: OrderStatus | null; created_at?: string | null;
+  merchant?: string | null; pay_status?: PayStatus | null; provider?: PayProvider | null; channel?: string | null; channel_label?: string | null;
+  paid_at?: string | null; support_ref?: string | null; external_id?: string | null;
+  lines?: ReceiptLine[] | null;
+  // Bentuk datar (cadangan bila server tidak mengirim `lines`)
+  items_subtotal?: number | null; delivery_fee?: number | null; driver_share_note?: string | null; platform_fee?: number | null; service_fee?: number | null;
+  pg_fee_customer?: number | null; tip?: number | null; extras?: number | null; helpers_fee?: number | null; intercity_fare?: number | null;
+  discount?: number | null; promo_code?: string | null; promo_funded_by?: PromoFunder | null; tax?: number | null;
+  total: number; refunded_amount?: number | null; refundable_note?: string | null;
+  /** 0105: total + tip; nama tampil provider; metode. */ total_paid?: number | null; provider_label?: string | null; payment_method?: PaymentMethod | null; completed_at?: string | null; payment_status?: string | null;
+}
+
+/** `rpc('refund_policy_calc', { p_order })` (§4). */
+export interface RefundPolicy { refundable: number; non_refundable: number; lines: { label: string; amount: number; refundable: boolean }[]; note?: string | null; phase?: string | null }
+
+export type DisputeKind = 'amount_mismatch' | 'not_received' | 'chargeback' | 'payout_missing' | 'other';
+export type DisputeStatus = 'open' | 'investigating' | 'resolved_refund' | 'resolved_no_refund' | 'closed';
+/** Satu baris `rpc('my_disputes')` (§4). */
+export interface DisputeRow {
+  id: string; order_id: string; payment_id?: string | null; kind: DisputeKind; amount: number | null; description: string | null;
+  status: DisputeStatus; resolution?: string | null; created_at: string; resolved_at?: string | null;
+  order_code?: string | null; support_ref?: string | null;
+}
+
+/** Placement iklan v3 (§7). */
+export type AdPlacementV3 = 'featured_home' | 'boost_nearby' | 'search_top' | 'banner_home' | 'banner_category' | 'radius_promo' | 'sponsored_voucher' | 'post_checkout_cross';
+/** Satu butir `rpc('ads_serve', …)` (§7). */
+export interface AdServed {
+  campaign_id: string; merchant_id: string; merchant: string; headline: string | null; image_url: string | null; cta: string | null;
+  label: string; distance_km: number | null;
+}

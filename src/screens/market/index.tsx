@@ -29,7 +29,7 @@ type Line = { qty: number; note: string };
 type VendorLine = MarketVendorItem & { vendor_id: string; vendor_name: string; stall_no: string | null };
 
 const GRADE: Record<VendorGrade, { label: string; color: string; desc: string }> = {
-  A: { label: 'Grade A', color: colors.success, desc: 'kualitas terbaik' },
+  A: { label: 'Grade A', color: colors.success, desc: 'mutu pilihan' },
   B: { label: 'Grade B', color: colors.primary, desc: 'kualitas standar' },
   C: { label: 'Grade C', color: colors.textMuted, desc: 'ekonomis' },
 };
@@ -451,7 +451,7 @@ export default function MarketScreen() {
           <Card solid style={{ gap: 8 }}>
             {est ? <PriceSummary total={total} note={checkoutNote(fees.pay, fees.econError)} rows={checkoutRows({
               service: 'market', econ: fees.econ, ongkir: est.fare, ongkirLabel: `Ongkir ${vehicle === 'car' ? 'mobil' : 'motor'} (${km(est.distance_km)})`,
-              items: subtotal, itemsLabel: 'Nilai barang (harga acuan)', itemsHint: 'Dibayar driver ke pedagang sesuai nota; disesuaikan dengan harga riil',
+              items: subtotal, itemsLabel: 'Harga barang (harga acuan)', itemsHint: 'Dibayar driver ke pedagang sesuai nota; disesuaikan dengan harga riil',
               platformFee, serviceFee: est.service_fee, pay: fees.pay, discount, promoCode: promo || null, promoFunder,
             })} />
               : fareFailed ? (
@@ -468,7 +468,7 @@ export default function MarketScreen() {
         )}
         <Card solid>
           <AntarNowSection service="market" accent={colors.market} />
-          <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={est?.fare ?? 0} service="market" onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} notesPlaceholder="Catatan untuk driver (mis. pilih yang segar, lapak langganan)" />
+          <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={est?.fare ?? 0} service="market" feeBase={baseTotal} onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} notesPlaceholder="Catatan untuk driver (mis. pilih yang segar, lapak langganan)" />
         </Card>
       </View>
       )}

@@ -36,6 +36,12 @@ const id = {
   become_driver: 'Daftar jadi Mitra Driver', become_merchant: 'Daftar jadi Merchant AntarFood', switch_driver: 'Beralih ke Mode Driver', switch_merchant: 'Beralih ke Mode Merchant', switch_customer: 'Beralih ke Mode Pelanggan', admin_panel: 'Panel Admin',
   status_searching: 'Mencari driver', status_accepted: 'Driver menuju lokasi', status_arrived: 'Driver sudah tiba', status_in_progress: 'Dalam perjalanan', status_completed: 'Selesai', status_cancelled: 'Dibatalkan',
   online: 'ONLINE', offline: 'OFFLINE', orders_available: 'order tersedia', accept_order: 'Terima Order', active_order: 'Order aktif',
+  // Finpay v3 — pembayaran, bukti, refund, sengketa, iklan
+  receipt_title: 'Bukti transaksi', receipt_unavailable: 'Bukti transaksi belum tersedia', retry: 'Coba lagi', share: 'Bagikan', save_pdf: 'Simpan / cetak', copy: 'Salin',
+  report_payment_issue: 'Laporkan masalah pembayaran', payment_history: 'Riwayat pembayaran', payment_history_empty: 'Belum ada pembayaran', support_code: 'Kode bantuan CS',
+  continue_payment: 'Lanjutkan pembayaran', new_invoice: 'Buat tagihan baru', check_status: 'Periksa status', open_payment_page: 'Buka halaman pembayaran',
+  request_refund: 'Ajukan pengembalian dana', payment_disputes: 'Masalah pembayaran saya', payment_disputes_empty: 'Belum ada laporan masalah pembayaran', sponsored: 'Sponsored',
+  payment_method_fee: 'Biaya metode pembayaran', platform_fee_ak: 'Biaya platform AntarKita', borne_by_ak: 'ditanggung AntarKita', payment_expired: 'Tagihan kedaluwarsa', payment_failed: 'Pembayaran gagal',
   tag_ride_motor: 'Ojek motor cepat & hemat', tag_ride_car: 'Mobil nyaman untuk keluarga', tag_food: 'Makanan favorit diantar', tag_send: 'Paket dalam & antar kota', tag_shop: 'Indomaret, Alfamart, apotek & supermarket', tag_market: 'Bahan masak dari pasar terdekat', tag_box: 'Mobil box / pick up, pindahan', tag_travel: 'Travel antar kota, jemput di rumah', tag_pay: 'Saldo & metode bayar', notifications: 'Notifikasi', payment_methods: 'Pembayaran', tap_detail: 'ketuk untuk detail',
 };
 export type TKey = keyof typeof id;
@@ -62,6 +68,11 @@ const en: Partial<Record<TKey, string>> = {
   become_driver: 'Become a Driver Partner', become_merchant: 'Become an AntarFood Merchant', switch_driver: 'Switch to Driver Mode', switch_merchant: 'Switch to Merchant Mode', switch_customer: 'Switch to Customer Mode', admin_panel: 'Admin Panel',
   status_searching: 'Finding a driver', status_accepted: 'Driver on the way', status_arrived: 'Driver has arrived', status_in_progress: 'On the way', status_completed: 'Completed', status_cancelled: 'Cancelled',
   online: 'ONLINE', offline: 'OFFLINE', orders_available: 'orders available', accept_order: 'Accept Order', active_order: 'Active order',
+  receipt_title: 'Receipt', receipt_unavailable: 'Receipt not available yet', retry: 'Try again', share: 'Share', save_pdf: 'Save / print', copy: 'Copy',
+  report_payment_issue: 'Report a payment issue', payment_history: 'Payment history', payment_history_empty: 'No payments yet', support_code: 'Support code',
+  continue_payment: 'Continue payment', new_invoice: 'Create a new bill', check_status: 'Check status', open_payment_page: 'Open payment page',
+  request_refund: 'Request a refund', payment_disputes: 'My payment issues', payment_disputes_empty: 'No payment issues reported', sponsored: 'Sponsored',
+  payment_method_fee: 'Payment method fee', platform_fee_ak: 'AntarKita platform fee', borne_by_ak: 'covered by AntarKita', payment_expired: 'Bill expired', payment_failed: 'Payment failed',
   tag_ride_motor: 'Fast & cheap motorbike rides', tag_ride_car: 'Comfortable cars for families', tag_food: 'Favorite food delivered', tag_send: 'Parcels in-city & intercity', tag_shop: 'Indomaret, Alfamart, pharmacy & supermarket', tag_market: 'Groceries from the nearest wet market', tag_box: 'Box truck / pickup, moving', tag_travel: 'Intercity travel, home pickup', tag_pay: 'Balance & payment methods', notifications: 'Notifications', payment_methods: 'Payment', tap_detail: 'tap for details',
 };
 
@@ -87,6 +98,11 @@ const zh: Partial<Record<TKey, string>> = {
   become_driver: '成为司机合作伙伴', become_merchant: '成为 AntarFood 商家', switch_driver: '切换到司机模式', switch_merchant: '切换到商家模式', switch_customer: '切换到顾客模式', admin_panel: '管理面板',
   status_searching: '正在寻找司机', status_accepted: '司机正在前来', status_arrived: '司机已到达', status_in_progress: '行程中', status_completed: '已完成', status_cancelled: '已取消',
   online: '在线', offline: '离线', orders_available: '个可接订单', accept_order: '接单', active_order: '进行中的订单',
+  receipt_title: '交易凭证', receipt_unavailable: '暂无交易凭证', retry: '重试', share: '分享', save_pdf: '保存 / 打印', copy: '复制',
+  report_payment_issue: '报告支付问题', payment_history: '支付记录', payment_history_empty: '暂无支付记录', support_code: '客服查询码',
+  continue_payment: '继续支付', new_invoice: '重新生成账单', check_status: '查询状态', open_payment_page: '打开支付页面',
+  request_refund: '申请退款', payment_disputes: '我的支付问题', payment_disputes_empty: '暂无支付问题', sponsored: 'Sponsored',
+  payment_method_fee: '支付方式手续费', platform_fee_ak: 'AntarKita 平台费', borne_by_ak: '由 AntarKita 承担', payment_expired: '账单已过期', payment_failed: '支付失败',
   tag_ride_motor: '快捷实惠的摩托出行', tag_ride_car: '舒适的家庭用车', tag_food: '最爱美食送到家', tag_send: '同城及跨城包裹', tag_shop: '代购 Indomaret、Alfamart、药店、超市', tag_market: '就近传统市场食材代购', tag_box: '厢式车/皮卡，搬家', tag_travel: '城际拼车，上门接送', tag_pay: '余额与支付方式', notifications: '通知', payment_methods: '支付', tap_detail: '点击查看详情',
 };
 
@@ -112,6 +128,11 @@ const ar: Partial<Record<TKey, string>> = {
   become_driver: 'كن سائقًا شريكًا', become_merchant: 'كن تاجرًا في AntarFood', switch_driver: 'التبديل إلى وضع السائق', switch_merchant: 'التبديل إلى وضع التاجر', switch_customer: 'التبديل إلى وضع العميل', admin_panel: 'لوحة المشرف',
   status_searching: 'جارٍ البحث عن سائق', status_accepted: 'السائق في الطريق', status_arrived: 'وصل السائق', status_in_progress: 'في الطريق', status_completed: 'مكتمل', status_cancelled: 'ملغى',
   online: 'متصل', offline: 'غير متصل', orders_available: 'طلبات متاحة', accept_order: 'قبول الطلب', active_order: 'طلب نشط',
+  receipt_title: 'إيصال المعاملة', receipt_unavailable: 'الإيصال غير متاح بعد', retry: 'إعادة المحاولة', share: 'مشاركة', save_pdf: 'حفظ / طباعة', copy: 'نسخ',
+  report_payment_issue: 'الإبلاغ عن مشكلة دفع', payment_history: 'سجل المدفوعات', payment_history_empty: 'لا توجد مدفوعات بعد', support_code: 'رمز الدعم',
+  continue_payment: 'متابعة الدفع', new_invoice: 'إنشاء فاتورة جديدة', check_status: 'التحقق من الحالة', open_payment_page: 'فتح صفحة الدفع',
+  request_refund: 'طلب استرداد', payment_disputes: 'مشكلات الدفع الخاصة بي', payment_disputes_empty: 'لا توجد مشكلات دفع', sponsored: 'Sponsored',
+  payment_method_fee: 'رسوم طريقة الدفع', platform_fee_ak: 'رسوم منصة AntarKita', borne_by_ak: 'تتحملها AntarKita', payment_expired: 'انتهت صلاحية الفاتورة', payment_failed: 'فشل الدفع',
   tag_ride_motor: 'رحلات دراجة سريعة واقتصادية', tag_ride_car: 'سيارات مريحة للعائلة', tag_food: 'طعامك المفضل يصل إليك', tag_send: 'طرود داخل المدينة وبين المدن', tag_shop: 'تسوّق من Indomaret وAlfamart والصيدليات', tag_market: 'مكوّنات الطبخ من أقرب سوق شعبي', tag_box: 'شاحنة صندوق/بيك أب، نقل أثاث', tag_travel: 'سفر بين المدن مع توصيل من المنزل', tag_pay: 'الرصيد وطرق الدفع', notifications: 'الإشعارات', payment_methods: 'الدفع', tap_detail: 'اضغط للتفاصيل',
 };
 

@@ -218,7 +218,9 @@ export default function TravelScreen() {
               note={econErr ? `Biaya platform belum termuat (${econErr}). Total final dihitung server saat memesan.` : method === 'ewallet' ? 'AntarTravel dibayar dari saldo AntarPay; bila kurang, halaman bayar dibuka untuk kekurangannya.' : null}
               rows={checkoutRows({
                 service: 'travel', ongkir: price, ongkirLabel: priv ? `Tarif carter private (${trip.partner.model})` : `Tarif ${pax} kursi × ${rupiah(trip.seat_price)}`,
-                ongkirHint: 'Tarif mitra AntarTravel (fee mitra sesuai kontrak)', platformFee: fee, discount: 0,
+                ongkirHint: 'Tarif mitra AntarTravel (fee mitra sesuai kontrak)', econ: travelEcon, platformFee: fee, discount: 0,
+                // travel_book menyelesaikan non-tunai dari saldo AntarPay (bukan tagihan gateway per pesanan) → tanpa biaya metode pembayaran.
+                pay: { kind: method === 'cash' ? 'cash' : 'wallet', channel: null, label: method === 'cash' ? 'Tunai' : 'AntarPay', provider: null, providerName: null, policy: 'platform', fee: 0, error: null },
               })} /></View>
             <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={price} service="ride_car" onDiscount={setDiscount} hidePromo notesPlaceholder="Catatan untuk mitra travel (bawaan, jam jemput)" />
             <Text style={font.tiny}>Mobil berangkat bila minimal {trip.min_pax} penumpang terkumpul (kecuali private). Pembatalan gratis s.d. 3 jam sebelum berangkat. Penumpang dijemput di alamat masing-masing ±1 jam sebelum jadwal.</Text>
@@ -495,7 +497,7 @@ function PartnerCard({ p, daily, active, onPick }: { p: TravelPartnerCard; daily
       <Row gap={6} style={{ flexWrap: 'wrap' }}>
         {!!p.is_electric && <Badge text="Listrik" color={colors.success} />}
         {p.accommodation?.includes('customer') && <Badge text="Akomodasi ditanggung pelanggan" color={colors.info} />}
-        {p.accommodation?.includes('self') && <Badge text={`Mandiri ${rupiah(p.accommodation_fee || 150000)}/malam`} color={colors.accent} />}
+        {p.accommodation?.includes('self') && <Badge text={p.accommodation_fee ? `Mandiri ${rupiah(p.accommodation_fee)}/malam` : 'Akomodasi mandiri'} color={colors.accent} />}
         {!!p.fuel_included && <Badge text="BBM termasuk" color={colors.primary} />}
         {daily && p.overtime_rate ? <Badge text={`Overtime ${rupiah(p.overtime_rate)}/jam`} color={colors.textMuted} /> : null}
       </Row>

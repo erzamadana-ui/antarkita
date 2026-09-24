@@ -42,10 +42,14 @@ export function orderRequestKey(p: Record<string, unknown>): string {
  * Ganti `rpc('create_order', { p })`. Menyisipkan `client_request_id` dan memutar nonce
  * setelah berhasil supaya pesanan identik yang memang disengaja tetap bisa dibuat.
  */
-export async function createOrder(p: Record<string, unknown>): Promise<Order> {
-  let key = orderRequestKey(p);
-  if (key === lastSuccess) { nonce = rand(); key = orderRequestKey(p); }
-  const o = await rpc<Order>('create_order', { p: { ...p, client_request_id: key } });
+export async function createOrder(p: Record<string, unknown>, opts: { adCampaignId?: string | null } = {}): Promise<Order> {
+  // Iklan v3 (§7): kampanye yang diklik pelanggan sebelum memesan → server mencatat konversi (orders.ad_campaign_id).
+  // create_order menerima satu argumen jsonb `p`, jadi kampanye dikirim sebagai kunci di dalam `p`
+  // (`ad_campaign_id`; alias `p_ad_campaign_id` sesuai penamaan kontrak). Tanpa klik iklan → kunci tidak dikirim.
+  const body: Record<string, unknown> = opts.adCampaignId ? { ...p, ad_campaign_id: opts.adCampaignId, p_ad_campaign_id: opts.adCampaignId } : p;
+  let key = orderRequestKey(body);
+  if (key === lastSuccess) { nonce = rand(); key = orderRequestKey(body); }
+  const o = await rpc<Order>('create_order', { p: { ...body, client_request_id: key } });
   lastSuccess = key;
   return o;
 }

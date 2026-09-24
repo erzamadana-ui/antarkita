@@ -114,3 +114,19 @@ export const productCategoryLabel: Record<string, string> = { sembako: 'Sembako'
 export const accommodationLabel: Record<string, string> = { customer: 'Akomodasi ditanggung pelanggan', self: 'Akomodasi sopir mandiri' };
 /** Format tanggal + jam singkat: "Sab, 6 Sep 08.00" */
 export const formatDateTimeShort = (iso?: string | null) => iso ? new Date(iso).toLocaleString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+
+// ---------- Finpay v3 (KONTRAK-API-V3 §0.4, §2–§4) ----------
+/** Penanggung promo untuk teks pelanggan: "Promo ditanggung AntarKita/Merchant/Sponsor" (§0.4). */
+export const promoOwnerLabel: Record<PromoFunder, string> = { platform: 'Promo ditanggung AntarKita', merchant: 'Promo ditanggung Merchant', sponsor: 'Promo ditanggung Sponsor' };
+/** Label status pembayaran kanonik (`payments.pay_status`). */
+export const payStatusLabel: Record<string, string> = {
+  PENDING: 'Menunggu pembayaran', PAID: 'Lunas', FAILED: 'Gagal', EXPIRED: 'Kedaluwarsa',
+  REFUND_REQUESTED: 'Pengembalian diajukan', PARTIALLY_REFUNDED: 'Dikembalikan sebagian', REFUNDED: 'Dikembalikan',
+  DISPUTED: 'Dalam sengketa', RECONCILED: 'Lunas · terekonsiliasi',
+};
+export const payStatusColor = (s?: string | null) =>
+  s === 'PAID' || s === 'RECONCILED' ? '#1FA363' : s === 'PENDING' ? '#D97706' : s === 'FAILED' || s === 'EXPIRED' ? '#E5484D'
+  : s === 'REFUND_REQUESTED' || s === 'DISPUTED' ? '#8B5CF6' : s === 'PARTIALLY_REFUNDED' || s === 'REFUNDED' ? '#2F80ED' : '#8A9899';
+export const disputeKindLabel: Record<string, string> = { amount_mismatch: 'Nominal tidak sesuai', not_received: 'Sudah bayar, pesanan tidak diterima', chargeback: 'Chargeback / sanggahan bank', payout_missing: 'Pencairan belum masuk', other: 'Lainnya' };
+export const disputeStatusLabel: Record<string, string> = { open: 'Dibuka', investigating: 'Diselidiki CS', resolved_refund: 'Selesai · dana dikembalikan', resolved_no_refund: 'Selesai · tanpa pengembalian', closed: 'Ditutup' };
+export const disputeStatusColor = (s: string) => s === 'open' ? '#F59E0B' : s === 'investigating' ? '#3B82F6' : s === 'resolved_refund' ? '#10B981' : '#94A3B8';

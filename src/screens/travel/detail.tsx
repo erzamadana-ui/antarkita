@@ -113,7 +113,7 @@ export default function TravelBookingDetail() {
                 </View></Entrance>
                 <Entrance index={2}><View style={s.card}>
                   <Row between><Text style={font.small}>{b.is_private ? 'Carter private' : `${b.pax} kursi`}</Text><Text style={font.body}>{rupiah(b.price - b.platform_fee)}</Text></Row>
-                  <Row between style={{ marginTop: 6 }}><Text style={font.small}>Biaya layanan</Text><Text style={font.body}>{rupiah(b.platform_fee)}</Text></Row>
+                  <Row between style={{ marginTop: 6 }}><Text style={font.small}>Biaya platform AntarKita</Text><Text style={font.body}>{rupiah(b.platform_fee)}</Text></Row>
                   <View style={s.divider} />
                   <Row between><Text style={font.h3}>Total</Text><Text style={[font.h3, { color: sc }]}>{rupiah(b.price)}</Text></Row>
                 </View></Entrance>

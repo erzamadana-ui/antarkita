@@ -53,7 +53,7 @@ const s = StyleSheet.create({
 /** Kartu destinasi gaya kit: gambar tinggi, badge rating kiri-atas, tombol panah kanan-atas, lokasi + judul di atas gradien. */
 export function DestinationCard({ image, title, subtitle, rating, badge, onPress, width = 210, height = 270, accent = colors.primary, art, adLabel }: {
   image?: string | null; title: string; subtitle?: string | null; rating?: number | null; badge?: string | null; onPress?: () => void; width?: number; height?: number; accent?: string; art?: React.ReactNode;
-  /** Label transparansi iklan (nearby_merchants_v2.ad_label, 0101) — mis. "Iklan" untuk merchant yang di-boost. */
+  /** Label transparansi iklan ("Sponsored"). v3: konten berbayar ditampilkan di SponsoredRow, bukan di kartu organik. */
   adLabel?: string | null;
 }) {
   return (

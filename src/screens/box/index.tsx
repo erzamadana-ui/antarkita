@@ -178,7 +178,7 @@ export default function BoxScreen() {
             )}
             <View style={s.group}>
               <Row between>
-                <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text }}>Pembantu angkat</Text><Text style={font.tiny}>{rupiah(opts?.helpers_fee && helpers ? opts.helpers_fee / helpers : 50000)}/orang · bantu muat & bongkar (maks. 3)</Text></View>
+                <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text }}>Pembantu angkat</Text><Text style={font.tiny}>{opts?.helpers_fee && helpers ? `${rupiah(opts.helpers_fee / helpers)}/orang · ` : ''}bantu muat & bongkar (maks. 3){!helpers ? ' · tarif tampil di rincian' : ''}</Text></View>
                 <Stepper value={helpers} onChange={setHelpers} min={0} max={3} />
               </Row>
               <Input placeholder="Daftar barang: mis. kasur 1, lemari 2, kardus 10" icon="list-outline" value={items} onChangeText={setItems} />
@@ -186,11 +186,11 @@ export default function BoxScreen() {
             <SchedulePicker value={when} onChange={setWhen} accent={colors.box} />
             {chosen && <View style={s.group}><PriceSummary total={total} note={checkoutNote(fees.pay, fees.econError)} rows={checkoutRows({
               service: 'box', econ: fees.econ, ongkir: chosen.fare - (opts?.helpers_fee ?? 0), ongkirLabel: `Ongkir · ${chosen.label} (${km(opts?.distance_km ?? 0)})`,
-              extra: opts?.helpers_fee ? [{ label: `Pembantu angkat ×${helpers}`, value: opts.helpers_fee }] : undefined,
+              extra: opts?.helpers_fee ? [{ label: `Biaya tambahan · pembantu angkat ×${helpers}`, value: opts.helpers_fee, hint: 'Untuk pembantu angkat (muat & bongkar)' }] : undefined,
               platformFee, pay: fees.pay, discount, promoCode: promo || null, promoFunder,
             })} /><LimitInfo limit={opts?.limit} service="box" /></View>}
             <AntarNowSection service="box" accent={colors.box} />
-            <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={chosen?.fare ?? 0} service="box" onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} notesPlaceholder="Catatan: lantai berapa, ada lift, jam bongkar" />
+            <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={chosen?.fare ?? 0} service="box" feeBase={baseTotal} onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} notesPlaceholder="Catatan: lantai berapa, ada lift, jam bongkar" />
             <Text style={font.tiny}>Driver membantu muat/bongkar ringan. Barang pecah belah harap dikemas. Pick up ±1 ton, mobil box ±2 ton.</Text>
           </Animated.View>
         )}

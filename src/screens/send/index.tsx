@@ -376,11 +376,11 @@ export default function SendScreen() {
             <SchedulePicker value={when} onChange={setWhen} accent={colors.send} />
             {fare && <View style={s.group}><PriceSummary total={total} note={checkoutNote(fees.pay, fees.econError)} rows={checkoutRows({
               service: 'send', econ: fees.econ, ongkir: fare.fare, ongkirLabel: travelPicked ? `Ongkir penjemputan paket (${km(fare.distance_km)})` : `Ongkir kurir (${km(fare.distance_km)})`,
-              extra: icFare ? [{ label: `Ongkir antar kota ${originCity?.name} → ${destCity?.name}`, value: icFare, hint: travelPicked ? 'Dibawa mitra AntarTravel (porsi mitra sesuai kontrak)' : 'Lewat gudang AntarSend' }] : undefined,
+              ongkirExtra: icFare ? [{ label: `Ongkir antar kota ${originCity?.name} → ${destCity?.name}`, value: icFare, hint: travelPicked ? 'Dibawa mitra AntarTravel (porsi mitra sesuai kontrak)' : 'Lewat gudang AntarSend' }] : undefined,
               platformFee, pay: fees.pay, discount, promoCode: promo || null, promoFunder,
             })} />{scope === 'in_city' && <LimitInfo limit={fare.limit} service="send" />}</View>}
             <AntarNowSection service="send" accent={colors.send} />
-            <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={fare?.fare ?? 0} service="send" onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} notesPlaceholder="Catatan (mis. titip di satpam)" />
+            <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={fare?.fare ?? 0} service="send" feeBase={baseTotal} onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} notesPlaceholder="Catatan (mis. titip di satpam)" />
             <Text style={font.tiny}>Barang terlarang: narkoba, senjata, hewan hidup, barang mudah terbakar. Maks. nilai barang Rp2.000.000.{scope === 'intercity' ? (travelPicked ? ' Titipan mitra travel: paket wajib bisa dibuka saat serah terima, tanpa barang bernilai tinggi.' : ' Paket antar kota diasuransikan s.d. Rp1.000.000.') : ''}</Text>
           </Animated.View>
         )}
