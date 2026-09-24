@@ -22,6 +22,8 @@ import { colors, font, shadow, glass, motion } from '@/lib/theme';
 import { rupiah, serviceLabel, shortMonth, execLevelLabel, formatDate } from '@/lib/format';
 import type { ExecAccess, ExecReport, ReportRun, Recommendation, ServiceType, SkemaReport } from '@/lib/types';
 import { SkemaReportView } from '@/screens/admin/_skema-report';
+import { ContributionView } from '@/screens/admin/_contribution-view';
+import type { ContributionGroup } from '@/lib/admin';
 
 /* ───────────────────── Bagian `pnl` (opsional, migrasi 0026) ───────────────────── */
 
@@ -70,7 +72,17 @@ export default function ExecPortal() {
   const [runs, setRuns] = useState<ReportRun[] | null>(null);
   const [runsErr, setRunsErr] = useState<string | null>(null);
   // Tab "Skema Bisnis" (0103): unit economics dari buku besar order lewat exec_report_v2 (token sesi eksekutif).
-  const [tab, setTab] = useState<'ringkasan' | 'skema'>('ringkasan');
+  const [tab, setTab] = useState<'ringkasan' | 'skema' | 'kontribusi'>('ringkasan');
+  // Tab "Contribution margin" (finpay-v3 §6): RPC yang sama dengan Panel Admin (admin_contribution_margin).
+  const fetchContribution = useCallback(async (from: string, to: string, group: ContributionGroup) => {
+    if (!sess) throw new Error('Sesi eksekutif berakhir, masuk lagi');
+    try { return await rpc('admin_contribution_margin', { p_from: from, p_to: to, p_group: group }); }
+    catch (e) {
+      const m = String((e as Error).message);
+      if (/Hanya admin|tidak punya akses|not authorized|permission/i.test(m)) throw new Error('Laporan contribution margin memakai RPC panel admin (admin_contribution_margin) — akun eksekutif ini belum punya peran admin/viewer. Minta superadmin memberi peran "Pemantau".');
+      throw e;
+    }
+  }, [sess]);
   const { style: shake, shake: doShake } = useShake();
   const fetchSkema = useCallback(async (from: string, to: string, filters: Record<string, unknown>) => {
     if (!sess) throw new Error('Sesi eksekutif berakhir, masuk lagi');
@@ -137,7 +149,7 @@ export default function ExecPortal() {
           <Row between style={{ flexWrap: 'wrap', gap: 12 }}>
             <View style={{ flexShrink: 1, minWidth: 260, gap: 3 }}>
               <Text style={s.heroKicker} numberOfLines={2}>LAPORAN MANAJEMEN & PEMEGANG SAHAM · {execLevelLabel[sess.level].toUpperCase()}</Text>
-              <Text style={s.heroTitle} numberOfLines={2}>{tab === 'skema' ? 'AntarKita — Skema Bisnis (unit economics)' : `AntarKita — ${months} bulan terakhir`}</Text>
+              <Text style={s.heroTitle} numberOfLines={2}>{tab === 'skema' ? 'AntarKita — Skema Bisnis (unit economics)' : tab === 'kontribusi' ? 'AntarKita — Contribution Margin' : `AntarKita — ${months} bulan terakhir`}</Text>
               <Text style={s.heroSub} numberOfLines={2}>Dibuat {r ? fmtDate(r.generated_at) : '…'} · sesi berlaku s.d. {new Date(sess.expires_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</Text>
             </View>
             {tab === 'ringkasan' && <Row gap={6} style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -150,9 +162,15 @@ export default function ExecPortal() {
         <Row gap={8} style={{ flexWrap: 'wrap' }}>
           <Chip label="Ringkasan manajemen" active={tab === 'ringkasan'} onPress={() => setTab('ringkasan')} color="#0B1F2A" />
           <Chip label="Skema Bisnis" active={tab === 'skema'} onPress={() => setTab('skema')} color="#0B1F2A" />
+          <Chip label="Contribution margin" active={tab === 'kontribusi'} onPress={() => setTab('kontribusi')} color="#0B1F2A" />
         </Row>
 
-        {tab === 'skema' ? (
+        {tab === 'kontribusi' ? (
+          <Animated.View entering={FadeInDown.duration(motion.base)} style={{ gap: adminSpace.lg }}>
+            <SectionHead title="Contribution margin" hint="Per layanan / kota / merchant / bulan dari buku besar order. Target 25 % = take rate bersih tahap matang, bukan laba." />
+            <ContributionView fetch={fetchContribution} />
+          </Animated.View>
+        ) : tab === 'skema' ? (
           <Animated.View entering={FadeInDown.duration(motion.base)} style={{ gap: adminSpace.lg }}>
             <SectionHead title="Skema Bisnis" hint="GMV bersih, pendapatan platform per sumber, take rate bersih vs target, contribution per order, EBITDA kota, dan gerbang scale-up — dari buku besar order (exec_report_v2)" />
             <SkemaReportView fetchReport={fetchSkema} />

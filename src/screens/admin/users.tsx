@@ -1,5 +1,7 @@
 // Admin · Pengguna — peran, saldo, akses eksekutif, kontak (chat/telepon), hapus akun (PIN + alasan).
 // Data pribadi tersamar; aksi "Tampilkan" tercatat sebagai admin.pii_reveal di log keamanan.
+// v3 (finpay-v3 §5): peran admin RBAC (profiles.admin_role) diatur superadmin lewat rpc('admin_set_admin_role', { p_user, p_role }) (PIN);
+// admin_adjust_wallet ≥ wallet_adjust_dual_approval_min menghasilkan permintaan persetujuan (menu Persetujuan).
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, Platform } from 'react-native';
 import {
@@ -13,9 +15,10 @@ import { phoneDisplay, phoneMasked, rupiah } from '@/lib/format';
 import { adminExportCsv } from '@/lib/csv';
 import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import type { Profile, UserRole, Wallet } from '@/lib/types';
+import { ADMIN_ROLES, adminRoleLabel, useAdminCan, useAdminRole, type AdminRole } from '@/lib/admin';
 import { usePager, Pager, fmtDate, fmtAgo, Trunc, WideTableHint } from './_shared';
 
-type Row_ = Profile & { balance: number };
+type Row_ = Profile & { balance: number; admin_role?: AdminRole | null };
 /** Samarkan email: na••@gmail.com */
 const emailMasked = (e?: string | null) => { if (!e) return '-'; const [u, d] = e.split('@'); return `${(u ?? '').slice(0, 2)}••@${d ?? ''}`; };
 const ROLE_LABEL: Record<UserRole, string> = { customer: 'Pelanggan', driver: 'Driver', merchant: 'Merchant', admin: 'Admin' };
@@ -58,6 +61,22 @@ export default function AdminUsers() {
     catch (e) { toast.error((e as Error).message); }
   };
   const exportCsv = () => adminExportCsv('users', `pengguna-${new Date().toISOString().slice(0, 10)}.csv`, ['ID', 'Nama', 'Email', 'Telepon', 'Peran', 'Saldo', 'Aktif', 'Daftar'], shown.map((u) => [u.id, u.full_name, u.email, phoneDisplay(u.phone), u.role, u.balance, u.is_active ? 'ya' : 'tidak', u.created_at]));
+  // RBAC v3: atur peran admin (hanya superadmin; server menolak selain itu)
+  const can = useAdminCan();
+  const myRole = useAdminRole((st) => st.info);
+  const [roleFor, setRoleFor] = useState<Row_ | null>(null);
+  const [roleSel, setRoleSel] = useState<AdminRole>('viewer');
+  const [roleBusy, setRoleBusy] = useState(false);
+  const saveAdminRole = async () => {
+    if (!roleFor) return;
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    setRoleBusy(true);
+    try {
+      await rpc('admin_set_admin_role', { p_user: roleFor.id, p_role: roleSel });
+      toast.success(`Peran admin ${roleFor.full_name}: ${adminRoleLabel(roleSel)}`);
+      setRoleFor(null); load(); useAdminRole.getState().load(true);
+    } catch (e) { handleAdminError(e); } finally { setRoleBusy(false); }
+  };
   const [adjusting, setAdjusting] = useState<Row_ | null>(null);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -66,7 +85,14 @@ export default function AdminUsers() {
     const n = Number(amount.replace(/[^\d-]/g, ''));
     if (!adjusting || !n) return toast.error('Masukkan nominal (negatif untuk mengurangi)');
     if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
-    try { await rpc('admin_adjust_wallet', { p_user: adjusting.id, p_amount: n, p_note: note || 'Penyesuaian admin' }); toast.success('Saldo disesuaikan'); setAdjusting(null); load(); }
+    try {
+      const r = await rpc<Record<string, unknown> | null>('admin_adjust_wallet', { p_user: adjusting.id, p_amount: n, p_note: note || 'Penyesuaian admin' });
+      // v3: nominal besar → server membuat approval_requests (maker = Anda); saldo berubah setelah admin lain menyetujui.
+      const pendingApproval = !!r && typeof r === 'object' && (r.approval_id != null || r.status === 'pending_approval' || r.requires_approval === true);
+      if (pendingApproval) toast.success('Nominal di atas ambang — permintaan dikirim ke menu Persetujuan, menunggu admin lain');
+      else toast.success('Saldo disesuaikan');
+      setAdjusting(null); load();
+    }
     catch (e) { handleAdminError(e); }
   };
   const shown = rows.filter((r) => (filter === 'all' || r.role === filter)
@@ -107,7 +133,12 @@ export default function AdminUsers() {
             );
           },
         },
-        { key: 'role', label: 'Peran', width: 110, render: (r) => <Pill text={ROLE_LABEL[r.role as UserRole] ?? String(r.role)} color={roleColor[r.role as UserRole]} /> },
+        { key: 'role', label: 'Peran', width: 130, render: (r) => (
+          <View style={{ gap: 3 }}>
+            <Pill text={ROLE_LABEL[r.role as UserRole] ?? String(r.role)} color={roleColor[r.role as UserRole]} />
+            {r.role === 'admin' ? <Text style={font.tiny} numberOfLines={1}>{r.admin_role ? adminRoleLabel(String(r.admin_role)) : 'peran RBAC belum diatur'}</Text> : null}
+          </View>
+        ) },
         { key: 'balance', label: 'Saldo', width: 120, align: 'right', render: (r) => <Text style={font.mono}>{rupiah(Number(r.balance))}</Text> },
         {
           key: 'is_active', label: 'Status', width: 140, render: (r) => (
@@ -129,6 +160,7 @@ export default function AdminUsers() {
                   { key: 'saldo', label: 'Penyesuaian saldo', icon: 'wallet-outline', onPress: () => adjust(u) },
                   !u.is_active && { key: 'on', label: 'Aktifkan akun', icon: 'checkmark-circle-outline', color: colors.success, onPress: () => setUser(u.id, { active: true, reason: 'Diaktifkan kembali oleh admin' }) },
                   u.role !== 'admin' && { key: 'admin', label: 'Jadikan admin', icon: 'shield-outline', onPress: () => setUser(u.id, { role: 'admin' }) },
+                  u.role === 'admin' && can('admin_role') && { key: 'adminrole', label: 'Atur peran admin…', icon: 'key-outline', hint: `saat ini: ${adminRoleLabel(u.admin_role)}`, onPress: () => { setRoleSel((u.admin_role as AdminRole) ?? 'viewer'); setRoleFor(u); } },
                   { key: 'exec', label: 'Akses eksekutif', icon: 'shield-half-outline', onPress: () => { setExecFor(u); setExecPin(''); } },
                   u.is_active && { key: 'off', label: 'Nonaktifkan akun', icon: 'close-circle-outline', danger: true, onPress: () => setUser(u.id, { active: false }) },
                   u.role === 'admin' && { key: 'unadmin', label: 'Cabut hak admin', icon: 'shield-outline', danger: true, onPress: () => setUser(u.id, { role: 'customer' }) },
@@ -153,8 +185,24 @@ export default function AdminUsers() {
         </Row>
       </AdminDialog>
 
+      <AdminDialog visible={!!roleFor} onClose={() => setRoleFor(null)} title={`Peran admin · ${roleFor?.full_name ?? ''}`}
+        subtitle={`Menentukan menu & aksi yang boleh dipakai (RBAC). Hanya superadmin, butuh PIN, tercatat di Log Audit.${myRole?.role ? ` Peran Anda: ${adminRoleLabel(myRole.role)}.` : ''}`}>
+        <View style={{ gap: 6 }}>
+          {ADMIN_ROLES.map((r) => (
+            <Pressable key={r.value} onPress={() => setRoleSel(r.value)} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start', padding: 10, borderRadius: 12, borderWidth: 1, borderColor: roleSel === r.value ? colors.primary : adminTone.border, backgroundColor: roleSel === r.value ? colors.primary + '10' : adminTone.surface }}>
+              <View style={{ width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: roleSel === r.value ? colors.primary : adminTone.faint, backgroundColor: roleSel === r.value ? colors.primary : 'transparent', marginTop: 2 }} />
+              <View style={{ flex: 1 }}><Text style={font.bodyStrong}>{r.label}</Text><Text style={font.tiny}>{r.desc}</Text></View>
+            </Pressable>
+          ))}
+        </View>
+        <Row gap={8} style={{ justifyContent: 'flex-end' }}>
+          <Button size="sm" title="Batal" variant="ghost" onPress={() => setRoleFor(null)} />
+          <Button size="sm" title="Simpan peran" icon="key-outline" loading={roleBusy} onPress={saveAdminRole} />
+        </Row>
+      </AdminDialog>
+
       <AdminDialog visible={!!adjusting} onClose={() => setAdjusting(null)} title={`Penyesuaian saldo · ${adjusting?.full_name ?? ''}`}
-        subtitle={`Saldo saat ini ${rupiah(adjusting?.balance ?? 0)}. Nominal negatif untuk mengurangi.`}>
+        subtitle={`Saldo saat ini ${rupiah(adjusting?.balance ?? 0)}. Nominal negatif untuk mengurangi. Nominal besar (≥ ambang wallet_adjust_dual_approval_min) butuh persetujuan admin kedua.`}>
         <Input label="Nominal (Rp)" keyboardType="numbers-and-punctuation" value={amount} onChangeText={setAmount} placeholder="50000 atau -25000" />
         <Input label="Catatan" value={note} onChangeText={setNote} placeholder="Alasan penyesuaian" />
         <Row gap={8} style={{ justifyContent: 'flex-end' }}>

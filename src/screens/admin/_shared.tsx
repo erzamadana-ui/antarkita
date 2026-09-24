@@ -13,6 +13,7 @@ import { adminFont, adminTone, adminSpace, adminRadius, adminIcon, Pill, TONE, t
 import { Row } from '@/components/ui';
 import { formatDate, timeAgo, rupiah } from '@/lib/format';
 import type { LedgerEntry, LedgerParty, ServiceType } from '@/lib/types';
+import { LEDGER_ENTRY_V3_LABEL } from '@/lib/admin';
 
 /**
  * Tanggal aman untuk tabel admin. Kolom tanggal di basis data boleh NULL
@@ -158,7 +159,8 @@ export const ENTRY_LABEL: Record<LedgerEntry, string> = {
   platform_revenue: 'Pendapatan platform bersih', pg_fee: 'Biaya payment gateway', pg_fee_ppn: 'PPN biaya gateway',
   driver_receivable: 'Setoran tunai ke platform', refund: 'Refund', adjustment: 'Penyesuaian / bonus sesi', ads_revenue: 'Pendapatan iklan',
 };
-export const entryLabel = (e: string) => ENTRY_LABEL[e as LedgerEntry] ?? e;
+/** Label baris buku besar — termasuk nilai `ledger_entry` baru v3 (§6: customer_receivable, unreconciled, dst). */
+export const entryLabel = (e: string) => ENTRY_LABEL[e as LedgerEntry] ?? LEDGER_ENTRY_V3_LABEL[e] ?? e;
 /** Label Indonesia pihak (`party_role`) di buku besar. */
 export const PARTY_LABEL: Record<LedgerParty, string> = {
   customer: 'Pelanggan', driver: 'Driver', merchant: 'Merchant', vendor: 'Vendor (via driver)', partner: 'Mitra travel',
@@ -176,14 +178,14 @@ export const parseNum = (v: string | number | null | undefined) => {
 /** Tag label angka di teks catatan: "[FAKTA SUMBER] … [ASUMSI] …" → ['FAKTA SUMBER', 'ASUMSI']. */
 export function labelTags(text?: string | null): string[] {
   const out: string[] = [];
-  for (const m of String(text ?? '').matchAll(/\[(FAKTA[^\]]*|ASUMSI[^\]]*|HASIL PILOT[^\]]*)\]/gi)) {
+  for (const m of String(text ?? '').matchAll(/\[(FAKTA[^\]]*|ASUMSI[^\]]*|HASIL PILOT[^\]]*|KONTRAK[^\]]*|PERLU[^\]]*)\]/gi)) {
     const t = m[1].trim().toUpperCase().replace(/\s+/g, ' ');
     if (!out.includes(t)) out.push(t);
   }
   return out;
 }
 /** Warna label angka: FAKTA = hijau, ASUMSI = kuning, HASIL PILOT = biru. */
-export const labelTone = (t: string): ToneKey => (/^FAKTA/i.test(t) ? 'ok' : /^ASUMSI/i.test(t) ? 'wait' : /^HASIL/i.test(t) ? 'info' : 'neutral');
+export const labelTone = (t: string): ToneKey => (/^FAKTA/i.test(t) ? 'ok' : /^ASUMSI/i.test(t) ? 'wait' : /^(HASIL|KONTRAK)/i.test(t) ? 'info' : /^PERLU/i.test(t) ? 'bad' : 'neutral');
 export function LabelPill({ text }: { text: string }) {
   return <Pill text={text} tone={labelTone(text)} />;
 }

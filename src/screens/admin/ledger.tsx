@@ -1,104 +1,95 @@
-// Admin · Buku Besar Order (Skema Bisnis v2, migrasi 0099).
-// Cari order dari kodenya (tabel `orders`), tampilkan semua baris `order_ledger` (RLS: admin boleh baca
-// semua) per fase, dan periksa keseimbangannya dengan rpc('ledger_check', { p_order }).
-// Bagian "Order tidak seimbang" memanggil ledger_check untuk 50 order selesai terakhir.
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// Admin · Buku Besar Order — v3 (finpay-v3, kontrak §6).
+//   • Cari: rpc('admin_ledger_lookup', { p_query }) → orders / travel_bookings / travel_requests / merchant_ads (kode atau ID)
+//     beserta baris order_ledger per fase + putusan keseimbangan.
+//   • Tidak seimbang: rpc('admin_ledger_unbalanced') → order selesai 30 hari terakhir yang tidak seimbang + order v2 tanpa buku besar.
+// Ledger v3 append-only: koreksi = baris PEMBALIK (`reversal_of` → id baris yang dibalik) lalu baris baru; `payment_id`
+// menghubungkan baris ke pembayaran gateway. Keduanya ditampilkan di tabel.
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AdminPage, Panel, DataTable, Pill, StatusPill, adminFont as font, adminTone, adminSpace, adminRadius } from '@/components/admin';
 import { LineItem, FootNote } from '@/components/reports';
 import { Row, Input, Button } from '@/components/ui';
-import { rpc, supabase } from '@/lib/supabase';
+import { rpc } from '@/lib/supabase';
 import { rupiah, serviceLabel, statusLabel, paidViaLabel } from '@/lib/format';
 import type { LedgerCheck, LedgerPhase, OrderLedgerRow, OrderStatus, ServiceType } from '@/lib/types';
+import { shortId } from '@/lib/admin';
 import { ErrorNote, entryLabel, partyLabel, fmtDate, FUNDER_LABEL, WideTableHint } from './_shared';
 
-type OrderHit = {
-  id: string; code: string; service: ServiceType; status: OrderStatus; total: number; payment_method: string; paid_via: string | null;
-  pg_channel: string | null; created_at: string; completed_at: string | null; ledger_version: number | null; city: string | null;
+type LedgerRowV3 = OrderLedgerRow & { payment_id?: string | null; reversal_of?: number | null };
+type LookupHit = {
+  source: 'orders' | 'travel_bookings' | 'travel_requests' | 'merchant_ads'; source_id: string; order_id: string | null; code: string | null;
+  service: ServiceType | null; status: string | null; payment_status?: string | null; payment_method?: string | null; paid_via?: string | null;
+  total: number | null; created_at: string | null; completed_at?: string | null; ledger_version?: number | null; merchant_name?: string | null;
+  check: LedgerCheck | null; rows: LedgerRowV3[];
 };
-const ORDER_COLS = 'id,code,service,status,total,payment_method,paid_via,pg_channel,created_at,completed_at,ledger_version,city';
+type Unbalanced = {
+  from: string; to: string; checked: number; unbalanced: number; missing_ledger: number; limit: number; truncated: boolean;
+  items: { order_id: string; code: string; service: ServiceType; city: string | null; completed_at: string | null; total: number; phase: string | null; verdict: LedgerCheck['verdict']; diff: number | null; diff_components: number | null }[];
+  missing: { order_id: string; code: string; service: ServiceType; completed_at: string | null }[];
+};
+
 const PHASES: LedgerPhase[] = ['created', 'adjusted', 'completed', 'cancelled', 'refunded', 'settled'];
 const PHASE_LABEL: Record<LedgerPhase, string> = {
   created: 'Dibuat (created)', adjusted: 'Disesuaikan (adjusted)', completed: 'Selesai (completed)',
   cancelled: 'Dibatalkan (cancelled)', refunded: 'Direfund (refunded)', settled: 'Settled',
 };
+const SOURCE_LABEL: Record<string, string> = { orders: 'Pesanan', travel_bookings: 'Travel · kursi', travel_requests: 'Travel · carter', merchant_ads: 'Iklan merchant' };
 const VERDICT_LABEL: Record<LedgerCheck['verdict'], string> = {
   balanced: 'Seimbang', unbalanced: 'TIDAK seimbang', refund_ok: 'Refund lengkap', refund_short: 'Refund kurang', no_ledger: 'Belum ada buku besar', not_found: 'Order tidak ditemukan',
 };
-const SCAN_SIZE = 50;
 
 export default function AdminLedger() {
   const [q, setQ] = useState('');
-  const [hits, setHits] = useState<OrderHit[]>([]);
+  const [hits, setHits] = useState<LookupHit[]>([]);
   const [searchErr, setSearchErr] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
-  const [order, setOrder] = useState<OrderHit | null>(null);
-  const [rows, setRows] = useState<OrderLedgerRow[]>([]);
-  const [rowsErr, setRowsErr] = useState<string | null>(null);
-  const [check, setCheck] = useState<LedgerCheck | null>(null);
-  const [checkErr, setCheckErr] = useState<string | null>(null);
-  const [checking, setChecking] = useState(false);
+  const [sel, setSel] = useState<LookupHit | null>(null);
 
-  const search = async () => {
-    const term = q.trim().toUpperCase().replace(/[%,()*\\]/g, '');
-    if (term.length < 3) { setSearchErr('Ketik minimal 3 karakter kode order (mis. AA260923…)'); return; }
+  const lookup = useCallback(async (term: string) => {
+    const t = term.trim();
+    if (t.length < 3) { setSearchErr('Ketik minimal 3 karakter kode (mis. AA260923…) atau tempel ID'); return; }
     setSearching(true); setSearchErr(null);
-    const { data, error } = await supabase.from('orders').select(ORDER_COLS).ilike('code', `%${term}%`).order('created_at', { ascending: false }).limit(20);
-    setSearching(false);
-    if (error) { setSearchErr(error.message); setHits([]); return; }
-    const list = (data as OrderHit[]) ?? [];
-    setHits(list);
-    if (list.length === 0) setSearchErr(`Tidak ada order dengan kode mengandung “${term}”`);
-    const exact = list.find((o) => o.code.toUpperCase() === term);
-    if (exact || list.length === 1) openOrder(exact ?? list[0]);
-  };
-
-  const openOrder = useCallback(async (o: OrderHit) => {
-    setOrder(o); setCheck(null); setCheckErr(null); setRows([]); setRowsErr(null);
-    const { data, error } = await supabase.from('order_ledger').select('*').eq('order_id', o.id).order('id');
-    if (error) { setRowsErr(error.message); return; }
-    setRows((data as OrderLedgerRow[]) ?? []);
+    try {
+      const r = await rpc<{ results: LookupHit[]; count: number }>('admin_ledger_lookup', { p_query: t });
+      const list = r?.results ?? [];
+      setHits(list);
+      if (list.length === 0) { setSearchErr(`Tidak ada transaksi dengan kode/ID “${t}”`); setSel(null); }
+      else setSel(list.find((h) => (h.code ?? '').toUpperCase() === t.toUpperCase() || h.source_id === t) ?? list[0]);
+    } catch (e) { setSearchErr((e as Error).message); setHits([]); setSel(null); }
+    finally { setSearching(false); }
   }, []);
 
-  /** Buka order dari id (dipakai daftar "tidak seimbang"). */
-  const openById = useCallback(async (id: string) => {
-    const { data, error } = await supabase.from('orders').select(ORDER_COLS).eq('id', id).maybeSingle();
-    if (error) { setSearchErr(error.message); return; }
-    if (!data) { setSearchErr('Order tidak ditemukan'); return; }
-    await openOrder(data as OrderHit);
-  }, [openOrder]);
-
-  const runCheck = async () => {
-    if (!order) return;
-    setChecking(true); setCheckErr(null);
-    try { setCheck(await rpc<LedgerCheck>('ledger_check', { p_order: order.id })); }
-    catch (e) { setCheckErr((e as Error).message); setCheck(null); }
-    finally { setChecking(false); }
-  };
-
+  const rows = useMemo(() => sel?.rows ?? [], [sel]);
+  /** id baris → id baris pembaliknya (v3 append-only). */
+  const reversedBy = useMemo(() => {
+    const m = new Map<number, number>();
+    rows.forEach((r) => { if (r.reversal_of != null) m.set(Number(r.reversal_of), r.id); });
+    return m;
+  }, [rows]);
   const byPhase = useMemo(() => {
-    const m = new Map<string, OrderLedgerRow[]>();
-    rows.forEach((r) => { const k = r.phase; m.set(k, [...(m.get(k) ?? []), r]); });
+    const m = new Map<string, LedgerRowV3[]>();
+    rows.forEach((r) => { m.set(r.phase, [...(m.get(r.phase) ?? []), r]); });
     return [...m.entries()].sort((a, b) => PHASES.indexOf(a[0] as LedgerPhase) - PHASES.indexOf(b[0] as LedgerPhase));
   }, [rows]);
+  const nReversal = rows.filter((r) => r.reversal_of != null).length;
 
   return (
-    <AdminPage title="Buku Besar Order" subtitle="Semua baris alokasi uang (order_ledger) satu order per fase, cek keseimbangan, dan daftar order selesai yang tidak seimbang.">
-      <Panel title="Cari order" icon="search-outline">
+    <AdminPage title="Buku Besar Order" subtitle="Baris alokasi uang (order_ledger) per fase, cek keseimbangan, dan daftar transaksi tidak seimbang. Buku besar append-only: koreksi = baris pembalik.">
+      <Panel title="Cari transaksi" subtitle="admin_ledger_lookup — kode pesanan/travel (awalan ≥ 5 karakter) atau ID (UUID) termasuk iklan merchant" icon="search-outline">
         <Row gap={10} style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <Input label="Kode order" placeholder="mis. AA26092300012" value={q} autoCapitalize="characters" onChangeText={setQ} onSubmitEditing={search} containerStyle={{ minWidth: 260, flex: 1, maxWidth: 420 }} icon="receipt-outline" />
-          <Button title="Cari" icon="search" loading={searching} onPress={search} />
+          <Input label="Kode atau ID" placeholder="mis. AA26092300012 / 3f2a…" value={q} autoCapitalize="characters" onChangeText={setQ} onSubmitEditing={() => lookup(q)} containerStyle={{ minWidth: 260, flex: 1, maxWidth: 460 }} icon="receipt-outline" />
+          <Button title="Cari" icon="search" loading={searching} onPress={() => lookup(q)} />
         </Row>
         <View style={{ marginTop: adminSpace.sm }}><ErrorNote text={searchErr} /></View>
         {hits.length > 1 ? (
           <View style={{ gap: 4, marginTop: adminSpace.sm }}>
-            <Text style={font.tiny}>{hits.length} order cocok — pilih salah satu:</Text>
+            <Text style={font.tiny}>{hits.length} transaksi cocok — pilih salah satu:</Text>
             <Row gap={6} style={{ flexWrap: 'wrap' }}>
               {hits.map((h) => (
-                <Pressable key={h.id} onPress={() => openOrder(h)} style={[st.hit, order?.id === h.id && st.hitOn]}>
-                  <Text style={font.bodyStrong}>{h.code}</Text>
-                  <Text style={font.tiny}>{serviceLabel[h.service] ?? h.service} · {rupiah(h.total)}</Text>
+                <Pressable key={`${h.source}:${h.source_id}`} onPress={() => setSel(h)} style={[st.hit, sel?.source_id === h.source_id && st.hitOn]}>
+                  <Text style={font.bodyStrong}>{h.code ?? shortId(h.source_id)}</Text>
+                  <Text style={font.tiny}>{SOURCE_LABEL[h.source] ?? h.source} · {h.service ? serviceLabel[h.service] ?? h.service : h.merchant_name ?? '—'} · {rupiah(Number(h.total ?? 0))}</Text>
                 </Pressable>
               ))}
             </Row>
@@ -106,22 +97,22 @@ export default function AdminLedger() {
         ) : null}
       </Panel>
 
-      {order ? (
-        <Panel title={`Order ${order.code}`} subtitle={`${serviceLabel[order.service] ?? order.service} · ${order.city ?? 'tanpa kota'} · dibuat ${fmtDate(order.created_at)}${order.completed_at ? ` · selesai ${fmtDate(order.completed_at)}` : ''}`}
-          icon="receipt-outline" right={<Button size="sm" title="Cek keseimbangan" icon="scale-outline" loading={checking} onPress={runCheck} />}>
+      {sel ? (
+        <Panel title={`${SOURCE_LABEL[sel.source] ?? sel.source} ${sel.code ?? shortId(sel.source_id)}`}
+          subtitle={`${sel.service ? serviceLabel[sel.service] ?? sel.service : sel.merchant_name ?? '—'} · dibuat ${fmtDate(sel.created_at)}${sel.completed_at ? ` · selesai ${fmtDate(sel.completed_at)}` : ''}`}
+          icon="receipt-outline" right={<Button size="sm" variant="outline" title="Muat ulang" icon="refresh-outline" loading={searching} onPress={() => lookup(sel.source_id)} />}>
           <Row gap={8} style={{ flexWrap: 'wrap' }}>
-            <StatusPill status={order.status} label={statusLabel(order.status, order.service) || order.status} />
-            <Pill text={`Total ${rupiah(order.total)}`} tone="neutral" />
-            <Pill text={paidViaLabel(order.paid_via ?? order.payment_method)} tone="neutral" />
-            {order.pg_channel ? <Pill text={`Saluran ${order.pg_channel}`} tone="neutral" /> : null}
-            <Pill text={`Ledger v${order.ledger_version ?? 1}`} tone={(order.ledger_version ?? 1) >= 2 ? 'brand' : 'off'} />
+            {sel.status ? <StatusPill status={sel.status} label={sel.source === 'orders' && sel.service ? statusLabel(sel.status as OrderStatus, sel.service) || sel.status : sel.status} /> : null}
+            <Pill text={`Total ${rupiah(Number(sel.total ?? 0))}`} tone="neutral" />
+            {sel.paid_via || sel.payment_method ? <Pill text={paidViaLabel(String(sel.paid_via ?? sel.payment_method))} tone="neutral" /> : null}
+            {sel.payment_status ? <Pill text={`Bayar: ${sel.payment_status}`} tone="neutral" /> : null}
+            {sel.source === 'orders' ? <Pill text={`Ledger v${sel.ledger_version ?? 1}`} tone={(sel.ledger_version ?? 1) >= 2 ? 'brand' : 'off'} /> : null}
             <Pill text={`${rows.length} baris`} tone="info" />
+            {nReversal ? <Pill text={`${nReversal} baris pembalik`} tone="wait" icon="swap-horizontal" /> : null}
           </Row>
           <View style={{ marginTop: adminSpace.md, gap: adminSpace.sm }}>
-            <ErrorNote text={rowsErr} onRetry={() => openOrder(order)} />
-            <ErrorNote text={checkErr} onRetry={runCheck} />
-            {check ? <CheckResult c={check} /> : null}
-            {!rowsErr && rows.length === 0 ? <Text style={font.small}>Order ini belum punya baris buku besar{(order.ledger_version ?? 1) < 2 ? ' (order lama sebelum migrasi 0099 — ledger v1)' : ''}.</Text> : null}
+            {sel.check ? <CheckResult c={sel.check} /> : null}
+            {rows.length === 0 ? <Text style={font.small}>Transaksi ini belum punya baris buku besar{sel.source === 'orders' && (sel.ledger_version ?? 1) < 2 ? ' (order lama sebelum migrasi 0099 — ledger v1)' : ''}.</Text> : null}
           </View>
         </Panel>
       ) : null}
@@ -129,24 +120,35 @@ export default function AdminLedger() {
       {byPhase.map(([phase, list]) => (
         <Panel key={phase} title={PHASE_LABEL[phase as LedgerPhase] ?? phase} subtitle={`${list.length} baris · ditulis ${fmtDate(list[0]?.created_at)}`} icon="layers-outline" padded={false}>
           <DataTable rows={list as unknown as Record<string, unknown>[]} emptyText="Tidak ada baris" columns={[
-            { key: 'entry', label: 'Baris', width: 250, render: (r) => <View><Text style={font.bodyStrong} numberOfLines={1}>{entryLabel(String(r.entry))}</Text><Text style={font.tiny}>{String(r.entry)}</Text></View> },
-            { key: 'amount', label: 'Nominal', width: 130, align: 'right', mono: true, render: (r) => <Text style={[font.mono, Number(r.amount) < 0 ? { color: adminTone.red } : null]}>{rupiah(Number(r.amount))}</Text> },
-            { key: 'party_role', label: 'Pihak', width: 140, render: (r) => <Text style={font.body}>{partyLabel(r.party_role as string)}</Text> },
-            { key: 'funded_by', label: 'Ditanggung', width: 100, render: (r) => <Text style={font.small}>{r.funded_by ? FUNDER_LABEL[String(r.funded_by)] ?? String(r.funded_by) : '—'}</Text> },
-            { key: 'pg_channel', label: 'Saluran', width: 100, render: (r) => <Text style={font.small}>{r.pg_channel ? String(r.pg_channel) : '—'}</Text> },
-            { key: 'note', label: 'Keterangan', width: 340, flex: 1, render: (r) => <Text style={font.small} numberOfLines={2}>{r.note ? String(r.note) : '—'}</Text> },
+            { key: 'id', label: '#', width: 70, mono: true, render: (r) => <Text style={[font.mono, reversedBy.has(Number(r.id)) ? { textDecorationLine: 'line-through', color: adminTone.faint } : null]}>{String(r.id)}</Text> },
+            { key: 'entry', label: 'Baris', width: 240, render: (r) => <View><Text style={font.bodyStrong} numberOfLines={1}>{entryLabel(String(r.entry))}</Text><Text style={font.tiny}>{String(r.entry)}</Text></View> },
+            { key: 'amount', label: 'Nominal', width: 124, align: 'right', mono: true, render: (r) => <Text style={[font.mono, Number(r.amount) < 0 ? { color: adminTone.red } : null]}>{rupiah(Number(r.amount))}</Text> },
+            { key: 'party_role', label: 'Pihak', width: 130, render: (r) => <Text style={font.body}>{partyLabel(r.party_role as string)}</Text> },
+            { key: 'funded_by', label: 'Ditanggung', width: 96, render: (r) => <Text style={font.small}>{r.funded_by ? FUNDER_LABEL[String(r.funded_by)] ?? String(r.funded_by) : '—'}</Text> },
+            {
+              key: 'reversal_of', label: 'Pembalikan', width: 150, render: (r) => {
+                const rev = r.reversal_of != null ? Number(r.reversal_of) : null;
+                const by = reversedBy.get(Number(r.id));
+                if (rev != null) return <Pill text={`membalik #${rev}`} tone="wait" icon="arrow-undo" />;
+                if (by != null) return <Pill text={`dibalik oleh #${by}`} tone="off" />;
+                return <Text style={font.tiny}>—</Text>;
+              },
+            },
+            { key: 'payment_id', label: 'Pembayaran', width: 110, render: (r) => <Text style={font.tiny} selectable>{r.payment_id ? shortId(String(r.payment_id)) : '—'}</Text> },
+            { key: 'pg_channel', label: 'Saluran', width: 90, render: (r) => <Text style={font.small}>{r.pg_channel ? String(r.pg_channel) : '—'}</Text> },
+            { key: 'note', label: 'Keterangan', width: 300, flex: 1, render: (r) => <Text style={font.small} numberOfLines={2}>{r.note ? String(r.note) : '—'} · {fmtDate(String(r.created_at))}</Text> },
           ]} />
         </Panel>
       ))}
 
-      <UnbalancedScan onOpen={openById} />
+      <UnbalancedList onOpen={(id) => { setQ(id); lookup(id); }} />
       <WideTableHint />
 
       <FootNote lines={[
         'Tanda: (+) uang masuk/hak platform, (−) keluar/kewajiban ke mitra (driver, merchant, vendor, mitra travel, gateway).',
-        'Rumus fase created/adjusted/completed: dibayar pelanggan + promo sponsor = hak driver + merchant + vendor + mitra + pendapatan platform + biaya PG yang ditanggung pelanggan; dan dibayar pelanggan = jumlah komponen (barang + ongkir + biaya platform + jasa + antar kota + tip + extras − promo + PG pelanggan).',
-        'Fase cancelled/refunded: refund + penggantian belanja + denda harus ≥ yang pernah dibayar bila order berstatus refunded.',
-        'ledger_check menilai fase terakhir yang berlaku (urutan: completed → refunded → cancelled → adjusted → created). Buku besar travel (kursi/carter) dan iklan tidak memakai order_id sehingga tidak muncul di pencarian ini.',
+        'Rumus v3: dibayar pelanggan + promo sponsor = hak driver + merchant + vendor + mitra + pendapatan platform + biaya PG yang ditanggung pelanggan + pajak keluaran.',
+        'Append-only (§6): baris tidak pernah dihapus/diubah. Bila fase ditulis ulang, server menulis baris pembalik (reversal_of = id baris lama, nominal berlawanan) lalu baris baru. Baris yang sudah dibalik dicoret.',
+        'Baris “Belum terekonsiliasi (selisih)” ditulis job rekonsiliasi harian; lihat menu Rekonsiliasi untuk detailnya.',
       ]} />
     </AdminPage>
   );
@@ -169,7 +171,6 @@ function CheckResult({ c }: { c: LedgerCheck }) {
         {c.rows != null ? <Pill text={`${c.rows} baris`} tone="neutral" /> : null}
       </Row>
       {c.formula ? <Text style={[font.tiny, { marginTop: 6 }]}>Rumus: {c.formula}</Text> : null}
-      {c.verdict === 'no_ledger' ? <Text style={[font.small, { marginTop: 6 }]}>Order ini belum pernah diposting ke buku besar (ledger v{c.ledger_version ?? 1}).</Text> : null}
       {isRefund ? (
         <View style={{ marginTop: 6 }}>
           <LineItem label="Pernah dibayar (bila direfund)" value={n(c.paid)} />
@@ -201,77 +202,62 @@ function CheckResult({ c }: { c: LedgerCheck }) {
   );
 }
 
-/* ───────────────────────── Pemindaian order tidak seimbang ───────────────────────── */
+/* ───────────────────────── Daftar tidak seimbang (server) ───────────────────────── */
 
-type ScanItem = { order: { id: string; code: string; service: ServiceType; total: number; completed_at: string | null }; check?: LedgerCheck; error?: string };
-
-function UnbalancedScan({ onOpen }: { onOpen: (id: string) => void }) {
-  const [items, setItems] = useState<ScanItem[]>([]);
+function UnbalancedList({ onOpen }: { onOpen: (id: string) => void }) {
+  const [data, setData] = useState<Unbalanced | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
-  const [done, setDone] = useState(0);
-  const [scannedAt, setScannedAt] = useState<string | null>(null);
-  const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
-
-  const scan = useCallback(async () => {
-    setRunning(true); setErr(null); setDone(0); setItems([]);
-    const { data, error } = await supabase.from('orders').select('id,code,service,total,completed_at')
-      .eq('status', 'completed').order('completed_at', { ascending: false, nullsFirst: false }).limit(SCAN_SIZE);
-    if (error) { setErr(error.message); setRunning(false); return; }
-    const orders = (data as ScanItem['order'][]) ?? [];
-    const out: ScanItem[] = orders.map((o) => ({ order: o }));
-    // 5 permintaan sekaligus supaya tidak membanjiri server
-    let next = 0;
-    const worker = async () => {
-      while (next < out.length && alive.current) {
-        const i = next++;
-        try { out[i].check = await rpc<LedgerCheck>('ledger_check', { p_order: out[i].order.id }); }
-        catch (e) { out[i].error = (e as Error).message; }
-        if (alive.current) setDone((d) => d + 1);
-      }
-    };
-    await Promise.all(Array.from({ length: 5 }, worker));
-    if (!alive.current) return;
-    setItems(out); setRunning(false); setScannedAt(new Date().toISOString());
+  const [loading, setLoading] = useState(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setData(await rpc<Unbalanced>('admin_ledger_unbalanced')); setErr(null); }
+    catch (e) { setErr((e as Error).message); }
+    finally { setLoading(false); }
   }, []);
-  useEffect(() => { scan(); }, [scan]);
+  useEffect(() => { load(); }, [load]);
 
-  const unbalanced = items.filter((x) => x.check?.balanced === false);
-  const failed = items.filter((x) => x.error);
-  const noLedger = items.filter((x) => x.check && x.check.balanced == null);
-  const balanced = items.filter((x) => x.check?.balanced === true);
-  const shown = [...unbalanced, ...failed];
-
+  const items = data?.items ?? [];
+  const missing = data?.missing ?? [];
   return (
-    <Panel title="Order tidak seimbang" subtitle={`ledger_check untuk ${SCAN_SIZE} order selesai terakhir${scannedAt ? ` · diperiksa ${fmtDate(scannedAt)}` : ''}`} icon="alert-circle-outline" iconColor={adminTone.red}
-      right={<Button size="sm" variant="outline" title={running ? `Memeriksa ${done}/${items.length || SCAN_SIZE}` : 'Periksa ulang'} icon="refresh-outline" disabled={running} onPress={scan} />}>
-      <ErrorNote text={err} onRetry={scan} />
-      {running ? <Row gap={8}><ActivityIndicator color={adminTone.teal} /><Text style={font.small}>Memeriksa {done} order…</Text></Row> : (
+    <Panel title="Transaksi tidak seimbang" subtitle={`admin_ledger_unbalanced — order selesai ${data ? `${fmtDate(data.from, false)} – ${fmtDate(data.to, false)}` : '30 hari terakhir'}`} icon="alert-circle-outline" iconColor={adminTone.red}
+      right={<Button size="sm" variant="outline" title="Periksa ulang" icon="refresh-outline" loading={loading} onPress={load} />}>
+      <ErrorNote text={err} onRetry={load} />
+      {loading && !data ? <Row gap={8}><ActivityIndicator color={adminTone.teal} /><Text style={font.small}>Memeriksa…</Text></Row> : data ? (
         <View style={{ gap: adminSpace.sm }}>
           <Row gap={8} style={{ flexWrap: 'wrap' }}>
-            <Pill text={`${balanced.length} seimbang`} tone="ok" />
-            <Pill text={`${unbalanced.length} tidak seimbang`} tone={unbalanced.length ? 'bad' : 'ok'} />
-            <Pill text={`${noLedger.length} tanpa buku besar (ledger v1)`} tone="off" />
-            {failed.length ? <Pill text={`${failed.length} gagal diperiksa`} tone="bad" /> : null}
+            <Pill text={`${data.checked} diperiksa`} tone="neutral" />
+            <Pill text={`${data.unbalanced} tidak seimbang`} tone={data.unbalanced ? 'bad' : 'ok'} />
+            <Pill text={`${data.missing_ledger} order v2 tanpa buku besar`} tone={data.missing_ledger ? 'bad' : 'ok'} />
+            {data.truncated ? <Pill text={`dipotong ${data.limit} teratas`} tone="wait" /> : null}
           </Row>
-          {shown.length === 0 && items.length > 0 ? <Text style={font.small}>Semua order selesai yang punya buku besar seimbang.</Text> : null}
-          {items.length === 0 && !err ? <Text style={font.small}>Belum ada order selesai.</Text> : null}
-          {shown.length > 0 ? (
-            <DataTable rows={shown.map((x) => ({ ...x.order, verdict: x.check?.verdict, phase: x.check?.phase, diff: x.check?.diff, diff_components: x.check?.diff_components, error: x.error })) as unknown as Record<string, unknown>[]}
-              onRowPress={(r) => onOpen(String(r.id))}
+          {items.length === 0 && missing.length === 0 ? <Text style={font.small}>Semua order selesai yang punya buku besar seimbang.</Text> : null}
+          {items.length > 0 ? (
+            <DataTable keyField="order_id" rows={items as unknown as Record<string, unknown>[]} onRowPress={(r) => onOpen(String(r.order_id))}
               columns={[
                 { key: 'code', label: 'Kode', width: 160, render: (r) => <View><Text style={font.bodyStrong}>{String(r.code)}</Text><Text style={font.tiny}>{fmtDate(r.completed_at as string)}</Text></View> },
                 { key: 'service', label: 'Layanan', width: 110, render: (r) => <Text style={font.body}>{serviceLabel[r.service as ServiceType] ?? String(r.service)}</Text> },
                 { key: 'total', label: 'Total', width: 110, align: 'right', mono: true, render: (r) => <Text style={font.mono}>{rupiah(Number(r.total))}</Text> },
-                { key: 'verdict', label: 'Putusan', width: 160, render: (r) => r.error ? <Pill text="gagal diperiksa" tone="bad" /> : <Pill text={VERDICT_LABEL[r.verdict as LedgerCheck['verdict']] ?? String(r.verdict)} tone="bad" /> },
+                { key: 'verdict', label: 'Putusan', width: 150, render: (r) => <Pill text={VERDICT_LABEL[r.verdict as LedgerCheck['verdict']] ?? String(r.verdict)} tone="bad" /> },
                 { key: 'diff', label: 'Selisih', width: 110, align: 'right', mono: true, render: (r) => <Text style={[font.mono, { color: adminTone.red }]}>{r.diff != null ? rupiah(Number(r.diff)) : '—'}</Text> },
                 { key: 'diff_components', label: 'Selisih komponen', width: 130, align: 'right', mono: true, render: (r) => <Text style={font.mono}>{r.diff_components != null ? rupiah(Number(r.diff_components)) : '—'}</Text> },
-                { key: 'error', label: 'Keterangan', width: 260, flex: 1, render: (r) => <Text style={font.small} numberOfLines={2}>{r.error ? String(r.error) : `fase ${String(r.phase ?? '—')} · klik untuk membuka`}</Text> },
+                { key: 'phase', label: 'Keterangan', width: 200, flex: 1, render: (r) => <Text style={font.small}>fase {String(r.phase ?? '—')} · klik untuk membuka</Text> },
               ]} />
           ) : null}
+          {missing.length > 0 ? (
+            <View style={{ gap: 4 }}>
+              <Text style={font.label}>Order v2 tanpa baris buku besar</Text>
+              <Row gap={6} style={{ flexWrap: 'wrap' }}>
+                {missing.map((m) => (
+                  <Pressable key={m.order_id} onPress={() => onOpen(m.order_id)} style={st.hit}>
+                    <Text style={font.bodyStrong}>{m.code}</Text>
+                    <Text style={font.tiny}>{serviceLabel[m.service] ?? m.service} · {fmtDate(m.completed_at, false)}</Text>
+                  </Pressable>
+                ))}
+              </Row>
+            </View>
+          ) : null}
         </View>
-      )}
+      ) : null}
     </Panel>
   );
 }

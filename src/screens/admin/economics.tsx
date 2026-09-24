@@ -32,6 +32,10 @@ const NUM_FIELDS: { key: NumKey; label: string; kind: 'pct' | 'rp'; width: numbe
 const PG_POLICY = [{ value: 'platform', label: 'Platform' }, { value: 'customer', label: 'Pelanggan' }];
 const FUNDERS = [{ value: 'platform', label: 'Platform' }, { value: 'merchant', label: 'Merchant' }, { value: 'sponsor', label: 'Sponsor' }];
 const TWO_WHEEL: ServiceType[] = ['ride_motor'];
+/** Kontrak v3 §0.1: ongkir = hak driver 100 % → komisi dari ongkir WAJIB 0 untuk layanan ini. */
+const DELIVERY_FULL_TO_DRIVER: ServiceType[] = ['food', 'send', 'shop', 'market', 'box'];
+/** Kontrak v3 §0.1: ride mobil komisi ≤ 15 %. */
+const CAR_CAP: Partial<Record<ServiceType, number>> = { ride_car: 15 };
 
 const toDraft = (r: ServiceEconomics): Draft => ({
   driver_commission_pct: String(r.driver_commission_pct ?? 0), merchant_fee_pct: String(r.merchant_fee_pct ?? 0),
@@ -85,8 +89,15 @@ export default function AdminEconomics() {
       if (f.kind === 'rp' && !Number.isInteger(n)) return { patch, error: `${f.label} harus bilangan bulat rupiah` };
       if (n !== Number(row[f.key])) patch[f.key] = n;
     }
-    if (TWO_WHEEL.includes(row.service) && cap != null && parseNum(d.driver_commission_pct) > cap) {
-      return { patch, error: `Komisi ${serviceLabel[row.service]} maksimal ${cap}% (commission_cap_two_wheel). Server akan menolak nilai di atasnya.` };
+    if (TWO_WHEEL.includes(row.service) && parseNum(d.driver_commission_pct) > Math.min(cap ?? 8, 8)) {
+      return { patch, error: `Komisi ${serviceLabel[row.service]} maksimal ${Math.min(cap ?? 8, 8)}% (Perpres 27/2026 · commission_cap_two_wheel). Server akan menolak nilai di atasnya.` };
+    }
+    if (DELIVERY_FULL_TO_DRIVER.includes(row.service) && parseNum(d.driver_commission_pct) > 0) {
+      return { patch, error: `Ongkir ${serviceLabel[row.service]} adalah hak driver 100 % — komisi dari ongkir harus 0 %. Pendapatan platform dari fee merchant, biaya platform pelanggan, iklan.` };
+    }
+    const carCap = CAR_CAP[row.service];
+    if (carCap != null && parseNum(d.driver_commission_pct) > carCap) {
+      return { patch, error: `Komisi ${serviceLabel[row.service]} maksimal ${carCap}% (prinsip bisnis v3 §0.1).` };
     }
     if (d.pg_fee_policy !== row.pg_fee_policy) patch.pg_fee_policy = d.pg_fee_policy;
     if (d.promo_default_funded_by !== row.promo_default_funded_by) patch.promo_default_funded_by = d.promo_default_funded_by;
@@ -131,7 +142,20 @@ export default function AdminEconomics() {
               {motorOver
                 ? `Komisi ${serviceLabel.ride_motor} saat ini/draf melebihi batas (${motor?.driver_commission_pct ?? '—'}% tersimpan, ${Number.isFinite(motorDraftPct) ? motorDraftPct : '—'}% di isian). Server menolak nilai di atas batas.`
                 : `Berlaku untuk ${serviceLabel.ride_motor} [FAKTA SUMBER, acuan regulasi Sep 2026]. Trigger server t_guard_commission_cap menolak nilai di atas batas.`}
-              {' '}Prinsip: ongkir adalah hak driver — komisi AntarFood/Send/Shop/Market = 0; pendapatan platform dari fee merchant + biaya platform pelanggan + iklan.
+              {' '}Ride mobil maksimal 15 %.
+            </Text>
+          </View>
+        </Row>
+      </View>
+
+      <View style={[st.note, { backgroundColor: TONE.ok.bg, borderColor: TONE.ok.border }]}>
+        <Row gap={8} style={{ alignItems: 'flex-start' }}>
+          <Ionicons name="bicycle-outline" size={adminIcon.md} color={TONE.ok.fg} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={[font.bodyStrong, { color: TONE.ok.fg }]}>Ongkir 100 % hak driver — AntarFood, AntarSend, AntarShop, AntarMarket, AntarBox</Text>
+            <Text style={font.small}>
+              Komisi dari ongkir untuk layanan ini dikunci 0 % (panel menolak nilai lain). Pendapatan platform = fee merchant + biaya platform pelanggan + iklan + langganan/B2B.
+              Target 25 % adalah take rate bersih portofolio tahap matang — bukan laba dan bukan potongan driver.
             </Text>
           </View>
         </Row>
@@ -160,10 +184,18 @@ export default function AdminEconomics() {
                   <View style={{ width: 150, gap: 4 }}>
                     <Text style={font.bodyStrong} numberOfLines={1}>{serviceLabel[row.service] ?? row.service}</Text>
                     <Text style={font.tiny} numberOfLines={1}>{row.service}{TWO_WHEEL.includes(row.service) && cap != null ? ` · maks ${cap}%` : ''}</Text>
-                    <Row gap={4} style={{ flexWrap: 'wrap' }}>{tags.length ? tags.map((t) => <LabelPill key={t} text={t} />) : <Pill text="tanpa label" tone="off" />}</Row>
+                    <Row gap={4} style={{ flexWrap: 'wrap' }}>
+                      {DELIVERY_FULL_TO_DRIVER.includes(row.service) ? <Pill text="ongkir 100 % driver" tone={Number(row.driver_commission_pct) > 0 ? 'bad' : 'ok'} icon="bicycle" /> : null}
+                      {TWO_WHEEL.includes(row.service) ? <Pill text={`komisi ≤ ${Math.min(cap ?? 8, 8)} %`} tone={Number(row.driver_commission_pct) > Math.min(cap ?? 8, 8) ? 'bad' : 'ok'} /> : null}
+                      {CAR_CAP[row.service] != null ? <Pill text={`komisi ≤ ${CAR_CAP[row.service]} %`} tone={Number(row.driver_commission_pct) > (CAR_CAP[row.service] ?? 100) ? 'bad' : 'ok'} /> : null}
+                      {tags.length ? tags.map((t) => <LabelPill key={t} text={t} />) : <Pill text="tanpa label" tone="off" />}
+                    </Row>
                   </View>
                   {NUM_FIELDS.map((f) => {
-                    const over = f.key === 'driver_commission_pct' && TWO_WHEEL.includes(row.service) && cap != null && parseNum(d[f.key]) > cap;
+                    const over = f.key === 'driver_commission_pct' && (
+                      (TWO_WHEEL.includes(row.service) && parseNum(d[f.key]) > Math.min(cap ?? 8, 8))
+                      || (DELIVERY_FULL_TO_DRIVER.includes(row.service) && parseNum(d[f.key]) > 0)
+                      || (CAR_CAP[row.service] != null && parseNum(d[f.key]) > (CAR_CAP[row.service] ?? 100)));
                     return (
                       <Input key={f.key} value={d[f.key]} keyboardType="decimal-pad" error={over ? ' ' : undefined}
                         onChangeText={(t) => setField(row.service, f.key, t)} containerStyle={{ width: f.width }}
@@ -215,6 +247,12 @@ const SETTING_NAME: Record<string, string> = {
   order_payment_timeout_min: 'Batas waktu bayar pesanan gateway',
   driver_debt_limit: 'Batas saldo minus driver/mitra',
   commission_cap_two_wheel: 'Batas komisi roda dua',
+  // v3 (kontrak §1)
+  refund_dual_approval_min: 'Ambang refund butuh 2 admin',
+  wallet_adjust_dual_approval_min: 'Ambang penyesuaian saldo butuh 2 admin',
+  ads_frequency_cap_per_day: 'Frequency cap iklan per hari',
+  ads_click_dedupe_minutes: 'Dedupe klik iklan',
+  variable_cost_per_order: 'Biaya variabel per order (contribution margin)',
 };
 const fmtSetting = (n: number | null | undefined, unit: string) => {
   if (n == null || !Number.isFinite(Number(n))) return '—';
