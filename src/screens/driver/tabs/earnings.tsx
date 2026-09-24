@@ -12,6 +12,8 @@ import { useMyOrders } from '@/hooks/useOrder';
 import { rpc } from '@/lib/supabase';
 import { colors, font, motion, radius, shadow } from '@/lib/theme';
 import { rupiah, formatDate, serviceLabel, driverEarningOf } from '@/lib/format';
+import { useServiceEconomics, driverCommissionText, DRIVER_SERVICES } from '@/lib/mitra';
+import { EarningsReportCard, MyDisputesCard } from '@/screens/mitra/finance';
 import type { Order } from '@/lib/types';
 
 type Summary = { today: number; today_trips: number; week: number; month: number };
@@ -63,7 +65,9 @@ export default function DriverEarnings() {
         </Row>
       </Entrance>
       <Entrance index={2}><EarningRules /></Entrance>
-      <Entrance index={3}><RecentOrderBreakdowns uid={uid} /></Entrance>
+      <Entrance index={3}><EarningsReportCard role="driver" ownerId={uid} /></Entrance>
+      <Entrance index={4}><RecentOrderBreakdowns uid={uid} /></Entrance>
+      <Entrance index={5}><MyDisputesCard /></Entrance>
     </View>
   );
 
@@ -74,13 +78,19 @@ export default function DriverEarnings() {
   );
 }
 
-/** Aturan uang yang berlaku (Skema Bisnis v2 §0): ongkir antar/belanja 100 % milik driver; komisi hanya ride/box. */
+/**
+ * Aturan uang yang berlaku (§0.1): persen komisi dibaca dari service_economics_public per layanan —
+ * TIDAK ditulis tetap di aplikasi (ongkir food/send/shop/market/box 100 % driver; ride ≤ 8 % motor, ≤ 15 % mobil).
+ */
 function EarningRules() {
+  const { data, error, loading } = useServiceEconomics(DRIVER_SERVICES);
+  const text = driverCommissionText(data);
   return (
     <Row gap={8} style={s.note}>
       <Ionicons name="information-circle-outline" size={16} color={colors.primary} />
       <Text style={[font.tiny, { flex: 1 }]}>
-        Ongkir AntarFood, AntarSend, AntarShop & AntarMarket 100 % milik Anda (komisi 0 %). Komisi platform hanya dipotong dari ongkir penumpang & AntarBox sesuai persentase yang tercantum di rincian.
+        {text ?? (loading ? 'Memuat aturan komisi terbaru…' : `Aturan komisi belum bisa dimuat${error ? ` (${error})` : ''} — persentase yang berlaku selalu tercantum di rincian tiap order.`)}
+        {' '}Tip pelanggan & biaya tambahan (parkir/tol/tunggu) 100 % milik Anda.
         {' '}Order tunai: Anda memegang uang pelanggan, lalu setoran ke platform (biaya platform, komisi, fee merchant) dipotong dari saldo saat order selesai. Jaga saldo tetap di atas batas minus yang ditetapkan admin.
       </Text>
     </Row>
@@ -95,7 +105,7 @@ function RecentOrderBreakdowns({ uid }: { uid?: string }) {
   return (
     <View style={s.card}>
       <Row between><Text style={font.h3}>Rincian per order</Text><Badge text={`${done.length} terakhir`} color={colors.textMuted} /></Row>
-      <Text style={font.tiny}>Ongkir · komisi platform · tip · extras · bagian biaya layanan · bonus sesi · pendapatan bersih — langsung dari buku besar order.</Text>
+      <Text style={font.tiny}>Nilai transaksi pelanggan · promo & biaya pembayaran (+ penanggung) · ongkir · komisi AntarKita · tip · extras · pendapatan bersih · status pencairan — langsung dari buku besar order.</Text>
       {loading ? <View style={{ gap: 8, marginTop: 6 }}><Skeleton height={44} radius={radius.md} /><Skeleton height={44} radius={radius.md} /></View>
         : done.length === 0 ? <Text style={[font.small, { marginTop: 6 }]}>Belum ada order selesai.</Text>
         : done.map((o) => <OrderRow key={o.id} o={o} open={open === o.id} onToggle={() => setOpen(open === o.id ? null : o.id)} />)}

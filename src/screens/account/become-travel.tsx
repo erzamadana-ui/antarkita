@@ -12,7 +12,8 @@ import { useMode } from '@/store/mode';
 import { useCurrentLocation } from '@/hooks/useLocation';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
-import { rupiah } from '@/lib/format';
+import { rupiah, pctLabel } from '@/lib/format';
+import { useServiceEconomics } from '@/lib/mitra';
 import type { TravelPartner, TravelPartnerType, TravelAccommodation } from '@/lib/types';
 
 const MODELS = [['Toyota Innova Reborn', 6], ['Toyota Hi-Ace Commuter', 14], ['Isuzu Elf Long', 15], ['Hyundai H-1', 8], ['Mitsubishi Xpander', 6], ['Toyota Avanza', 6], ['Honda Brio', 4], ['BYD M6 (EV)', 6], ['Lainnya', 6]] as const;
@@ -81,7 +82,7 @@ export default function BecomeTravel() {
           <View style={{ alignItems: 'center', marginTop: 4 }}>
             <View style={s.artCircle}><ServiceIllustration kind="travel" size={80} /></View>
             <Text style={[font.h1, { textAlign: 'center', marginTop: 14 }]}>Hasilkan dari{'\n'}mobil Anda</Text>
-            <Text style={[font.small, { textAlign: 'center', marginTop: 6 }]}>Agen travel mengisi kursi antar kota; pemilik mobil pribadi menerima carter privat & sopir harian saat mobil menganggur. Komisi 10% + biaya layanan; pencairan ke AntarPay setelah perjalanan selesai.</Text>
+            <Text style={[font.small, { textAlign: 'center', marginTop: 6 }]}>Agen travel mengisi kursi antar kota; pemilik mobil pribadi menerima carter privat & sopir harian saat mobil menganggur. <TravelFeeText /></Text>
             {st && <Badge text={st[0]} color={st[1]} style={{ marginTop: 10 }} />}
             {me?.status_reason && me.status !== 'approved' && <Text style={[font.small, { color: colors.danger, textAlign: 'center', marginTop: 6 }]}>Alasan admin: {me.status_reason}</Text>}
           </View>
@@ -168,6 +169,13 @@ export default function BecomeTravel() {
     </Screen>
   );
 }
+/** Fee mitra travel dari server (service_economics 'travel'.merchant_fee_pct bila dibuka) — bukan angka tetap di aplikasi. */
+function TravelFeeText() {
+  const { data } = useServiceEconomics(['travel']);
+  const fee = data.travel?.merchant_fee_pct;
+  return <>{fee != null ? `Fee layanan AntarKita ${pctLabel(fee)} per perjalanan` : 'Fee layanan AntarKita tercantum di rincian tiap perjalanan'}; pencairan ke AntarPay setelah perjalanan selesai.</>;
+}
+
 const s = StyleSheet.create({
   artCircle: { width: 124, height: 124, borderRadius: 62, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.primaryLight },
   option: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1.5, borderColor: colors.border, ...shadow.soft },
