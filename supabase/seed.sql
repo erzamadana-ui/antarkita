@@ -35,6 +35,13 @@ set local antaraja.bypass = 'on';
 update profiles set role = 'admin'    where id = 'a0000000-0000-4000-8000-000000000001';
 update profiles set role = 'driver'   where id in ('a0000000-0000-4000-8000-000000000003','a0000000-0000-4000-8000-000000000004');
 update profiles set role = 'merchant' where id = 'a0000000-0000-4000-8000-000000000005';
+-- Finpay v3 (0107): RBAC admin — admin demo = superadmin (promosi baru default 'viewer')
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'profiles' and column_name = 'admin_role') then
+    execute $q$update profiles set admin_role = 'superadmin' where id = 'a0000000-0000-4000-8000-000000000001'$q$;
+  end if;
+end $$;
 
 -- Saldo awal demo
 update wallets set balance = 200000 where user_id = 'a0000000-0000-4000-8000-000000000002';

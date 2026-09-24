@@ -94,12 +94,26 @@ grant usage on schema public to anon, authenticated, service_role, supabase_auth
 -- `set local role authenticated` di simulasi_e2e S31 gagal dengan
 -- "permission denied for table order_messages". Migrasi 0003 kemudian
 -- mencabut bagian FUNGSI dari hak bawaan ini (tetap berlaku di sini).
-grant all on all tables    in schema public to postgres, anon, authenticated, service_role;
-grant all on all sequences in schema public to postgres, anon, authenticated, service_role;
-grant all on all functions in schema public to postgres, anon, authenticated, service_role;
-alter default privileges for role postgres in schema public grant all on tables    to postgres, anon, authenticated, service_role;
-alter default privileges for role postgres in schema public grant all on sequences to postgres, anon, authenticated, service_role;
-alter default privileges for role postgres in schema public grant all on functions to postgres, anon, authenticated, service_role;
+-- Hanya pada database SEGAR (belum ada migrasi tercatat): menjalankan ulang stub saat
+-- `db-lokal.sh migrate` tidak boleh membuka lagi hak yang sudah dicabut migrasi
+-- (mis. revoke pada gateway_secrets/order_ledger/payment_events, fungsi service_role).
+do $$
+declare sudah boolean;
+begin
+  if to_regclass('_lokal.migrasi') is not null then
+    execute 'select exists (select 1 from _lokal.migrasi)' into sudah;
+  end if;
+  if not coalesce(sudah, false) then
+    grant all on all tables    in schema public to postgres, anon, authenticated, service_role;
+    grant all on all sequences in schema public to postgres, anon, authenticated, service_role;
+    grant all on all functions in schema public to postgres, anon, authenticated, service_role;
+    -- hak bawaan objek BARU: juga hanya sekali (0003 mencabut bagian fungsi untuk anon; stub yang
+    -- dijalankan ulang tidak boleh memberikannya kembali)
+    alter default privileges for role postgres in schema public grant all on tables    to postgres, anon, authenticated, service_role;
+    alter default privileges for role postgres in schema public grant all on sequences to postgres, anon, authenticated, service_role;
+    alter default privileges for role postgres in schema public grant all on functions to postgres, anon, authenticated, service_role;
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------
 -- 3. Ekstensi + 4. search_path

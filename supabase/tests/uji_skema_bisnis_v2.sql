@@ -168,6 +168,25 @@ begin
       antarpay_enabled(), payment_channel_enabled('gopay'), pg_temp.v2_saldo(cust), dbox) || E'\n';
   exception when others then log := log || 'S0 BUG persiapan: ' || sqlerrm || E'\n'; end;
 
+  -- ===== S0 fixture Finpay v3 (0105–0110; ikut di-ROLLBACK). Uji v2 memakai payments.provider='simulated', penyesuaian
+  --        saldo ≥ Rp100.000, dan pg_fee_policy=customer pada kartu/VA Midtrans. Di v3: K1 (simulasi hanya bila
+  --        payments_simulation_enabled & sandbox), dual approval, dan §0.5 (biaya PG ke pelanggan HANYA bila kanal
+  --        pass_to_customer & pass_to_customer_legal_ok; QRIS tidak pernah) — diuji di uji_finpay_v3.sql.
+  --        Di sini: simulasi dinyalakan, ambang dual approval/rate limit dilonggarkan, kartu & VA Midtrans diberi
+  --        izin legal pass-through supaya skenario pg_fee_policy=customer (S45/S62/S81) tetap bermakna.
+  begin
+    insert into app_settings (key, value) values
+      ('payments_simulation_enabled', 'true'::jsonb), ('payment_provider_env', '"sandbox"'::jsonb),
+      ('wallet_adjust_dual_approval_min', '1000000000000'::jsonb), ('refund_dual_approval_min', '1000000000000'::jsonb),
+      ('rate_limit_create_order_per_hour', '100000'::jsonb), ('rate_limit_payment_prepare_per_hour', '100000'::jsonb),
+      ('rate_limit_withdrawal_per_hour', '100000'::jsonb)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+    if exists (select 1 from information_schema.columns where table_name = 'payment_channel_fees' and column_name = 'pass_to_customer_legal_ok') then
+      execute $q$update payment_channel_fees set pass_to_customer = true, pass_to_customer_legal_ok = true
+                 where provider = 'midtrans' and channel in ('card', 'bank_transfer')$q$;
+    end if;
+  exception when others then log := log || 'S0 BUG fixture v3: ' || sqlerrm || E'\n'; end;
+
   -- ===== S1 Tabel aturan (0098): 8 baris, pagar roda dua, RPC publik, RPC admin (PIN + validasi + audit) =====
   begin
     select count(*) into n from service_economics;
@@ -722,8 +741,10 @@ begin
       se := admin_set_service_economics('send', '{"pg_fee_policy": "customer"}');
       o := pg_temp.v2_jalankan('send', 'qris', null, '{"hanya_buat": true, "tanpa_bayar": true}');
       v_base := o.fare_delivery + o.platform_fee - o.discount;
-      ok := o.total = v_base + round(v_base * 0.007) and o.pg_fee_borne_by = 'customer';
-      alasan := format('qris: total %s = dasar %s + biaya pembayaran %s', o.total, v_base, o.total - v_base);
+      -- Finpay v3 §0.5: QRIS TIDAK PERNAH dibebankan ke pelanggan (larangan surcharge BI) walau pg_fee_policy=customer
+      -- → biaya 0,7 % ditanggung platform, total = dasar (sebelum v3: dasar + 0,7 %).
+      ok := o.total = v_base and o.pg_fee = round(v_base * 0.007) and o.pg_fee_borne_by = 'platform';
+      alasan := format('qris (v3: tanpa surcharge): total %s = dasar %s + biaya pembayaran %s, pg_fee %s ditanggung %s', o.total, v_base, o.total - v_base, o.pg_fee, o.pg_fee_borne_by);
       -- pelanggan ganti ke VA saat membayar → biaya pembayaran jadi 4.000 + 440
       perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
       q := order_payment_prepare(o.id, 'bank_transfer');
@@ -802,7 +823,7 @@ begin
       log := log || format('S64a %s boost_nearby 3 hari: harga=%s (3 × 15.000) status=%s saldo merchant Δ%s | ledger ads_revenue=%s (source merchant_ads) | nearby_merchants_v2 teratas=%s boosted=%s label=%s',
         case when a.price_paid = 45000 and a.status = 'active' and m1 - m0 = -45000
                   and (select sum(amount) from order_ledger where source = 'merchant_ads' and source_id = a.id and entry = 'ads_revenue') = 45000
-                  and (v_first->>'id')::uuid = merch and (v_first->>'boosted')::boolean and v_first->>'ad_label' = 'Iklan' then 'OK' else 'BUG' end,
+                  and (v_first->>'id')::uuid = merch and (v_first->>'boosted')::boolean and v_first->>'ad_label' = 'Sponsored' then 'OK' else 'BUG' end,   -- Finpay v3 §7: label 'Sponsored' (sebelumnya 'Iklan')
         a.price_paid, a.status, m1 - m0, (select sum(amount) from order_ledger where source = 'merchant_ads' and source_id = a.id), v_first->>'name', v_first->>'boosted', v_first->>'ad_label') || E'\n';
       -- saldo kurang → ditolak
       perform set_config('request.jwt.claims', json_build_object('sub', mown, 'role', 'authenticated')::text, true);
@@ -1306,12 +1327,19 @@ begin
       select l.id, x.code into v_row, v_code from order_ledger l join orders x on x.id = l.order_id
        where x.status = 'completed' and x.ledger_version = 2 and x.created_at >= transaction_timestamp() and l.phase = 'completed' and l.entry = 'platform_revenue'
        order by x.completed_at desc limit 1;
+      -- Finpay v3 (0106): order_ledger append-only — merusak baris hanya lewat sesi pemeliharaan tanpa JWT + antarkita.append_only_bypass
+      perform set_config('request.jwt.claims', '', true); perform set_config('antarkita.append_only_bypass', 'on', true);
       update order_ledger set amount = amount + 1 where id = v_row;
+      perform set_config('antarkita.append_only_bypass', 'off', true);
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
       r := admin_ledger_unbalanced(50);
       j := (select x from jsonb_array_elements(r->'items') x where x->>'code' = v_code);
       ok := (r->>'unbalanced')::int = n + 1 and j is not null and (j->>'diff')::bigint = -1 and (r->>'checked')::int > 0;
       ok := ok and jsonb_array_length(admin_ledger_unbalanced(1)->'items') <= 1;
+      perform set_config('request.jwt.claims', '', true); perform set_config('antarkita.append_only_bypass', 'on', true);
       update order_ledger set amount = amount - 1 where id = v_row;
+      perform set_config('antarkita.append_only_bypass', 'off', true);
+      perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
       log := log || format('S84a %s admin_ledger_unbalanced: awal %s tidak seimbang dari %s order; baris %s dirusak +1 → muncul (diff=%s), dipulihkan → %s',
         case when ok and n = 0 and (admin_ledger_unbalanced(50)->>'unbalanced')::int = 0 then 'OK' else 'BUG' end, n, r->>'checked', v_code, j->>'diff', admin_ledger_unbalanced(50)->>'unbalanced') || E'\n';
       -- pencarian: kode order (persis & awalan huruf kecil), booking travel (kode), iklan (ID)

@@ -62,6 +62,19 @@ begin
     log := log || format('S0 %s AntarPay dinyalakan untuk simulasi (nilai produksi=%s → sekarang=%s; dikembalikan oleh S54 & ROLLBACK)', case when antarpay_enabled() then 'OK' else 'BUG' end, pay_on0, r->>'antarpay_enabled') || E'\n';
   exception when others then log := log || 'S0 BUG sakelar AntarPay: ' || sqlerrm || E'\n'; end;
 
+  -- ===== S0 fixture Finpay v3 (0105–0110; ikut di-ROLLBACK): skenario v1/v2 di berkas ini memakai payments.provider='simulated',
+  --        penyesuaian saldo admin ≥ Rp100.000 dan > 30 pesanan per jam per pelanggan. Di v3 ketiganya dijaga
+  --        (K1: simulasi hanya bila payments_simulation_enabled & env sandbox; dual approval; rate_take) — diuji
+  --        tersendiri di uji_finpay_v3.sql. Di sini dilonggarkan supaya perilaku lama tetap teruji apa adanya.
+  begin
+    insert into app_settings (key, value) values
+      ('payments_simulation_enabled', 'true'::jsonb), ('payment_provider_env', '"sandbox"'::jsonb),
+      ('wallet_adjust_dual_approval_min', '1000000000000'::jsonb), ('refund_dual_approval_min', '1000000000000'::jsonb),
+      ('rate_limit_create_order_per_hour', '100000'::jsonb), ('rate_limit_payment_prepare_per_hour', '100000'::jsonb),
+      ('rate_limit_withdrawal_per_hour', '100000'::jsonb)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  exception when others then log := log || 'S0 BUG fixture v3: ' || sqlerrm || E'\n'; end;
+
   -- ===== S0 Semua saluran pembayaran dinyalakan untuk simulasi (0089: default produksi = hanya tunai;
   --        skenario dompet/e-wallet di bawah membutuhkan salurannya aktif) =====
   begin

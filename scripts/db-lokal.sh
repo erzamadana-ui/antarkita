@@ -19,6 +19,7 @@
 #   DB_NAME=antarkita   DB_USER=postgres   DB_HOST=127.0.0.1   DB_PORT=5432
 #   SEED_PASSWORD=UjiLokal123   PG_VERSION=16   PG_CLUSTER=main
 #   DB_LOKAL_NO_SUDO=1  (lewati pengelolaan cluster; anggap server sudah jalan)
+#   DB_LOKAL_MIG_UNTIL=0104  (migrate: berhenti setelah migrasi berawalan itu — baseline uji rollback)
 #
 # Idempoten: semua langkah aman diulang. Butuh sudo/root hanya untuk
 # menyalakan cluster & mengaktifkan trust-auth di localhost.
@@ -207,6 +208,8 @@ migrate() {
   N_MIG_APPLIED=0; N_MIG_SKIPPED=0
   while IFS= read -r f; do
     name="$(basename "$f")"
+    # DB_LOKAL_MIG_UNTIL=0104 → berhenti setelah migrasi berawalan 0104 (dipakai scripts/uji-rollback.sh)
+    if [[ -n "${DB_LOKAL_MIG_UNTIL:-}" && "$name" > "${DB_LOKAL_MIG_UNTIL}~" ]]; then continue; fi
     applied="$(psql -X -q -At -c "select 1 from _lokal.migrasi where nama = '$name'")"
     if [[ "$applied" == "1" ]]; then N_MIG_SKIPPED=$((N_MIG_SKIPPED+1)); continue; fi
     printf '     %s ... ' "$name"
