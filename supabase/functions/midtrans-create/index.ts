@@ -28,8 +28,13 @@ type OrderQuote = {
 async function loadKeys(admin: ReturnType<typeof createClient>) {
   const env = { server: Deno.env.get("MIDTRANS_SERVER_KEY") ?? "", client: Deno.env.get("MIDTRANS_CLIENT_KEY") ?? "", prod: (Deno.env.get("MIDTRANS_IS_PRODUCTION") ?? "false") === "true", source: "secret" };
   if (env.server) return env;
-  const { data } = await admin.from("gateway_secrets").select("server_key, client_key, is_production").eq("provider", "midtrans").maybeSingle();
-  if (data?.server_key) return { server: data.server_key as string, client: (data.client_key as string) ?? "", prod: !!data.is_production, source: "admin" };
+  // v3: gateway_secrets berkunci (provider, env) → bisa 2 baris Midtrans; pilih sesuai payment_provider_env (fallback baris lama).
+  const { data: rows } = await admin.from("gateway_secrets").select("*").eq("provider", "midtrans");
+  const { data: envRow } = await admin.from("app_settings").select("value").eq("key", "payment_provider_env").maybeSingle();
+  const want = envRow?.value === "production" ? "production" : "sandbox";
+  const list = (rows ?? []).filter((r: Record<string, unknown>) => r.server_key);
+  const data = list.find((r: Record<string, unknown>) => r.env === want) ?? list.find((r: Record<string, unknown>) => r.env == null) ?? list[0];
+  if (data?.server_key) return { server: data.server_key as string, client: (data.client_key as string) ?? "", prod: data.env ? data.env === "production" : !!data.is_production, source: "admin" };
   return { server: "", client: "", prod: false, source: "none" };
 }
 
@@ -58,6 +63,18 @@ Deno.serve(async (req) => {
     }
 
     const purpose: string = body.purpose === "order" ? "order" : "topup";
+
+    // ---- Guard provider v3 (KONTRAK-API-V3 §9): transaksi pesanan baru lewat pay-create bila provider aktif bukan Midtrans ----
+    {
+      const { data: act } = await admin.from("app_settings").select("value").eq("key", "payment_provider_active").maybeSingle();
+      const active = typeof act?.value === "string" ? act.value : "midtrans"; // setting belum ada (pra-v3) → perilaku lama
+      if (purpose === "order" && active !== "midtrans") {
+        return json({ error: "Metode pembayaran telah diperbarui. Perbarui aplikasi lalu coba lagi.", provider: active, use: "pay-create" }, 409);
+      }
+    }
+    // Mode simulasi lama dihapus (v3): tanpa server key tidak ada transaksi yang dibuat. Simulasi kini hanya lewat
+    // pay-create + pay-webhook/simulated (payments_simulation_enabled & env≠production).
+    if (!keys.server) return json({ error: "Gateway Midtrans belum dikonfigurasi. Hubungi admin.", configured: false }, 503);
     const { data: prof } = await admin.from("profiles").select("full_name, email, phone").eq("id", user.id).single();
     const provider = keys.server ? "midtrans" : "simulated";
     const customer = { first_name: prof?.full_name ?? "Pengguna", email: prof?.email ?? user.email, phone: prof?.phone ?? undefined };
