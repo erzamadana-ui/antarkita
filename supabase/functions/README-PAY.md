@@ -14,8 +14,9 @@ service_role (`payment_event_ingest`, `payout_event_ingest`, `refund_execute_res
 | `pay-webhook/simulated` | app (JWT pemilik) | **off** (JWT dicek di dalam) | simulasi sandbox, syarat ketat |
 | `pay-refund` | Panel Admin (JWT, `refund_execute`) | default | eksekusi `refund_requests` berstatus `approved` |
 | `pay-reconcile` | pg_cron (`x-cron-secret`) / service_role | **off** | PENDING menggantung, konfirmasi PAID H-1, `reconcile_daily` |
-| `pay-disburse` | Panel Admin (JWT, `payout_execute`) | default | inquiry → transfer Finpay Disbursement |
-| `midtrans-create` / `midtrans-webhook` | lama | — | tetap untuk transaksi lama; guard v3 ditambahkan |
+| `pay-disburse` | Panel Admin (JWT, `payout` + PIN) | default | `payout_execute_allowed` → inquiry → transfer Finpay Disbursement |
+| `midtrans-create` | lama | default | hanya bila provider aktif Midtrans (order); kunci sesuai `payment_provider_env` saja |
+| `midtrans-webhook` | Midtrans (URL dashboard lama) | **off** | pembungkus tipis → handler `pay-webhook/midtrans` yang sama (tidak ada lagi `payment_settle` langsung) |
 
 Kode bersama `_shared/`: `providers/{types,finpay,midtrans,simulated,index}.ts`, `db.ts` (satu-satunya yang
 mengimpor supabase-js), `config.ts` (`getSetting`, `loadPaySettings`, `getSecrets`), `http.ts` (CORS, `json`,
@@ -30,12 +31,15 @@ Wajib:
 - `CRON_SECRET` — ≥ 16 karakter acak; dipakai pg_cron memanggil `pay-reconcile` (header `x-cron-secret`).
 
 Opsional (override; normalnya kunci diisi admin di Panel Admin → `gateway_secrets`):
-- `FINPAY_MERCHANT_ID`, `FINPAY_MERCHANT_KEY` (+ `FINPAY_ENV=sandbox|production` membatasi env yang dipakai override), `FINPAY_BASE_URL`.
+- `FINPAY_MERCHANT_ID`, `FINPAY_MERCHANT_KEY` + **wajib** `FINPAY_ENV=sandbox|production` (tanpa `FINPAY_ENV` override diabaikan; hanya berlaku untuk env itu), `FINPAY_BASE_URL`.
+- `MIDTRANS_SERVER_KEY` berlaku hanya untuk env `MIDTRANS_IS_PRODUCTION` (true = production).
 - `FINPAY_DISB_MERCHANT_ID`, `FINPAY_DISB_MERCHANT_KEY` — bila kredensial Disbursement berbeda (atau baris `gateway_secrets.provider='finpay_disbursement'`).
 - `MIDTRANS_SERVER_KEY`, `MIDTRANS_CLIENT_KEY`, `MIDTRANS_IS_PRODUCTION`.
 - `PAY_WEBHOOK_BASE_URL` — default `<SUPABASE_URL>/functions/v1`.
 - `PAY_RETURN_URL` — successUrl/failUrl/backUrl (mis. deep link `antarkita://pay/return`).
-- `FINPAY_CALLBACK_IP_ALLOWLIST` — daftar IP Finpay dipisah koma; kosong = tidak dicek.
+- `FINPAY_CALLBACK_IP_ALLOWLIST`, `MIDTRANS_CALLBACK_IP_ALLOWLIST` — IP resmi provider dipisah koma. Kosong = TIDAK memblokir
+  (peringatan `webhook_ip_allowlist_empty` dicatat sekali per isolate). Terisi = IP lain → 403. IP di allowlist bebas rate limit.
+- `WEBHOOK_RATE_LIMIT_PER_MIN` — default 60 permintaan/menit per IP per rute webhook (memori isolate).
 - `PAYMENTS_SIMULATION_HARD_OFF=true` — mematikan simulasi apa pun isi setting (disarankan di project production).
 
 `gateway_secrets.extra` (jsonb, per provider+env) yang dikenali:
@@ -49,12 +53,17 @@ Opsional (override; normalnya kunci diisi admin di Panel Admin → `gateway_secr
   (juga dikirim per transaksi di `url.callbackUrl`).
 - Finpay Disbursement → Callback: `https://qwltshvzrsykxdvhbxcv.supabase.co/functions/v1/pay-webhook/finpay-disbursement`
 - Midtrans: transaksi dari `pay-create` mengirim header `X-Override-Notification` ke
-  `https://qwltshvzrsykxdvhbxcv.supabase.co/functions/v1/pay-webhook/midtrans`. URL notifikasi di dashboard Midtrans
-  tetap `…/midtrans-webhook` untuk transaksi lama (AKORD-/AKPAY-).
+  `https://qwltshvzrsykxdvhbxcv.supabase.co/functions/v1/pay-webhook/midtrans`. URL notifikasi di dashboard Midtrans boleh
+  tetap `…/midtrans-webhook` — sejak v3 ia hanya pembungkus handler yang sama (verifikasi + `payment_event_ingest`).
 
-### IP whitelist
-- **Masuk (callback):** isi `FINPAY_CALLBACK_IP_ALLOWLIST` dengan IP callback resmi Finpay (minta ke Finpay). Lapisan
-  tambahan saja; keamanan utama = HMAC + `checkStatus`.
+### IP whitelist & rate limit
+- IP klien (R6): `cf-connecting-ip` → `x-real-ip` → entri TERAKHIR `x-forwarded-for` (entri awal bisa dipalsukan).
+- **Masuk (callback):** isi `FINPAY_CALLBACK_IP_ALLOWLIST` (dan opsional `MIDTRANS_CALLBACK_IP_ALLOWLIST`) dengan IP callback
+  resmi (minta ke provider). Lapisan tambahan saja; keamanan utama = HMAC/SHA512 dengan kunci env transaksi + `checkStatus`.
+- **Rate limit:** 60/menit per IP per rute (`finpay`, `finpay-disbursement`, `midtrans`, `simulated`), lewat → 429
+  (Finpay: `responseCode 4290000`). Risiko: bila semua callback provider datang dari sedikit IP dan volume > 60/menit,
+  callback sah ikut terkena 429 (provider mengirim ulang) → WAJIB isi allowlist IP provider di production (IP allowlist dikecualikan)
+  atau naikkan `WEBHOOK_RATE_LIMIT_PER_MIN`. Batas di memori per isolate (bukan global).
 - **Keluar (API call ke Finpay):** bila Finpay mewajibkan whitelist IP server merchant, Supabase Edge Functions **tidak
   punya IP egress statis**. Perlu konfirmasi ke Finpay; bila wajib → pakai proxy egress statis (`FINPAY_BASE_URL`
   menunjuk proxy) atau minta pengecualian. **PERLU VERIFIKASI.**
@@ -95,18 +104,47 @@ deno check supabase/functions/pay-*/index.ts
 ```
 
 ## Keamanan (ringkas)
+- **Env terikat ke transaksi (T1).** Webhook mencari transaksi dulu (`payments` by `external_id`/`provider_ref`, service_role),
+  mengambil `payments.env`, lalu memverifikasi signature HANYA dengan kunci `(provider, env)` itu, `checkStatus` ke host env itu
+  (devo/live, api.sandbox/api), dan mengirim `p_env` ke `payment_event_ingest` (DB menolak `env_mismatch`). Tidak ada lagi
+  "coba semua kunci/semua env". `pay-create` membuat charge dengan env intent (`payments.env`), `pay-refund`/`pay-reconcile`
+  juga memakai env transaksi. Disbursement: env dari prefiks `external_id` buatan `pay-disburse` (`AKD-` production,
+  `AKDS-` sandbox) yang dicari di `withdrawal_requests.provider_ref` (kolom env belum ada — lihat catatan Agen A).
+- Transaksi tidak ditemukan / milik provider lain → **200 + log bersampel**, tanpa menulis apa pun (tidak membocorkan keberadaan order).
 - Webhook Finpay: HMAC-SHA512 dicoba atas (a) raw body dengan field `signature` dihapus secara tekstual, (b) re-serialisasi
-  ala PHP `json_encode` (escape `/` dan unicode; juga varian objek kosong → `[]`), (c) `JSON.stringify` ringkas. Semua butuh
-  Merchant Key. Perbandingan waktu-konstan. Setelah lolos, status **selalu** ditanyakan ulang (`checkStatus`) dan status +
-  amount dari provider yang di-ingest. Provider tidak bisa dihubungi → 503 (provider mengulang). Provider tidak mengenal
-  order → di-ingest sebagai `UNCONFIRMED` (tidak pernah PAID).
-- Signature salah → 401 + audit `payment_event_ingest(p_provider_status='SIGNATURE_INVALID', p_signature_ok=false, p_amount=null)`.
-- Duplikat (`payment_events` unik `(provider,event_id)`) → selalu 200.
-- `p_raw` yang dikirim ke DB sudah melewati redaksi (signature/kunci/token → `[REDACTED]`, PAN → 4 digit akhir, email/telepon/rekening disamarkan).
-- `pay-create` purpose `order`: nominal dari `order_payment_prepare` (JWT pengguna), bukan dari body. Charge hanya dibuat
-  sekali per intent (klaim atomik `checkout_token`), karena Finpay tidak punya header idempotency.
+  ala PHP `json_encode` (escape `/` dan unicode; juga varian objek kosong → `[]`), (c) `JSON.stringify` ringkas — semuanya
+  dengan kunci env transaksi. Perbandingan waktu-konstan. Setelah lolos, status **selalu** ditanyakan ulang (`checkStatus`) dan
+  status + amount dari provider yang di-ingest. Provider tidak mengenal order → `UNCONFIRMED` (tidak pernah PAID).
+- **Signature salah (S5)** → 401; TIDAK ditulis ke `payment_events` (append-only → cegah DoS). Hanya log bersampel
+  (5 pertama lalu tiap ke-50) + penghitung di memori.
+- `p_raw` = payload notifikasi di tingkat atas (dibaca `payment_settle`: `gross_amount`, `va_numbers`, `payment_type`,
+  `settlement_time`) + `check` + `_antarkita{env, verified_via, channel, pay_status, note}`; sudah melewati redaksi
+  (signature/kunci/token → `[REDACTED]`, PAN → 4 digit akhir, email/telepon/rekening disamarkan).
+- Midtrans refund/partial_refund/chargeback diterima → REFUNDED/PARTIALLY_REFUNDED/DISPUTED; `p_raw.refund_amount` =
+  total kumulatif (jumlah `refunds[].refund_amount`, atau `refund_amount`), diambil dari respons cek status lalu callback.
+- `pay-create` purpose `order`: nominal dari `order_payment_prepare` (JWT pengguna), bukan dari body. Intent PENDING aktif
+  yang dikembalikan DB (order & topup) → `reused`, tanpa charge baru; intent yang pernah di-charge tetapi instruksi bayarnya
+  tidak tersimpan → 409 (tidak charge ulang `order.id` yang sama). Klaim atomik `checkout_token` mencegah charge ganda.
+- Admin (`pay-refund`, `pay-disburse`): `admin_has(perm)` **dan** `admin_require_unlock()` wajib (PIN). `pay-disburse` juga
+  memanggil `payout_execute_allowed(p_withdrawal)` sebelum inquiry/klaim (dual approval ≥ ambang).
 - Simulasi: `payments_simulation_enabled=true` **dan** `payment_provider_env≠'production'` **dan** `payments.provider='simulated'`
-  **dan** pemilik JWT; DB wajib mengecek ulang di `payment_event_ingest` untuk `p_provider='simulated'`.
+  **dan** `payments.env≠'production'` **dan** pemilik JWT; DB mengecek ulang (`payments_simulation_active()`).
+
+### Semantik retry (jawaban webhook)
+| Kondisi | Finpay | Midtrans | Provider mengirim ulang? |
+|---|---|---|---|
+| Diproses / duplikat (`duplicate=true`) / terminal diabaikan (`ignored_terminal`, `no_change`, `env_mismatch` …) | 200 `2000000` | 200 | tidak |
+| Transaksi tidak ditemukan / provider lain | 200 | 200 | tidak |
+| Body rusak / tanpa order id | 400 | 400 | — |
+| Signature salah | 401 | 401 | — |
+| IP di luar allowlist | 403 | 403 | — |
+| Rate limit | 429 | 429 | ya |
+| Error DB (lookup/RPC melempar) atau RPC mengembalikan `note='error: …'` | 500 `5000000` | 500 | ya |
+| `checkStatus` gagal dihubungi / kunci env belum diisi | 503 | 503 | ya |
+
+Catatan untuk Agen A: `payment_event_ingest` saat ini menangkap error internal menjadi `note='error: …'` SETELAH baris
+`payment_events` tersimpan — kiriman ulang provider akan terdeteksi duplikat dan tidak diproses ulang. Edge menjawab 500,
+tetapi agar retry efektif RPC sebaiknya `raise` (rollback insert inbox) untuk error non-bisnis.
 
 ## RPC yang dipanggil (harus cocok dengan migrasi Agen A)
 
@@ -114,17 +152,18 @@ deno check supabase/functions/pay-*/index.ts
 |---|---|---|---|
 | `order_payment_prepare` | JWT pengguna | `p_order uuid, p_channel text` | jsonb `{order_id, code, channel, gross, expires_at, …}` (v2) |
 | `payment_intent_create` | service_role | `p_user, p_purpose, p_order, p_amount, p_channel, p_provider` | baris `payments` (kolom §2; `support_ref`) |
-| `payment_event_ingest` | service_role | `p_provider, p_event_id, p_external_id, p_provider_status, p_amount, p_signature_ok, p_raw` | `{duplicate, applied, pay_status, note}` |
+| `payment_event_ingest` | service_role | `p_provider, p_event_id, p_external_id, p_provider_status, p_amount, p_signature_ok, p_raw, p_env` | `{duplicate, applied, pay_status, note}`; `note` `error: …` → edge 500 |
 | `payout_event_ingest` | service_role | `p_external_id, p_status, p_raw` | `p_status` ∈ `PAYOUT_SETTLED/PAYOUT_PROCESSING/PAYOUT_FAILED` |
-| `refund_execute_result` | service_role | `p_id uuid, p_status text, p_provider_ref text, p_raw jsonb, p_note text` | `executing` = klaim atomik dari `approved` (tolak selain approved/executing); `done`/`failed` final; `destination='wallet'` → `wallet_apply('refund')` di DB |
-| `reconcile_daily` | service_role | `p_date date` | ringkasan run |
-| `admin_has` | JWT admin | `p_perm text` | `bool` (`refund_execute`, `payout_execute`) |
-| `admin_require_unlock` | JWT admin | — | raise bila PIN belum dibuka; bila fungsi tidak ada (PGRST202) dilewati |
+| `payout_execute_allowed` | service_role | `p_withdrawal uuid` | `{allowed, needs_approval, reason, pending_approval_id}` — `allowed≠true` → 409 |
+| `refund_execute_result` | service_role | `p_id uuid, p_status text, p_provider_ref text, p_raw jsonb, p_note text` | `executing` = klaim atomik dari `approved`; `done`/`failed` final; `destination='wallet'` → `wallet_apply('refund')` di DB |
+| `reconcile_daily` | service_role | `p_date date` (`p_kind`, `p_by` default) | ringkasan run |
+| `admin_has` | JWT admin | `p_perm text` | `bool` (`refund_execute`, `payout`) |
+| `admin_require_unlock` | JWT admin | — | WAJIB; error apa pun → 403 `need_unlock` |
 | `antarpay_enabled`, `gateway_public_config`, `payment_channel_enabled(p_key)` | service_role | — | sudah ada (v2), untuk topup |
 
 Nilai `p_provider_status` yang dikirim (DB memetakan per provider, KONTRAK §3):
 - Finpay: status mentah huruf besar (`PAID`, `CAPTURED`, `PENDING`, `FAILURE`, `EXPIRED`, `CANCELLED`, `REFUNDED`, `PARTIALLY_REFUNDED`),
-  plus `UNCONFIRMED` dan `SIGNATURE_INVALID` (harus diabaikan/no-op oleh mesin status).
+  plus `UNCONFIRMED` (diabaikan mesin status: `unknown_status`).
 - Midtrans: `transaction_status` dengan `fraud_status` sudah dilipat (`capture`=accept, challenge→`pending`, deny→`deny`),
   `settlement`, `expire`, `cancel`, `failure`, `refund`, `partial_refund`, `chargeback`.
 - Simulated: `PAID`/`FAILED`/`EXPIRED`. Rekonsiliasi: status provider seperti di atas; kedaluwarsa lokal → `EXPIRED` / `expire`.
@@ -166,7 +205,8 @@ Tulisan langsung (service_role, di luar RPC — mohon disetujui atau diganti RPC
    (`provider_ref`, `expires_at`, `raw.create`). Catat bentuk respons → sesuaikan parser bila perlu.
 4. Bayar dengan simulator Finpay → log `payment_event_ingested`, `raw._antarkita.verified_via` (a/b/c), order jadi PAID,
    ledger tertulis. Kirim ulang callback yang sama (replay) → `duplicate=true`, 200.
-5. Ubah satu byte body callback lalu POST manual → 401 + baris `SIGNATURE_INVALID`.
+5. Ubah satu byte body callback lalu POST manual → 401, tidak ada baris baru di `payment_events`. Callback bertanda tangan
+   kunci sandbox untuk transaksi production → 401. POST > 60/menit dari satu IP non-allowlist → 429.
 6. Ulangi 3–4 untuk tiap saluran: `va_bca/bri/bni/mandiri/permata/bsi`, `ovo`, `dana`, `shopeepay`, `linkaja`,
    `finpaymoney`, `cc`, `alfamart`, `indomaret`, `kredivo`, `indodana`. Kode yang ditolak → perbaiki `extra.channel_map`.
 7. Biarkan satu transaksi kedaluwarsa → callback EXPIRED / `pay-reconcile` menandai EXPIRED. Bayar setelah EXPIRED (bila

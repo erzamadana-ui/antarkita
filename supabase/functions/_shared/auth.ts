@@ -11,8 +11,8 @@ export async function requireUser(deps: Deps, req: Request): Promise<{ user: Aut
 }
 
 /**
- * Admin dengan izin RBAC (KONTRAK §5: admin_has(p_perm)). Juga mencoba admin_require_unlock() (PIN) bila fungsi itu
- * tersedia untuk authenticated; bila fungsinya belum ada (PGRST202) → dilewati dengan peringatan log.
+ * Admin dengan izin RBAC (KONTRAK §5: admin_has(p_perm)) DAN sesi PIN terbuka (admin_require_unlock(), 0019) — wajib;
+ * error apa pun (termasuk fungsi tidak ada) → 403.
  */
 export async function requireAdminPerm(deps: Deps, req: Request, perm: string): Promise<{ user: AuthUser; authHeader: string }> {
   const { user, authHeader } = await requireUser(deps, req);
@@ -25,8 +25,8 @@ export async function requireAdminPerm(deps: Deps, req: Request, perm: string): 
   if (data !== true) throw new HttpError(403, `Butuh izin admin '${perm}'`);
   const unlock = await udb.rpc("admin_require_unlock", {});
   if (unlock.error) {
-    if (unlock.error.code === "PGRST202") log.warn("admin_require_unlock_missing", { perm });
-    else throw new HttpError(403, unlock.error.message || "PIN admin diperlukan", { need_unlock: true });
+    log.warn("admin_unlock_required", { perm, code: unlock.error.code });
+    throw new HttpError(403, unlock.error.code === "PGRST202" ? "Pemeriksaan PIN admin tidak tersedia" : unlock.error.message || "PIN admin diperlukan", { need_unlock: true });
   }
   return { user, authHeader };
 }

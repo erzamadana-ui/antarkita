@@ -2,7 +2,11 @@
 import type { Deps } from "./deps.ts";
 import { log, redact } from "./log.ts";
 
-export interface IngestResult { duplicate: boolean; applied: boolean; pay_status: string | null; note: string | null }
+export interface IngestResult {
+  duplicate: boolean; applied: boolean; pay_status: string | null; note: string | null;
+  /** true = RPC menangkap error internal (note 'error: …') — webhook menjawab 5xx agar provider mengirim ulang. */
+  failed: boolean;
+}
 
 export interface IngestArgs {
   provider: string;
@@ -12,9 +16,11 @@ export interface IngestArgs {
   amount: number | null;
   signatureOk: boolean;
   raw: unknown;
+  /** Env transaksi (payments.env). RPC menolak (env_mismatch) bila berbeda. */
+  env?: string | null;
 }
 
-/** payment_event_ingest(p_provider, p_event_id, p_external_id, p_provider_status, p_amount, p_signature_ok, p_raw). */
+/** payment_event_ingest(p_provider, p_event_id, p_external_id, p_provider_status, p_amount, p_signature_ok, p_raw, p_env). */
 export async function ingestPaymentEvent(deps: Deps, a: IngestArgs): Promise<IngestResult> {
   const { data, error } = await deps.db.rpc("payment_event_ingest", {
     p_provider: a.provider,
@@ -24,13 +30,18 @@ export async function ingestPaymentEvent(deps: Deps, a: IngestArgs): Promise<Ing
     p_amount: a.amount,
     p_signature_ok: a.signatureOk,
     p_raw: redact(a.raw), // PAN/kunci tidak pernah masuk DB
+    p_env: a.env ?? null,
   });
   if (error) {
     log.error("payment_event_ingest_failed", { provider: a.provider, event_id: a.eventId, external_id: a.externalId, code: error.code, message: error.message });
     throw new Error(`payment_event_ingest: ${error.message}`);
   }
   const r = (Array.isArray(data) ? data[0] : data) ?? {};
-  const out: IngestResult = { duplicate: !!r.duplicate, applied: !!r.applied, pay_status: r.pay_status ?? null, note: r.note ?? null };
+  const note: string | null = r.note ?? null;
+  const out: IngestResult = {
+    duplicate: !!r.duplicate, applied: !!r.applied, pay_status: r.pay_status ?? null, note,
+    failed: !r.duplicate && typeof note === "string" && /^error/i.test(note),
+  };
   log.info("payment_event_ingested", { provider: a.provider, event_id: a.eventId, external_id: a.externalId, provider_status: a.providerStatus, ...out });
   return out;
 }

@@ -66,6 +66,36 @@ export function routeAfter(req: Request, fnName: string): string {
   return i >= 0 ? (parts[i + 1] ?? "") : (parts[parts.length - 1] ?? "");
 }
 
+/**
+ * IP klien (R6): `cf-connecting-ip` / `x-real-ip` bila ada (diisi proxy tepercaya), selain itu entri TERAKHIR
+ * `x-forwarded-for` (ditambahkan proxy tepercaya; entri awal bisa dipalsukan klien). '' bila tidak diketahui.
+ */
+export function clientIp(req: Request): string {
+  const cf = (req.headers.get("cf-connecting-ip") ?? "").trim();
+  if (cf) return cf;
+  const real = (req.headers.get("x-real-ip") ?? "").trim();
+  if (real) return real;
+  const xff = (req.headers.get("x-forwarded-for") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  return xff.length ? xff[xff.length - 1] : "";
+}
+
+/** Rate limit jendela tetap per kunci, di memori isolate (reset saat isolate didaur ulang). */
+export class RateLimiter {
+  private m = new Map<string, { start: number; count: number }>();
+  constructor(private limit = 60, private windowMs = 60_000, private now: () => number = () => Date.now()) {}
+  take(key: string): boolean {
+    const t = this.now();
+    let e = this.m.get(key);
+    if (!e || t - e.start >= this.windowMs) {
+      e = { start: t, count: 0 };
+      this.m.set(key, e);
+      if (this.m.size > 10_000) for (const [k, v] of this.m) if (t - v.start >= this.windowMs) this.m.delete(k);
+    }
+    e.count++;
+    return e.count <= this.limit;
+  }
+}
+
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** fetch dengan batas waktu (default 15 detik). */

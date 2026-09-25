@@ -3,13 +3,14 @@ import { makePayCreateHandler } from "../pay-create/handler.ts";
 import { makePayRefundHandler, refundVisible } from "../pay-refund/handler.ts";
 import { makeReconcileHandler, wibDayRange, yesterdayWib } from "../pay-reconcile/handler.ts";
 import { makeDisburseHandler, namesMatch } from "../pay-disburse/handler.ts";
+import { getSecrets } from "../_shared/config.ts";
 import { jsonRes, MockDb, mkDeps, mockFetch, post, quiet, type Row, settingsRows } from "./_mock.ts";
 
 const KEY = "TEST-Finpay-MerchantKey-0123456789";
 const ORDER = "11111111-2222-4333-8444-555555555555";
 const auth = { Authorization: "Bearer good" };
 
-function createSetup(o: { initiate?: () => Response; settings?: Row; channel?: string } = {}) {
+function createSetup(o: { initiate?: () => Response; settings?: Row; channel?: string; intentEnv?: string } = {}) {
   const db: MockDb = new MockDb({
     app_settings: settingsRows({ payment_provider_active: "finpay", payment_provider_env: "sandbox", order_payment_timeout_min: 15, ...(o.settings ?? {}) }),
     gateway_secrets: [{ provider: "finpay", env: "sandbox", merchant_id: "MID1", server_key: KEY, extra: {} }],
@@ -18,14 +19,20 @@ function createSetup(o: { initiate?: () => Response; settings?: Row; channel?: s
   }, {
     payment_intent_create: (a) => {
       const rows = db.tables.payments;
-      let r = rows.find((x) => x.order_id === a.p_order && x.pay_status === "PENDING");
+      // Tiruan 0105: idempoten per order, dan (R4) per topup PENDING aktif dengan nominal sama; env dari setting.
+      let r = rows.find((x) => x.pay_status === "PENDING" && x.purpose === a.p_purpose &&
+        (a.p_purpose === "order" ? x.order_id === a.p_order : x.user_id === a.p_user && x.amount === a.p_amount));
       if (!r) {
-        r = { id: `pay-${rows.length + 1}`, user_id: a.p_user, order_id: a.p_order, purpose: a.p_purpose, amount: a.p_amount, provider: a.p_provider, pg_channel: a.p_channel, pay_status: "PENDING", external_id: "AKORD-260924100000-1a2b3c4d", provider_ref: "AKORD-260924100000-1a2b3c4d", checkout_token: null, support_ref: "AK-1A2B3C", expires_at: "2026-09-24T03:10:00Z" };
+        const ext = a.p_purpose === "order" ? "AKORD-260924100000-1a2b3c4d" : `AKPAY-260924100000-${String(rows.length).padStart(8, "0")}`;
+        r = { id: `pay-${rows.length + 1}`, user_id: a.p_user, order_id: a.p_order, purpose: a.p_purpose, amount: a.p_amount, provider: a.p_provider, pg_channel: a.p_channel, pay_status: "PENDING", external_id: ext, provider_ref: ext, checkout_token: null, support_ref: "AK-1A2B3C", expires_at: "2026-09-24T03:10:00Z", env: o.intentEnv ?? "sandbox", raw: null };
         rows.push(r);
       }
       return { data: { ...r }, error: null };
     },
     payment_event_ingest: () => ({ data: { duplicate: false, applied: true, pay_status: "FAILED", note: null }, error: null }),
+    antarpay_enabled: () => ({ data: true, error: null }),
+    gateway_public_config: () => ({ data: { topup_min: 10000, topup_max: 10000000 }, error: null }),
+    payment_channel_enabled: () => ({ data: true, error: null }),
   });
   const userDb = new MockDb({}, {
     order_payment_prepare: (a) => a.p_order === ORDER
@@ -109,10 +116,46 @@ Deno.test("pay-create: kunci Finpay kosong & simulasi mati → 503; simulasi akt
   } finally { restore(); }
 });
 
+Deno.test("(d) pay-create topup: intent PENDING aktif yang dikembalikan DB → reused, TIDAK ada charge baru", async () => {
+  const restore = quiet();
+  try {
+    const { db, m, h } = createSetup();
+    const a = await (await h(post("pay-create", { purpose: "topup", amount: 50000, channel: "qris" }, auth))).json();
+    assert.equal(a.reused, false);
+    const b = await (await h(post("pay-create", { purpose: "topup", amount: 50000, channel: "qris" }, auth))).json();
+    assert.equal(b.reused, true);
+    assert.equal(b.payment_id, a.payment_id);
+    assert.equal(m.calls.length, 1);
+    assert.equal(JSON.parse(m.calls[0].body!).order.amount, 50000);
+    // intent yang sudah pernah di-charge tetapi instruksi bayar tidak tersimpan → 409, bukan charge ulang
+    const row = db.tables.payments[0];
+    Object.assign(row, { checkout_url: null, qr_string: null, payment_code: null, checkout_token: null, raw: { create: { responseCode: "2000000" } } });
+    const c = await h(post("pay-create", { purpose: "topup", amount: 50000, channel: "qris" }, auth));
+    assert.equal(c.status, 409);
+    assert.equal(m.calls.length, 1);
+  } finally { restore(); }
+});
+
+Deno.test("T1 pay-create: charge memakai env intent (payments.env), bukan setting saat ini", async () => {
+  const restore = quiet();
+  try {
+    const s = createSetup({ intentEnv: "production", initiate: () => jsonRes({ responseCode: "2000000", redirecturl: "https://live.finnet.co.id/pay/x" }) });
+    s.db.tables.gateway_secrets.push({ provider: "finpay", env: "production", merchant_id: "MIDP", server_key: "PROD-KEY-123456" });
+    const res = await s.h(post("pay-create", { purpose: "order", order_id: ORDER, channel: "qris" }, auth));
+    assert.equal(res.status, 200, await res.clone().text());
+    assert.match(s.m.calls[0].url, /^https:\/\/live\.finnet\.co\.id\//);
+    assert.equal(s.m.calls[0].headers.get("Authorization"), "Basic " + btoa("MIDP:PROD-KEY-123456"));
+    // kunci production tidak ada → 409, tidak jatuh ke kunci sandbox
+    const t = createSetup({ intentEnv: "production" });
+    assert.equal((await t.h(post("pay-create", { purpose: "order", order_id: ORDER, channel: "qris" }, auth))).status, 409);
+    assert.equal(t.m.calls.length, 0);
+  } finally { restore(); }
+});
+
 // ------------------------------ pay-refund ------------------------------
-function refundSetup(o: { rr?: Row; pay?: Row; adminHas?: boolean; refundResp?: () => Response; checkResp?: () => Response } = {}) {
+function refundSetup(o: { rr?: Row; pay?: Row; adminHas?: boolean; locked?: boolean; refundResp?: () => Response; checkResp?: () => Response } = {}) {
   const rr = { id: "aaaaaaaa-2222-4333-8444-555555555555", payment_id: "p1", amount: 50000, status: "approved", destination: "gateway", reason: "batal", ...(o.rr ?? {}) };
-  const pay = { id: "p1", provider: "finpay", provider_ref: "AKF-X-111111", external_id: "AKF-X-111111", amount: 150000, refunded_amount: 0, raw: { _antarkita: { env: "sandbox" } }, ...(o.pay ?? {}) };
+  const pay = { id: "p1", provider: "finpay", env: "sandbox", provider_ref: "AKF-X-111111", external_id: "AKF-X-111111", amount: 150000, refunded_amount: 0, raw: null, ...(o.pay ?? {}) };
   const db = new MockDb({
     app_settings: settingsRows({ payment_provider_active: "finpay", payment_provider_env: "sandbox" }),
     gateway_secrets: [{ provider: "finpay", env: "sandbox", merchant_id: "MID1", server_key: KEY }],
@@ -125,7 +168,10 @@ function refundSetup(o: { rr?: Row; pay?: Row; adminHas?: boolean; refundResp?: 
     },
     payment_event_ingest: () => ({ data: { duplicate: false, applied: true, pay_status: "PARTIALLY_REFUNDED" }, error: null }),
   });
-  const userDb = new MockDb({}, { admin_has: (a) => ({ data: o.adminHas !== false && a.p_perm === "refund_execute", error: null }) });
+  const userDb = new MockDb({}, {
+    admin_has: (a) => ({ data: o.adminHas !== false && a.p_perm === "refund_execute", error: null }),
+    admin_require_unlock: () => (o.locked ? { data: null, error: { message: "ADMIN_LOCKED: buka kunci panel dengan PIN", code: "P0001" } } : { data: null, error: null }),
+  });
   const m = mockFetch([
     { match: /\/pg\/payment\/card\/refund$/, respond: o.refundResp ?? (() => jsonRes({ responseCode: "2000000", status: "PARTIALLY_REFUNDED", refundId: "RF1" })) },
     { match: /\/check\//, respond: o.checkResp ?? (() => jsonRes({ responseCode: "2000000", result: { payment: { status: "PAID" } } })) },
@@ -159,6 +205,17 @@ Deno.test("pay-refund: tanpa izin 403; wallet → done tanpa provider; tidak did
   try {
     let s = refundSetup({ adminHas: false });
     assert.equal((await s.h(post("pay-refund", { refund_id: s.rr.id }, auth))).status, 403);
+    s = refundSetup({ locked: true }); // PIN wajib
+    const locked = await s.h(post("pay-refund", { refund_id: s.rr.id }, auth));
+    assert.equal(locked.status, 403);
+    assert.equal((await locked.json()).need_unlock, true);
+    assert.equal(s.db.calls("refund_execute_result").length, 0);
+    // transaksi production → refund ke host production dengan kunci production (bukan setting sandbox)
+    s = refundSetup({ pay: { env: "production" } });
+    s.db.tables.gateway_secrets.push({ provider: "finpay", env: "production", merchant_id: "MID1", server_key: "PROD-KEY-123456" });
+    await s.h(post("pay-refund", { refund_id: s.rr.id }, auth));
+    assert.match(s.m.calls[0].url, /^https:\/\/live\.finnet\.co\.id\//);
+    assert.equal(s.db.calls("payment_event_ingest")[0].args.p_env, "production");
 
     s = refundSetup({ rr: { destination: "wallet" } });
     const w = await (await s.h(post("pay-refund", { refund_id: s.rr.id }, auth))).json();
@@ -253,13 +310,19 @@ Deno.test("pay-disburse: inquiry → cocok nama → klaim → transfer → payou
   const restore = quiet();
   try {
     const W = "bbbbbbbb-2222-4333-8444-555555555555";
-    const mk = (settings: Row, accountNameBank = "BUDI SANTOSO") => {
+    const mk = (settings: Row, accountNameBank = "BUDI SANTOSO", allowed: Row = { allowed: true, needs_approval: false }) => {
       const db = new MockDb({
         app_settings: settingsRows({ payment_provider_env: "sandbox", ...settings }),
         gateway_secrets: [{ provider: "finpay", env: "sandbox", merchant_id: "MID1", server_key: KEY }],
-        withdrawal_requests: [{ id: W, amount: 250000, bank_name: "BCA", bank_account: "123-456-7890", account_name: "Budi Santoso", status: "approved", settled_at: null, provider_ref: null, payout_status: null }],
-      }, { payout_event_ingest: () => ({ data: { ok: true }, error: null }) });
-      const userDb = new MockDb({}, { admin_has: (a) => ({ data: a.p_perm === "payout_execute", error: null }) });
+        withdrawal_requests: [{ id: W, amount: 250000, bank_name: "BCA", bank_account: "123-456-7890", account_name: "Budi Santoso", status: "approved", settled_at: null, provider_ref: null, payout_status: "PAYOUT_PENDING" }],
+      }, {
+        payout_event_ingest: () => ({ data: { applied: true }, error: null }),
+        payout_execute_allowed: () => ({ data: allowed, error: null }),
+      });
+      const userDb = new MockDb({}, {
+        admin_has: (a) => ({ data: a.p_perm === "payout", error: null }),
+        admin_require_unlock: () => ({ data: null, error: null }),
+      });
       const m = mockFetch([
         { match: /\/disbursement\/inquiry\//, respond: () => jsonRes({ responseCode: "2000000", refCode: "INQ-1", accountName: accountNameBank, feeAmount: 2500 }) },
         { match: /\/disbursement\/transfer$/, respond: () => jsonRes({ responseCode: "2000000", transactionStatus: "03" }) },
@@ -268,6 +331,12 @@ Deno.test("pay-disburse: inquiry → cocok nama → klaim → transfer → payou
     };
     let s = mk({ disbursement_provider: "manual" });
     assert.equal((await s.h(post("pay-disburse", { withdrawal_id: W }, auth))).status, 409);
+
+    s = mk({ disbursement_provider: "finpay" }, "BUDI SANTOSO", { allowed: false, needs_approval: true, reason: "approval_required", pending_approval_id: "ap1" });
+    const na = await s.h(post("pay-disburse", { withdrawal_id: W }, auth));
+    assert.equal(na.status, 409);
+    assert.equal((await na.json()).reason, "approval_required");
+    assert.equal(s.m.calls.length, 0);
 
     s = mk({ disbursement_provider: "finpay" }, "SITI AMINAH");
     assert.equal((await s.h(post("pay-disburse", { withdrawal_id: W }, auth))).status, 422);
@@ -278,7 +347,8 @@ Deno.test("pay-disburse: inquiry → cocok nama → klaim → transfer → payou
     assert.equal(res.status, 200, await res.clone().text());
     const out = await res.json();
     assert.equal(out.payout_status, "PAYOUT_PROCESSING");
-    assert.match(out.external_id, /^AKD-/);
+    assert.match(out.external_id, /^AKDS-/); // sandbox
+    assert.deepEqual(s.db.calls("payout_execute_allowed")[0].args, { p_withdrawal: W });
     const inq = new URL(s.m.calls[0].url);
     assert.equal(inq.searchParams.get("bankCode"), "014");
     assert.equal(inq.searchParams.get("accountNumber"), "1234567890");
@@ -300,4 +370,16 @@ Deno.test("namesMatch: toleran gelar/urutan, menolak nama lain", () => {
   assert.equal(namesMatch("Budi", "BUDI SANTOSO"), true);
   assert.equal(namesMatch("Budi Santoso", "SITI AMINAH"), false);
   assert.equal(namesMatch("", "X"), false);
+});
+
+Deno.test("T1 getSecrets: ketat per env; override env var wajib FINPAY_ENV; Midtrans env var sesuai MIDTRANS_IS_PRODUCTION", async () => {
+  const db = new MockDb({ gateway_secrets: [{ provider: "finpay", env: "sandbox", merchant_id: "M", server_key: "SANDBOX-KEY-1" }] });
+  const e = (m: Record<string, string>) => (k: string) => m[k];
+  assert.equal((await getSecrets(db, "finpay", "sandbox", e({})))?.serverKey, "SANDBOX-KEY-1");
+  assert.equal(await getSecrets(db, "finpay", "production", e({})), null); // tidak jatuh ke sandbox
+  assert.equal((await getSecrets(db, "finpay", "production", e({ FINPAY_MERCHANT_KEY: "ENVKEY-123456" })))?.serverKey, undefined); // tanpa FINPAY_ENV diabaikan
+  assert.equal((await getSecrets(db, "finpay", "production", e({ FINPAY_MERCHANT_KEY: "ENVKEY-123456", FINPAY_ENV: "production" })))?.serverKey, "ENVKEY-123456");
+  assert.equal((await getSecrets(db, "finpay", "sandbox", e({ FINPAY_MERCHANT_KEY: "ENVKEY-123456", FINPAY_ENV: "production" })))?.serverKey, "SANDBOX-KEY-1");
+  assert.equal(await getSecrets(db, "midtrans", "production", e({ MIDTRANS_SERVER_KEY: "SB-Mid-server-x" })), null);
+  assert.equal((await getSecrets(db, "midtrans", "sandbox", e({ MIDTRANS_SERVER_KEY: "SB-Mid-server-x" })))?.serverKey, "SB-Mid-server-x");
 });

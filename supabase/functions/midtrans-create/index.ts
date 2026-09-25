@@ -26,14 +26,15 @@ type OrderQuote = {
 };
 
 async function loadKeys(admin: ReturnType<typeof createClient>) {
-  const env = { server: Deno.env.get("MIDTRANS_SERVER_KEY") ?? "", client: Deno.env.get("MIDTRANS_CLIENT_KEY") ?? "", prod: (Deno.env.get("MIDTRANS_IS_PRODUCTION") ?? "false") === "true", source: "secret" };
-  if (env.server) return env;
-  // v3: gateway_secrets berkunci (provider, env) → bisa 2 baris Midtrans; pilih sesuai payment_provider_env (fallback baris lama).
-  const { data: rows } = await admin.from("gateway_secrets").select("*").eq("provider", "midtrans");
+  // v3 (T1): kunci HARUS sesuai payment_provider_env — payments.env diisi trigger dari setting yang sama, dan
+  // pay-webhook/midtrans memverifikasi notifikasi hanya dengan kunci env transaksi. Tidak ada fallback ke env lain.
   const { data: envRow } = await admin.from("app_settings").select("value").eq("key", "payment_provider_env").maybeSingle();
   const want = envRow?.value === "production" ? "production" : "sandbox";
+  const env = { server: Deno.env.get("MIDTRANS_SERVER_KEY") ?? "", client: Deno.env.get("MIDTRANS_CLIENT_KEY") ?? "", prod: (Deno.env.get("MIDTRANS_IS_PRODUCTION") ?? "false") === "true", source: "secret" };
+  if (env.server && env.prod === (want === "production")) return env;
+  const { data: rows } = await admin.from("gateway_secrets").select("*").eq("provider", "midtrans");
   const list = (rows ?? []).filter((r: Record<string, unknown>) => r.server_key);
-  const data = list.find((r: Record<string, unknown>) => r.env === want) ?? list.find((r: Record<string, unknown>) => r.env == null) ?? list[0];
+  const data = list.find((r: Record<string, unknown>) => r.env === want) ?? list.find((r: Record<string, unknown>) => r.env == null && !!r.is_production === (want === "production"));
   if (data?.server_key) return { server: data.server_key as string, client: (data.client_key as string) ?? "", prod: data.env ? data.env === "production" : !!data.is_production, source: "admin" };
   return { server: "", client: "", prod: false, source: "none" };
 }

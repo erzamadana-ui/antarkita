@@ -18,6 +18,7 @@ import { log } from "../_shared/log.ts";
 import { MidtransProvider, providerFor } from "../_shared/providers/index.ts";
 import type { CreateChargeResult, PaymentProvider, ProviderName } from "../_shared/providers/types.ts";
 import { requireUser } from "../_shared/auth.ts";
+import { paymentEnv } from "../_shared/payments.ts";
 
 type Body = { purpose?: string; order_id?: string; amount?: number | string; channel?: string; bank?: string; simulate?: boolean };
 // deno-lint-ignore no-explicit-any
@@ -102,15 +103,23 @@ async function handle(deps: Deps, req: Request): Promise<Response> {
   if (intentErr || !intentData) throw new HttpError(400, intentErr?.message ?? "Intent pembayaran gagal dibuat");
   let row = (Array.isArray(intentData) ? intentData[0] : intentData) as Row;
   if (row.pay_status && row.pay_status !== "PENDING") throw new HttpError(409, "Pembayaran ini sudah tidak menunggu", { pay_status: row.pay_status });
-  if (row.provider && row.provider !== providerName) {
-    // Intent PENDING lama dari provider lain (mis. dibuat sebelum provider diganti) → pakai provider intent itu.
-    const alt = await providerFor(deps, row.provider as ProviderName, settings.env);
-    if (!alt || (row.provider === "simulated" && !simOk)) throw new HttpError(409, "Ada pembayaran tertunda dari metode lain. Tunggu hingga kedaluwarsa.");
+  // T1: env & provider TERIKAT ke intent (payments.env diisi DB saat intent dibuat) — charge dibuat dengan kunci
+  // dan host env intent, sehingga callback kelak diverifikasi dengan kunci yang sama.
+  const rowEnv = paymentEnv(row, settings.env);
+  const rowProvider = (row.provider ?? providerName) as ProviderName;
+  if (rowProvider !== providerName || rowEnv !== provider.env) {
+    const alt = await providerFor(deps, rowProvider, rowEnv);
+    if (!alt || (rowProvider === "simulated" && !simOk)) throw new HttpError(409, "Ada pembayaran tertunda dari metode/lingkungan lain (atau kunci gateway lingkungan itu belum diisi). Tunggu hingga kedaluwarsa.");
     provider = alt;
-    providerName = row.provider as ProviderName;
+    providerName = rowProvider;
   }
 
+  // (d) Intent PENDING aktif yang dikembalikan DB (order maupun topup, 0105 R4) → JANGAN buat charge baru.
   if (hasCheckout(row)) return json(respond(row, provider, true));
+  if (row.provider_txn_id || row.raw?.create) {
+    // Charge sudah pernah dibuat untuk intent ini tetapi instruksi bayar tidak tersimpan → jangan charge ulang order.id sama.
+    throw new HttpError(409, "Pembayaran sebelumnya masih aktif. Tunggu hingga kedaluwarsa atau hubungi CS.", { payment_id: row.id, support_ref: row.support_ref ?? null });
+  }
 
   // ---- Klaim atomik supaya charge hanya dibuat sekali per intent ----
   const nowMs = deps.now();
@@ -196,7 +205,7 @@ async function closeFailed(deps: Deps, provider: PaymentProvider, externalId: st
   try {
     await ingestPaymentEvent(deps, {
       provider: provider.name, eventId: `create-failed-${externalId}`, externalId, providerStatus: FAILED_STATUS[provider.name],
-      amount, signatureOk: true, raw: { create_failed: true, error: charge.error, http: charge.httpStatus, response: charge.raw },
+      amount, signatureOk: true, env: provider.env, raw: { create_failed: true, error: charge.error, http: charge.httpStatus, response: charge.raw },
     });
   } catch { /* sudah di-log */ }
 }

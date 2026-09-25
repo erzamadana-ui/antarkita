@@ -12,7 +12,9 @@ import { HttpError, json, preflight, readJson, UUID_RE } from "../_shared/http.t
 import { ingestPaymentEvent, refundExecuteResult } from "../_shared/ingest.ts";
 import { log } from "../_shared/log.ts";
 import { providerFor } from "../_shared/providers/index.ts";
-import type { PaymentProvider, ProviderEnv, ProviderName } from "../_shared/providers/types.ts";
+import { paymentEnv } from "../_shared/payments.ts";
+export { paymentEnv };
+import type { PaymentProvider, ProviderName } from "../_shared/providers/types.ts";
 
 // deno-lint-ignore no-explicit-any
 type Row = Record<string, any>;
@@ -30,11 +32,6 @@ export function refundProviderStatus(provider: ProviderName, full: boolean): str
 export function refundVisible(status: string | null, alreadyRefunded: unknown): boolean {
   if (status === "REFUNDED") return true;
   return status === "PARTIALLY_REFUNDED" && Math.round(Number(alreadyRefunded ?? 0)) === 0;
-}
-
-export function paymentEnv(p: Row, fallback: ProviderEnv): ProviderEnv {
-  const e = p?.raw?._antarkita?.env;
-  return e === "production" || e === "sandbox" ? e : fallback;
 }
 
 export function makePayRefundHandler(deps: Deps) {
@@ -88,7 +85,8 @@ export async function executeRefund(deps: Deps, id: string, adminId: string | nu
     await refundExecuteResult(deps, id, "failed", null, { reason: "simulation_disabled" }, "simulation_disabled");
     throw new HttpError(409, "Refund transaksi simulasi hanya saat simulasi aktif");
   }
-  const provider = await providerFor(deps, pname, paymentEnv(pay, settings.env));
+  const env = paymentEnv(pay, settings.env);
+  const provider = await providerFor(deps, pname, env);
   if (!provider) {
     await refundExecuteResult(deps, id, "failed", null, { reason: "provider_not_configured", provider: pname }, "provider_not_configured");
     throw new HttpError(503, `Gateway ${pname} belum dikonfigurasi`);
@@ -133,10 +131,11 @@ export async function executeRefund(deps: Deps, id: string, adminId: string | nu
  * p_raw.refund_amount karena payment_event_ingest (0105) mengisi payments.refunded_amount dari field itu.
  */
 export async function finishDone(deps: Deps, provider: PaymentProvider, id: string, externalId: string, amount: number, full: boolean, providerRef: string | null, raw: unknown, cumulative: number) {
-  await ingestPaymentEvent(deps, {
+  const r = await ingestPaymentEvent(deps, {
     provider: provider.name, eventId: `refund-${id}`, externalId, providerStatus: refundProviderStatus(provider.name, full),
-    amount, signatureOk: true, raw: { event_type: "refund", refund_request_id: id, refund_amount: cumulative, response: raw },
+    amount, signatureOk: true, env: provider.env, raw: { event_type: "refund", refund_request_id: id, refund_amount: cumulative, response: raw },
   });
+  if (r.failed) throw new Error(`payment_event_ingest: ${r.note}`);
   await refundExecuteResult(deps, id, "done", providerRef, { response: raw }, null);
   log.info("refund_done_gateway", { refund_id: id, external_id: externalId, amount, full });
   return { ok: true, refund_id: id, status: "done", destination: "gateway", provider_ref: providerRef };

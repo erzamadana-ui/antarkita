@@ -1,5 +1,6 @@
 // pay-disburse — pencairan penarikan mitra lewat Finpay Disbursement (KONTRAK §8).
-// Body: { withdrawal_id, dry_run?: boolean }. Admin JWT + admin_has('payout') (+ admin_require_unlock bila ada).
+// Body: { withdrawal_id, dry_run?: boolean }. Admin JWT + admin_has('payout') + admin_require_unlock() (wajib)
+// + payout_execute_allowed(p_withdrawal) (dual approval 0110) sebelum klaim.
 // Hanya bila app_settings.disbursement_provider = 'finpay'.
 // Alur: inquiry (refCode, nama pemilik rekening, fee) → cocokkan nama → klaim baris (provider_ref = external_id,
 //   payout_status PAYOUT_PROCESSING) → transfer (order.id = external_id) → payout_event_ingest(p_external_id, p_status, p_raw).
@@ -10,6 +11,7 @@ import type { Deps } from "../_shared/deps.ts";
 import { HttpError, json, preflight, readJson, UUID_RE } from "../_shared/http.ts";
 import { ingestPayoutEvent } from "../_shared/ingest.ts";
 import { newExternalId } from "../_shared/ids.ts";
+import { disbursementPrefix } from "../_shared/payments.ts";
 import { log } from "../_shared/log.ts";
 import { buildProvider, disbursementSecrets } from "../_shared/providers/index.ts";
 import { bankCodeOf, type FinpayProvider } from "../_shared/providers/finpay.ts";
@@ -56,6 +58,13 @@ async function disburse(deps: Deps, id: string, adminId: string, dryRun: boolean
   if (w.status !== "approved") throw new HttpError(409, "Penarikan belum disetujui");
   if (w.settled_at) throw new HttpError(409, "Penarikan sudah selesai");
   if (w.provider_ref || (w.payout_status && w.payout_status !== "PAYOUT_PENDING")) throw new HttpError(409, `Penarikan sedang/sudah diproses (${w.payout_status ?? w.provider_ref})`);
+  // (b) Dual approval pencairan (0110): ditolak bila butuh approval_requests payout_batch yang belum disetujui.
+  const { data: allowed, error: aErr } = await deps.db.rpc("payout_execute_allowed", { p_withdrawal: id });
+  if (aErr) throw new HttpError(503, `Izin pencairan tidak dapat diperiksa: ${aErr.message}`);
+  if (!allowed || allowed.allowed !== true) {
+    throw new HttpError(409, allowed?.reason === "approval_required" ? "Pencairan ini butuh persetujuan admin kedua terlebih dahulu." : `Pencairan tidak diizinkan (${allowed?.reason ?? "unknown"})`,
+      { reason: allowed?.reason ?? null, needs_approval: allowed?.needs_approval ?? null, pending_approval_id: allowed?.pending_approval_id ?? null });
+  }
   const bankCode = bankCodeOf(String(w.bank_name ?? ""), s.extra.bank_map as Record<string, unknown> | undefined);
   if (!bankCode) throw new HttpError(422, `Kode bank untuk '${w.bank_name}' tidak dikenal. Tambahkan di gateway_secrets.extra.bank_map.`);
   const accountNumber = String(w.bank_account ?? "").replace(/\D/g, "");
@@ -76,7 +85,8 @@ async function disburse(deps: Deps, id: string, adminId: string, dryRun: boolean
   if (dryRun) return { ok: true, dry_run: true, account_name: inq.accountName, fee: inq.fee, bank_code: bankCode };
 
   // 2. Klaim baris (satu eksekusi saja)
-  const externalId = newExternalId("AKD", deps.now());
+  // Prefiks menandai env (AKD- production, AKDS- sandbox): callback diverifikasi hanya dengan kunci env itu (T1).
+  const externalId = newExternalId(disbursementPrefix(settings.env), deps.now());
   const { data: claimed, error: cErr } = await deps.db.from("withdrawal_requests")
     .update({ provider: "finpay", provider_ref: externalId, inquiry_ref: inq.refCode, fee: inq.fee ?? 0, payout_status: "PAYOUT_PROCESSING" })
     .eq("id", id).eq("status", "approved").is("provider_ref", null).is("settled_at", null).select("id").maybeSingle();

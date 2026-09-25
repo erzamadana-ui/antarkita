@@ -15,13 +15,23 @@ import { ingestPaymentEvent } from "../_shared/ingest.ts";
 import { log } from "../_shared/log.ts";
 import { providerFor } from "../_shared/providers/index.ts";
 import type { PaymentProvider, ProviderEnv, ProviderName } from "../_shared/providers/types.ts";
-import { finishDone, paymentEnv, refundVisible } from "../pay-refund/handler.ts";
+import { finishDone, refundVisible } from "../pay-refund/handler.ts";
+import { paymentEnv, refundTotalOf } from "../_shared/payments.ts";
 
 // deno-lint-ignore no-explicit-any
 type Row = Record<string, any>;
 
 const PENDING_AGE_MIN = 30;
 const EXPIRY_GRACE_MIN = 15;
+
+/** Field tambahan untuk ingest dari hasil checkStatus: refund_amount kumulatif bila status refund. */
+function reconRaw(provider: string, c: { status: string | null; raw: unknown }): Record<string, unknown> {
+  // Respons status di tingkat atas (payment_settle membaca gross_amount/payment_type/va_numbers dari p_raw).
+  const base = c.raw && typeof c.raw === "object" && !Array.isArray(c.raw) ? { ...(c.raw as Record<string, unknown>) } : {};
+  if (c.status !== "REFUNDED" && c.status !== "PARTIALLY_REFUNDED") return base;
+  const total = refundTotalOf(provider, c.raw);
+  return { ...base, event_type: "refund", ...(total !== null ? { refund_amount: total } : {}) };
+}
 
 /** Tanggal WIB (UTC+7) kemarin sebagai 'YYYY-MM-DD'. */
 export function yesterdayWib(nowMs: number): string {
@@ -83,7 +93,7 @@ export async function reconcile(deps: Deps, date: string, limit: number, skipDai
       if (c.status && c.status !== "PENDING") {
         await ingestPaymentEvent(deps, {
           provider: provider.name, eventId: `recon-${now}-${ext}`, externalId: ext, providerStatus: c.providerStatus, amount: c.amount,
-          signatureOk: true, raw: { reconcile: true, check: c.raw, _antarkita: { pay_status: c.status } },
+          signatureOk: true, env: provider.env, raw: { ...reconRaw(provider.name, c), reconcile: true, check: c.raw, _antarkita: { env: provider.env, pay_status: c.status } },
         });
         summary.pending_updated++;
       } else if (expired) {
@@ -92,7 +102,7 @@ export async function reconcile(deps: Deps, date: string, limit: number, skipDai
         if (cancel.ok) {
           await ingestPaymentEvent(deps, {
             provider: provider.name, eventId: `recon-${now}-${ext}`, externalId: ext,
-            providerStatus: provider.name === "midtrans" ? "expire" : "EXPIRED", amount: null, signatureOk: true,
+            providerStatus: provider.name === "midtrans" ? "expire" : "EXPIRED", amount: null, signatureOk: true, env: provider.env,
             raw: { reconcile: true, local_expired: true, check: c.raw, cancel: cancel.raw },
           });
           summary.pending_expired++;
@@ -125,7 +135,7 @@ export async function reconcile(deps: Deps, date: string, limit: number, skipDai
         if (c.status && c.status !== "PAID") {
           await ingestPaymentEvent(deps, {
             provider: provider.name, eventId: `recon-${now}-${ext}`, externalId: ext, providerStatus: c.providerStatus, amount: c.amount,
-            signatureOk: true, raw: { reconcile: true, paid_recheck: true, check: c.raw },
+            signatureOk: true, env: provider.env, raw: { ...reconRaw(provider.name, c), reconcile: true, paid_recheck: true, check: c.raw },
           });
         }
       }

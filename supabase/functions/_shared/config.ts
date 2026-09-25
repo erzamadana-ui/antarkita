@@ -62,7 +62,7 @@ export interface GatewaySecrets {
  * Rahasia gateway untuk (provider, env).
  * Urutan: (1) env var override, (2) gateway_secrets baris (provider, env), (3) baris lama tanpa kolom env
  * (Midtrans pra-v3: env dari is_production). Mengembalikan null bila kunci kosong.
- * Env override: FINPAY_MERCHANT_ID / FINPAY_MERCHANT_KEY / FINPAY_BASE_URL (+ FINPAY_ENV membatasi env-nya),
+ * Env override: FINPAY_MERCHANT_ID / FINPAY_MERCHANT_KEY / FINPAY_BASE_URL (WAJIB + FINPAY_ENV = env-nya),
  * FINPAY_DISB_MERCHANT_ID / FINPAY_DISB_MERCHANT_KEY, MIDTRANS_SERVER_KEY / MIDTRANS_CLIENT_KEY / MIDTRANS_IS_PRODUCTION.
  */
 export async function getSecrets(db: DbLike, provider: string, env: ProviderEnv, envVar: (k: string) => string | undefined): Promise<GatewaySecrets | null> {
@@ -96,7 +96,9 @@ function envOverride(provider: string, env: ProviderEnv, envVar: (k: string) => 
     const pre = provider === "finpay" ? "FINPAY" : "FINPAY_DISB";
     const key = envVar(`${pre}_MERCHANT_KEY`);
     const restrict = envVar("FINPAY_ENV");
-    if (!key || (restrict && restrict !== env)) return null;
+    // T1: override env var WAJIB menyebut env-nya (FINPAY_ENV) — tanpa itu diabaikan, agar kunci sandbox tidak
+    // pernah dipakai untuk transaksi production (atau sebaliknya).
+    if (!key || !restrict || restrict !== env) return null;
     const extra: Record<string, unknown> = {};
     if (envVar("FINPAY_BASE_URL")) extra.base_url = envVar("FINPAY_BASE_URL");
     return { provider, env, merchantId: envVar(`${pre}_MERCHANT_ID`) ?? null, serverKey: key, clientKey: null, callbackToken: null, extra, source: "env" };
