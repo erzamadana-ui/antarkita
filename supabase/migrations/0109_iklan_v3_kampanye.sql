@@ -35,7 +35,7 @@ begin
     'public.merchant_campaigns()', 'public.merchant_campaign_report(uuid,date,date)',
     'public.ads_serve(text,double precision,double precision,text,text,integer)', 'public.ads_click(uuid,text)', 'public.ads_conversion(uuid,uuid)',
     'public.admin_campaigns(text)', 'public.admin_campaign_review(uuid,boolean,text)', 'public.admin_campaign_set(uuid,text)',
-    'public.admin_ads_report(date,date)', 'public.ads_activate(uuid)'] loop
+    'public.admin_ads_report(date,date)', 'public.ads_activate(uuid)', 'public.ads_conversion_reverse(uuid,uuid)', 'public.orders_ads_conversion()'] loop
     perform _mig_backup('0109', s);
   end loop;
 end $$;
@@ -389,12 +389,12 @@ begin
       from generate_series(v_from, v_to, interval '1 day') g(d)
       left join (select (x.created_at at time zone 'Asia/Jakarta')::date dd, count(*) filter (where x.event = 'impression') imp,
                    count(*) filter (where x.event = 'click') clk, count(*) filter (where x.event = 'click' and x.billable) bclk,
-                   count(*) filter (where x.event = 'conversion') conv,
-                   coalesce(sum(o.items_subtotal) filter (where x.event = 'conversion'), 0) cval
+                   count(*) filter (where x.event = 'conversion' and o.status is distinct from 'cancelled') conv,
+                   coalesce(sum(o.items_subtotal) filter (where x.event = 'conversion' and o.status is distinct from 'cancelled'), 0) cval
                  from ad_events x left join orders o on o.id = x.order_id where x.campaign_id = a.id group by 1) e on e.dd = g.d::date
       left join (select (l.created_at at time zone 'Asia/Jakarta')::date dd, -sum(l.amount) spent from ad_budget_ledger l
-                 where l.campaign_id = a.id and l.kind = 'charge' group by 1) s on s.dd = g.d::date),
-    'totals', (select jsonb_build_object('spent', coalesce(-sum(amount) filter (where kind = 'charge'), 0), 'funded', coalesce(sum(amount) filter (where kind = 'fund'), 0),
+                 where l.campaign_id = a.id and (l.kind = 'charge' or (l.kind = 'adjust' and l.ref is not null)) group by 1) s on s.dd = g.d::date),
+    'totals', (select jsonb_build_object('spent', coalesce(-sum(amount) filter (where kind = 'charge' or (kind = 'adjust' and ref is not null)), 0), 'funded', coalesce(sum(amount) filter (where kind = 'fund'), 0),
         'refunded', coalesce(sum(amount) filter (where kind = 'refund'), 0)) from ad_budget_ledger where campaign_id = a.id),
     'conversion_value', a.conversion_value, 'roas', case when a.spent > 0 then round(a.conversion_value::numeric / a.spent, 2) end);
 end $$;
@@ -458,24 +458,32 @@ comment on function public.ads_serve(text, double precision, double precision, t
 
 create or replace function public.ads_click(p_campaign_id uuid, p_placement text)
 returns jsonb language plpgsql volatile security definer set search_path = public as $$
-declare v_uid uuid := auth.uid(); a merchant_ads; pr ad_products; v_bucket bigint; v_ev bigint; v_cost bigint := 0;
+declare v_uid uuid := auth.uid(); a merchant_ads; pr ad_products; v_ev bigint; v_cost bigint := 0;
   v_min int := greatest(1, setting_num('ads_click_dedupe_minutes', 30)::int);
 begin
-  select * into a from merchant_ads where id = p_campaign_id;
+  -- S4: klik anonim ditolak (tidak dicatat, tidak ditagih)
+  if v_uid is null then raise exception 'Harus login untuk membuka iklan'; end if;
+  -- S4: kunci baris kampanye → dedupe & anggaran berurutan (tidak ada balapan dua klik bersamaan)
+  select * into a from merchant_ads where id = p_campaign_id for update;
   if not found or a.budget is null then raise exception 'Iklan tidak ditemukan'; end if;
   select * into pr from ad_products where code = a.product_code;
-  if v_uid is null then
-    insert into ad_events (campaign_id, user_id, event, placement, billable, dedupe_key) values (a.id, null, 'click', p_placement, false, 'anon:' || gen_random_uuid());
-    update merchant_ads set clicks = clicks + 1 where id = a.id;
-    return jsonb_build_object('charged', false, 'reason', 'anonymous');
+  -- S4: pemilik merchant mengklik iklannya sendiri → dicatat (laporan fraud) tetapi tidak dihitung & tidak ditagih
+  if coalesce(owns_merchant(a.merchant_id), false) then
+    insert into ad_events (campaign_id, user_id, event, placement, billable, dedupe_key) values (a.id, v_uid, 'click', p_placement, false, 'owner:' || gen_random_uuid());
+    return jsonb_build_object('charged', false, 'reason', 'owner');
   end if;
   if a.status <> 'active' or now() < a.starts_at or now() >= a.ends_at then
     insert into ad_events (campaign_id, user_id, event, placement, billable, dedupe_key) values (a.id, v_uid, 'click', p_placement, false, 'inactive:' || gen_random_uuid());
     return jsonb_build_object('charged', false, 'reason', 'inactive', 'status', a.status);
   end if;
-  v_bucket := floor(extract(epoch from now()) / (v_min * 60))::bigint;
-  if exists (select 1 from ad_events where campaign_id = a.id and user_id = v_uid and event = 'click' and dedupe_key = 'clk:' || v_bucket) then
-    -- klik berulang dalam jendela dedupe: dicatat (laporan fraud) tetapi TIDAK ditagih
+  -- S4: klik sah harus didahului impresi pengguna yang sama untuk kampanye ini ≤ 30 menit
+  if not exists (select 1 from ad_events where campaign_id = a.id and user_id = v_uid and event = 'impression' and created_at >= now() - interval '30 minutes') then
+    insert into ad_events (campaign_id, user_id, event, placement, billable, dedupe_key) values (a.id, v_uid, 'click', p_placement, false, 'noimp:' || gen_random_uuid());
+    return jsonb_build_object('charged', false, 'reason', 'no_impression');
+  end if;
+  -- S4: dedupe jendela GESER (bukan bucket jam): klik sah terakhir pengguna ini < N menit lalu → tidak ditagih
+  if exists (select 1 from ad_events where campaign_id = a.id and user_id = v_uid and event = 'click' and dedupe_key like 'clk:%'
+              and created_at > now() - make_interval(mins => v_min)) then
     insert into ad_events (campaign_id, user_id, event, placement, billable, dedupe_key) values (a.id, v_uid, 'click', p_placement, false, 'dup:' || gen_random_uuid());
     update merchant_ads set clicks = clicks + 1 where id = a.id;
     return jsonb_build_object('charged', false, 'reason', 'dedupe');
@@ -489,16 +497,18 @@ begin
     end if;
   end if;
   insert into ad_events (campaign_id, user_id, event, placement, cost, billable, dedupe_key)
-  values (a.id, v_uid, 'click', p_placement, v_cost, v_cost > 0, 'clk:' || v_bucket)
-  on conflict do nothing returning id into v_ev;
-  if v_ev is null then return jsonb_build_object('charged', false, 'reason', 'dedupe'); end if;
+  values (a.id, v_uid, 'click', p_placement, v_cost, v_cost > 0, 'clk:' || gen_random_uuid())
+  returning id into v_ev;
   update merchant_ads set clicks = clicks + 1 where id = a.id;
   if v_cost > 0 then v_cost := ads_charge(a.id, v_cost, v_ev, 'cpc klik'); end if;
   return jsonb_build_object('charged', v_cost > 0, 'cost', v_cost, 'status', (select status from merchant_ads where id = a.id));
 end $$;
-revoke all on function public.ads_click(uuid, text) from public;
-grant execute on function public.ads_click(uuid, text) to anon, authenticated;
+revoke all on function public.ads_click(uuid, text) from public, anon;
+grant execute on function public.ads_click(uuid, text) to authenticated;
+comment on function public.ads_click(uuid, text) is
+  'Finpay v3 §7 (S4): klik iklan — wajib login; pemilik merchant tidak dihitung; wajib impresi pengguna yang sama ≤ 30 menit; dedupe jendela geser ads_click_dedupe_minutes (duplikat dicatat dup:…, tidak ditagih); cpc ditagih per klik sah.';
 
+-- S4: konversi dicatat & CPA ditagih HANYA saat pesanan dibayar (payment_status paid) atau selesai; dibalik saat batal.
 create or replace function public.ads_conversion(p_campaign uuid, p_order uuid)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare a merchant_ads; pr ad_products; o orders; v_ev bigint; v_cost bigint := 0; v_val bigint;
@@ -507,6 +517,13 @@ begin
   if not found or a.budget is null then return jsonb_build_object('attributed', false, 'reason', 'not_campaign'); end if;
   select * into o from orders where id = p_order;
   if o.merchant_id is distinct from a.merchant_id then return jsonb_build_object('attributed', false, 'reason', 'merchant_mismatch'); end if;
+  if o.customer_id is not null and coalesce((select m.owner_id = o.customer_id from merchants m where m.id = a.merchant_id), false) then
+    return jsonb_build_object('attributed', false, 'reason', 'owner');   -- S4: pesanan pemilik merchant sendiri
+  end if;
+  if o.status = 'cancelled' then return jsonb_build_object('attributed', false, 'reason', 'cancelled'); end if;
+  if not (o.payment_status = 'paid' or o.status = 'completed') then
+    return jsonb_build_object('attributed', true, 'pending', true, 'reason', 'menunggu pembayaran/penyelesaian');
+  end if;
   select * into pr from ad_products where code = a.product_code;
   v_val := coalesce(o.items_subtotal, 0);
   insert into ad_events (campaign_id, user_id, event, placement, order_id, billable, dedupe_key)
@@ -523,6 +540,54 @@ begin
   return jsonb_build_object('attributed', true, 'cost', v_cost, 'conversion_value', v_val);
 end $$;
 revoke all on function public.ads_conversion(uuid, uuid) from public, anon, authenticated;
+
+-- S4: pembalikan konversi saat pesanan batal — biaya CPA kembali ke anggaran (adjust +), spent turun, ads_revenue dibalik
+create or replace function public.ads_conversion_reverse(p_campaign uuid, p_order uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare a merchant_ads; ev ad_events; o orders; v_cost bigint; m merchants;
+begin
+  select * into a from merchant_ads where id = p_campaign for update;
+  if not found then return jsonb_build_object('reversed', false, 'reason', 'not_campaign'); end if;
+  select * into ev from ad_events where campaign_id = a.id and event = 'conversion' and dedupe_key = 'order:' || p_order;
+  if ev.id is null then return jsonb_build_object('reversed', false, 'reason', 'no_conversion'); end if;
+  if exists (select 1 from ad_budget_ledger where campaign_id = a.id and kind = 'adjust' and ref = ev.id) then
+    return jsonb_build_object('reversed', false, 'reason', 'already_reversed');
+  end if;
+  select * into o from orders where id = p_order;
+  v_cost := coalesce((select -sum(amount) from ad_budget_ledger where campaign_id = a.id and kind = 'charge' and ref = ev.id), 0);
+  insert into ad_budget_ledger (campaign_id, amount, kind, ref, note) values (a.id, v_cost, 'adjust', ev.id, 'pembalikan konversi: pesanan ' || coalesce(o.code, p_order::text) || ' dibatalkan');
+  update merchant_ads set conversions = greatest(0, conversions - 1), conversion_value = greatest(0, conversion_value - coalesce(o.items_subtotal, 0)),
+    spent = greatest(0, spent - v_cost), price_paid = greatest(0, spent - v_cost)
+   where id = a.id returning * into a;
+  if v_cost > 0 then
+    select * into m from merchants where id = a.merchant_id;
+    insert into order_ledger (source, source_id, service, entry, amount, party_role, party_id, phase, note)
+    values ('merchant_ads', a.id, 'food', 'ads_revenue', -v_cost, 'merchant', m.owner_id, 'completed', 'pembalikan cpa: pesanan ' || coalesce(o.code, '-') || ' dibatalkan');
+    if a.status = 'budget_exhausted' and a.paused_by = 'system' and now() < a.ends_at then
+      update merchant_ads set status = 'active', paused_by = null where id = a.id;
+    end if;
+  end if;
+  return jsonb_build_object('reversed', true, 'cost_returned', v_cost);
+end $$;
+revoke all on function public.ads_conversion_reverse(uuid, uuid) from public, anon, authenticated;
+
+create or replace function public.orders_ads_conversion()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.ad_campaign_id is null then return null; end if;
+  if new.status = 'cancelled' and old.status is distinct from 'cancelled' then
+    perform ads_conversion_reverse(new.ad_campaign_id, new.id);
+  elsif (new.payment_status = 'paid' and old.payment_status is distinct from 'paid') or (new.status = 'completed' and old.status is distinct from 'completed') then
+    perform ads_conversion(new.ad_campaign_id, new.id);
+  end if;
+  return null;
+exception when others then
+  insert into order_events (order_id, status, actor_id, note) values (new.id, 'note', auth.uid(), 'Atribusi iklan gagal: ' || left(sqlerrm, 120));
+  return null;
+end $$;
+drop trigger if exists t_orders_ads_conversion on public.orders;
+create trigger t_orders_ads_conversion after update of payment_status, status on public.orders
+  for each row when (new.ad_campaign_id is not null) execute function orders_ads_conversion();
 
 -- create_order: p_ad_campaign_id (atau p.ad_campaign_id) → orders.ad_campaign_id + ads_conversion
 select _v3_splice('0109', 'public.create_order(jsonb)',
@@ -720,7 +785,7 @@ begin
   v_from := p_from::timestamp at time zone 'Asia/Jakarta'; v_to := (p_to + 1)::timestamp at time zone 'Asia/Jakarta';
   return jsonb_build_object('from', p_from, 'to', p_to,
     'revenue_total', (select coalesce(sum(amount), 0) from order_ledger where source = 'merchant_ads' and entry = 'ads_revenue' and created_at >= v_from and created_at < v_to),
-    'campaign_spend', (select coalesce(-sum(amount), 0) from ad_budget_ledger where kind = 'charge' and created_at >= v_from and created_at < v_to),
+    'campaign_spend', (select coalesce(-sum(amount), 0) from ad_budget_ledger where (kind = 'charge' or (kind = 'adjust' and ref is not null)) and created_at >= v_from and created_at < v_to),
     'by_product', (select coalesce(jsonb_agg(jsonb_build_object('product', x.code, 'name', x.name, 'pricing_model', x.pricing_model, 'revenue', x.rev) order by x.rev desc), '[]'::jsonb)
       from (select pr.code, pr.name, pr.pricing_model, sum(l.amount) rev from order_ledger l join merchant_ads a on a.id = l.source_id join ad_products pr on pr.code = a.product_code
             where l.source = 'merchant_ads' and l.entry = 'ads_revenue' and l.created_at >= v_from and l.created_at < v_to group by pr.code, pr.name, pr.pricing_model) x),
@@ -866,6 +931,7 @@ begin
   if has_table_privilege('authenticated', 'public.ad_events', 'INSERT') or has_table_privilege('authenticated', 'public.ad_budget_ledger', 'INSERT')
      or has_function_privilege('authenticated', 'public.ads_charge(uuid,bigint,bigint,text)', 'EXECUTE')
      or has_function_privilege('authenticated', 'public.ads_conversion(uuid,uuid)', 'EXECUTE')
+     or has_function_privilege('anon', 'public.ads_click(uuid,text)', 'EXECUTE')   -- S4: klik anonim ditolak
      or not has_function_privilege('anon', 'public.ads_serve(text,double precision,double precision,text,text,integer)', 'EXECUTE')
      or not has_function_privilege('anon', 'public.nearby_merchants_v2(double precision,double precision,numeric,text,boolean)', 'EXECUTE') then
     raise exception '0109 batal: hak akses iklan salah';

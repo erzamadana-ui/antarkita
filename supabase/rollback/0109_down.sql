@@ -9,6 +9,7 @@
 --   pendapatan iklan di order_ledger (append-only) tetap. Produk iklan baru yang masih dipakai kampanye TIDAK
 --   dihapus → CHECK placement/unit v3 dipertahankan (NOTICE).
 -- =====================================================================
+drop trigger if exists t_orders_ads_conversion on public.orders;
 select public._mig_restore('0109');
 
 update public.merchant_ads set status = case status when 'active' then 'active' when 'ended' then 'expired' when 'budget_exhausted' then 'expired'

@@ -1252,10 +1252,11 @@ begin
       ok := true; alasan := '';
       begin perform admin_set_settings('{"payout_sla_hours": 48}'); ok := false; alasan := 'tanpa PIN diterima';
       exception when others then alasan := left(sqlerrm, 30); if sqlerrm not ilike '%ADMIN_LOCKED%' and sqlerrm not ilike '%PIN%' then ok := false; end if; end;
-      -- kunci umum lama tetap jalan tanpa PIN (layar Otomasi/Pengaturan)
+      -- v3 T3 (0105): kunci umum (layar Otomasi/Pengaturan) JUGA wajib PIN + izin payment_config
       v_wait := coalesce((select value from app_settings where key = 'wait_apology_minutes'), '5'::jsonb);
-      perform admin_set_settings(jsonb_build_object('wait_apology_minutes', v_wait));
-      log := log || format('S83a %s ambang bisnis tanpa PIN ditolak (%s); kunci umum (wait_apology_minutes) tetap tersimpan tanpa PIN', case when ok then 'OK' else 'BUG' end, alasan) || E'\n';
+      begin perform admin_set_settings(jsonb_build_object('wait_apology_minutes', v_wait)); ok := false; alasan := alasan || ' | kunci umum tanpa PIN diterima';
+      exception when others then if sqlerrm not ilike '%ADMIN_LOCKED%' then ok := false; alasan := alasan || ' | ' || left(sqlerrm, 40); end if; end;
+      log := log || format('S83a %s ambang bisnis tanpa PIN ditolak (%s); kunci umum (wait_apology_minutes) tanpa PIN juga ditolak (v3 T3)', case when ok then 'OK' else 'BUG' end, alasan) || E'\n';
       perform admin_unlock('123456');
       v_audit := (select count(*) from audit_logs where action = 'settings.business_updated');
       perform admin_set_settings('{"payout_sla_hours": "48", "gate_contribution_weeks": 4, "take_rate_north_star_pct": 22.5}');

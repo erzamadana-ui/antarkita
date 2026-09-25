@@ -41,7 +41,9 @@ begin
     'public.refund_approval_reject(uuid,text)', 'public.refund_via_request(orders)', 'public.refund_auto_on_cancel(uuid,uuid,text)',
     'public.admin_refund_requests(text)', 'public.refund_create_internal(uuid,bigint,text,text,uuid,text,uuid)',
     'public.dispute_open(uuid,text,bigint,text)', 'public.my_disputes()', 'public.admin_disputes(text)',
-    'public.admin_dispute_resolve(uuid,text,text,bigint)', 'public.refund_execute_result(uuid,text,text,jsonb,text)'] loop
+    'public.admin_dispute_resolve(uuid,text,text,bigint)', 'public.refund_execute_result(uuid,text,text,jsonb,text)',
+    'public.order_refunds_done(uuid)', 'public.refund_record_wallet(uuid,uuid,bigint,text)', 'public.refund_order_cumulative(uuid,uuid)',
+    'public.admin_refunds(text)'] loop
     perform _mig_backup('0108', s);
   end loop;
 end $$;
@@ -75,6 +77,9 @@ create table if not exists public.refund_requests (
 create index if not exists refund_requests_order_idx on public.refund_requests (order_id, created_at);
 create index if not exists refund_requests_payment_idx on public.refund_requests (payment_id) where payment_id is not null;
 create index if not exists refund_requests_status_idx on public.refund_requests (status, created_at);
+-- S3: maksimal satu permintaan refund TERBUKA dari pelanggan per pesanan
+create unique index if not exists refund_requests_one_open_customer on public.refund_requests (order_id)
+  where source = 'customer' and status in ('requested', 'approved', 'executing');
 comment on table public.refund_requests is
   'Finpay v3 §4: permintaan refund. requested → approved (maker; ≥ refund_dual_approval_min butuh checker ≠ maker) → executing (pay-refund) → done|failed; rejected. destination wallet = wallet_apply refund (hanya bila AntarPay aktif / fallback).';
 alter table public.refund_requests enable row level security;
@@ -128,6 +133,21 @@ end $$;
 -- ---------------------------------------------------------------------
 -- 2. Kebijakan refund per fase
 -- ---------------------------------------------------------------------
+-- T5: refund yang SUDAH terjadi untuk satu pesanan = refund_requests done (selain late_payment) + refund saldo
+-- jalur lama (cancel_order/merchant_update_order v2: wallet_transactions refund tanpa ref RF-/external_id pembayaran,
+-- bukan refund tip) yang belum tercatat sebagai refund_requests (policy.path = cancel_wallet).
+create or replace function public.order_refunds_done(p_order uuid)
+returns bigint language sql stable security definer set search_path = public as $$
+  select coalesce((select sum(r.amount) from refund_requests r where r.order_id = p_order and r.status = 'done' and coalesce(r.reason, '') <> 'late_payment'), 0)
+       + greatest(0,
+           coalesce((select sum(t.amount) from wallet_transactions t join orders o on o.id = t.order_id
+                      where t.order_id = p_order and t.user_id = o.customer_id and t.type = 'refund'
+                        and (t.ref is null or (t.ref not like 'RF-%' and not exists (select 1 from payments x where x.external_id = t.ref)))
+                        and coalesce(t.note, '') not ilike 'Refund tip%'), 0)
+           - coalesce((select sum(r.amount) from refund_requests r where r.order_id = p_order and r.status = 'done' and r.policy->>'path' = 'cancel_wallet'), 0))::bigint;
+$$;
+revoke all on function public.order_refunds_done(uuid) from public, anon, authenticated;
+
 create or replace function public.refund_policy_calc(p_order uuid)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
 declare o orders; v_paid bigint := 0; v_phase text; S bigint; F bigint; Fd bigint; PF bigint; SF bigint; X bigint; T bigint; D bigint; pgc bigint;
@@ -167,8 +187,9 @@ begin
     if (ln->>'refundable')::boolean then v_ref := v_ref + (ln->>'amount')::bigint; else v_non := v_non + (ln->>'amount')::bigint; end if;
   end loop;
   if v_paid = 0 then v_ref := 0; v_non := 0; end if;
-  select coalesce(sum(amount) filter (where status = 'done'), 0), coalesce(sum(amount) filter (where status in ('requested','approved','executing')), 0)
-    into v_done, v_pend from refund_requests where order_id = o.id and coalesce(reason, '') <> 'late_payment';
+  v_done := order_refunds_done(o.id);   -- T5: refund_requests + refund saldo jalur pembatalan
+  select coalesce(sum(amount) filter (where status in ('requested','approved','executing')), 0)
+    into v_pend from refund_requests where order_id = o.id and coalesce(reason, '') <> 'late_payment';
   return jsonb_build_object('order_id', o.id, 'code', o.code, 'status', o.status, 'phase', v_phase, 'paid', v_paid,
     'refundable', v_ref, 'non_refundable', v_non, 'already_refunded', v_done, 'pending_refund', v_pend,
     'remaining_refundable', greatest(0, v_ref - v_done - v_pend), 'lines', lines,
@@ -368,10 +389,13 @@ begin
   if o.status <> 'cancelled' then raise exception 'Refund hanya untuk pesanan yang dibatalkan/ditolak (status %). Untuk pesanan selesai, ajukan sengketa.', o.status; end if;
   if o.payment_status = 'refunded' then raise exception 'Pesanan % sudah direfund', o.code; end if;
   if o.payment_status <> 'paid' then raise exception 'Pesanan % belum dibayar — tidak ada yang direfund', o.code; end if;
-  -- idempoten: permintaan terbuka tanpa nominal baru → kembalikan yang ada
+  -- idempoten: permintaan terbuka tanpa nominal baru → kembalikan yang ada; S3: dengan nominal baru → ditolak (satu terbuka per pesanan)
   select * into r from refund_requests where order_id = o.id and status in ('requested', 'approved', 'executing') and coalesce(reason, '') <> 'late_payment'
    order by created_at desc limit 1;
-  if found and p_amount is null then return r; end if;
+  if found then
+    if p_amount is null then return r; end if;
+    raise exception 'REFUND_OPEN: masih ada permintaan refund Rp% (%) untuk % — tunggu selesai sebelum mengajukan lagi', r.amount, r.status, o.code;
+  end if;
   return refund_create_internal(o.id, p_amount, coalesce(nullif(btrim(p_reason), ''), 'permintaan pelanggan'), 'customer', auth.uid(), null, null);
 end $$;
 revoke all on function public.refund_request(uuid, bigint, text) from public, anon;
@@ -395,6 +419,15 @@ end $$;
 revoke all on function public.admin_refund_requests(text) from public, anon;
 grant execute on function public.admin_refund_requests(text) to authenticated;
 
+-- S3: nilai refund kumulatif pesanan (selain refund otomatis pembatalan & late_payment), termasuk p_refund
+create or replace function public.refund_order_cumulative(p_order uuid, p_refund uuid)
+returns bigint language sql stable security definer set search_path = public as $$
+  select coalesce(sum(r.amount), 0)::bigint from refund_requests r
+   where r.order_id = p_order and coalesce(r.reason, '') <> 'late_payment' and coalesce(r.policy->>'path', '') <> 'cancel_wallet'
+     and (r.id = p_refund or r.status in ('requested', 'approved', 'executing', 'done'));
+$$;
+revoke all on function public.refund_order_cumulative(uuid, uuid) from public, anon, authenticated;
+
 create or replace function public.admin_refund_approve(p_id uuid)
 returns refund_requests language plpgsql security definer set search_path = public as $$
 declare r refund_requests; v_min bigint := setting_num('refund_dual_approval_min', 200000)::bigint; ap approval_requests;
@@ -408,7 +441,8 @@ begin
     raise exception 'Refund ini sudah disetujui maker lain — gunakan admin_refund_confirm (checker)';
   end if;
   update refund_requests set maker = auth.uid(), decided_at = now() where id = r.id returning * into r;
-  if r.amount >= v_min then
+  -- S3: ambang dual approval KUMULATIF per pesanan (memecah refund tidak melewati checker)
+  if r.amount >= v_min or (r.order_id is not null and refund_order_cumulative(r.order_id, r.id) >= v_min) then
     -- dual approval: tunggu checker ≠ maker
     select * into ap from approval_requests where kind = 'refund' and ref_id = r.id and status = 'pending';
     if ap.id is null then
@@ -444,6 +478,9 @@ begin
   if r.maker = auth.uid() then raise exception 'DUAL_APPROVAL: maker tidak boleh menjadi checker refund yang sama'; end if;
   select * into ap from approval_requests where kind = 'refund' and ref_id = r.id and status = 'pending' for update;
   if ap.id is not null then
+    if ap.expires_at <= now() then   -- R2
+      raise exception 'APPROVAL_EXPIRED: permintaan persetujuan refund kedaluwarsa % — maker perlu mengajukan ulang', ap.expires_at;
+    end if;
     update approval_requests set status = 'approved', checker = auth.uid(), decided_at = now(), note = 'dikonfirmasi lewat admin_refund_confirm' where id = ap.id;
   end if;
   perform refund_approval_apply(r.id, ap.id);
@@ -526,12 +563,17 @@ create or replace function public.refund_execute_result(p_id uuid, p_status text
 returns refund_requests language plpgsql security definer set search_path = public as $$
 declare r refund_requests; v text := lower(btrim(coalesce(p_status, '')));
 begin
-  if v = 'executing' then   -- klaim atomik approved → executing (ditolak bila bukan approved; done = idempoten)
-    update refund_requests set status = 'executing' where id = p_id and status = 'approved' returning * into r;
-    if found then return r; end if;
-    select * into r from refund_requests where id = p_id;
-    if r.status in ('executing', 'done') then return r; end if;
-    raise exception 'Refund % tidak bisa dieksekusi (status %)', p_id, coalesce(r.status, 'tidak ada');
+  if v = 'executing' then   -- klaim atomik: HANYA dari approved (baris dikunci); sudah diklaim/selesai → RAISE
+    select * into r from refund_requests where id = p_id for update;
+    if not found then raise exception 'REFUND_NOT_FOUND: refund % tidak ditemukan', p_id; end if;
+    if r.status in ('executing', 'done') then
+      raise exception 'REFUND_ALREADY_CLAIMED: refund % sudah % — tidak dieksekusi dua kali', p_id, r.status;
+    end if;
+    if r.status <> 'approved' or r.destination <> 'gateway' then
+      raise exception 'Refund % tidak bisa dieksekusi (status %, tujuan %)', p_id, r.status, r.destination;
+    end if;
+    update refund_requests set status = 'executing' where id = r.id returning * into r;
+    return r;
   elsif v in ('done', 'failed') then
     return refund_execute_result(p_id, v = 'done', p_provider_ref, coalesce(p_note, p_raw->>'reason'));
   end if;
@@ -582,16 +624,27 @@ revoke all on function public.payment_refund_auto(uuid, text) from public, anon,
 
 create or replace function public.payment_hook_after_ingest(p_payment uuid, p_prev text, p_new text, p_amount bigint, p_raw jsonb)
 returns text language plpgsql security definer set search_path = public as $$
-declare p payments; r refund_requests; v_done bigint; v_delta bigint; d disputes;
+declare p payments; r refund_requests; v_done bigint; v_delta bigint; d disputes; v_rid uuid; v_pref text;
 begin
   select * into p from payments where id = p_payment;
   if p_new in ('REFUNDED', 'PARTIALLY_REFUNDED') then
-    select * into r from refund_requests where payment_id = p.id and status in ('executing', 'approved') and destination = 'gateway' order by created_at limit 1 for update;
+    -- S1: refund ditutup HANYA bila event menyebut refund_request_id kita atau provider_ref refund yang sama
+    v_rid := case when coalesce(p_raw->>'refund_request_id', '') ~ '^[0-9a-f-]{36}$' then (p_raw->>'refund_request_id')::uuid end;
+    v_pref := nullif(btrim(coalesce(p_raw->>'refund_id', p_raw->>'refundId', p_raw->>'refund_key', p_raw->'refunds'->-1->>'refund_key', '')), '');
+    select * into r from refund_requests
+     where payment_id = p.id and status in ('executing', 'approved') and destination = 'gateway'
+       and ((v_rid is not null and id = v_rid) or (v_pref is not null and provider_ref = v_pref))
+     order by created_at limit 1 for update;
     if found then
-      update refund_requests set status = 'done', executed_at = now(), provider_ref = coalesce(provider_ref, p_raw->>'refund_id', p_raw->>'refundId')
+      update refund_requests set status = 'done', executed_at = now(), provider_ref = coalesce(provider_ref, v_pref)
        where id = r.id;
       perform refund_apply_effects(r.id);
       return 'refund_done:' || r.id;
+    end if;
+    if exists (select 1 from refund_requests where payment_id = p.id and status in ('executing', 'approved', 'requested')) then
+      -- ada refund terbuka tetapi event tidak cocok → dicatat saja (payment_events), refund TIDAK ditutup
+      update payments set note = 'needs_review: event refund provider tidak cocok dengan refund terbuka' where id = p.id;
+      return 'refund_unmatched';
     end if;
     -- refund dilakukan langsung di dasbor provider → catat supaya buku besar & rekonsiliasi cocok
     select coalesce(sum(amount), 0) into v_done from refund_requests where payment_id = p.id and status = 'done';
@@ -653,6 +706,33 @@ begin
 end $$;
 revoke all on function public.refund_auto_on_cancel(uuid, uuid, text) from public, anon, authenticated;
 
+-- T5: refund ke SALDO saat pembatalan (AntarPay aktif / bayar saldo) tercatat sebagai refund_requests (done, wallet,
+-- policy.path = cancel_wallet) + payments.refunded_amount/pay_status — supaya refund_policy_calc/sengketa tidak
+-- mengembalikan dana yang sama lagi lewat gateway. Uang & buku besar tetap oleh cancel_order (tidak dijalankan ulang).
+create or replace function public.refund_record_wallet(p_order uuid, p_by uuid, p_amount bigint, p_reason text)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare o orders; p payments; r refund_requests;
+begin
+  if coalesce(p_amount, 0) <= 0 then return null; end if;
+  select * into o from orders where id = p_order;
+  if not found then return null; end if;
+  select * into p from payments where order_id = o.id and purpose = 'order' and pay_status in ('PAID','REFUND_REQUESTED','PARTIALLY_REFUNDED','DISPUTED')
+   order by paid_at desc nulls last limit 1 for update;
+  insert into refund_requests (order_id, payment_id, requested_by, amount, kind, reason, destination, source, status, decided_at, executed_at, note, policy)
+  values (o.id, p.id, p_by, p_amount, case when p_amount >= o.total then 'full' else 'partial' end, coalesce(nullif(btrim(p_reason), ''), 'pesanan dibatalkan'),
+          'wallet', 'system', 'done', now(), now(), 'refund saldo otomatis saat pembatalan (dana sudah dikreditkan cancel_order/merchant_update_order)',
+          jsonb_build_object('path', 'cancel_wallet'))
+  returning * into r;
+  if p.id is not null then
+    update payments set refunded_amount = least(amount, refunded_amount + p_amount),
+      pay_status = case when least(amount, refunded_amount + p_amount) >= amount then 'REFUNDED' else 'PARTIALLY_REFUNDED' end,
+      note = coalesce(note, 'refund saldo saat pembatalan')
+     where id = p.id;
+  end if;
+  return r.id;
+end $$;
+revoke all on function public.refund_record_wallet(uuid, uuid, bigint, text) from public, anon, authenticated;
+
 select _v3_splice('0108', 'public.cancel_order(uuid,text)',
   $a$payment_status = case when payment_status = 'paid' then 'refunded' else payment_status end$a$,
   $a$payment_status = case when payment_status = 'paid' and not refund_via_request(o) then 'refunded' else payment_status end   /* 0108 refund gateway */$a$,
@@ -662,6 +742,15 @@ select _v3_splice('0108', 'public.cancel_order(uuid,text)',
   $a$  if refund_via_request(o) then perform refund_auto_on_cancel(o.id, v_uid, coalesce(p_reason, 'pesanan dibatalkan')); end if;   -- 0108 AntarPay nonaktif: refund lewat gateway
   if order_payment_pending(o) then   -- 0104 belum lunas: belum ada dana masuk → tidak ada refund$a$,
   '0108 AntarPay nonaktif');
+select _v3_splice('0108', 'public.cancel_order(uuid,text)',
+  $a$  if v_tip > 0 then
+    perform wallet_apply(o.customer_id, 'refund', v_tip, o.id, 'Refund tip pesanan dibatalkan ' || o.code);$a$,
+  $a$  if o.payment_status = 'refunded' then   -- 0108 T5: refund saldo tercatat di refund_requests + payments
+    perform refund_record_wallet(o.id, v_uid, o.total - case when v_belanja > 0 and o.driver_id is not null then v_belanja else 0 end, coalesce(p_reason, 'pesanan dibatalkan'));
+  end if;
+  if v_tip > 0 then
+    perform wallet_apply(o.customer_id, 'refund', v_tip, o.id, 'Refund tip pesanan dibatalkan ' || o.code);$a$,
+  '0108 T5');
 select _v3_splice('0108', 'public.merchant_update_order(uuid,merchant_order_status)',
   $a$payment_status = case when payment_status = 'paid' then 'refunded' else payment_status end$a$,
   $a$payment_status = case when payment_status = 'paid' and not refund_via_request(o) then 'refunded' else payment_status end   /* 0108 refund gateway */$a$,
@@ -671,16 +760,25 @@ select _v3_splice('0108', 'public.merchant_update_order(uuid,merchant_order_stat
   $a$    if refund_via_request(o) then perform refund_auto_on_cancel(o.id, auth.uid(), 'Merchant menolak pesanan'); end if;   -- 0108 AntarPay nonaktif
     if o.payment_status = 'refunded' then perform wallet_apply(o.customer_id, 'refund', o.total, o.id, 'Refund ' || o.code); end if;$a$,
   '0108 AntarPay nonaktif');
+select _v3_splice('0108', 'public.merchant_update_order(uuid,merchant_order_status)',
+  $a$    if o.payment_status = 'refunded' then perform wallet_apply(o.customer_id, 'refund', o.total, o.id, 'Refund ' || o.code); end if;$a$,
+  $a$    if o.payment_status = 'refunded' then perform wallet_apply(o.customer_id, 'refund', o.total, o.id, 'Refund ' || o.code); end if;
+    if o.payment_status = 'refunded' then perform refund_record_wallet(o.id, auth.uid(), o.total, 'Merchant menolak pesanan'); end if;   -- 0108 T5$a$,
+  '0108 T5');
 
 -- ---------------------------------------------------------------------
 -- 7. Sengketa
 -- ---------------------------------------------------------------------
 create or replace function public.dispute_open(p_order uuid, p_kind text, p_amount bigint, p_description text)
 returns disputes language plpgsql security definer set search_path = public as $$
-declare o orders; v_uid uuid := auth.uid(); v_role text; d disputes; v_kind text := lower(trim(coalesce(p_kind, ''))); v_pay uuid;
+declare o orders; v_uid uuid := auth.uid(); v_role text; d disputes; v_kind text := lower(trim(coalesce(p_kind, ''))); v_pay uuid; v_paid bigint;
 begin
   if v_uid is null then raise exception 'Harus login'; end if;
-  select * into o from orders where id = p_order;
+  -- R1: batas laju pembukaan sengketa
+  if not rate_take('dispute_open', greatest(1, setting_num('rate_limit_dispute_per_hour', 5)::int)) then
+    raise exception 'RATE_LIMIT: terlalu banyak sengketa dalam 1 jam. Coba lagi nanti.';
+  end if;
+  select * into o from orders where id = p_order for update;
   if not found then raise exception 'Pesanan tidak ditemukan'; end if;
   v_role := case when o.customer_id = v_uid then 'customer' when o.driver_id = v_uid or o.travel_partner_id = v_uid then 'driver'
                  when o.merchant_id is not null and owns_merchant(o.merchant_id) then 'merchant' end;
@@ -688,15 +786,25 @@ begin
   if v_kind not in ('amount_mismatch','not_received','chargeback','payout_missing','other') then
     raise exception 'Jenis sengketa harus amount_mismatch|not_received|chargeback|payout_missing|other';
   end if;
+  -- R1: jenis per peran — chargeback hanya dari sistem/admin (event provider); payout_missing hanya mitra
+  if v_kind = 'chargeback' then raise exception 'DISPUTE_KIND: chargeback hanya dibuka sistem/admin dari notifikasi provider'; end if;
+  if v_kind = 'payout_missing' and v_role = 'customer' then raise exception 'DISPUTE_KIND: payout_missing hanya untuk mitra (driver/merchant)'; end if;
+  if v_kind = 'not_received' and v_role <> 'customer' then raise exception 'DISPUTE_KIND: not_received hanya untuk pelanggan'; end if;
   if length(btrim(coalesce(p_description, ''))) < 10 then raise exception 'Jelaskan masalahnya (min. 10 karakter)'; end if;
-  if p_amount is null or p_amount < 0 or p_amount > greatest(o.total + coalesce(o.tip, 0), 1) * 2 then raise exception 'Nominal sengketa tidak wajar'; end if;
-  if exists (select 1 from disputes where order_id = o.id and opened_by = v_uid and kind = v_kind and status in ('open', 'investigating')) then
-    raise exception 'Sengketa % untuk pesanan ini masih terbuka', v_kind;
+  -- R1: nominal ≤ yang dibayar; pesanan belum dibayar → nominal 0 dan tanpa baris ledger
+  v_paid := case when o.payment_status in ('paid', 'refunded') then coalesce(o.total, 0) + coalesce(o.tip, 0) else 0 end;
+  if p_amount is null or p_amount < 0 then raise exception 'Nominal sengketa tidak valid'; end if;
+  if p_amount > v_paid then
+    raise exception 'DISPUTE_AMOUNT: nominal sengketa Rp% melebihi yang dibayar Rp%', p_amount, v_paid;
+  end if;
+  -- R1: satu sengketa terbuka per pesanan per pihak
+  if exists (select 1 from disputes where order_id = o.id and opened_by = v_uid and status in ('open', 'investigating')) then
+    raise exception 'DISPUTE_OPEN: Anda masih punya sengketa terbuka untuk pesanan ini';
   end if;
   select id into v_pay from payments where order_id = o.id and purpose = 'order' and pay_status not in ('PENDING','FAILED','EXPIRED') order by paid_at desc nulls last limit 1;
   insert into disputes (order_id, payment_id, opened_by, party_role, kind, amount, description)
   values (o.id, v_pay, v_uid, v_role, v_kind, p_amount, btrim(p_description)) returning * into d;
-  if p_amount > 0 then
+  if p_amount > 0 and v_paid > 0 then
     insert into order_ledger (order_id, source, source_id, service, city_id, city, entry, amount, party_role, party_id, phase, note, payment_id)
     values (o.id, 'disputes', d.id, o.service, o.city_id, o.city, 'dispute', -p_amount, v_role, v_uid, 'adjusted', 'sengketa dibuka: ' || v_kind, v_pay);
   end if;
@@ -754,8 +862,8 @@ begin
       case when exists (select 1 from payments x where x.order_id = d.order_id and x.purpose = 'order' and x.pay_status in ('PAID','PARTIALLY_REFUNDED','REFUND_REQUESTED','DISPUTED'))
            then 'gateway' else 'wallet' end, d.id);
     update disputes set refund_id = r.id where id = d.id returning * into d;
-    -- admin = maker; ≥ ambang → tunggu checker; di bawah → disetujui (saldo: langsung dieksekusi)
-    if r.amount >= v_min then
+    -- admin = maker; ≥ ambang (S3: kumulatif per pesanan) → tunggu checker; di bawah → disetujui (saldo: langsung dieksekusi)
+    if r.amount >= v_min or refund_order_cumulative(r.order_id, r.id) >= v_min then
       insert into approval_requests (kind, ref_id, payload, amount, maker, note)
       values ('refund', r.id, jsonb_build_object('order_id', r.order_id, 'amount', r.amount, 'dispute_id', d.id), r.amount, auth.uid(), 'refund sengketa butuh admin kedua')
       returning * into ap;
@@ -789,7 +897,8 @@ declare t text;
 begin
   foreach t in array array['cancel_order', 'merchant_update_order'] loop
     if position('0108 refund gateway' in (select pg_get_functiondef(p.oid) from pg_proc p where p.proname = t and p.pronamespace = 'public'::regnamespace)) = 0
-       or position('0108 AntarPay nonaktif' in (select pg_get_functiondef(p.oid) from pg_proc p where p.proname = t and p.pronamespace = 'public'::regnamespace)) = 0 then
+       or position('0108 AntarPay nonaktif' in (select pg_get_functiondef(p.oid) from pg_proc p where p.proname = t and p.pronamespace = 'public'::regnamespace)) = 0
+       or position('0108 T5' in (select pg_get_functiondef(p.oid) from pg_proc p where p.proname = t and p.pronamespace = 'public'::regnamespace)) = 0 then
       raise exception '0108 batal: tambalan refund belum terpasang di %', t;
     end if;
   end loop;

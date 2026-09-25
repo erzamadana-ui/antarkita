@@ -24,6 +24,8 @@ alter table public.withdrawal_requests drop column if exists fee;
 alter table public.withdrawal_requests drop column if exists payout_status;
 alter table public.withdrawal_requests drop column if exists failed_reason;
 alter table public.withdrawal_requests drop column if exists payout_updated_at;
+alter table public.withdrawal_requests drop constraint if exists withdrawal_requests_provider_env_check;
+alter table public.withdrawal_requests drop column if exists provider_env;
 
 -- catatan migrasi (harness lokal / Supabase CLI) bila ada
 do $$
@@ -34,7 +36,7 @@ end $$;
 
 do $$
 begin
-  if to_regprocedure('public.payout_event_ingest(text,text,jsonb)') is not null or to_regclass('public.withdrawal_orders') is not null
+  if to_regprocedure('public.payout_event_ingest(text,text,jsonb,text)') is not null or to_regclass('public.withdrawal_orders') is not null
      or exists (select 1 from information_schema.columns where table_name = 'withdrawal_requests' and column_name = 'payout_status')
      or position('PAYOUT_SETTLED' in pg_get_functiondef('public.admin_mark_withdrawal_settled(uuid,text)'::regprocedure)) > 0 then
     raise exception '0110_down gagal: objek 0110 masih ada';

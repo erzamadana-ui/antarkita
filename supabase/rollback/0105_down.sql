@@ -16,10 +16,11 @@ drop trigger if exists t_orders_settlement_on_complete on public.orders;
 drop trigger if exists t_payment_events_append_only on public.payment_events;
 drop trigger if exists t_payment_events_no_truncate on public.payment_events;
 
+-- payment_events dulu: kebijakan RLS-nya memakai admin_has() yang dihapus _mig_restore
+drop table if exists public.payment_events;
+
 select public._mig_restore('0105');
 select public._mig_restore_acl('0105');
-
-drop table if exists public.payment_events;
 
 -- payments
 drop index if exists public.payments_one_pending_per_order;
@@ -29,10 +30,11 @@ drop index if exists public.payments_pay_status_idx;
 alter table public.payments drop constraint if exists payments_pay_status_check;
 alter table public.payments drop constraint if exists payments_refunded_amount_check;
 alter table public.payments drop constraint if exists payments_support_ref_format;
+alter table public.payments drop constraint if exists payments_env_check;
 alter table public.payments drop column if exists provider_ref, drop column if exists provider_txn_id, drop column if exists checkout_url,
   drop column if exists checkout_token, drop column if exists qr_string, drop column if exists payment_code, drop column if exists expires_at,
   drop column if exists paid_at, drop column if exists pay_status, drop column if exists refunded_amount, drop column if exists reconciled_at,
-  drop column if exists support_ref, drop column if exists note, drop column if exists reconcile_run_id;
+  drop column if exists support_ref, drop column if exists note, drop column if exists reconcile_run_id, drop column if exists env;
 
 -- orders
 drop index if exists public.orders_payment_support_ref_key;
@@ -89,7 +91,7 @@ drop table if exists public._migration_backup_acl;
 do $$
 begin
   if to_regprocedure('public.pg_fee_calc(text,bigint)') is null or to_regprocedure('public.pg_fee_calc(text,bigint,text,timestamp with time zone)') is not null
-     or to_regclass('public.payment_events') is not null or to_regprocedure('public.payment_event_ingest(text,text,text,text,bigint,boolean,jsonb)') is not null
+     or to_regclass('public.payment_events') is not null or to_regprocedure('public.payment_event_ingest(text,text,text,text,bigint,boolean,jsonb,text)') is not null
      or position('payments_simulation_active' in pg_get_functiondef('public.payment_settle(text,text,jsonb,text,timestamp with time zone)'::regprocedure)) > 0 then
     raise exception '0105_down gagal: objek 0105 masih ada';
   end if;

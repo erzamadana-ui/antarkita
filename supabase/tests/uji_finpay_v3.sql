@@ -237,14 +237,14 @@ begin
     o := pg_temp.v3_order('ride_motor', 'qris');
     pay := pg_temp.v3_intent(o.id); pay2 := pg_temp.v3_intent(o.id);
     ok := pay.id = pay2.id and (select count(*) from payments where order_id = o.id and pay_status = 'PENDING') = 1 and pay.expires_at is not null;
-    pay2 := pg_temp.v3_intent(o.id, 'gopay');
+    pay2 := pg_temp.v3_intent(o.id, 'shopeepay');   -- GoPay tidak didukung adapter Finpay (S38)
     ok := ok and pay2.id <> pay.id and (select pay_status from payments where id = pay.id) = 'FAILED'
       and (select count(*) from payments where order_id = o.id and pay_status = 'PENDING') = 1;
     -- penulis lama (midtrans-create) memasukkan baris pending langsung → tetap satu PENDING
     perform pg_temp.v3_as(null);
     insert into payments (user_id, order_id, purpose, amount, method, provider, status, external_id, pg_channel)
-    values (cust, o.id, 'order', pay2.amount, 'gopay', 'midtrans', 'pending', 'AKORD-V3-LEGACY-' || left(md5(random()::text), 8), 'gopay');
-    log := log || format('S7 %s intent ganda: panggilan 2× → id sama=%s; ganti ke gopay → intent lama FAILED, PENDING=%s; sisipan lama → PENDING tetap %s',
+    values (cust, o.id, 'order', pay2.amount, 'shopeepay', 'midtrans', 'pending', 'AKORD-V3-LEGACY-' || left(md5(random()::text), 8), 'shopeepay');
+    log := log || format('S7 %s intent ganda: panggilan 2× → id sama=%s; ganti ke shopeepay → intent lama FAILED, PENDING=%s; sisipan lama → PENDING tetap %s',
       case when ok and (select count(*) from payments where order_id = o.id and pay_status = 'PENDING') = 1 then 'OK' else 'BUG' end,
       pay.id = (select id from payments where id = pay.id), 1, (select count(*) from payments where order_id = o.id and pay_status = 'PENDING')) || E'\n';
     perform pg_temp.v3_as(cust); perform cancel_order(o.id, 'uji S7 bersih');
@@ -366,6 +366,11 @@ begin
     perform pg_temp.v3_as(null);
     rf := refund_execute_result(rf.id, 'executing', null, '{"by": "pay-refund"}'::jsonb, null);
     alasan := rf.status;
+    -- klaim kedua (pay-refund ganda) → REFUND_ALREADY_CLAIMED, bukan baris dikembalikan diam-diam
+    begin perform refund_execute_result(rf.id, 'executing', null, '{"by": "pay-refund-2"}'::jsonb, null); v_err := 'klaim kedua diterima';
+    exception when others then v_err := sqlerrm; end;
+    log := log || format('S13b %s klaim eksekusi refund ganda: pertama → %s; kedua → %s',
+      case when alasan = 'executing' and v_err like 'REFUND_ALREADY_CLAIMED%' then 'OK' else 'BUG' end, alasan, left(v_err, 50)) || E'\n';
     rf := refund_execute_result(rf.id, 'done', 'FP-RF-S13', '{}'::jsonb, null);
     select * into pay from payments where id = pay.id; select * into o from orders where id = o.id;
     perform pg_temp.v3_as(adm); lc := ledger_check(o.id);
@@ -705,8 +710,9 @@ begin
     perform pg_temp.v3_as(mown);
     camp2 := merchant_campaign_create('post_checkout_cross', 'Cross V3', 50000, 3, 5, '{"headline": "Coba juga sate kami"}');
     perform pg_temp.v3_as(ops); a := admin_campaign_review(camp2, true, 'ok');
-    perform pg_temp.v3_as(cust); r := ads_click(camp2, 'post_checkout_cross');
-    perform pg_temp.v3_as(drv); r2 := ads_click(camp2, 'post_checkout_cross');
+    -- S4: klik sah wajib didahului impresi (ads_serve) pengguna yang sama
+    perform pg_temp.v3_as(cust); perform ads_serve('post_checkout_cross', v_lat + 0.01, v_lng + 0.01, null, null, 3); r := ads_click(camp2, 'post_checkout_cross');
+    perform pg_temp.v3_as(drv); perform ads_serve('post_checkout_cross', v_lat + 0.01, v_lng + 0.01, null, null, 3); r2 := ads_click(camp2, 'post_checkout_cross');
     select * into a from merchant_ads where id = camp2;
     perform pg_temp.v3_as(drv2); lc := ads_click(camp2, 'post_checkout_cross');
     log := log || format('S29 %s anggaran Rp50.000 cpc Rp25.000: klik1 %s, klik2 %s → status=%s spent=%s sisa=%s; klik3 charged=%s (%s)',
@@ -778,6 +784,429 @@ begin
       r->>'server_key', r->>'configured',
       not exists (select 1 from audit_logs where created_at >= transaction_timestamp() and (detail::text like '%SECRET-987654%' or detail::text like '%rahasia-abc123%')), left(v_err, 30)) || E'\n';
   exception when others then log := log || 'S37 BUG kunci gateway: ' || sqlerrm || E'\n'; end;
+
+  -- ===================================================================================================
+  -- S38–S56: perbaikan tinjauan keamanan (T2–T5, S1–S4, S6, R1–R5, (a)–(e))
+  -- ===================================================================================================
+
+  -- ===== S38 (a) GoPay tidak didukung adapter Finpay: disembunyikan dari payment_provider_public & ditolak saat bayar =====
+  begin
+    perform pg_temp.v3_as(null); set local role anon;
+    r := payment_provider_public();
+    reset role;
+    o := pg_temp.v3_order('ride_motor', 'qris');
+    begin pay := pg_temp.v3_intent(o.id, 'gopay'); v_err := 'intent gopay finpay diterima'; exception when others then v_err := sqlerrm; end;
+    begin perform payment_intent_create(cust, 'topup', null, 50000, 'gopay', 'finpay'); alasan := 'top up gopay finpay diterima'; exception when others then alasan := sqlerrm; end;
+    log := log || format('S38 %s kanal tak didukung: provider=%s gopay tampil=%s; order_payment_prepare gopay → %s; top up gopay → %s; midtrans gopay tetap didukung=%s',
+      case when r->>'provider' = 'finpay' and not exists (select 1 from jsonb_array_elements(r->'channels') x where x->>'key' = 'gopay')
+                and v_err like 'CHANNEL_UNSUPPORTED%' and alasan like 'CHANNEL_UNSUPPORTED%' and payment_channel_provider_ok('gopay', 'midtrans') then 'OK' else 'BUG' end,
+      r->>'provider', exists (select 1 from jsonb_array_elements(r->'channels') x where x->>'key' = 'gopay'), left(v_err, 50), left(alasan, 50),
+      payment_channel_provider_ok('gopay', 'midtrans')) || E'\n';
+    perform pg_temp.v3_as(cust); perform cancel_order(o.id, 'uji S38 bersih');
+  exception when others then reset role; log := log || 'S38 BUG kanal: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S39 T2: payment_settle langsung (midtrans-webhook lama) — finpay ditolak; midtrans lewat ingest: gross_amount wajib cocok, chargeback → DISPUTED =====
+  begin
+    -- transaksi Finpay dipanggil langsung → ditolak
+    o := pg_temp.v3_order('ride_motor', 'qris');
+    pay := pg_temp.v3_intent(o.id, 'qris', 'finpay');
+    perform pg_temp.v3_as(null);
+    begin perform payment_settle(pay.external_id, 'settlement', jsonb_build_object('gross_amount', pay.amount::text || '.00')); v_err := 'settle finpay langsung diterima';
+    exception when others then v_err := sqlerrm; end;
+    -- transaksi Midtrans: gross_amount beda → tidak diterapkan (amount_mismatch + unreconciled), gross cocok → PAID
+    pay2 := pg_temp.v3_intent(o.id, 'qris', 'midtrans');
+    perform pg_temp.v3_as(null);
+    pay2 := payment_settle(pay2.external_id, 'settlement', jsonb_build_object('transaction_status', 'settlement', 'gross_amount', (pay2.amount + 1000)::text || '.00', 'status_code', '200', 'payment_type', 'qris'), 'qris', now());
+    n := (select count(*) from order_ledger where source = 'payments' and source_id = pay2.id and entry = 'unreconciled');
+    alasan := pay2.pay_status || '/' || coalesce((select result from payment_events where payment_id = pay2.id order by id desc limit 1), '-');
+    pay2 := payment_settle(pay2.external_id, 'settlement', jsonb_build_object('transaction_status', 'settlement', 'gross_amount', pay2.amount::text || '.00', 'status_code', '200', 'payment_type', 'qris'), 'qris', now());
+    select * into o from orders where id = o.id;
+    ok := v_err like 'PROVIDER_MISMATCH%' and alasan like 'PENDING/amount_mismatch%' and n = 1 and pay2.pay_status = 'PAID' and o.payment_status = 'paid'
+      and exists (select 1 from payment_events where payment_id = pay2.id and provider = 'midtrans' and result = 'applied');
+    -- notifikasi sama dikirim ulang → duplikat (tidak diproses)
+    n2 := (select count(*) from order_events where order_id = o.id);
+    pay2 := payment_settle(pay2.external_id, 'settlement', jsonb_build_object('transaction_status', 'settlement', 'gross_amount', pay2.amount::text || '.00', 'status_code', '200', 'payment_type', 'qris'), 'qris', now());
+    ok := ok and (select count(*) from order_events where order_id = o.id) = n2;
+    -- chargeback Midtrans (dulu dipetakan 'pending' oleh webhook lama) → DISPUTED + sengketa chargeback
+    pay2 := payment_settle(pay2.external_id, 'pending', jsonb_build_object('transaction_status', 'chargeback', 'gross_amount', pay2.amount::text || '.00', 'status_code', '200'), null, null);
+    log := log || format('S39 %s T2: settle Finpay langsung → %s | Midtrans gross beda → %s (unreconciled=%s) | gross cocok → %s bayar=%s | ulang → event tetap | chargeback → %s sengketa=%s',
+      case when ok and pay2.pay_status = 'DISPUTED' and exists (select 1 from disputes where payment_id = pay2.id and kind = 'chargeback') then 'OK' else 'BUG' end,
+      left(v_err, 40), alasan, n, 'PAID', o.payment_status, pay2.pay_status, exists (select 1 from disputes where payment_id = pay2.id and kind = 'chargeback')) || E'\n';
+  exception when others then log := log || 'S39 BUG T2: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S40 R3 + T1: event PAID tanpa nominal / nominal beda → amount_mismatch (tidak diterapkan); p_env beda → env_mismatch =====
+  begin
+    o := pg_temp.v3_order('ride_motor', 'qris');
+    pay := pg_temp.v3_intent(o.id);
+    perform pg_temp.v3_as(null);
+    r := payment_event_ingest('finpay', 'ev-' || pay.id || '-noamt', pay.external_id, 'PAID', null, true, '{}');
+    r2 := payment_event_ingest('finpay', 'ev-' || pay.id || '-env', pay.external_id, 'PAID', pay.amount, true, '{}', 'production');
+    select * into pay2 from payments where id = pay.id;
+    ok := r->>'note' = 'amount_mismatch' and not (r->>'applied')::boolean and r2->>'note' = 'env_mismatch' and pay2.pay_status = 'PENDING'
+      and pay2.env = 'sandbox' and pay2.note like 'unreconciled%'
+      and exists (select 1 from order_ledger where source = 'payments' and source_id = pay.id and entry = 'unreconciled');
+    r := payment_event_ingest('finpay', 'ev-' || pay.id || '-ok', pay.external_id, 'PAID', pay.amount, true, '{}', 'sandbox');
+    log := log || format('S40 %s R3/T1: PAID tanpa nominal → %s; env production ≠ sandbox → %s; pay_status tetap %s (env %s, note %s); nominal & env cocok → %s',
+      case when ok and (r->>'applied')::boolean and r->>'pay_status' = 'PAID' then 'OK' else 'BUG' end,
+      '-', r2->>'note', pay2.pay_status, pay2.env, left(pay2.note, 30), r->>'pay_status') || E'\n';
+    o4 := o;   -- dipakai S41
+  exception when others then log := log || 'S40 BUG R3: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S41 S2: PARTIALLY_REFUNDED tanpa refund_amount → needs_review (refunded_amount tidak berubah); dengan refund_amount → diperbarui =====
+  begin
+    select * into pay from payments where order_id = o4.id and pay_status = 'PAID';
+    perform pg_temp.v3_as(null);
+    r := payment_event_ingest('finpay', 'ev-' || pay.id || '-pr1', pay.external_id, 'PARTIALLY_REFUNDED', pay.amount, true, '{}');
+    select * into pay2 from payments where id = pay.id;
+    ok := r->>'note' = 'needs_review' and pay2.refunded_amount = 0 and pay2.pay_status = 'PARTIALLY_REFUNDED' and pay2.note like 'needs_review%';
+    r2 := payment_event_ingest('finpay', 'ev-' || pay.id || '-pr2', pay.external_id, 'PARTIALLY_REFUNDED', pay.amount, true, jsonb_build_object('refund_amount', 1000));
+    select * into pay2 from payments where id = pay.id;
+    log := log || format('S41 %s S2: refund sebagian tanpa refund_amount (p_amount=%s) → note=%s refunded=%s; dengan refund_amount 1000 → hasil=%s refunded=%s',
+      case when ok and pay2.refunded_amount = 1000 then 'OK' else 'BUG' end, pay.amount, r->>'note', 0, r2->>'note', pay2.refunded_amount) || E'\n';
+  exception when others then log := log || 'S41 BUG S2: ' || sqlerrm || E'\n'; end;
+
+  -- AntarPay NONAKTIF untuk S42 & S44 (refund lewat gateway)
+  begin perform pg_temp.v3_as(adm); r := admin_set_antarpay_enabled(false); exception when others then log := log || 'S41z BUG AntarPay: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S42 S1: event REFUND provider yang tidak cocok TIDAK menutup refund terbuka; yang cocok (refund_request_id) menutup =====
+  begin
+    o := pg_temp.v3_order('food', 'qris');
+    pay := pg_temp.v3_bayar(o.id);
+    perform pg_temp.v3_as(cust); o := cancel_order(o.id, 'uji S42');
+    select * into rf from refund_requests where order_id = o.id and status = 'requested';
+    perform pg_temp.v3_as(fin); rf := admin_refund_approve(rf.id);
+    perform pg_temp.v3_as(null);
+    r := payment_event_ingest('finpay', 'ev-' || pay.id || '-rf-lain', pay.external_id, 'PARTIALLY_REFUNDED', pay.amount, true,
+           jsonb_build_object('refund_amount', 500, 'refund_request_id', gen_random_uuid()));
+    select * into rf2 from refund_requests where id = rf.id;
+    ok := r->>'note' like 'applied · refund_unmatched%' and rf2.status = 'approved';
+    r2 := payment_event_ingest('finpay', 'ev-' || pay.id || '-rf-cocok', pay.external_id, 'REFUNDED', pay.amount, true,
+           jsonb_build_object('refund_request_id', rf.id, 'refund_id', 'FP-RF-S42'));
+    select * into rf2 from refund_requests where id = rf.id;
+    log := log || format('S42 %s S1: refund %s approved; event refund lain → %s, refund tetap %s; event dengan refund_request_id cocok → %s, refund %s (ref %s)',
+      case when ok and r2->>'note' like 'applied · refund_done:%' and rf2.status = 'done' and rf2.provider_ref = 'FP-RF-S42' then 'OK' else 'BUG' end,
+      left(rf.id::text, 8), r->>'note', 'approved', r2->>'note', rf2.status, rf2.provider_ref) || E'\n';
+  exception when others then log := log || 'S42 BUG S1: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S44 S3: refund — satu permintaan pelanggan terbuka per pesanan; ambang dual approval kumulatif per pesanan =====
+  begin
+    o := pg_temp.v3_order('food', 'qris');
+    pay := pg_temp.v3_bayar(o.id);
+    perform pg_temp.v3_as(cust); o := cancel_order(o.id, 'uji S44');
+    select * into rf from refund_requests where order_id = o.id and status = 'requested';   -- refund otomatis (system) → ditolak agar pelanggan mengajukan sendiri
+    perform pg_temp.v3_as(fin); perform admin_refund_reject(rf.id, 'uji S44 ajukan ulang sebagian');
+    update app_settings set value = to_jsonb(floor(o.total * 0.6)::bigint) where key = 'refund_dual_approval_min';
+    perform pg_temp.v3_as(cust);
+    rf := refund_request(o.id, floor(o.total * 0.4)::bigint, 'sebagian 1');
+    begin perform refund_request(o.id, floor(o.total * 0.3)::bigint, 'sebagian 2 saat 1 terbuka'); v_err := 'dua permintaan terbuka diterima'; exception when others then v_err := sqlerrm; end;
+    perform pg_temp.v3_as(fin); rf := admin_refund_approve(rf.id);
+    ok := rf.status = 'approved' and v_err like 'REFUND_OPEN%';
+    perform pg_temp.v3_as(null); rf := refund_execute_result(rf.id, true, 'FP-RF-S44A', null);
+    -- refund kedua lewat sengketa (admin = maker): 0,4 + 0,3 total ≥ ambang 0,6 → butuh checker walau 0,3 < ambang
+    perform pg_temp.v3_as(cust); dsp := dispute_open(o.id, 'amount_mismatch', floor(o.total * 0.3)::bigint, 'Minta sisa refund lewat sengketa S44');
+    perform pg_temp.v3_as(fin); dsp := admin_dispute_resolve(dsp.id, 'resolved_refund', 'refund sisa sebagian', floor(o.total * 0.3)::bigint);
+    select * into rf2 from refund_requests where id = dsp.refund_id;
+    log := log || format('S44 %s S3 refund: sebagian 1 (%s) approved; permintaan ke-2 saat terbuka → %s; sebagian 2 (%s, < ambang %s) → status %s approval=%s (kumulatif %s)',
+      case when ok and rf.status = 'done' and rf2.status = 'requested' and rf2.approval_id is not null then 'OK' else 'BUG' end,
+      rf.amount, left(v_err, 40), rf2.amount, floor(o.total * 0.6)::bigint, rf2.status, rf2.approval_id is not null, refund_order_cumulative(o.id, rf2.id)) || E'\n';
+    -- ===== S48 R2: persetujuan refund kedaluwarsa tidak bisa dikonfirmasi =====
+    update approval_requests set expires_at = now() - interval '1 minute' where id = rf2.approval_id;
+    perform pg_temp.v3_as(adm);
+    begin perform admin_refund_confirm(rf2.id); alasan := 'approval kedaluwarsa dikonfirmasi'; exception when others then alasan := sqlerrm; end;
+    log := log || format('S48 %s R2 admin_refund_confirm pada approval kedaluwarsa → %s; refund tetap %s',
+      case when alasan like 'APPROVAL_EXPIRED%' and (select status from refund_requests where id = rf2.id) = 'requested' then 'OK' else 'BUG' end,
+      left(alasan, 50), (select status from refund_requests where id = rf2.id)) || E'\n';
+    update app_settings set value = '200000'::jsonb where key = 'refund_dual_approval_min';
+  exception when others then log := log || 'S44 BUG S3 refund: ' || sqlerrm || E'\n';
+    update app_settings set value = '200000'::jsonb where key = 'refund_dual_approval_min';
+  end;
+
+  begin perform pg_temp.v3_as(adm); r := admin_set_antarpay_enabled(true); exception when others then log := log || 'S44z BUG AntarPay: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S43 T5: batal (AntarPay aktif) → refund saldo TERCATAT (refund_requests + payments REFUNDED); sengketa tidak bisa refund lagi =====
+  begin
+    o := pg_temp.v3_order('food', 'qris');
+    pay := pg_temp.v3_bayar(o.id);
+    c0 := pg_temp.v3_saldo(cust);
+    perform pg_temp.v3_as(cust); o := cancel_order(o.id, 'uji S43 batal saldo');
+    select * into rf from refund_requests where order_id = o.id;
+    select * into pay2 from payments where id = pay.id;
+    pol := refund_policy_calc(o.id);
+    dsp := dispute_open(o.id, 'amount_mismatch', o.total, 'Coba minta refund lagi lewat sengketa setelah batal');
+    perform pg_temp.v3_as(fin);
+    begin perform admin_dispute_resolve(dsp.id, 'resolved_refund', 'uji refund dobel', o.total); v_err := 'refund dobel diterima'; exception when others then v_err := sqlerrm; end;
+    log := log || format('S43 %s T5 %s: saldo +%s; refund_requests %s/%s/%s Rp%s; pay_status=%s refunded=%s; kebijakan already=%s remaining=%s; sengketa refund lagi → %s',
+      case when pg_temp.v3_saldo(cust) - c0 = o.total and rf.status = 'done' and rf.destination = 'wallet' and rf.policy->>'path' = 'cancel_wallet' and rf.amount = o.total
+                and pay2.pay_status = 'REFUNDED' and pay2.refunded_amount = pay2.amount and (pol->>'already_refunded')::bigint = o.total
+                and (pol->>'remaining_refundable')::bigint = 0 and v_err like '%melebihi sisa%' then 'OK' else 'BUG' end,
+      o.code, pg_temp.v3_saldo(cust) - c0, rf.status, rf.destination, rf.policy->>'path', rf.amount, pay2.pay_status, pay2.refunded_amount,
+      pol->>'already_refunded', pol->>'remaining_refundable', left(v_err, 50)) || E'\n';
+  exception when others then log := log || 'S43 BUG T5: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S45 S3: penyesuaian saldo — akun sendiri ditolak; dipecah (60.000 + 60.000) → yang kedua butuh approval =====
+  begin
+    perform pg_temp.v3_as(fin);
+    begin perform admin_adjust_wallet_v3(fin, 1000, 'kredit diri sendiri'); v_err := 'kredit diri diterima'; exception when others then v_err := sqlerrm; end;
+    c0 := pg_temp.v3_saldo(drv2);
+    r := admin_adjust_wallet_v3(drv2, 60000, 'uji pecah 1');
+    r2 := admin_adjust_wallet_v3(drv2, 60000, 'uji pecah 2');
+    log := log || format('S45 %s S3 saldo: diri sendiri → %s; 60.000 → %s; 60.000 lagi (kumulatif %s ≥ 100.000) → %s; saldo Δ%s',
+      case when v_err like 'SELF_ADJUST%' and r->>'status' = 'executed' and r2->>'status' = 'pending_approval' and pg_temp.v3_saldo(drv2) - c0 = 60000 then 'OK' else 'BUG' end,
+      left(v_err, 30), r->>'status', r2->>'cumulative_24h', r2->>'status', pg_temp.v3_saldo(drv2) - c0) || E'\n';
+  exception when others then log := log || 'S45 BUG S3 saldo: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S46 S4 iklan: klik anonim ditolak, pemilik tidak ditagih, tanpa impresi tidak ditagih, dedupe jendela geser; CPA saat dibayar & dibalik saat batal =====
+  begin
+    perform pg_temp.v3_as(mown);
+    camp := merchant_campaign_create('boost_nearby', 'Klik V3 S46', 50000, 3, 5, '{"headline": "Uji klik"}');
+    perform pg_temp.v3_as(ops); a := admin_campaign_review(camp, true, 'ok');
+    perform pg_temp.v3_as(null);
+    begin perform ads_click(camp, 'boost_nearby'); v_err := 'klik anonim diterima'; exception when others then v_err := sqlerrm; end;
+    perform pg_temp.v3_as(mown); r := ads_click(camp, 'boost_nearby');
+    perform pg_temp.v3_as(drv2); r2 := ads_click(camp, 'boost_nearby');   -- belum ada impresi
+    ok := v_err like 'Harus login%' and r->>'reason' = 'owner' and r2->>'reason' = 'no_impression' and (select spent from merchant_ads where id = camp) = 0;
+    -- jendela geser: klik sah terakhir 29 menit lalu (bucket berbeda) → tetap dedupe; 31 menit lalu → ditagih
+    perform ads_serve('boost_nearby', v_lat + 0.01, v_lng + 0.01, null, null, 3);
+    insert into ad_events (campaign_id, user_id, event, placement, cost, billable, dedupe_key, created_at)
+    values (camp, drv2, 'click', 'boost_nearby', 0, false, 'clk:uji-lama', now() - interval '29 minutes');
+    r := ads_click(camp, 'boost_nearby');
+    perform pg_temp.v3_as(drv); perform ads_serve('boost_nearby', v_lat + 0.01, v_lng + 0.01, null, null, 3);
+    insert into ad_events (campaign_id, user_id, event, placement, cost, billable, dedupe_key, created_at)
+    values (camp, drv, 'click', 'boost_nearby', 0, false, 'clk:uji-lama2', now() - interval '31 minutes');
+    r2 := ads_click(camp, 'boost_nearby');
+    ok := ok and r->>'reason' = 'dedupe' and (r2->>'charged')::boolean;
+    log := log || format('S46a %s S4 klik: anonim → %s; pemilik → %s; tanpa impresi → %s; klik terakhir 29 mnt lalu → %s; 31 mnt lalu → charged=%s; spent=%s',
+      case when ok and (select spent from merchant_ads where id = camp) = 500 then 'OK' else 'BUG' end,
+      left(v_err, 25), 'owner', 'no_impression', r->>'reason', r2->>'charged', (select spent from merchant_ads where id = camp)) || E'\n';
+    perform pg_temp.v3_as(mown); perform merchant_campaign_set(camp, 'stop');
+    -- CPA: konversi ditagih saat pesanan DIBAYAR, dibalik saat batal
+    perform pg_temp.v3_as(mown);
+    camp2 := merchant_campaign_create('sponsored_voucher', 'CPA V3 S46', 100000, 3, 5, '{"headline": "Voucher uji"}');
+    perform pg_temp.v3_as(ops); a := admin_campaign_review(camp2, true, 'ok');
+    perform pg_temp.v3_as(cust);
+    o := create_order(jsonb_build_object('service','food','merchant_id', merch,
+           'items', jsonb_build_array(jsonb_build_object('menu_item_id', (select id from menu_items where merchant_id = merch and is_available limit 1), 'qty', 2)),
+           'dropoff', jsonb_build_object('lat',-0.945,'lng',100.36,'address','V3 Kos'), 'paid_via', 'qris', 'client_request_id', 'v3-cpa-' || md5(random()::text)), camp2);
+    select * into a from merchant_ads where id = camp2;
+    n := a.conversions; b0 := a.spent;
+    pay := pg_temp.v3_bayar(o.id);
+    select * into a from merchant_ads where id = camp2;
+    n2 := a.conversions; b1 := a.spent;
+    perform pg_temp.v3_as(cust); perform cancel_order(o.id, 'uji S46 batal CPA');
+    select * into a from merchant_ads where id = camp2;
+    log := log || format('S46b %s S4 CPA %s: belum dibayar → konversi %s spent %s; dibayar → konversi %s spent %s (5%% barang %s); batal → konversi %s spent %s; ledger iklan seimbang=%s',
+      case when o.status::text = 'awaiting_payment' and n = 0 and b0 = 0 and n2 = 1 and b1 = round(o.items_subtotal * 0.05) and b1 > 0 and a.conversions = 0 and a.spent = 0
+                and (ledger_check_source('merchant_ads', camp2)->>'balanced')::boolean then 'OK' else 'BUG' end,
+      o.code, n, b0, n2, b1, o.items_subtotal, a.conversions, a.spent, ledger_check_source('merchant_ads', camp2)->>'balanced') || E'\n';
+    perform pg_temp.v3_as(mown); perform merchant_campaign_set(camp2, 'stop');
+  exception when others then log := log || 'S46 BUG S4 iklan: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S47 R1: dispute_open — jenis per peran, nominal ≤ dibayar, pesanan belum dibayar tanpa ledger, satu terbuka per pihak =====
+  begin
+    o := pg_temp.v3_order('ride_motor', 'qris');   -- belum dibayar
+    perform pg_temp.v3_as(cust);
+    n := 0;
+    begin perform dispute_open(o.id, 'chargeback', 0, 'Pelanggan mencoba membuka chargeback sendiri'); exception when others then if sqlerrm like 'DISPUTE_KIND%' then n := n + 1; end if; end;
+    begin perform dispute_open(o.id, 'payout_missing', 0, 'Pelanggan mencoba jenis khusus mitra'); exception when others then if sqlerrm like 'DISPUTE_KIND%' then n := n + 1; end if; end;
+    begin perform dispute_open(o.id, 'amount_mismatch', 1000, 'Nominal untuk pesanan yang belum dibayar'); exception when others then if sqlerrm like 'DISPUTE_AMOUNT%' then n := n + 1; end if; end;
+    dsp := dispute_open(o.id, 'other', 0, 'Pesanan belum dibayar tapi ada kendala');
+    begin perform dispute_open(o.id, 'other', 0, 'Sengketa kedua untuk pesanan yang sama'); exception when others then if sqlerrm like 'DISPUTE_OPEN%' then n := n + 1; end if; end;
+    log := log || format('S47 %s R1 sengketa: %s/4 penolakan (chargeback pelanggan, payout_missing pelanggan, nominal > dibayar, kedua terbuka); sengketa nominal 0 pada pesanan belum dibayar dibuat tanpa ledger (baris=%s); batas laju=%s/jam',
+      case when n = 4 and dsp.id is not null and not exists (select 1 from order_ledger where source = 'disputes' and source_id = dsp.id) then 'OK' else 'BUG' end,
+      n, (select count(*) from order_ledger where source = 'disputes' and source_id = dsp.id), setting_num('rate_limit_dispute_per_hour', 5)) || E'\n';
+    perform cancel_order(o.id, 'uji S47 bersih');
+  exception when others then log := log || 'S47 BUG R1: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S49 R4: intent top up — PENDING aktif dikembalikan (idempoten) + batas laju per pengguna =====
+  begin
+    perform pg_temp.v3_as(null);
+    update app_settings set value = '1'::jsonb where key = 'rate_limit_topup_intent_per_hour';
+    insert into app_settings (key, value) select 'rate_limit_topup_intent_per_hour', '1'::jsonb where not exists (select 1 from app_settings where key = 'rate_limit_topup_intent_per_hour');
+    pay := payment_intent_create(drv2, 'topup', null, 55000, 'qris', 'finpay');
+    pay2 := payment_intent_create(drv2, 'topup', null, 55000, 'qris', 'finpay');
+    begin perform payment_intent_create(drv2, 'topup', null, 65000, 'qris', 'finpay'); v_err := 'intent ke-2 diterima'; exception when others then v_err := sqlerrm; end;
+    delete from app_settings where key = 'rate_limit_topup_intent_per_hour';
+    log := log || format('S49 %s R4 top up: intent sama 2× → id sama=%s; nominal lain (batas 1/jam) → %s',
+      case when pay.id = pay2.id and v_err like 'RATE_LIMIT%' then 'OK' else 'BUG' end, pay.id = pay2.id, left(v_err, 40)) || E'\n';
+  exception when others then log := log || 'S49 BUG R4: ' || sqlerrm || E'\n'; delete from app_settings where key = 'rate_limit_topup_intent_per_hour'; end;
+
+  -- ===== S50 S6 + (c): pencairan Finpay — tandai manual saat diproses provider ditolak; ≥ ambang butuh approval payout_batch =====
+  begin
+    perform pg_temp.v3_as(null);
+    update app_settings set value = '"finpay"'::jsonb where key = 'disbursement_provider';
+    perform wallet_apply(drv, 'earning', 100000, null, 'saldo uji v3 pencairan');
+    perform pg_temp.v3_as(drv); w := request_withdrawal(20000, 'BCA', '111222333', 'Driver Uji');
+    if w.status = 'pending' then perform pg_temp.v3_as(fin); w := admin_review_withdrawal(w.id, true, 'uji v3 S50'); end if;
+    perform pg_temp.v3_as(null);   -- klaim edge pay-disburse (service_role)
+    update withdrawal_requests set provider = 'finpay', provider_ref = 'AKD-V3-' || left(md5(random()::text), 8), payout_status = 'PAYOUT_PROCESSING' where id = w.id;
+    perform pg_temp.v3_as(fin);
+    begin perform admin_mark_withdrawal_settled(w.id, 'TRF-MANUAL-S50'); v_err := 'tandai manual diterima'; exception when others then v_err := sqlerrm; end;
+    -- ≥ ambang: klaim tanpa approval ditolak → maker (finance) ajukan → checker (superadmin) setujui → boleh
+    update app_settings set value = '10000'::jsonb where key = 'wallet_adjust_dual_approval_min';
+    perform pg_temp.v3_as(drv); w := request_withdrawal(20000, 'BCA', '111222333', 'Driver Uji');
+    if w.status = 'pending' then perform pg_temp.v3_as(fin); w := admin_review_withdrawal(w.id, true, 'uji v3 S50b'); end if;
+    perform pg_temp.v3_as(null);
+    r := payout_execute_allowed(w.id);
+    begin update withdrawal_requests set provider = 'finpay', provider_ref = 'AKD-V3-B-' || left(md5(random()::text), 8), payout_status = 'PAYOUT_PROCESSING' where id = w.id;
+      alasan := 'klaim tanpa approval diterima'; exception when others then alasan := sqlerrm; end;
+    perform pg_temp.v3_as(fin); r2 := admin_payout_request_approval(w.id, 'uji S50');
+    begin perform admin_approval_decide((r2->>'id')::uuid, true, 'sendiri'); f := 0; exception when others then f := 1; end;
+    perform pg_temp.v3_as(adm); perform admin_approval_decide((r2->>'id')::uuid, true, 'checker superadmin');
+    perform pg_temp.v3_as(null);
+    lc := payout_execute_allowed(w.id);
+    update withdrawal_requests set provider = 'finpay', provider_ref = 'AKD-V3-C-' || left(md5(random()::text), 8), payout_status = 'PAYOUT_PROCESSING' where id = w.id;
+    log := log || format('S50 %s S6/(c) payout Finpay: tandai manual saat PROCESSING → %s | ≥ ambang: izin=%s (%s), klaim → %s; maker setuju sendiri ditolak=%s; checker setuju → izin=%s, klaim → %s',
+      case when v_err like 'PAYOUT_IN_PROVIDER%' and not (r->>'allowed')::boolean and r->>'reason' = 'approval_required' and alasan like 'PAYOUT_APPROVAL_REQUIRED%'
+                and f = 1 and (lc->>'allowed')::boolean and (select payout_status from withdrawal_requests where id = w.id) = 'PAYOUT_PROCESSING' then 'OK' else 'BUG' end,
+      left(v_err, 30), r->>'allowed', r->>'reason', left(alasan, 35), f = 1, lc->>'allowed', (select payout_status from withdrawal_requests where id = w.id)) || E'\n';
+    update app_settings set value = '100000'::jsonb where key = 'wallet_adjust_dual_approval_min';
+    update app_settings set value = '"manual"'::jsonb where key = 'disbursement_provider';
+  exception when others then log := log || 'S50 BUG payout: ' || sqlerrm || E'\n';
+    update app_settings set value = '100000'::jsonb where key = 'wallet_adjust_dual_approval_min';
+    update app_settings set value = '"manual"'::jsonb where key = 'disbursement_provider';
+  end;
+
+  -- ===== S51 T3: admin_set_settings — kunci tak dikenal ditolak, semua kunci wajib payment_config + PIN, JSON divalidasi =====
+  begin
+    perform pg_temp.v3_as(adm);
+    n := 0;
+    begin perform admin_set_settings('{"kunci_asing_v3": 1}'); exception when others then if sqlerrm like 'SETTING_UNKNOWN%' then n := n + 1; end if; end;
+    begin perform admin_set_settings('{"bank_account": {"bank": "BCA", "name": "X", "number": "abc"}}'); exception when others then if sqlerrm like 'bank_account%' then n := n + 1; end if; end;
+    begin perform admin_set_settings('{"pg_topup_max": 1}'); exception when others then if sqlerrm like 'Nilai pg_topup_max%' then n := n + 1; end if; end;
+    begin perform admin_set_settings('{"services_enabled": {"food": false}}'); exception when others then if sqlerrm like '%menunya sendiri%' then n := n + 1; end if; end;
+    perform admin_set_settings('{"bank_account": {"bank": "BCA", "name": "PT Uji V3", "number": "1234567890"}, "admin_session_minutes": 45, "market_driver_share_pct": 72}');
+    ok := (select value->>'name' from app_settings where key = 'bank_account') = 'PT Uji V3' and setting_num('admin_session_minutes', 0) = 45;
+    perform pg_temp.v3_as(ops);
+    begin perform admin_set_settings('{"wait_apology_minutes": 6}'); v_err := 'ops ubah setelan'; exception when others then v_err := sqlerrm; end;
+    perform pg_temp.v3_as(adm); perform admin_lock();
+    begin perform admin_set_settings('{"wait_apology_minutes": 6}'); alasan := 'tanpa PIN diterima'; exception when others then alasan := sqlerrm; end;
+    perform admin_unlock('123456');
+    log := log || format('S51 %s T3 setelan: %s/4 masukan salah ditolak (kunci asing, rekening, rentang top up, sakelar ber-RPC); rekening/sesi/share tersimpan=%s; ops → %s; tanpa PIN → %s',
+      case when n = 4 and ok and v_err like 'ADMIN_FORBIDDEN%' and alasan like 'ADMIN_LOCKED%' then 'OK' else 'BUG' end, n, ok, left(v_err, 30), left(alasan, 25)) || E'\n';
+  exception when others then log := log || 'S51 BUG T3: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S52 T4 penjaga: semua RPC admin_% volatile (bukan baca) memuat admin_require; viewer ditolak di RPC lama =====
+  begin
+    select string_agg(p.proname, ', ') into v_err
+      from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'admin\_%' and p.prokind = 'f' and p.provolatile = 'v'
+       and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+       and p.proname not in ('admin_set_pin', 'admin_unlock', 'admin_lock', 'admin_log_event', 'admin_require_unlock')
+       and position('admin_require(' in pg_get_functiondef(p.oid)) = 0;
+    perform pg_temp.v3_as(vw);
+    n := 0;
+    begin perform admin_set_user(cust, null, false, 'viewer mencoba menonaktifkan'); exception when others then if sqlerrm like 'ADMIN_FORBIDDEN%' then n := n + 1; end if; end;
+    begin perform admin_set_service_economics('send', '{"customer_platform_fee": 1}'); exception when others then if sqlerrm like 'ADMIN_FORBIDDEN%' then n := n + 1; end if; end;
+    begin perform admin_set_bank_verified(drv, true); exception when others then if sqlerrm like 'ADMIN_FORBIDDEN%' then n := n + 1; end if; end;
+    begin perform admin_set_antarpay_enabled(false); exception when others then if sqlerrm like 'ADMIN_FORBIDDEN%' then n := n + 1; end if; end;
+    begin perform admin_set_driver_status(drv, 'suspended', 'viewer mencoba'); exception when others then if sqlerrm like 'ADMIN_FORBIDDEN%' then n := n + 1; end if; end;
+    perform pg_temp.v3_as(adm);
+    begin perform admin_set_user(adm, null, false, 'nonaktifkan diri sendiri'); alasan := 'ubah diri sendiri diterima'; exception when others then alasan := sqlerrm; end;
+    log := log || format('S52 %s T4: RPC admin volatile tanpa admin_require = %s; viewer ditolak %s/5 (admin_set_user, admin_set_service_economics, admin_set_bank_verified, admin_set_antarpay_enabled, admin_set_driver_status); superadmin ubah diri sendiri → %s',
+      case when v_err is null and n = 5 and alasan like 'SELF_CHANGE%' then 'OK' else 'BUG' end, coalesce(v_err, 'tidak ada'), n, left(alasan, 30)) || E'\n';
+  exception when others then log := log || 'S52 BUG T4: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S53 R5: tulis langsung pricing_sessions/intercity_rates/travel_routes ditolak → RPC ber-PIN; kebijakan baca & admin_role_perms =====
+  begin
+    perform pg_temp.v3_as(adm);
+    n := 0;
+    set local role authenticated;
+    begin update pricing_sessions set multiplier = multiplier; exception when insufficient_privilege then n := n + 1; end;
+    begin update intercity_rates set base_fare = base_fare; exception when insufficient_privilege then n := n + 1; end;
+    begin update travel_routes set seat_price = seat_price; exception when insufficient_privilege then n := n + 1; end;
+    reset role;
+    perform pg_temp.v3_as(ops);
+    r := admin_set_pricing_session(null, '{"name": "Sesi V3", "level": "high", "start_time": "17:00", "end_time": "19:00", "multiplier": 1.2}');
+    r2 := admin_set_pricing_session((r->>'id')::uuid, '{"active": false}');
+    perform pg_temp.v3_as(cs);
+    begin perform admin_set_pricing_session((r->>'id')::uuid, '{"multiplier": 3}'); v_err := 'cs ubah sesi'; exception when others then v_err := sqlerrm; end;
+    perform pg_temp.v3_as(cust);
+    set local role authenticated;
+    n2 := (select count(*) from payment_events) + (select count(*) from approval_requests);
+    reset role;
+    log := log || format('S53 %s R5: tulis langsung ditolak %s/3; ops via RPC → sesi %s aktif=%s; cs → %s; pelanggan melihat payment_events/approval=%s; anon admin_role_perms=%s',
+      case when n = 3 and (r2->>'active')::boolean = false and v_err like 'ADMIN_FORBIDDEN%' and n2 = 0
+                and not has_function_privilege('anon', 'public.admin_role_perms(text)', 'EXECUTE') then 'OK' else 'BUG' end,
+      n, r->>'name', r2->>'active', left(v_err, 30), n2, has_function_privilege('anon', 'public.admin_role_perms(text)', 'EXECUTE')) || E'\n';
+  exception when others then reset role; log := log || 'S53 BUG R5: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S54 (b) cron pay-reconcile: terdaftar; tanpa secret dilewati; dengan URL + secret → net.http_post x-cron-secret =====
+  begin
+    perform pg_temp.v3_as(null);
+    r := pay_reconcile_dispatch('{"skip_daily": true}');
+    insert into push_config (id, function_url, service_key) values (true, 'https://proyek-uji.supabase.co/functions/v1/push-send', 'svc-uji')
+    on conflict (id) do update set function_url = excluded.function_url;
+    perform pg_temp.v3_as(adm);
+    perform admin_set_gateway_secret('finpay', 'sandbox', '{"extra": {"cron_secret": "cron-rahasia-v3-0123456789"}}');
+    perform pg_temp.v3_as(null);
+    n := (select coalesce(max(id), 0) from net._lokal_http_log);
+    r2 := pay_reconcile_dispatch('{"skip_daily": true}');
+    log := log || format('S54 %s (b) cron: jadwal=%s; tanpa secret → skipped=%s; dengan secret → POST %s header x-cron-secret=%s; secret di audit=%s',
+      case when (select count(*) from cron.job where jobname in ('antarkita_pay_reconcile_pending', 'antarkita_pay_reconcile_daily')) = 2
+                and (r->>'skipped')::boolean and (r2->>'ok')::boolean
+                and exists (select 1 from net._lokal_http_log where id > n and url = 'https://proyek-uji.supabase.co/functions/v1/pay-reconcile'
+                              and headers->>'x-cron-secret' = 'cron-rahasia-v3-0123456789')
+                and not exists (select 1 from audit_logs where created_at >= transaction_timestamp() and detail::text like '%cron-rahasia-v3%') then 'OK' else 'BUG' end,
+      (select string_agg(jobname || ' ' || schedule, ', ') from cron.job where jobname like 'antarkita_pay_reconcile%'), r->>'skipped', r2->>'url',
+      exists (select 1 from net._lokal_http_log where id > n and headers ? 'x-cron-secret'),
+      exists (select 1 from audit_logs where created_at >= transaction_timestamp() and detail::text like '%cron-rahasia-v3%')) || E'\n';
+  exception when others then log := log || 'S54 BUG cron: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S55 (d)+(e): struk — pajak dari ledger tax_output; intent yang digantikan tercatat 'superseded' di admin_payment_events(null) =====
+  begin
+    perform pg_temp.v3_as(cust);
+    r := my_receipt(o2.id);
+    perform pg_temp.v3_as(vw);
+    r2 := admin_payment_events(null);
+    select * into pay from payments where note = 'superseded' and provider = 'finpay' order by updated_at desc limit 1;
+    log := log || format('S55 %s (d) pajak struk=%s (= |Σ tax_output| %s); (e) intent digantikan: note=%s tercatat di admin_payment_events(null)=%s (%s baris)',
+      case when (select (x->>'amount')::bigint from jsonb_array_elements(r->'lines') x where x->>'key' = 'tax')
+                  = abs(coalesce((select sum(amount) from order_ledger where order_id = o2.id and source = 'orders' and entry::text = 'tax_output' and phase = 'completed'), 0))
+                and pay.id is not null and exists (select 1 from jsonb_array_elements(r2->'superseded') x where (x->>'payment_id')::uuid = pay.id and x->>'result' like 'superseded%')
+           then 'OK' else 'BUG' end,
+      (select x->>'amount' from jsonb_array_elements(r->'lines') x where x->>'key' = 'tax'),
+      abs(coalesce((select sum(amount) from order_ledger where order_id = o2.id and source = 'orders' and entry::text = 'tax_output' and phase = 'completed'), 0)),
+      pay.note, exists (select 1 from jsonb_array_elements(r2->'superseded') x where (x->>'payment_id')::uuid = pay.id), jsonb_array_length(r2->'superseded')) || E'\n';
+  exception when others then log := log || 'S55 BUG struk/superseded: ' || sqlerrm || E'\n'; end;
+
+
+  -- ===== S56 error INTERNAL saat ingest → RAISE, baris payment_events ikut batal; kirim ulang provider diproses =====
+  begin
+    o := pg_temp.v3_order('ride_motor', 'qris');
+    pay := pg_temp.v3_intent(o.id);
+    perform pg_temp.v3_as(null);
+    create or replace function public._uji_v3_gagal() returns trigger language plpgsql as $f$
+    begin
+      if new.id::text = current_setting('antarkita.uji_gagal', true) then raise exception 'UJI_GAGAL_INTERNAL: kegagalan buatan'; end if;
+      return new;
+    end $f$;
+    create trigger t_uji_v3_gagal before update on public.orders for each row execute function public._uji_v3_gagal();
+    perform set_config('antarkita.uji_gagal', o.id::text, true);
+    begin r := payment_event_ingest('finpay', 'ev-' || pay.id || '-err', pay.external_id, 'PAID', pay.amount, true, '{}'); v_err := 'error ditelan: ' || coalesce(r->>'note', '-');
+    exception when others then v_err := sqlerrm; end;
+    n := (select count(*) from payment_events where provider = 'finpay' and event_id = 'ev-' || pay.id || '-err');
+    perform set_config('antarkita.uji_gagal', '', true);
+    drop trigger t_uji_v3_gagal on public.orders;
+    drop function public._uji_v3_gagal();
+    r := payment_event_ingest('finpay', 'ev-' || pay.id || '-err', pay.external_id, 'PAID', pay.amount, true, '{}');   -- provider mengirim ulang event yang sama
+    log := log || format('S56 %s ingest error internal → %s; baris payment_events tersisa=%s (harus 0); kirim ulang event sama → applied=%s pay_status=%s',
+      case when v_err like 'UJI_GAGAL_INTERNAL%' and n = 0 and (r->>'applied')::boolean and r->>'pay_status' = 'PAID' then 'OK' else 'BUG' end,
+      left(v_err, 40), n, r->>'applied', r->>'pay_status') || E'\n';
+  exception when others then log := log || 'S56 BUG ingest error: ' || sqlerrm || E'\n'; end;
+
+  -- ===== S57 payout provider_env: diisi saat dibuat; payout_event_ingest p_env beda → env_mismatch =====
+  begin
+    perform pg_temp.v3_as(drv); w := request_withdrawal(20000, 'BCA', '111222333', 'Driver Uji');
+    if w.status = 'pending' then perform pg_temp.v3_as(fin); w := admin_review_withdrawal(w.id, true, 'uji v3 S57'); end if;
+    perform pg_temp.v3_as(null);
+    r := payout_event_ingest(w.id::text, 'PROCESSING', '{}', 'production');
+    r2 := payout_event_ingest(w.id::text, 'PROCESSING', '{}', 'sandbox');
+    lc := payout_event_ingest(w.id::text, 'SUCCESS', '{"reference": "FP-TRF-V3-S57"}');   -- tanpa p_env (kompatibel lama)
+    select * into w from withdrawal_requests where id = w.id;
+    log := log || format('S57 %s payout env: provider_env=%s; event production → %s; sandbox → %s; tanpa p_env → %s (%s)',
+      case when w.provider_env = 'sandbox' and r->>'note' = 'env_mismatch' and not (r->>'applied')::boolean and (r2->>'applied')::boolean
+                and (lc->>'applied')::boolean and w.payout_status = 'PAYOUT_SETTLED' then 'OK' else 'BUG' end,
+      w.provider_env, r->>'note', r2->>'payout_status', lc->>'payout_status', w.payout_status) || E'\n';
+  exception when others then log := log || 'S57 BUG payout env: ' || sqlerrm || E'\n'; end;
 
   -- ===== S24 Invarian: semua pesanan simulasi ini seimbang (ledger_check), sumber iklan seimbang, dompet = Σ mutasi =====
   begin

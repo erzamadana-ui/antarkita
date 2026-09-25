@@ -97,6 +97,7 @@ returns text[] language sql immutable set search_path = public as $$
     when 'viewer'     then array['view','orders_view','payments_view','ledger','report']
     else array[]::text[] end;
 $$;
+revoke all on function public.admin_role_perms(text) from public, anon;   -- R5: tidak untuk PUBLIC/anon
 grant execute on function public.admin_role_perms(text) to authenticated, service_role;
 
 create or replace function public.admin_has(p_perm text)
@@ -182,7 +183,7 @@ create index if not exists approval_requests_ref_idx on public.approval_requests
 comment on table public.approval_requests is 'Finpay v3 §4: maker-checker generik (refund, wallet_adjust, fee_change, payout_batch). checker ≠ maker (CHECK). Ditulis hanya lewat RPC.';
 alter table public.approval_requests enable row level security;
 drop policy if exists approval_requests_admin on public.approval_requests;
-create policy approval_requests_admin on public.approval_requests for select to authenticated using (is_admin());
+create policy approval_requests_admin on public.approval_requests for select to authenticated using (admin_has('payments_view'));   -- R5
 revoke all on public.approval_requests from public, anon, authenticated;
 grant select on public.approval_requests to authenticated;
 grant all on public.approval_requests to service_role;
@@ -216,6 +217,12 @@ begin
     if to_regprocedure('public.refund_approval_apply(uuid,uuid)') is null then raise exception 'Modul refund (0108) belum terpasang'; end if;
     execute 'select public.refund_approval_apply($1, $2)' into r using a.ref_id, a.id;
     return r;
+  elsif a.kind = 'payout_batch' then
+    -- (c) pencairan Finpay ≥ ambang: persetujuan checker membuka payout_execute_allowed(); eksekusi tetap oleh edge pay-disburse
+    perform log_activity('payout.approved', 'withdrawal_requests', a.ref_id::text,
+      'Pencairan Rp' || coalesce(a.amount, 0) || ' disetujui untuk dieksekusi (maker ' || a.maker || ', checker ' || auth.uid() || ')',
+      jsonb_build_object('approval_id', a.id, 'withdrawal_id', a.ref_id));
+    return jsonb_build_object('withdrawal_id', a.ref_id, 'execute_allowed', true);
   else
     raise exception 'Jenis approval % belum bisa dieksekusi otomatis — tandai manual', a.kind;
   end if;
@@ -255,6 +262,15 @@ begin
   if a.maker = auth.uid() then raise exception 'DUAL_APPROVAL: pembuat (maker) tidak boleh menyetujui permintaannya sendiri — perlu admin lain (checker)'; end if;
   if a.kind = 'refund' and not admin_has('refund') then raise exception 'ADMIN_FORBIDDEN: persetujuan refund butuh izin refund'; end if;
   if a.kind = 'fee_change' and not admin_has('fee') then raise exception 'ADMIN_FORBIDDEN: persetujuan tarif butuh izin fee'; end if;
+  if a.kind = 'wallet_adjust' and not admin_has('wallet_adjust') then raise exception 'ADMIN_FORBIDDEN: persetujuan penyesuaian saldo butuh izin wallet_adjust'; end if;
+  if a.kind = 'payout_batch' and not admin_has('payout') then raise exception 'ADMIN_FORBIDDEN: persetujuan pencairan butuh izin payout'; end if;
+  -- S3: checker tidak boleh menyetujui kredit/pencairan untuk dirinya sendiri
+  if p_approve and a.kind = 'wallet_adjust' and (a.payload->>'user_id')::uuid = auth.uid() then
+    raise exception 'DUAL_APPROVAL: penyesuaian saldo akun sendiri tidak boleh disetujui sendiri';
+  end if;
+  if p_approve and a.kind = 'payout_batch' and exists (select 1 from withdrawal_requests w where w.id = a.ref_id and w.user_id = auth.uid()) then
+    raise exception 'DUAL_APPROVAL: pencairan milik sendiri tidak boleh disetujui sendiri';
+  end if;
   update approval_requests set checker = auth.uid(), decided_at = now(), note = coalesce(p_note, note),
     status = case when p_approve then 'approved' else 'rejected' end where id = a.id returning * into a;
   if p_approve then
@@ -274,23 +290,29 @@ grant execute on function public.admin_approval_decide(uuid, boolean, text) to a
 -- admin_adjust_wallet v3 (tanda tangan tetap; hasil = saldo; saat butuh persetujuan saldo TIDAK berubah)
 create or replace function public.admin_adjust_wallet_v3(p_user uuid, p_amount bigint, p_note text)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare v_min bigint := setting_num('wallet_adjust_dual_approval_min', 100000)::bigint; a approval_requests; v_bal bigint;
+declare v_min bigint := setting_num('wallet_adjust_dual_approval_min', 100000)::bigint; a approval_requests; v_bal bigint; v_cum bigint;
+  v_ref text := 'ADJ-' || auth.uid()::text || '-' || to_char(clock_timestamp(), 'YYYYMMDDHH24MISSUS');
 begin
   perform admin_require('wallet_adjust');
   perform admin_require_unlock();
   if p_user is null or not exists (select 1 from profiles where id = p_user) then raise exception 'Pengguna tidak ditemukan'; end if;
+  if p_user = auth.uid() then raise exception 'SELF_ADJUST: admin tidak boleh menyesuaikan saldo akunnya sendiri'; end if;   -- S3
   if p_amount is null or p_amount = 0 then raise exception 'Nominal penyesuaian tidak boleh 0'; end if;
   if length(btrim(coalesce(p_note, ''))) < 3 then raise exception 'Tulis alasan penyesuaian (min. 3 huruf)'; end if;
-  if abs(p_amount) >= v_min then
+  -- S3: ambang KUMULATIF 24 jam per (maker, target) — memecah nominal tidak melewati dual approval
+  perform pg_advisory_xact_lock(hashtext('wallet_adjust:' || auth.uid()::text || ':' || p_user::text));
+  select coalesce(sum(abs(amount)), 0) into v_cum from wallet_transactions
+   where user_id = p_user and type = 'adjustment' and ref like 'ADJ-' || auth.uid()::text || '-%' and created_at > now() - interval '24 hours';
+  if v_cum + abs(p_amount) >= v_min then
     insert into approval_requests (kind, ref_id, payload, amount, maker, note)
     values ('wallet_adjust', p_user, jsonb_build_object('user_id', p_user, 'amount', p_amount, 'note', p_note), p_amount, auth.uid(), p_note)
     returning * into a;
     perform log_activity('wallet.adjust_requested', 'approval_requests', a.id::text,
       'Penyesuaian saldo Rp' || p_amount || ' menunggu persetujuan admin kedua (≥ Rp' || v_min || ')', jsonb_build_object('user_id', p_user, 'amount', p_amount, 'note', p_note));
-    return jsonb_build_object('status', 'pending_approval', 'approval_id', a.id, 'threshold', v_min,
+    return jsonb_build_object('status', 'pending_approval', 'approval_id', a.id, 'threshold', v_min, 'cumulative_24h', v_cum + abs(p_amount),
       'balance', coalesce((select balance from wallets where user_id = p_user), 0));
   end if;
-  v_bal := wallet_apply(p_user, 'adjustment', p_amount, null, coalesce(p_note, 'Penyesuaian admin'));
+  v_bal := wallet_apply(p_user, 'adjustment', p_amount, null, coalesce(p_note, 'Penyesuaian admin'), v_ref);
   perform log_activity('wallet.adjusted', 'wallets', p_user::text, 'Penyesuaian saldo Rp' || p_amount || ': ' || p_note,
     jsonb_build_object('amount', p_amount, 'balance_after', v_bal));
   return jsonb_build_object('status', 'executed', 'balance', v_bal, 'threshold', v_min);
@@ -298,13 +320,14 @@ end $$;
 revoke all on function public.admin_adjust_wallet_v3(uuid, bigint, text) from public, anon;
 grant execute on function public.admin_adjust_wallet_v3(uuid, bigint, text) to authenticated;
 comment on function public.admin_adjust_wallet_v3(uuid, bigint, text) is
-  'Finpay v3 §4: penyesuaian saldo — |amount| ≥ wallet_adjust_dual_approval_min → approval_requests (status pending_approval, saldo belum berubah); di bawahnya langsung. Izin wallet_adjust + PIN.';
+  'Finpay v3 §4: penyesuaian saldo — Σ|amount| 24 jam oleh maker yang sama ke target yang sama (termasuk yang ini) ≥ wallet_adjust_dual_approval_min → approval_requests (status pending_approval, saldo belum berubah); di bawahnya langsung (ref ADJ-<maker>-…). Akun sendiri ditolak. Izin wallet_adjust + PIN.';
 
 create or replace function public.admin_adjust_wallet(p_user uuid, p_amount bigint, p_note text)
 returns bigint language plpgsql security definer set search_path = public as $$
 declare r jsonb;
 begin
   if not is_admin() then raise exception 'Hanya admin'; end if;
+  perform admin_require('wallet_adjust');   -- 0107 RBAC (T4)
   r := admin_adjust_wallet_v3(p_user, p_amount, p_note);   -- 0107: dual approval di atas ambang
   return (r->>'balance')::bigint;
 end $$;
@@ -469,6 +492,7 @@ grant execute on function public.admin_upsert_promo(jsonb) to authenticated;
 create or replace function public.admin_set_promo(p_id text, p_patch jsonb)
 returns promos language plpgsql security definer set search_path = public as $$
 begin
+  perform admin_require('promo');   -- T4
   if not exists (select 1 from promos where code = upper(btrim(coalesce(p_id, '')))) then raise exception 'Promo % tidak ditemukan', coalesce(p_id, '-'); end if;
   if p_patch is null or jsonb_typeof(p_patch) <> 'object' or p_patch = '{}'::jsonb then raise exception 'Patch kosong'; end if;
   if p_patch ? 'code' and upper(btrim(p_patch->>'code')) <> upper(btrim(p_id)) then raise exception 'Kode promo tidak bisa diganti'; end if;

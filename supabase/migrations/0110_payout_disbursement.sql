@@ -24,8 +24,9 @@ begin
   foreach s in array array[
     'public.admin_mark_withdrawal_settled(uuid,text)', 'public.driver_order_breakdown(uuid)', 'public.merchant_order_breakdown(uuid)',
     'public._driver_order_breakdown_v2(uuid)', 'public._merchant_order_breakdown_v2(uuid)', 'public.withdrawal_payout_defaults()',
-    'public.withdrawal_link_orders()', 'public.withdrawal_status_sync()', 'public.payout_event_ingest(text,text,jsonb)', 'public.my_withdrawals()',
-    'public.payout_status_map(text)', 'public.order_payout_extras(orders,text)'] loop
+    'public.withdrawal_link_orders()', 'public.withdrawal_status_sync()', 'public.payout_event_ingest(text,text,jsonb,text)', 'public.my_withdrawals()',
+    'public.payout_status_map(text)', 'public.order_payout_extras(orders,text)',
+    'public.payout_execute_allowed(uuid)', 'public.admin_payout_request_approval(uuid,text)'] loop
     perform _mig_backup('0110', s);
   end loop;
 end $$;
@@ -39,6 +40,14 @@ alter table public.withdrawal_requests add column if not exists fee bigint not n
 alter table public.withdrawal_requests add column if not exists payout_status text;
 alter table public.withdrawal_requests add column if not exists failed_reason text;
 alter table public.withdrawal_requests add column if not exists payout_updated_at timestamptz;
+alter table public.withdrawal_requests add column if not exists provider_env text;   -- lingkungan provider saat dibuat/diklaim (opsional)
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'withdrawal_requests_provider_env_check') then
+    alter table public.withdrawal_requests add constraint withdrawal_requests_provider_env_check check (provider_env is null or provider_env in ('sandbox', 'production'));
+  end if;
+end $$;
+comment on column public.withdrawal_requests.provider_env is 'Lingkungan provider (sandbox|production) saat penarikan dibuat / diklaim pay-disburse. payout_event_ingest(p_env) menolak event lingkungan lain (env_mismatch). NULL = baris lama (tidak dicek).';
 update public.withdrawal_requests set provider = 'manual' where provider is null;
 update public.withdrawal_requests set payout_status = case when settled_at is not null then 'PAYOUT_SETTLED' when status = 'rejected' then 'PAYOUT_FAILED' else 'PAYOUT_PENDING' end,
   failed_reason = case when status = 'rejected' and settled_at is null then coalesce(review_note, 'ditolak admin') end
@@ -87,6 +96,7 @@ begin
   new.provider := coalesce(new.provider, case when lower(coalesce((select value #>> '{}' from app_settings where key = 'disbursement_provider'), 'manual')) = 'finpay'
                                               then 'finpay' else 'manual' end);
   new.payout_status := coalesce(new.payout_status, 'PAYOUT_PENDING');
+  new.provider_env := coalesce(new.provider_env, payment_provider_env());
   return new;
 end $$;
 drop trigger if exists t_withdrawal_payout_defaults on public.withdrawal_requests;
@@ -110,10 +120,68 @@ end $$;
 drop trigger if exists t_withdrawal_link_orders on public.withdrawal_requests;
 create trigger t_withdrawal_link_orders after insert on public.withdrawal_requests for each row execute function withdrawal_link_orders();
 
+-- (c) Pencairan via Finpay ≥ wallet_adjust_dual_approval_min butuh approval_requests 'payout_batch' (maker ≠ checker)
+-- sebelum edge pay-disburse boleh mengeksekusi. Edge memanggil payout_execute_allowed(id) sebelum klaim; trigger
+-- withdrawal_status_sync juga menolak klaim PAYOUT_PENDING → PAYOUT_PROCESSING provider finpay tanpa izin.
+create or replace function public.payout_execute_allowed(p_withdrawal uuid)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare w withdrawal_requests; v_min bigint := setting_num('wallet_adjust_dual_approval_min', 100000)::bigint; ap approval_requests;
+begin
+  select * into w from withdrawal_requests where id = p_withdrawal;
+  if not found then return jsonb_build_object('allowed', false, 'reason', 'not_found'); end if;
+  if w.status <> 'approved' then return jsonb_build_object('allowed', false, 'reason', 'not_approved:' || w.status); end if;
+  if w.settled_at is not null or w.payout_status <> 'PAYOUT_PENDING' then
+    return jsonb_build_object('allowed', false, 'reason', 'already_processed:' || w.payout_status);
+  end if;
+  if w.amount < v_min then return jsonb_build_object('allowed', true, 'needs_approval', false, 'threshold', v_min); end if;
+  select * into ap from approval_requests where kind = 'payout_batch' and ref_id = w.id and status = 'approved' and checker is not null and checker <> maker
+   order by decided_at desc limit 1;
+  if ap.id is not null then return jsonb_build_object('allowed', true, 'needs_approval', true, 'approval_id', ap.id, 'threshold', v_min); end if;
+  select * into ap from approval_requests where kind = 'payout_batch' and ref_id = w.id and status = 'pending' and expires_at > now() order by created_at desc limit 1;
+  return jsonb_build_object('allowed', false, 'needs_approval', true, 'reason', 'approval_required', 'pending_approval_id', ap.id, 'threshold', v_min);
+end $$;
+revoke all on function public.payout_execute_allowed(uuid) from public, anon, authenticated;
+grant execute on function public.payout_execute_allowed(uuid) to service_role;
+comment on function public.payout_execute_allowed(uuid) is
+  'Finpay v3 §8 (c) (service_role, edge pay-disburse): {allowed, needs_approval, reason, approval_id} — pencairan ≥ wallet_adjust_dual_approval_min wajib approval_requests payout_batch disetujui admin kedua sebelum transfer.';
+
+create or replace function public.admin_payout_request_approval(p_withdrawal uuid, p_note text default null)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare w withdrawal_requests; ap approval_requests;
+begin
+  perform admin_require('payout');
+  perform admin_require_unlock();
+  select * into w from withdrawal_requests where id = p_withdrawal for update;
+  if not found then raise exception 'Permintaan penarikan tidak ditemukan'; end if;
+  if w.user_id = auth.uid() then raise exception 'DUAL_APPROVAL: pencairan milik sendiri tidak boleh diajukan sendiri'; end if;
+  if w.status <> 'approved' or w.payout_status <> 'PAYOUT_PENDING' then raise exception 'Penarikan tidak menunggu pencairan (status %, payout %)', w.status, w.payout_status; end if;
+  select * into ap from approval_requests where kind = 'payout_batch' and ref_id = w.id and status in ('pending', 'approved') and expires_at > now() order by created_at desc limit 1;
+  if ap.id is null then
+    insert into approval_requests (kind, ref_id, payload, amount, maker, note)
+    values ('payout_batch', w.id, jsonb_build_object('withdrawal_id', w.id, 'user_id', w.user_id, 'amount', w.amount, 'provider', w.provider), w.amount, auth.uid(),
+            coalesce(nullif(btrim(p_note), ''), 'pencairan ≥ ambang butuh admin kedua'))
+    returning * into ap;
+    perform log_activity('payout.approval_requested', 'approval_requests', ap.id::text, 'Pencairan Rp' || w.amount || ' menunggu persetujuan admin kedua',
+      jsonb_build_object('withdrawal_id', w.id));
+  end if;
+  return to_jsonb(ap);
+end $$;
+revoke all on function public.admin_payout_request_approval(uuid, text) from public, anon;
+grant execute on function public.admin_payout_request_approval(uuid, text) to authenticated;
+
 -- ditolak admin (admin_review_withdrawal) → PAYOUT_FAILED, pesanan kembali ORDER_COMPLETED
 create or replace function public.withdrawal_status_sync()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
+  -- (c) klaim eksekusi Finpay (PENDING → PROCESSING) tanpa izin payout_execute_allowed ditolak
+  if new.provider = 'finpay' and old.payout_status = 'PAYOUT_PENDING' and new.payout_status = 'PAYOUT_PROCESSING'
+     and not coalesce((payout_execute_allowed(new.id)->>'allowed')::boolean, false) then
+    raise exception 'PAYOUT_APPROVAL_REQUIRED: pencairan Rp% ≥ ambang butuh persetujuan admin kedua (approval payout_batch) sebelum dieksekusi', new.amount;
+  end if;
+  -- klaim eksekusi: catat lingkungan provider saat itu (kecuali pengklaim mengisinya sendiri)
+  if old.payout_status = 'PAYOUT_PENDING' and new.payout_status = 'PAYOUT_PROCESSING' and new.provider_env is not distinct from old.provider_env then
+    new.provider_env := payment_provider_env();
+  end if;
   if new.status = 'rejected' and old.status is distinct from 'rejected' and new.payout_status <> 'PAYOUT_SETTLED' then
     new.payout_status := 'PAYOUT_FAILED';
     new.failed_reason := coalesce(new.failed_reason, new.review_note, 'ditolak admin');
@@ -143,6 +211,10 @@ begin
   if b.status <> 'approved' then raise exception 'Hanya penarikan berstatus approved yang bisa ditandai settled (status %)', b.status; end if;
   if b.settled_at is not null then raise exception 'Penarikan sudah settled % (ref %)', b.settled_at, b.provider_ref; end if;
   if b.payout_status = 'PAYOUT_FAILED' then raise exception 'Pencairan sudah gagal (%) — saldo sudah dikembalikan', b.failed_reason; end if;
+  -- S6: pencairan yang sedang/sudah dieksekusi provider tidak boleh ditandai manual (risiko transfer ganda)
+  if b.payout_status = 'PAYOUT_PROCESSING' or (b.provider = 'finpay' and b.provider_ref is not null) then
+    raise exception 'PAYOUT_IN_PROVIDER: pencairan sedang diproses provider % (ref %) — tunggu callback, jangan tandai manual', b.provider, coalesce(b.provider_ref, '-');
+  end if;
   if exists (select 1 from withdrawal_requests x where x.provider_ref = v_ref and x.id <> b.id) then raise exception 'Referensi % sudah dipakai penarikan lain', v_ref; end if;
   update withdrawal_requests set settled_at = now(), provider_ref = v_ref, settled_by = auth.uid(), payout_status = 'PAYOUT_SETTLED'   -- 0110
    where id = b.id returning * into w;
@@ -173,14 +245,19 @@ returns text language sql immutable set search_path = public as $$
     else null end;
 $$;
 
-create or replace function public.payout_event_ingest(p_external_id text, p_status text, p_raw jsonb default null)
+drop function if exists public.payout_event_ingest(text, text, jsonb);   -- diganti versi + p_env
+create or replace function public.payout_event_ingest(p_external_id text, p_status text, p_raw jsonb default null, p_env text default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare w withdrawal_requests; b withdrawal_requests; v_new text := payout_status_map(p_status); v_fee bigint; v_reason text; v_ref text;
+  v_env text := nullif(lower(btrim(coalesce(p_env, ''))), '');
 begin
   select * into b from withdrawal_requests
    where provider_ref = p_external_id or inquiry_ref = p_external_id or id::text = p_external_id
    order by (id::text = p_external_id) desc limit 1 for update;
   if not found then return jsonb_build_object('applied', false, 'note', 'withdrawal_not_found'); end if;
+  if v_env is not null and b.provider_env is not null and v_env <> b.provider_env then   -- event sandbox ≠ penarikan production (dan sebaliknya)
+    return jsonb_build_object('applied', false, 'payout_status', b.payout_status, 'note', 'env_mismatch', 'provider_env', b.provider_env);
+  end if;
   if v_new is null then return jsonb_build_object('applied', false, 'payout_status', b.payout_status, 'note', 'unknown_status'); end if;
   if b.payout_status in ('PAYOUT_SETTLED', 'PAYOUT_FAILED') then   -- terminal: tidak mundur
     return jsonb_build_object('applied', false, 'payout_status', b.payout_status, 'note', case when b.payout_status = v_new then 'no_change' else 'ignored_terminal' end);
@@ -224,10 +301,10 @@ begin
     jsonb_build_object('before', b.payout_status, 'after', w.payout_status, 'raw', p_raw));
   return jsonb_build_object('applied', true, 'payout_status', w.payout_status, 'withdrawal_id', w.id, 'note', lower(w.payout_status));
 end $$;
-revoke all on function public.payout_event_ingest(text, text, jsonb) from public, anon, authenticated;
-grant execute on function public.payout_event_ingest(text, text, jsonb) to service_role;
-comment on function public.payout_event_ingest(text, text, jsonb) is
-  'Finpay v3 §8 (service_role, edge pay-disburse): status transfer dari provider. PROCESSING / SETTLED (settled_at, pesanan PAYOUT_SETTLED, biaya → ledger payout_fee) / FAILED (saldo dikembalikan sekali, pesanan ORDER_COMPLETED, notifikasi). Terminal tidak mundur.';
+revoke all on function public.payout_event_ingest(text, text, jsonb, text) from public, anon, authenticated;
+grant execute on function public.payout_event_ingest(text, text, jsonb, text) to service_role;
+comment on function public.payout_event_ingest(text, text, jsonb, text) is
+  'Finpay v3 §8 (service_role, edge pay-disburse): status transfer dari provider. PROCESSING / SETTLED (settled_at, pesanan PAYOUT_SETTLED, biaya → ledger payout_fee) / FAILED (saldo dikembalikan sekali, pesanan ORDER_COMPLETED, notifikasi). Terminal tidak mundur. p_env (opsional) ≠ withdrawal_requests.provider_env → env_mismatch (tidak diterapkan).';
 
 create or replace function public.my_withdrawals()
 returns jsonb language sql stable security definer set search_path = public as $$
@@ -306,7 +383,7 @@ begin
   if exists (select 1 from withdrawal_requests where payout_status is null or provider is null) then raise exception '0110 batal: withdrawal_requests lama belum terisi'; end if;
   if exists (select 1 from withdrawal_requests where settled_at is not null and payout_status <> 'PAYOUT_SETTLED') then raise exception '0110 batal: settled lama ≠ PAYOUT_SETTLED'; end if;
   if position('PAYOUT_SETTLED' in pg_get_functiondef('public.admin_mark_withdrawal_settled(uuid,text)'::regprocedure)) = 0 then raise exception '0110 batal: admin_mark_withdrawal_settled belum menulis payout_status'; end if;
-  if has_function_privilege('authenticated', 'public.payout_event_ingest(text,text,jsonb)', 'EXECUTE')
+  if has_function_privilege('authenticated', 'public.payout_event_ingest(text,text,jsonb,text)', 'EXECUTE')
      or has_function_privilege('authenticated', 'public._driver_order_breakdown_v2(uuid)', 'EXECUTE')
      or has_function_privilege('anon', 'public.my_withdrawals()', 'EXECUTE') or has_table_privilege('authenticated', 'public.withdrawal_orders', 'INSERT') then
     raise exception '0110 batal: RPC/tabel payout terbuka';

@@ -191,9 +191,12 @@ begin
     'public.admin_payment_events(text)', 'public.admin_has(text)', 'public.admin_require(text)',
     'public.payment_status_map(text,text,jsonb)', 'public.payment_refund_auto(uuid,text)',
     'public.payment_hook_after_ingest(uuid,text,text,bigint,jsonb)', 'public.payment_intent_create(uuid,text,uuid,bigint,text,text)',
-    'public.payment_event_ingest(text,text,text,text,bigint,boolean,jsonb)', 'public.payment_mark_reconciled(uuid,uuid)',
+    'public.payment_event_ingest(text,text,text,text,bigint,boolean,jsonb,text)', 'public.payment_mark_reconciled(uuid,uuid)',
     'public.my_payment_status(uuid)', 'public.my_payment_history(integer)', 'public.my_receipt(uuid)',
-    'public.receipt_refundable_note(orders)', 'public.append_only_bypass()'] loop
+    'public.receipt_refundable_note(orders)', 'public.append_only_bypass()',
+    -- perbaikan tinjauan keamanan (T2/T3/R3/R4/(a)/(e))
+    'public.app_setting_specs()', 'public.setting_json_validate(text,jsonb)', 'public.rate_take_user(uuid,text,integer)',
+    'public.payment_supersede(uuid,text)', 'public.payment_channel_provider_ok(text,text)'] loop
     perform _mig_backup('0105', s);
   end loop;
 end $$;
@@ -258,6 +261,8 @@ language sql immutable set search_path = public as $$
     ('rate_limit_create_order_per_hour',   'int', 1, 100000, null, '30', 'per jam', 'ASUMSI', 'Batas pembuatan pesanan per pelanggan per jam (rate_take)', 'payment_config'),
     ('rate_limit_payment_prepare_per_hour','int', 1, 100000, null, '30', 'per jam', 'ASUMSI', 'Batas order_payment_prepare per pelanggan per jam', 'payment_config'),
     ('rate_limit_withdrawal_per_hour',     'int', 1, 100000, null, '30', 'per jam', 'ASUMSI', 'Batas permintaan penarikan saldo per mitra per jam', 'payout'),
+    ('rate_limit_topup_intent_per_hour',   'int', 1, 100000, null, '10', 'per jam', 'ASUMSI', 'Batas intent top up (payment_intent_create) per pengguna per jam', 'payment_config'),
+    ('rate_limit_dispute_per_hour',        'int', 1, 100000, null, '5',  'per jam', 'ASUMSI', 'Batas pembukaan sengketa (dispute_open) per pengguna per jam', 'dispute'),
     ('auto_payout_enabled',            'bool', null, null, null, 'true', '', 'ASUMSI', 'Pencairan otomatis rekening terverifikasi (0019)', 'payout'),
     ('auto_payout_max',                'int',  0, 100000000, null, '500000', 'Rp', 'ASUMSI', 'Batas nominal satu pencairan otomatis', 'payout'),
     ('auto_payout_daily_max',          'int',  0, 1000000000, null, '1000000', 'Rp', 'ASUMSI', 'Batas total pencairan otomatis per mitra per hari', 'payout')
@@ -374,7 +379,7 @@ begin
   if p_patch ? 'client_key' then a.client_key := nullif(btrim(p_patch->>'client_key'), ''); end if;
   if coalesce(btrim(p_patch->>'callback_token'), '') <> '' then a.callback_token := btrim(p_patch->>'callback_token');
   elsif p_patch ? 'clear_callback_token' then a.callback_token := null; end if;
-  if p_patch ? 'extra' then a.extra := p_patch->'extra'; end if;
+  if p_patch ? 'extra' then a.extra := coalesce(a.extra, '{}'::jsonb) || (p_patch->'extra'); end if;  -- gabung, bukan ganti (cron_secret dll.)
   if v_env = 'sandbox' and v_prov = 'midtrans' and a.server_key is not null and a.server_key not like 'SB-%' then
     raise exception 'Server key Midtrans sandbox harus berawalan SB-';
   end if;
@@ -519,6 +524,11 @@ insert into public.payment_channel_fees (provider, channel, effective_from, labe
   ('finpay', 'paylater_indodana', '2026-01-01', 'Indodana',           2.3, 0,    false, 11, 2, 'finpay.id/biaya-transaksi (9 Jul 2026)', '[ASUMSI]', '[ASUMSI: batas atas rentang publik paylater] 2,3 %; saluran belum ada di aplikasi', null, null),
   ('finpay', 'instant_payment',   '2026-01-01', 'Instant payment',    0,   4000, false, 11, 1, 'finpay.id/biaya-transaksi (9 Jul 2026)', '[FAKTA-PUBLIK]', 'Instant payment Rp4.000/transaksi; saluran belum ada di aplikasi', null, null)
 on conflict (provider, channel, effective_from) do nothing;
+-- (a) GoPay TIDAK didukung adapter Finpay (supabase/functions/_shared/providers/finpay.ts: gopay = null) →
+-- baris dinonaktifkan (sekali; admin boleh menyalakan lagi bila adapter sudah mendukung). payment_provider_public
+-- menyembunyikan baris nonaktif, payment_intent_create/order_payment_prepare menolaknya (payment_channel_provider_ok).
+update public.payment_channel_fees set active = false, note = coalesce(note || ' · ', '') || '[0105] dinonaktifkan: adapter Finpay belum mendukung GoPay'
+ where provider = 'finpay' and channel = 'gopay' and coalesce(note, '') not like '%adapter Finpay belum mendukung GoPay%';
 
 -- pg_fee_calc v3: (kanal, nominal, provider default aktif, waktu default now()). Satu fungsi saja:
 -- pemanggil 2 argumen lama (create_order, pg_fee_estimate, uji v2) tetap jalan lewat default.
@@ -759,11 +769,23 @@ returns jsonb language sql stable security definer set search_path = public as $
         'pass_to_customer', c.pass_to_customer and c.pass_to_customer_legal_ok and c.channel <> 'qris',
         'enabled', c.active and c.channel = any (payment_gateway_channel_keys()) and payment_channel_order_enabled(c.channel),
         'supported_by_app', c.channel = any (payment_channel_keys()))
-      order by (c.channel = any (payment_gateway_channel_keys())) desc, c.channel) from cur c), '[]'::jsonb));
+      order by (c.channel = any (payment_gateway_channel_keys())) desc, c.channel) from cur c where c.active), '[]'::jsonb));   -- (a) kanal nonaktif/tidak didukung provider disembunyikan
 $$;
 grant execute on function public.payment_provider_public() to anon, authenticated, service_role;
 comment on function public.payment_provider_public() is
-  'Finpay v3 §1 (anon): {provider, env, simulation, channels:[{key,label,fee_label,fee_pct,fee_fixed,pass_to_customer,enabled}]} — kanal = baris payment_channel_fees provider aktif yang berlaku hari ini.';
+  'Finpay v3 §1 (anon): {provider, env, simulation, channels:[{key,label,fee_label,fee_pct,fee_fixed,pass_to_customer,enabled}]} — kanal = baris payment_channel_fees AKTIF provider aktif yang berlaku hari ini (kanal yang tidak didukung adapter provider, mis. GoPay di Finpay, tidak tampil).';
+
+-- (a) kanal gateway didukung provider = ada baris payment_channel_fees aktif (berlaku hari ini) untuk provider itu
+create or replace function public.payment_channel_provider_ok(p_channel text, p_provider text)
+returns boolean language sql stable security definer set search_path = public as $$
+  select case when lower(coalesce(p_provider, '')) = 'simulated' then true
+    else coalesce((select f.active from payment_channel_fees f
+                    where f.provider = lower(coalesce(p_provider, '')) and f.channel = lower(trim(coalesce(p_channel, '')))
+                      and f.effective_from <= (now() at time zone 'Asia/Jakarta')::date
+                    order by f.effective_from desc limit 1), false) end;
+$$;
+revoke all on function public.payment_channel_provider_ok(text, text) from public, anon;
+grant execute on function public.payment_channel_provider_ok(text, text) to authenticated, service_role;
 
 -- ---------------------------------------------------------------------
 -- 4. payments kanonik (§2) + orders.settlement_status / payment_support_ref
@@ -782,6 +804,15 @@ alter table public.payments add column if not exists reconciled_at timestamptz;
 alter table public.payments add column if not exists support_ref text;
 alter table public.payments add column if not exists note text;
 alter table public.payments add column if not exists reconcile_run_id uuid;
+alter table public.payments add column if not exists env text;   -- T1/R: lingkungan provider saat intent dibuat (sandbox|production)
+update public.payments set env = payment_provider_env() where env is null;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'payments_env_check') then
+    alter table public.payments add constraint payments_env_check check (env is null or env in ('sandbox', 'production'));
+  end if;
+end $$;
+comment on column public.payments.env is 'Lingkungan provider (sandbox|production) saat intent dibuat (payment_provider_env). payment_event_ingest(p_env) menolak event dari lingkungan lain.';
 
 alter table public.orders add column if not exists settlement_status text;
 alter table public.orders add column if not exists payment_support_ref text;
@@ -878,11 +909,12 @@ begin
       new.status := payment_status_to_legacy(new.pay_status);
     end if;
     new.provider_ref := coalesce(new.provider_ref, new.external_id);
+    new.env := coalesce(new.env, payment_provider_env());
     if new.support_ref is null then new.support_ref := gen_support_ref(); end if;
     if new.purpose = 'order' and new.order_id is not null and new.pay_status = 'PENDING' then
-      update payments set pay_status = 'FAILED',
-             raw = coalesce(raw, '{}'::jsonb) || jsonb_build_object('superseded', true, 'superseded_by', new.external_id, 'superseded_at', now())
-       where order_id = new.order_id and purpose = 'order' and pay_status = 'PENDING';
+      -- (e) intent lama digantikan: FAILED 'superseded' + dicatat di payment_events (dibatalkan manual di dasbor provider)
+      perform payment_supersede(x.id, new.external_id)
+         from payments x where x.order_id = new.order_id and x.purpose = 'order' and x.pay_status = 'PENDING';
     end if;
   else
     if new.pay_status is distinct from old.pay_status then
@@ -942,7 +974,7 @@ comment on table public.payment_events is
   'Finpay v3 §2: inbox webhook/cek status provider. unique(provider, event_id) = idempoten; append-only (UPDATE hanya processed_at/result, DELETE/TRUNCATE ditolak). Ditulis hanya lewat payment_event_ingest.';
 alter table public.payment_events enable row level security;
 drop policy if exists payment_events_admin_read on public.payment_events;
-create policy payment_events_admin_read on public.payment_events for select to authenticated using (is_admin());
+create policy payment_events_admin_read on public.payment_events for select to authenticated using (admin_has('payments_view'));   -- R5
 revoke all on public.payment_events from public, anon, authenticated;
 grant select on public.payment_events to authenticated;
 grant select, insert, update on public.payment_events to service_role;
@@ -970,12 +1002,40 @@ drop trigger if exists t_payment_events_no_truncate on public.payment_events;
 create trigger t_payment_events_no_truncate before truncate on public.payment_events
   for each statement execute function payment_events_append_only();
 
+-- (e) intent PENDING yang digantikan (ganti saluran/nominal/provider): FAILED + note 'superseded' + baris
+-- payment_events 'superseded' (tampil di admin_payment_events(null)) supaya tagihan di provider bisa
+-- dibatalkan manual (Midtrans tidak dibatalkan otomatis dari sini).
+create or replace function public.payment_supersede(p_payment uuid, p_by text)
+returns void language plpgsql security definer set search_path = public as $$
+declare p payments;
+begin
+  update payments set pay_status = 'FAILED', note = 'superseded',
+         raw = coalesce(raw, '{}'::jsonb) || jsonb_build_object('superseded', true, 'superseded_by', p_by, 'superseded_at', now())
+   where id = p_payment and pay_status = 'PENDING'
+  returning * into p;
+  if not found then return; end if;
+  insert into payment_events (provider, event_id, external_id, payment_id, event_type, provider_status, amount, signature_ok, raw, processed_at, result)
+  values (p.provider, 'superseded-' || p.id, p.external_id, p.id, 'superseded', 'SUPERSEDED', p.amount, false,
+          jsonb_build_object('superseded_by', p_by, 'provider', p.provider, 'support_ref', p.support_ref),
+          now(), case when p.provider = 'midtrans' then 'superseded: batalkan manual tagihan ini di dasbor Midtrans (' || p.external_id || ')'
+                      else 'superseded: tagihan lama tidak dipakai lagi (' || p.provider || ')' end)
+  on conflict (provider, event_id) do nothing;
+end $$;
+revoke all on function public.payment_supersede(uuid, text) from public, anon, authenticated;
+
 create or replace function public.admin_payment_events(p_external_id text)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
 declare v_q text := nullif(btrim(coalesce(p_external_id, '')), '');
 begin
   perform admin_require('payments_view');
-  if v_q is null then raise exception 'external_id / support_ref wajib diisi'; end if;
+  if v_q is null then
+    -- (e) tanpa kueri: daftar intent yang digantikan (perlu dibatalkan manual di dasbor provider)
+    return jsonb_build_object('query', null, 'superseded', coalesce((select jsonb_agg(to_jsonb(e) || jsonb_build_object(
+        'support_ref', p.support_ref, 'order_id', p.order_id, 'pay_status', p.pay_status) order by e.received_at desc)
+      from (select * from payment_events where event_type = 'superseded' order by received_at desc limit 200) e
+      left join payments p on p.id = e.payment_id), '[]'::jsonb),
+      'events', '[]'::jsonb);
+  end if;
   return jsonb_build_object('query', v_q,
     'payment', (select to_jsonb(p) - 'raw' from payments p where p.external_id = v_q or p.provider_ref = v_q or p.support_ref = upper(v_q) limit 1),
     'events', coalesce((select jsonb_agg(to_jsonb(e) order by e.received_at, e.id) from payment_events e
@@ -1053,10 +1113,36 @@ returns payments
 language plpgsql security definer set search_path = public as $$
 declare
   p payments%rowtype; o orders%rowtype; v_ch text; v_fee bigint := 0; v_ppn bigint := 0; v_bank text; v_settle timestamptz;
-  v_ok boolean := false; v_reason text; v_label text; v_fee_prov text;
+  v_ok boolean := false; v_reason text; v_label text; v_fee_prov text; v_mt text; v_gross numeric; v_evid text;
 begin
   select * into p from payments where external_id = p_external_id for update;
   if not found then raise exception 'Payment tidak ditemukan'; end if;
+  -- 0105 T2: pemanggil langsung (bukan payment_event_ingest). Penanda ingest = GUC transaksi-lokal
+  -- antarkita.payment_ingest yang HANYA diset payment_event_ingest (klien PostgREST tidak bisa memanggil
+  -- set_config; p_raw._ingest tidak dipercaya karena isi notifikasi di luar tanda tangan bisa ditambah).
+  if coalesce(current_setting('antarkita.payment_ingest', true), '') <> 'on' then
+    if p.provider not in ('midtrans', 'simulated') then
+      raise exception 'PROVIDER_MISMATCH: payment_settle langsung hanya untuk transaksi Midtrans (transaksi % memakai %) — gunakan payment_event_ingest', p.external_id, p.provider;
+    end if;
+    if p.provider = 'midtrans' then
+      -- midtrans-webhook lama: SEMUA status (termasuk refund/partial_refund/chargeback) diteruskan ke mesin status
+      -- payment_event_ingest jalur 'midtrans' (duplikat, urutan, nominal gross_amount = payments.amount, REFUNDED/DISPUTED).
+      v_mt := lower(coalesce(nullif(btrim(p_raw->>'transaction_status'), ''), p_status));
+      begin v_gross := nullif(btrim(coalesce(p_raw->>'gross_amount', '')), '')::numeric;
+      exception when others then v_gross := null; end;
+      v_evid := 'mt:' || p.external_id || ':' || v_mt || ':' || md5(coalesce(p_raw::text, ''));
+      perform payment_event_ingest('midtrans', v_evid, p.external_id, v_mt,
+        case when v_gross is not null and v_gross = trunc(v_gross) then v_gross::bigint end, true,
+        coalesce(p_raw, '{}'::jsonb) || jsonb_build_object('_via', 'payment_settle', '_channel', p_channel), null);
+      select * into p from payments where id = p.id;
+      return p;
+    end if;
+    -- simulated (K1 di bawah): bila nominal dikirim, wajib sama
+    if p_raw ? 'gross_amount' and nullif(btrim(coalesce(p_raw->>'gross_amount', '')), '') is not null then
+      begin v_gross := (p_raw->>'gross_amount')::numeric; exception when others then v_gross := -1; end;
+      if v_gross <> p.amount then raise exception 'AMOUNT_MISMATCH: gross_amount % ≠ nominal pembayaran %', p_raw->>'gross_amount', p.amount; end if;
+    end if;
+  end if;
   -- 0105 K1: simulasi hanya bila payments_simulation_enabled DAN env ≠ production DAN payments.provider = 'simulated'
   if p_status = 'settlement' and p.provider = 'simulated' and not payments_simulation_active() then
     raise exception 'Simulasi pembayaran ditolak: payments_simulation_enabled=% env=% (hanya sandbox + sakelar simulasi menyala)',
@@ -1069,7 +1155,7 @@ begin
   update payments set status = p_status, raw = coalesce(p_raw, raw), updated_at = now() where id = p.id returning * into p;
 
   if p_status = 'settlement' then
-    v_ch := nullif(lower(trim(coalesce(p_channel, ''))), '');
+    v_ch := nullif(lower(trim(coalesce(p_channel, p_raw->>'_channel', p_raw->'_antarkita'->>'channel', ''))), '');
     if v_ch is null then
       v_ch := coalesce(p.pg_channel, case when lower(p.method) = any (payment_gateway_channel_keys()) then lower(p.method) end);
     end if;
@@ -1133,11 +1219,23 @@ end $$;
 revoke all on function public.payment_settle(text, text, jsonb, text, timestamptz) from public, anon, authenticated;
 grant execute on function public.payment_settle(text, text, jsonb, text, timestamptz) to service_role;
 comment on function public.payment_settle(text, text, jsonb, text, timestamptz) is
-  'Webhook gateway (0100, v3 0105): idempoten per external_id. K1: settlement provider simulated hanya bila payments_simulation_active(); order hanya bila antarpay_enabled() atau gateway_order_payment_enabled(). settlement → biaya PG provider transaksi + hold_until; purpose=order → paid + ledger_post(created); tidak bisa dibayar → payment_refund_auto. purpose=topup → wallet topup.';
+  'Webhook gateway (0100, v3 0105): idempoten per external_id. T2: pemanggil langsung (bukan payment_event_ingest) hanya untuk provider midtrans (diteruskan ke payment_event_ingest jalur midtrans: gross_amount wajib = amount, refund/chargeback → REFUNDED/DISPUTED) atau simulated (K1); finpay ditolak. K1: settlement provider simulated hanya bila payments_simulation_active(); order hanya bila antarpay_enabled() atau gateway_order_payment_enabled(). settlement → biaya PG provider transaksi + hold_until; purpose=order → paid + ledger_post(created); tidak bisa dibayar → payment_refund_auto. purpose=topup → wallet topup.';
 
 -- ---------------------------------------------------------------------
 -- 8. Intent idempoten, ingest event (mesin status §3), tanda rekonsiliasi — service_role
 -- ---------------------------------------------------------------------
+-- R4: rate_take (0040) memakai auth.uid() (kosong untuk service_role) → varian dengan pengguna eksplisit, tabel sama
+create or replace function public.rate_take_user(p_user uuid, p_kind text, p_limit int)
+returns boolean language plpgsql security definer set search_path = public as $$
+declare v_win timestamptz := date_trunc('hour', now()); v_n int;
+begin
+  if p_user is null then return true; end if;
+  insert into lookup_rate (user_id, kind, window_start, n) values (p_user, p_kind, v_win, 1)
+  on conflict (user_id, kind, window_start) do update set n = lookup_rate.n + 1
+  returning n into v_n;
+  return v_n <= p_limit;
+end $$;
+revoke all on function public.rate_take_user(uuid, text, int) from public, anon, authenticated;
 create or replace function public.payment_intent_create(p_user uuid, p_purpose text, p_order uuid, p_amount bigint, p_channel text, p_provider text)
 returns payments language plpgsql security definer set search_path = public as $$
 declare o orders; p payments; v_prov text := lower(coalesce(nullif(trim(p_provider), ''), payment_provider_active()));
@@ -1166,6 +1264,9 @@ begin
     v_ch := coalesce(v_ch, o.pg_channel);
     if not (v_ch = any (payment_gateway_channel_keys())) then raise exception 'Saluran % bukan payment gateway', payment_channel_label(v_ch); end if;
     perform payment_channel_require_order(v_ch);
+    if not payment_channel_provider_ok(v_ch, v_prov) then   -- (a)
+      raise exception 'CHANNEL_UNSUPPORTED: saluran % tidak tersedia di %', payment_channel_label(v_ch), payment_provider_label(v_prov);
+    end if;
     if p_amount <> o.total then
       raise exception 'Nominal % ≠ total pesanan % — panggil order_payment_prepare dulu (saluran %)', p_amount, o.total, v_ch;
     end if;
@@ -1174,29 +1275,43 @@ begin
     if found then
       if p.expires_at is not null and p.expires_at <= now() then
         update payments set pay_status = 'EXPIRED', note = 'kedaluwarsa saat intent baru dibuat' where id = p.id;
-      elsif p.amount = p_amount and coalesce(p.pg_channel, p.method) = v_ch and p.provider = v_prov then
+      elsif p.amount = p_amount and coalesce(p.pg_channel, p.method) = v_ch and p.provider = v_prov and p.env is not distinct from payment_provider_env() then
         return p;
       else
-        update payments set pay_status = 'FAILED', note = 'diganti intent baru (saluran/nominal/provider berubah)',
-               raw = coalesce(raw, '{}'::jsonb) || jsonb_build_object('superseded', true, 'superseded_at', now())
-         where id = p.id;
+        perform payment_supersede(p.id, 'intent baru (saluran/nominal/provider berubah)');   -- (e)
       end if;
     end if;
     v_ref := o.payment_support_ref;
     if v_ref is null or exists (select 1 from payments where support_ref = v_ref) then v_ref := gen_support_ref(); end if;
   else
     perform antarpay_require_enabled();   -- top up = stored value: hanya bila AntarPay aktif (0088, PKS 7.4b)
-    if v_ch is not null then perform payment_channel_require(v_ch); end if;
+    if v_ch is not null then
+      perform payment_channel_require(v_ch);
+      if v_ch = any (payment_gateway_channel_keys()) and not payment_channel_provider_ok(v_ch, v_prov) then   -- (a)
+        raise exception 'CHANNEL_UNSUPPORTED: saluran % tidak tersedia di %', payment_channel_label(v_ch), payment_provider_label(v_prov);
+      end if;
+    end if;
     if p_amount < setting_num('pg_topup_min', 10000) or p_amount > setting_num('pg_topup_max', 10000000) then
       raise exception 'Nominal top up Rp% – Rp%', setting_num('pg_topup_min', 10000), setting_num('pg_topup_max', 10000000);
+    end if;
+    -- R4: idempoten — intent top up PENDING yang masih berlaku (nominal/saluran/provider/env sama) dikembalikan
+    select * into p from payments
+     where user_id = p_user and purpose = 'topup' and pay_status = 'PENDING' and amount = p_amount
+       and coalesce(pg_channel, method) is not distinct from coalesce(v_ch, 'any') and provider = v_prov
+       and env is not distinct from payment_provider_env() and (expires_at is null or expires_at > now())
+     order by created_at desc limit 1 for update;
+    if found then return p; end if;
+    -- R4: batas laju intent top up per pengguna (service_role → rate_take_user, bukan auth.uid())
+    if not rate_take_user(p_user, 'topup_intent', greatest(1, setting_num('rate_limit_topup_intent_per_hour', 10)::int)) then
+      raise exception 'RATE_LIMIT: terlalu banyak permintaan top up dalam 1 jam. Coba lagi nanti.';
     end if;
     v_exp := now() + interval '30 minutes';
     v_ref := gen_support_ref();
   end if;
   v_ext := case v_purpose when 'order' then 'AKORD-' else 'AKPAY-' end || to_char(clock_timestamp() at time zone 'Asia/Jakarta', 'YYMMDDHH24MISS') || '-' || substr(md5(gen_random_uuid()::text), 1, 8);
   begin
-    insert into payments (user_id, order_id, purpose, amount, method, provider, external_id, provider_ref, pg_channel, expires_at, support_ref, pay_status)
-    values (p_user, o.id, v_purpose, p_amount, coalesce(v_ch, 'any'), v_prov, v_ext, v_ext, v_ch, v_exp, v_ref, 'PENDING')
+    insert into payments (user_id, order_id, purpose, amount, method, provider, external_id, provider_ref, pg_channel, expires_at, support_ref, pay_status, env)
+    values (p_user, o.id, v_purpose, p_amount, coalesce(v_ch, 'any'), v_prov, v_ext, v_ext, v_ch, v_exp, v_ref, 'PENDING', payment_provider_env())
     returning * into p;
   exception when unique_violation then   -- balapan dua permintaan untuk order yang sama → kembalikan yang menang
     select * into p from payments where order_id = o.id and purpose = 'order' and pay_status = 'PENDING';
@@ -1211,11 +1326,12 @@ grant execute on function public.payment_intent_create(uuid, text, uuid, bigint,
 comment on function public.payment_intent_create(uuid, text, uuid, bigint, text, text) is
   'Finpay v3 §2 (service_role, edge pay-create): buat intent pembayaran. Idempoten per order: intent PENDING yang belum kedaluwarsa dengan nominal/saluran/provider sama dikembalikan; yang berbeda digantikan (FAILED, superseded); unique partial index payments_one_pending_per_order. Order: milik p_user, awaiting_payment, payment_channel_require_order, nominal = orders.total (panggil order_payment_prepare dulu).';
 
+drop function if exists public.payment_event_ingest(text, text, text, text, bigint, boolean, jsonb);   -- diganti versi + p_env
 create or replace function public.payment_event_ingest(p_provider text, p_event_id text, p_external_id text, p_provider_status text,
-  p_amount bigint, p_signature_ok boolean, p_raw jsonb)
+  p_amount bigint, p_signature_ok boolean, p_raw jsonb, p_env text default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare p payments; v_ev_id bigint; v_prov text := lower(btrim(coalesce(p_provider, ''))); v_new text; v_prev text; v_note text;
-  v_applied boolean := false; v_res text; v_st text;
+  v_applied boolean := false; v_res text; v_st text; v_env text := nullif(lower(btrim(coalesce(p_env, ''))), ''); v_rf bigint; v_rf_txt text;
 begin
   if v_prov = '' or btrim(coalesce(p_event_id, '')) = '' then raise exception 'provider & event_id wajib diisi'; end if;
   select * into p from payments where external_id = p_external_id or provider_ref = p_external_id
@@ -1230,25 +1346,37 @@ begin
   end if;
   v_prev := p.pay_status;
   v_new := payment_status_map(v_prov, p_provider_status, p_raw);
+  -- S2: nominal refund HANYA dari field refund eksplisit (refund_amount), bukan p_amount (nominal transaksi)
+  v_rf_txt := nullif(btrim(coalesce(p_raw->>'refund_amount', p_raw->>'refundAmount', '')), '');
+  begin v_rf := round(v_rf_txt::numeric)::bigint; exception when others then v_rf := null; end;
 
   if not coalesce(p_signature_ok, false) then v_res := 'signature_invalid';
   elsif p.id is null then v_res := 'payment_not_found';
   elsif p.provider <> v_prov then v_res := 'provider_mismatch';
+  elsif v_env is not null and v_env is distinct from p.env then v_res := 'env_mismatch';   -- T1: event sandbox ≠ transaksi production (dan sebaliknya)
   elsif v_prov = 'simulated' and not payments_simulation_active() then v_res := 'simulation_rejected';
   elsif v_new is null then v_res := 'unknown_status';
-  elsif v_new = v_prev then v_res := 'no_change';
+  elsif v_new = v_prev and not (v_new = 'PARTIALLY_REFUNDED' and coalesce(v_rf, 0) > p.refunded_amount) then v_res := 'no_change';
   elsif v_new = 'PENDING' then v_res := 'ignored_out_of_order';   -- terminal tidak boleh mundur ke PENDING
   elsif v_new = 'PAID' then
     if v_prev in ('PENDING', 'EXPIRED', 'FAILED') then
-      if p_amount is not null and p_amount <> p.amount then v_res := 'amount_mismatch';
+      if p_amount is null or p_amount <> p.amount then
+        -- R3: nominal wajib ada & sama dengan payments.amount; selisih TIDAK diterapkan, ditandai unreconciled
+        v_res := 'amount_mismatch';
+        update payments set note = 'unreconciled: amount_mismatch (provider ' || coalesce(p_amount::text, 'tanpa nominal') || ' ≠ ' || p.amount || ')' where id = p.id;
+        if not exists (select 1 from order_ledger l where l.source = 'payments' and l.source_id = p.id and l.entry = 'unreconciled') then
+          insert into order_ledger (order_id, source, source_id, service, entry, amount, party_role, phase, pg_channel, note, payment_id)
+          values (p.order_id, 'payments', p.id, (select service from orders where id = p.order_id), 'unreconciled', coalesce(p_amount, p.amount), 'gateway', 'adjusted',
+                  p.pg_channel, 'event PAID ' || v_prov || ' nominal ' || coalesce(p_amount::text, 'kosong') || ' ≠ pembayaran ' || p.amount || ' (' || p.external_id || ', event ' || btrim(p_event_id) || ')', p.id);
+        end if;
       else
         if v_prev in ('EXPIRED', 'FAILED') then v_note := 'late_paid'; end if;
-        begin
-          -- status lama expire/failure → payment_settle memproses (idempoten hanya untuk 'settlement')
-          perform payment_settle(p.external_id, 'settlement', coalesce(p_raw, '{}'::jsonb) || jsonb_build_object('_ingest', v_prov, '_event_id', p_event_id), null, now());
-          v_applied := true;
-        exception when others then v_res := 'error: ' || left(sqlerrm, 200);
-        end;
+        perform set_config('antarkita.payment_ingest', 'on', true);   -- T2: penanda pemanggil sah payment_settle
+        -- error internal TIDAK ditelan: RAISE → baris payment_events ikut batal → provider mengirim ulang
+        -- (status lama expire/failure → payment_settle memproses; idempoten hanya untuk 'settlement')
+        perform payment_settle(p.external_id, 'settlement', coalesce(p_raw, '{}'::jsonb) || jsonb_build_object('_ingest', true, '_ingest_provider', v_prov, '_event_id', p_event_id), null, null);
+        v_applied := true;
+        perform set_config('antarkita.payment_ingest', 'off', true);
       end if;
     elsif v_prev = 'DISPUTED' then
       update payments set pay_status = 'PAID', note = 'sengketa ditutup provider (dana tetap)' where id = p.id; v_applied := true;
@@ -1256,18 +1384,22 @@ begin
     end if;
   elsif v_new in ('FAILED', 'EXPIRED') then
     if v_prev = 'PENDING' then
-      begin
-        perform payment_settle(p.external_id, case when v_new = 'EXPIRED' then 'expire' else 'failure' end, coalesce(p_raw, '{}'::jsonb), null, null);
-        v_applied := true;
-      exception when others then v_res := 'error: ' || left(sqlerrm, 200);
-      end;
+      perform set_config('antarkita.payment_ingest', 'on', true);
+      perform payment_settle(p.external_id, case when v_new = 'EXPIRED' then 'expire' else 'failure' end, coalesce(p_raw, '{}'::jsonb) || jsonb_build_object('_ingest', true), null, null);
+      v_applied := true;
+      perform set_config('antarkita.payment_ingest', 'off', true);
     else v_res := 'ignored_terminal';
     end if;
   elsif v_new in ('REFUNDED', 'PARTIALLY_REFUNDED') then
     if v_prev in ('PAID', 'REFUND_REQUESTED', 'PARTIALLY_REFUNDED', 'DISPUTED') then
-      update payments set pay_status = v_new,
-        refunded_amount = least(amount, greatest(refunded_amount, case when v_new = 'REFUNDED' then amount else coalesce(nullif(p_raw->>'refund_amount', '')::bigint, p_amount, refunded_amount) end))
-       where id = p.id;
+      if v_new = 'REFUNDED' then
+        update payments set pay_status = v_new, refunded_amount = amount where id = p.id;
+      elsif v_rf is not null and v_rf > 0 then
+        update payments set pay_status = v_new, refunded_amount = least(amount, greatest(refunded_amount, v_rf)) where id = p.id;
+      else
+        update payments set pay_status = v_new, note = 'needs_review: refund sebagian tanpa refund_amount dari provider' where id = p.id;
+        v_note := 'needs_review';
+      end if;
       v_applied := true;
     else v_res := 'ignored_terminal';
     end if;
@@ -1281,7 +1413,7 @@ begin
 
   if v_applied then
     v_st := payment_hook_after_ingest(p.id, v_prev, v_new, p_amount, p_raw);   -- 0108: tutup refund / buka sengketa
-    if v_note is not null then update payments set note = v_note where id = p.id; end if;
+    if v_note is not null and v_note <> 'needs_review' then update payments set note = v_note where id = p.id; end if;
     v_res := coalesce(v_note, 'applied') || coalesce(' · ' || v_st, '');
   end if;
   update payment_events set processed_at = now(), result = v_res where id = v_ev_id;
@@ -1289,10 +1421,10 @@ begin
     'pay_status', (select pay_status from payments where id = p.id), 'previous', v_prev, 'mapped', v_new,
     'note', coalesce(v_note, v_res), 'event_id', v_ev_id, 'payment_id', p.id, 'support_ref', p.support_ref);
 end $$;
-revoke all on function public.payment_event_ingest(text, text, text, text, bigint, boolean, jsonb) from public, anon, authenticated;
-grant execute on function public.payment_event_ingest(text, text, text, text, bigint, boolean, jsonb) to service_role;
-comment on function public.payment_event_ingest(text, text, text, text, bigint, boolean, jsonb) is
-  'Finpay v3 §2/§3 (service_role, edge pay-webhook/pay-reconcile): satu transaksi — inbox payment_events (duplikat event_id → duplicate=true, tidak diproses), kunci payment, mesin status (terminal tidak mundur ke PENDING; PAID sesudah EXPIRED/FAILED → diterapkan + note late_paid; order yang sudah tidak bisa dibayar → payment_refund_auto), payment_settle internal (ledger). Hasil: {duplicate, applied, pay_status, note}.';
+revoke all on function public.payment_event_ingest(text, text, text, text, bigint, boolean, jsonb, text) from public, anon, authenticated;
+grant execute on function public.payment_event_ingest(text, text, text, text, bigint, boolean, jsonb, text) to service_role;
+comment on function public.payment_event_ingest(text, text, text, text, bigint, boolean, jsonb, text) is
+  'Finpay v3 §2/§3 (service_role, edge pay-webhook/pay-reconcile): satu transaksi — inbox payment_events (duplikat event_id → duplicate=true, tidak diproses), kunci payment, mesin status (terminal tidak mundur ke PENDING; PAID sesudah EXPIRED/FAILED → diterapkan + note late_paid; order yang sudah tidak bisa dibayar → payment_refund_auto), payment_settle internal (ledger). Keputusan bisnis (duplicate, ignored_*, amount_mismatch, env_mismatch, signature_invalid, …) dicatat & dijawab normal; error INTERNAL saat memproses → RAISE (baris payment_events ikut batal, provider mengirim ulang). R3: PAID wajib p_amount = payments.amount (selisih → amount_mismatch, tidak diterapkan, baris ledger unreconciled). S2: refund sebagian hanya dari raw.refund_amount (tanpa itu → needs_review). p_env (opsional): ≠ payments.env → env_mismatch. Hasil: {duplicate, applied, pay_status, note}.';
 
 create or replace function public.payment_mark_reconciled(p_payment uuid, p_run uuid)
 returns payments language plpgsql security definer set search_path = public as $$
@@ -1327,6 +1459,9 @@ begin
   v_ch := coalesce(nullif(lower(trim(coalesce(p_channel, ''))), ''), o.pg_channel);
   if not (v_ch = any (payment_gateway_channel_keys())) then raise exception 'Saluran % bukan payment gateway', payment_channel_label(v_ch); end if;
   perform payment_channel_require_order(v_ch);   -- 0104
+  if not payment_channel_provider_ok(v_ch, v_prov) then   -- (a) kanal tidak didukung provider aktif (mis. GoPay di Finpay)
+    raise exception 'CHANNEL_UNSUPPORTED: saluran % tidak tersedia di % — pilih metode lain', payment_channel_label(v_ch), payment_provider_label(v_prov);
+  end if;
   -- dasar = total tanpa biaya pembayaran yang (mungkin) sudah ditagihkan; biaya dihitung ulang untuk saluran & provider final
   v_base := o.total - case when o.pg_fee_borne_by = 'customer' then o.pg_fee + o.pg_fee_ppn else 0 end;
   select f.fee, f.ppn into v_fee, v_ppn from pg_fee_calc(v_ch, v_base, v_prov) f;
@@ -1416,7 +1551,7 @@ revoke all on function public.receipt_refundable_note(orders) from public, anon,
 
 create or replace function public.my_receipt(p_order uuid)
 returns jsonb language plpgsql stable security definer set search_path = public as $$
-declare o orders; p payments; v_prov text; v_pgc bigint; v_lines jsonb := '[]'::jsonb;
+declare o orders; p payments; v_prov text; v_pgc bigint; v_lines jsonb := '[]'::jsonb; v_tax bigint := 0;
 begin
   if auth.uid() is null then raise exception 'Harus login'; end if;
   select * into o from orders where id = p_order;
@@ -1441,7 +1576,14 @@ begin
   if coalesce(o.discount, 0) <> 0 then v_lines := v_lines || jsonb_build_object('key', 'discount', 'label', 'Diskon' || coalesce(' ' || o.promo_code, ''),
       'amount', -o.discount, 'funded_by', coalesce(o.promo_funded_by, 'platform'),
       'note', 'Ditanggung ' || case coalesce(o.promo_funded_by, 'platform') when 'merchant' then 'merchant' when 'sponsor' then 'sponsor' else 'AntarKita' end); end if;
-  v_lines := v_lines || jsonb_build_object('key', 'tax', 'label', 'Pajak', 'amount', 0, 'note', 'Tidak ada pajak terpisah pada transaksi ini');
+  -- (d) pajak dari buku besar (entry tax_output, fase aktif terakhir pesanan); 0 bila tidak ada
+  select coalesce(sum(l.amount), 0) into v_tax from order_ledger l
+   where l.order_id = o.id and l.source = 'orders' and l.entry::text = 'tax_output'
+     and l.phase = coalesce((select l2.phase from order_ledger l2 where l2.order_id = o.id and l2.source = 'orders' and l2.phase in ('completed', 'created')
+                              order by case l2.phase when 'completed' then 0 else 1 end limit 1), 'created');
+  v_tax := abs(coalesce(v_tax, 0));
+  v_lines := v_lines || jsonb_build_object('key', 'tax', 'label', 'Pajak', 'amount', v_tax,
+    'note', case when v_tax = 0 then 'Tidak ada pajak terpisah pada transaksi ini' else 'PPN/pajak tercatat di buku besar (tax_output)' end);
   return jsonb_build_object('order_id', o.id, 'code', o.code, 'service', o.service, 'status', o.status, 'created_at', o.created_at, 'completed_at', o.completed_at,
     'payment_method', o.payment_method, 'channel', coalesce(p.pg_channel, payment_channel_of(o.paid_via)),
     'channel_label', payment_channel_label(coalesce(p.pg_channel, payment_channel_of(o.paid_via))),
@@ -1458,64 +1600,233 @@ comment on function public.my_receipt(uuid) is 'Finpay v3 §2/§0.4: struk lengk
 -- ---------------------------------------------------------------------
 -- 10. admin_set_settings / admin_business_settings v3
 -- ---------------------------------------------------------------------
+-- T3: spesifikasi SEMUA kunci app_settings yang boleh diubah lewat admin_set_settings. Kunci di luar daftar
+-- ditolak. Tipe: int | numeric | bool | text (opsi) | string (teks bebas tervalidasi) | json (validator per kunci).
+-- = business_setting_specs (v2, 11 ambang) ∪ business_setting_specs_v3 ∪ kunci umum (otomasi, peta, belanja, dst.).
+create or replace function public.app_setting_specs()
+returns table(key text, value_type text, min_value numeric, max_value numeric, options text[], default_value jsonb,
+  unit text, label text, note text, perm text)
+language sql stable set search_path = public as $$
+  select s.key, case when s.is_int then 'int' else 'numeric' end, s.min_value, s.max_value, null::text[], to_jsonb(s.default_value),
+         s.unit, s.label, s.note, 'payment_config' from business_setting_specs() s
+  union all
+  select v.key, v.value_type, v.min_value, v.max_value, v.options, v.default_value, v.unit, v.label, v.note, v.perm from business_setting_specs_v3() v
+  union all
+  select ('max_km_' || e::text), 'numeric', 0.5, 5000, null::text[], null::jsonb, 'km', 'UMUM', 'Batas jarak dalam kota layanan ' || e::text, 'pricing'
+    from unnest(enum_range(null::service_type)) e
+  union all
+  select g.* from (values
+    ('admin_session_minutes',      'int',     5::numeric, 720::numeric, null::text[], '60'::jsonb, 'menit', 'KEAMANAN', 'Durasi sesi PIN panel admin', 'admin_role'),
+    ('bank_account',               'json',    null, null, null, null, '', 'UANG', 'Rekening tujuan top up manual {bank, name, number}', 'payment_config'),
+    ('app_name',                   'string',  1, 60, null, null, '', 'UMUM', 'Nama aplikasi', 'payment_config'),
+    ('support_phone',              'string',  6, 20, null, null, '', 'UMUM', 'Nomor CS (+62…)', 'ticket'),
+    ('pg_provider',                'text',    null, null, array['midtrans','finpay'], '"midtrans"', '', 'UANG', 'Provider gateway v2 (lama) — v3 memakai payment_provider_active', 'payment_config'),
+    ('pg_topup_min',               'int',     1000, 10000000, null, '10000', 'Rp', 'UANG', 'Nominal top up minimum', 'payment_config'),
+    ('pg_topup_max',               'int',     10000, 100000000, null, '10000000', 'Rp', 'UANG', 'Nominal top up maksimum', 'payment_config'),
+    ('gateway_fee_pct',            'numeric', 0, 10, null, null, '%', 'UANG', 'Asumsi biaya gateway (laporan)', 'fee'),
+    ('target_take_rate_pct',       'numeric', 0, 100, null, null, '%', 'UANG', 'Target take rate', 'fee'),
+    ('helper_fee',                 'int',     0, 10000000, null, null, 'Rp', 'UANG', 'Biaya helper angkut', 'pricing'),
+    ('market_driver_share_pct',    'numeric', 0, 100, null, null, '%', 'UANG', 'Porsi driver jasa belanja pasar', 'pricing'),
+    ('market_service_min',         'int',     0, 10000000, null, null, 'Rp', 'UANG', 'Biaya jasa belanja pasar minimum', 'pricing'),
+    ('market_service_pct',         'numeric', 0, 100, null, null, '%', 'UANG', 'Biaya jasa belanja pasar', 'pricing'),
+    ('shop_driver_share_pct',      'numeric', 0, 100, null, null, '%', 'UANG', 'Porsi driver jasa belanja toko', 'pricing'),
+    ('shop_service_min',           'int',     0, 10000000, null, null, 'Rp', 'UANG', 'Biaya jasa belanja toko minimum', 'pricing'),
+    ('shop_service_pct',           'numeric', 0, 100, null, null, '%', 'UANG', 'Biaya jasa belanja toko', 'pricing'),
+    ('shop_budget_buffer_pct',     'numeric', 0, 100, null, null, '%', 'UANG', 'Cadangan anggaran belanja', 'pricing'),
+    ('shop_budget_coef',           'numeric', 1, 5, null, null, '×', 'UANG', 'Koefisien batas total belanja', 'pricing'),
+    ('shop_car_factor',            'numeric', 1, 5, null, null, '×', 'UANG', 'Faktor ongkir belanja mobil', 'pricing'),
+    ('shop_car_min_budget',        'int',     0, 100000000, null, null, 'Rp', 'UANG', 'Anggaran minimum belanja mobil', 'pricing'),
+    ('travel_cancel_free_hours',   'int',     0, 168, null, null, 'jam', 'UANG', 'Batal travel gratis sebelum N jam', 'pricing'),
+    ('travel_commission_pct',      'numeric', 0, 100, null, null, '%', 'UANG', 'Komisi travel', 'pricing'),
+    ('travel_daily_hours',         'int',     1, 24, null, null, 'jam', 'UMUM', 'Jam operasional travel harian', 'pricing'),
+    ('travel_platform_fee',        'int',     0, 10000000, null, null, 'Rp', 'UANG', 'Biaya platform travel', 'pricing'),
+    ('travel_request_commission_pct','numeric',0, 100, null, null, '%', 'UANG', 'Komisi permintaan travel', 'pricing'),
+    ('travel_send_partner_pct',    'numeric', 0, 100, null, null, '%', 'UANG', 'Porsi mitra kirim antarkota', 'pricing'),
+    ('intercity_partner_share_pct','numeric', 0, 100, null, null, '%', 'UANG', 'Porsi mitra antarkota', 'pricing'),
+    ('retention_budget_month',     'int',     0, 1000000000, null, null, 'Rp', 'UANG', 'Anggaran promo retensi per bulan', 'promo'),
+    ('retention_promo_max',        'int',     0, 10000000, null, null, 'Rp', 'UANG', 'Maks diskon promo retensi', 'promo'),
+    ('retention_promo_value',      'numeric', 0, 100, null, null, '%', 'UANG', 'Diskon promo retensi', 'promo'),
+    ('retention_cooldown_days',    'int',     1, 365, null, null, 'hari', 'OTOMASI', 'Jeda antar promo retensi', 'promo'),
+    ('retention_days',             'int',     1, 365, null, null, 'hari', 'OTOMASI', 'Tidak aktif selama N hari → promo retensi', 'promo'),
+    ('retention_enabled',          'bool',    null, null, null, null, '', 'OTOMASI', 'Promo retensi otomatis', 'promo'),
+    ('dynamic_pricing_enabled',    'bool',    null, null, null, null, '', 'OTOMASI', 'Harga dinamis', 'pricing'),
+    ('dynamic_max_multiplier',     'numeric', 1, 5, null, null, '×', 'OTOMASI', 'Pengganda maksimum', 'pricing'),
+    ('dynamic_step',               'numeric', 0, 2, null, null, '×', 'OTOMASI', 'Langkah kenaikan', 'pricing'),
+    ('dynamic_radius_km',          'numeric', 0.5, 100, null, null, 'km', 'OTOMASI', 'Radius harga dinamis', 'pricing'),
+    ('dynamic_window_min',         'int',     1, 1440, null, null, 'menit', 'OTOMASI', 'Jendela waktu harga dinamis', 'pricing'),
+    ('price_coef_min',             'numeric', 0.1, 1, null, null, '×', 'OTOMASI', 'Koef. harga minimum', 'pricing'),
+    ('price_coef_max',             'numeric', 1, 10, null, null, '×', 'OTOMASI', 'Koef. harga maksimum', 'pricing'),
+    ('price_coef_hard',            'numeric', 1, 10, null, null, '×', 'OTOMASI', 'Koef. tolak (batas keras)', 'pricing'),
+    ('auto_verify_enabled',        'bool',    null, null, null, null, '', 'OTOMASI', 'Verifikasi mitra otomatis', 'driver'),
+    ('auto_verify_min_score',      'int',     0, 100, null, null, 'skor', 'OTOMASI', 'Skor minimum verifikasi otomatis', 'driver'),
+    ('probation_days',             'int',     0, 365, null, null, 'hari', 'OTOMASI', 'Masa percobaan mitra', 'driver'),
+    ('probation_daily_orders',     'int',     0, 1000, null, null, 'order', 'OTOMASI', 'Batas order/hari saat percobaan', 'driver'),
+    ('driver_selfie_hours',        'int',     1, 168, null, null, 'jam', 'OTOMASI', 'Selfie ulang driver tiap N jam', 'driver'),
+    ('driver_code_lookup_per_hour','int',     1, 10000, null, null, 'per jam', 'KEAMANAN', 'Batas cari kode driver per jam', 'driver'),
+    ('class_fallback_minutes',     'int',     0, 60, null, null, 'menit', 'OTOMASI', 'Fallback kelas kendaraan', 'orders'),
+    ('direct_order_fallback',      'bool',    null, null, null, null, '', 'OTOMASI', 'Order langsung jatuh ke umum bila tidak diterima', 'orders'),
+    ('direct_order_hold_seconds',  'int',     0, 3600, null, null, 'detik', 'OTOMASI', 'Tahan order langsung', 'orders'),
+    ('schedule_release_min',       'int',     1, 1440, null, null, 'menit', 'OTOMASI', 'Order terjadwal dilepas N menit sebelumnya', 'orders'),
+    ('wait_apology_minutes',       'int',     0, 120, null, null, 'menit', 'OTOMASI', 'Pesan maaf bila menunggu lebih dari N menit', 'orders'),
+    ('search_radius_km',           'numeric', 0.5, 100, null, null, 'km', 'UMUM', 'Radius pencarian', 'orders'),
+    ('max_route_ratio',            'numeric', 1, 10, null, null, '×', 'UMUM', 'Rasio rute maksimum', 'orders'),
+    ('fraud_auto_suspend',         'bool',    null, null, null, null, '', 'KEAMANAN', 'Tangguhkan otomatis bila fraud', 'driver'),
+    ('fraud_cancel_limit',         'int',     1, 1000, null, null, 'per 24 jam', 'KEAMANAN', 'Pembatalan driver per 24 jam', 'driver'),
+    ('fraud_gps_speed_kmh',        'int',     10, 2000, null, null, 'km/jam', 'KEAMANAN', 'Lompatan GPS ditandai di atas', 'driver'),
+    ('customer_withdrawal_enabled','bool',    null, null, null, null, '', 'UANG', 'Penarikan saldo oleh pelanggan', 'payment_config'),
+    ('reports_enabled',            'bool',    null, null, null, null, '', 'OTOMASI', 'Laporan terjadwal', 'report'),
+    ('ticket_per_hour',            'int',     1, 1000, null, null, 'per jam', 'KEAMANAN', 'Batas tiket per jam', 'ticket'),
+    ('estimate_per_hour',          'int',     1, 100000, null, null, 'per jam', 'KEAMANAN', 'Batas estimasi tarif per jam', 'orders'),
+    ('resolve_per_hour',           'int',     1, 100000, null, null, 'per jam', 'KEAMANAN', 'Batas resolve alamat per jam', 'orders'),
+    ('place_auto_approve_reports', 'int',     1, 100, null, null, 'laporan', 'OTOMASI', 'Laporan untuk aktif otomatis', 'city'),
+    ('place_dedup_radius_m',       'int',     1, 5000, null, null, 'meter', 'OTOMASI', 'Radius dedup usulan tempat', 'city'),
+    ('vendor_quality_min',         'int',     0, 100, null, null, 'skor', 'OTOMASI', 'Skor kualitas minimum pedagang', 'merchant'),
+    ('osm_auto_refresh_enabled',   'bool',    null, null, null, null, '', 'PETA', 'Penyegaran impor peta otomatis', 'city'),
+    ('osm_auto_refresh_days',      'int',     1, 365, null, null, 'hari', 'PETA', 'Interval penyegaran impor peta', 'city'),
+    ('osm_city_assign_max_km',     'numeric', 1, 500, null, null, 'km', 'PETA', 'Jarak maks penetapan kota', 'city'),
+    ('osm_import_enabled',         'bool',    null, null, null, null, '', 'PETA', 'Impor tempat dari peta', 'city'),
+    ('osm_import_max_per_task',    'int',     50, 3000, null, null, 'tempat', 'PETA', 'Maks tempat per tugas impor', 'city'),
+    ('osm_import_pause_ms',        'int',     0, 60000, null, null, 'ms', 'PETA', 'Jeda antar permintaan impor', 'city'),
+    ('osm_import_radius_km',       'numeric', 0.5, 100, null, null, 'km', 'PETA', 'Radius impor tempat', 'city'),
+    ('pickup_radius_km',           'json',    null, null, null, null, 'km', 'UMUM', 'Radius terima order per layanan {layanan: km}', 'orders'),
+    ('priority_tiers',             'json',    null, null, null, null, '', 'UMUM', 'Antrean prioritas driver [{min_rating, delay_s}]', 'orders'),
+    ('send_limits',                'json',    null, null, null, null, '', 'UMUM', 'Batas berat/ukuran kirim {kendaraan: {max_kg, max_cm}}', 'orders'),
+    ('pin_services',               'json',    null, null, null, null, '', 'UMUM', 'Layanan yang wajib PIN serah terima', 'orders'),
+    ('same_city_services',         'json',    null, null, null, null, '', 'UMUM', 'Layanan dalam kota', 'orders')
+  ) as g(key, value_type, min_value, max_value, options, default_value, unit, label, note, perm)
+  where not exists (select 1 from business_setting_specs() b where b.key = g.key)
+    and not exists (select 1 from business_setting_specs_v3() b where b.key = g.key);
+$$;
+revoke all on function public.app_setting_specs() from public, anon, authenticated;
+
+-- T3: validasi & normalisasi nilai kunci JSON (raise bila salah)
+create or replace function public.setting_json_validate(p_key text, v jsonb)
+returns jsonb language plpgsql immutable set search_path = public as $$
+declare k text; x jsonb; n numeric; e text;
+begin
+  if p_key = 'bank_account' then
+    if jsonb_typeof(v) <> 'object' then raise exception 'bank_account harus objek {bank, name, number}'; end if;
+    for k, x in select * from jsonb_each(v) loop
+      if k not in ('bank', 'name', 'number', 'branch', 'note') then raise exception 'bank_account: kolom tidak dikenal %', k; end if;
+      if jsonb_typeof(x) <> 'string' or length(x #>> '{}') > 100 then raise exception 'bank_account.% harus teks ≤ 100 karakter', k; end if;
+    end loop;
+    if coalesce(btrim(v->>'bank'), '') = '' or coalesce(btrim(v->>'name'), '') = '' or coalesce(v->>'number', '') !~ '^[0-9][0-9 .-]{4,29}$' then
+      raise exception 'bank_account wajib berisi bank, name, dan number (angka 5–30 digit)';
+    end if;
+    return v;
+  elsif p_key = 'pickup_radius_km' then
+    if jsonb_typeof(v) <> 'object' then raise exception 'pickup_radius_km harus objek {layanan: km}'; end if;
+    for k, x in select * from jsonb_each(v) loop
+      if k !~ '^[a-z_]{2,30}$' or jsonb_typeof(x) <> 'number' then raise exception 'pickup_radius_km.% harus angka', k; end if;
+      n := (x #>> '{}')::numeric; if n < 0.1 or n > 500 then raise exception 'pickup_radius_km.% harus 0,1–500 km', k; end if;
+    end loop;
+    return v;
+  elsif p_key = 'priority_tiers' then
+    if jsonb_typeof(v) <> 'array' or jsonb_array_length(v) not between 1 and 10 then raise exception 'priority_tiers harus larik 1–10 tingkat'; end if;
+    for x in select * from jsonb_array_elements(v) loop
+      if jsonb_typeof(x) <> 'object' or (select count(*) from jsonb_object_keys(x) kk where kk not in ('min_rating', 'delay_s')) > 0
+         or jsonb_typeof(x->'min_rating') <> 'number' or jsonb_typeof(x->'delay_s') <> 'number'
+         or (x->>'min_rating')::numeric not between 0 and 5 or (x->>'delay_s')::numeric not between 0 and 3600 then
+        raise exception 'priority_tiers: tiap tingkat {min_rating 0–5, delay_s 0–3600}';
+      end if;
+    end loop;
+    return v;
+  elsif p_key = 'send_limits' then
+    if jsonb_typeof(v) <> 'object' then raise exception 'send_limits harus objek {kendaraan: {max_kg, max_cm}}'; end if;
+    for k, x in select * from jsonb_each(v) loop
+      if k !~ '^[a-z_]{2,30}$' or jsonb_typeof(x) <> 'object' or (select count(*) from jsonb_object_keys(x) kk where kk not in ('max_kg', 'max_cm')) > 0
+         or jsonb_typeof(x->'max_kg') <> 'number' or jsonb_typeof(x->'max_cm') <> 'number'
+         or (x->>'max_kg')::numeric not between 0 and 100000 or (x->>'max_cm')::numeric not between 0 and 10000 then
+        raise exception 'send_limits.% harus {max_kg 0–100000, max_cm 0–10000}', k;
+      end if;
+    end loop;
+    return v;
+  elsif p_key in ('pin_services', 'same_city_services') then
+    if jsonb_typeof(v) <> 'array' then raise exception '% harus larik kode layanan', p_key; end if;
+    for x in select * from jsonb_array_elements(v) loop
+      e := x #>> '{}';
+      if jsonb_typeof(x) <> 'string' or not (e = any (enum_range(null::service_type)::text[])) then raise exception '%: layanan tidak dikenal %', p_key, coalesce(e, x::text); end if;
+    end loop;
+    return v;
+  end if;
+  raise exception 'Kunci JSON % tidak punya validator', p_key;
+end $$;
+revoke all on function public.setting_json_validate(text, jsonb) from public, anon, authenticated;
+
 create or replace function public.admin_set_settings(p jsonb)
 returns void language plpgsql security definer set search_path = public as $$
 declare
-  k text; v jsonb; s record; s3 record; n numeric; t text; biz jsonb := '{}'::jsonb; before jsonb := '{}'::jsonb; v_bad text; ringkas text;
+  k text; v jsonb; s record; n numeric; t text; biz jsonb := '{}'::jsonb; val jsonb := '{}'::jsonb; before jsonb := '{}'::jsonb;
+  before_all jsonb := '{}'::jsonb; v_bad text; ringkas text;
   -- 0104 ambang bisnis: sakelar yang punya RPC khusus (PIN + audit sendiri) tidak boleh lewat jalur umum
-  protected constant text[] := array['antarpay_enabled', 'payment_channels', 'pg_methods', 'gateway_order_payment_enabled', 'pg_last_webhook_at'];
+  protected constant text[] := array['antarpay_enabled', 'payment_channels', 'pg_methods', 'gateway_order_payment_enabled', 'pg_last_webhook_at', 'services_enabled'];
 begin
-  if not is_admin() then raise exception 'Hanya admin'; end if;
-  if p is null or jsonb_typeof(p) <> 'object' then raise exception 'Pengaturan harus objek JSON {kunci: nilai}'; end if;
+  -- T3: SEMUA kunci = izin payment_config + PIN; kunci di luar app_setting_specs() ditolak
+  perform admin_require('payment_config');
+  perform admin_require_unlock();
+  if p is null or jsonb_typeof(p) <> 'object' or p = '{}'::jsonb then raise exception 'Pengaturan harus objek JSON {kunci: nilai}'; end if;
   -- validasi SEMUA kunci dulu (tidak ada yang ditulis bila satu saja tidak valid)
   for k, v in select * from jsonb_each(p) loop
-    if k !~ '^[a-z_]+$' then raise exception 'Kunci tidak valid: %', k; end if;
+    if k !~ '^[a-z_0-9]+$' then raise exception 'Kunci tidak valid: %', k; end if;
     if k = any (protected) then raise exception 'Pengaturan % diubah lewat menunya sendiri (PIN + audit), bukan lewat pengaturan umum', k; end if;
-    select * into s from business_setting_specs() x where x.key = k;
-    select * into s3 from business_setting_specs_v3() x where x.key = k;
-    if s.key is not null or (s3.key is not null and s3.value_type in ('int', 'numeric')) then
+    select * into s from app_setting_specs() x where x.key = k;
+    if s.key is null then raise exception 'SETTING_UNKNOWN: kunci pengaturan % tidak dikenal (tidak ada di app_setting_specs)', k; end if;
+    perform admin_require(s.perm);
+    if s.value_type in ('int', 'numeric') then
       if jsonb_typeof(v) = 'number' then n := (v #>> '{}')::numeric;
       elsif jsonb_typeof(v) = 'string' and btrim(v #>> '{}') ~ '^-?[0-9]+(\.[0-9]+)?$' then n := btrim(v #>> '{}')::numeric;
       else raise exception 'Nilai % harus angka', k; end if;
-      if coalesce(s.is_int, s3.value_type = 'int') and n <> trunc(n) then raise exception 'Nilai % harus bilangan bulat', k; end if;
-      if n < coalesce(s.min_value, s3.min_value) or n > coalesce(s.max_value, s3.max_value) then
-        raise exception 'Nilai % harus % s.d. % %', k, coalesce(s.min_value, s3.min_value), coalesce(s.max_value, s3.max_value), coalesce(s.unit, s3.unit);
+      if s.value_type = 'int' and n <> trunc(n) then raise exception 'Nilai % harus bilangan bulat', k; end if;
+      if (s.min_value is not null and n < s.min_value) or (s.max_value is not null and n > s.max_value) then
+        raise exception 'Nilai % harus % s.d. % %', k, s.min_value, s.max_value, coalesce(s.unit, '');
       end if;
-      biz := biz || jsonb_build_object(k, n);
-    elsif s3.key is not null and s3.value_type = 'bool' then   -- 0105 v3
-      if jsonb_typeof(v) = 'boolean' then biz := biz || jsonb_build_object(k, v);
-      elsif lower(coalesce(v #>> '{}', '')) in ('true', 'false') then biz := biz || jsonb_build_object(k, lower(v #>> '{}')::boolean);
+      val := val || jsonb_build_object(k, n);
+    elsif s.value_type = 'bool' then
+      if jsonb_typeof(v) = 'boolean' then val := val || jsonb_build_object(k, v);
+      elsif lower(coalesce(v #>> '{}', '')) in ('true', 'false') then val := val || jsonb_build_object(k, lower(v #>> '{}')::boolean);
       else raise exception 'Nilai % harus true|false', k; end if;
-    elsif s3.key is not null and s3.value_type = 'text' then
+    elsif s.value_type = 'text' then
       t := lower(btrim(coalesce(v #>> '{}', '')));
-      if not (t = any (s3.options)) then raise exception 'Nilai % harus salah satu dari: %', k, array_to_string(s3.options, ' | '); end if;
-      biz := biz || jsonb_build_object(k, t);
+      if jsonb_typeof(v) <> 'string' or not (t = any (s.options)) then raise exception 'Nilai % harus salah satu dari: %', k, array_to_string(s.options, ' | '); end if;
+      val := val || jsonb_build_object(k, t);
+    elsif s.value_type = 'string' then
+      t := btrim(coalesce(v #>> '{}', ''));
+      if jsonb_typeof(v) <> 'string' or length(t) < coalesce(s.min_value, 0) or length(t) > coalesce(s.max_value, 200) then
+        raise exception 'Nilai % harus teks % s.d. % karakter', k, coalesce(s.min_value, 0), coalesce(s.max_value, 200);
+      end if;
+      if k = 'support_phone' and t !~ '^\+?[0-9][0-9 -]{5,19}$' then raise exception 'support_phone harus nomor telepon (+62…)'; end if;
+      val := val || jsonb_build_object(k, t);
+    elsif s.value_type = 'json' then
+      val := val || jsonb_build_object(k, setting_json_validate(k, v));
+    else
+      raise exception 'Tipe pengaturan % tidak dikenal (%)', k, s.value_type;
     end if;
-    if s3.key is not null then perform admin_require(s3.perm); end if;   -- 0105/0107: izin per kunci v3
+    -- ambang bisnis v2/v3 (audit settings.business_updated seperti 0104)
+    if exists (select 1 from business_setting_specs() b where b.key = k) or exists (select 1 from business_setting_specs_v3() b where b.key = k) then
+      biz := biz || jsonb_build_object(k, val -> k);
+    end if;
   end loop;
 
-  if biz <> '{}'::jsonb then
-    perform admin_require_unlock();   -- ambang yang menyentuh uang/laporan/provider: wajib PIN
-    if biz ? 'commission_cap_two_wheel' then
-      select string_agg(format('%s %s%%', e.service, e.driver_commission_pct), ', ') into v_bad
-        from service_economics e where e.service::text = any (two_wheel_services()) and e.driver_commission_pct > (biz->>'commission_cap_two_wheel')::numeric;
-      if v_bad is null then
-        select string_agg(format('pricing.%s %s%%', pr.service, pr.commission_pct), ', ') into v_bad
-          from pricing pr where pr.service::text = any (two_wheel_services()) and pr.commission_pct > (biz->>'commission_cap_two_wheel')::numeric;
-      end if;
-      if v_bad is not null then
-        raise exception 'Batas komisi roda dua % %% lebih rendah dari komisi yang berlaku (%). Turunkan komisinya dulu di Aturan Bisnis.', biz->>'commission_cap_two_wheel', v_bad;
-      end if;
+  if biz ? 'commission_cap_two_wheel' then
+    select string_agg(format('%s %s%%', e.service, e.driver_commission_pct), ', ') into v_bad
+      from service_economics e where e.service::text = any (two_wheel_services()) and e.driver_commission_pct > (biz->>'commission_cap_two_wheel')::numeric;
+    if v_bad is null then
+      select string_agg(format('pricing.%s %s%%', pr.service, pr.commission_pct), ', ') into v_bad
+        from pricing pr where pr.service::text = any (two_wheel_services()) and pr.commission_pct > (biz->>'commission_cap_two_wheel')::numeric;
     end if;
-    select coalesce(jsonb_object_agg(b.key, a.value), '{}'::jsonb) into before
-      from jsonb_object_keys(biz) b(key) left join app_settings a on a.key = b.key;
+    if v_bad is not null then
+      raise exception 'Batas komisi roda dua % %% lebih rendah dari komisi yang berlaku (%). Turunkan komisinya dulu di Aturan Bisnis.', biz->>'commission_cap_two_wheel', v_bad;
+    end if;
   end if;
+  select coalesce(jsonb_object_agg(b.key, a.value), '{}'::jsonb) into before_all
+    from jsonb_object_keys(val) b(key) left join app_settings a on a.key = b.key;
+  select coalesce(jsonb_object_agg(b.key, before_all -> b.key), '{}'::jsonb) into before from jsonb_object_keys(biz) b(key);
 
-  for k, v in select * from jsonb_each(p) loop
-    if biz ? k then v := biz -> k; end if;   -- disimpan dalam bentuk JSON bertipe (angka/boolean/teks)
+  for k, v in select * from jsonb_each(val) loop   -- disimpan dalam bentuk JSON bertipe (angka/boolean/teks/objek)
     insert into app_settings (key, value) values (k, v) on conflict (key) do update set value = excluded.value, updated_at = now();
   end loop;
-  perform log_activity('settings.update', 'app_settings', 'batch', 'Pengaturan otomasi diubah: ' || (select string_agg(key, ', ') from jsonb_object_keys(p) key), p);
+  perform log_activity('settings.update', 'app_settings', 'batch', 'Pengaturan diubah: ' || (select string_agg(key, ', ') from jsonb_object_keys(val) key),
+    jsonb_build_object('before', before_all, 'after', val));
   if biz <> '{}'::jsonb then
     select string_agg(format('%s: %s → %s', b.key, coalesce(before ->> b.key, '-'), biz ->> b.key), ', ') into ringkas from jsonb_object_keys(biz) b(key);
     perform log_activity('settings.business_updated', 'app_settings', 'business', 'Ambang bisnis diubah: ' || ringkas,
@@ -1530,7 +1841,7 @@ end $$;
 revoke all on function public.admin_set_settings(jsonb) from public, anon;
 grant execute on function public.admin_set_settings(jsonb) to authenticated;
 comment on function public.admin_set_settings(jsonb) is
-  'Pengaturan umum app_settings (0019). 0104: ambang bisnis (business_setting_specs) wajib PIN + validasi + audit. 0105: kunci v3 (business_setting_specs_v3: provider/env/simulasi/disbursement, ambang dual approval, iklan, rate limit, auto_payout_*) — tipe & opsi divalidasi, PIN + admin_require(perm), audit payment.provider_switched.';
+  'Pengaturan app_settings (0019). v3 T3: SEMUA kunci wajib izin payment_config + PIN (admin_require_unlock) + izin per kunci; kunci di luar app_setting_specs() (ambang v2 + v3 + kunci umum: rekening, share %, sesi admin, batas top up, otomasi, peta, JSON radius/tier/batas kirim) DITOLAK. Tipe divalidasi, atomik, audit settings.update (+ settings.business_updated / payment.provider_switched).';
 
 create or replace function public.admin_business_settings()
 returns jsonb language plpgsql stable security definer set search_path = public as $$
@@ -1591,7 +1902,7 @@ begin
   if to_regclass('public.payments_one_pending_per_order') is null then raise exception '0105 batal: unique index intent PENDING belum ada'; end if;
   -- hak akses
   if has_function_privilege('authenticated', 'public.payment_intent_create(uuid,text,uuid,bigint,text,text)', 'EXECUTE')
-     or has_function_privilege('authenticated', 'public.payment_event_ingest(text,text,text,text,bigint,boolean,jsonb)', 'EXECUTE')
+     or has_function_privilege('authenticated', 'public.payment_event_ingest(text,text,text,text,bigint,boolean,jsonb,text)', 'EXECUTE')
      or has_function_privilege('authenticated', 'public.payment_mark_reconciled(uuid,uuid)', 'EXECUTE')
      or has_function_privilege('authenticated', 'public.payment_settle(text,text,jsonb,text,timestamp with time zone)', 'EXECUTE')
      or has_function_privilege('anon', 'public.payment_settle(text,text,jsonb,text,timestamp with time zone)', 'EXECUTE') then
