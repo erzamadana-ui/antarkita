@@ -13,6 +13,7 @@ import { initPush, attachSignOutHook, markNavigationReady } from '@/lib/push';
 import { ToastHost, Loading } from '@/components/ui';
 import { AmbientBackground } from '@/components/glass';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { InternalBuildRibbon } from '@/components/InternalBuildRibbon';
 import { colors, FONT_ASSETS } from '@/lib/theme';
 import { useFonts } from 'expo-font';
 import { APP, APP_NAME } from '@/lib/app';
@@ -123,6 +124,7 @@ export default function RootLayout() {
           )}
           {ready && <IncomingCallOverlay />}
           <ToastHost />
+          <InternalBuildRibbon />
         </View>
       </SafeAreaProvider>
     </GestureHandlerRootView>

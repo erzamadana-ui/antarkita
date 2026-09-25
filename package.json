@@ -1,7 +1,7 @@
 {
   "name": "antarkita",
   "main": "expo-router/entry",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "dependencies": {
     "@config-plugins/react-native-webrtc": "^15.0.2",
     "@expo/vector-icons": "^15.1.1",

@@ -72,6 +72,9 @@ jobs:
           EXPO_PUBLIC_APK_URL: https://github.com/${{ github.repository }}/releases/latest
           EXPO_PUBLIC_SITE_URL: https://apps.antarkitaindonesia.com
           EXPO_NO_TELEMETRY: 1
+          # branch selain main = INTERNAL TESTING (pita merah di aplikasi, nama berkas ber-akhiran -INTERNAL, tanpa GitHub Release)
+          EXPO_PUBLIC_BUILD_CHANNEL: ${{ github.ref == 'refs/heads/main' && 'production' || 'internal' }}
+          EXPO_PUBLIC_BUILD_COMMIT: ${{ github.sha }}
           CI: 1
         run: npx expo prebuild --platform android --no-install
 
@@ -98,28 +101,39 @@ jobs:
           # Bundel JS dibuat di dalam Gradle (bundleRelease) → env tautan "Bagikan perjalanan" wajib ada di sini juga.
           EXPO_PUBLIC_SITE_URL: https://apps.antarkitaindonesia.com
           EXPO_NO_TELEMETRY: 1
+          # branch selain main = INTERNAL TESTING (pita merah di aplikasi, nama berkas ber-akhiran -INTERNAL, tanpa GitHub Release)
+          EXPO_PUBLIC_BUILD_CHANNEL: ${{ github.ref == 'refs/heads/main' && 'production' || 'internal' }}
+          EXPO_PUBLIC_BUILD_COMMIT: ${{ github.sha }}
           CI: 1
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=${{ steps.opsi.outputs.abi }}
-          cp app/build/outputs/apk/release/app-release.apk ../antarkita-${{ matrix.app }}-${{ github.run_number }}.apk
+          SUF=${{ github.ref == 'refs/heads/main' && '' || '-INTERNAL' }}
+          cp app/build/outputs/apk/release/app-release.apk ../antarkita-${{ matrix.app }}-${{ github.run_number }}${SUF}.apk
 
       # Ukuran APK dicetak ke ringkasan job supaya perubahan ukuran terlihat
       # tiap build tanpa harus mengunduh berkasnya.
       - name: Catat ukuran APK
         run: |
-          F=antarkita-${{ matrix.app }}-${{ github.run_number }}.apk
-          SZ=$(du -h "$F" | cut -f1)
-          echo "| ${{ matrix.app }} | ${{ steps.opsi.outputs.abi }} | minify=${{ steps.opsi.outputs.minify }} | $SZ |" >> "$GITHUB_STEP_SUMMARY"
-          echo "Ukuran $F = $SZ"
+          for F in antarkita-${{ matrix.app }}-${{ github.run_number }}*.apk; do
+            SZ=$(du -h "$F" | cut -f1); SHA=$(sha256sum "$F" | cut -d' ' -f1)
+            echo "| $F | ${{ steps.opsi.outputs.abi }} | minify=${{ steps.opsi.outputs.minify }} | $SZ | \`$SHA\` | ${{ github.sha }} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "$SHA  $F" > "$F.sha256"
+            echo "Ukuran $F = $SZ · SHA-256 $SHA · commit ${{ github.sha }}"
+          done
 
       - uses: actions/upload-artifact@v4
         with:
           name: antarkita-${{ matrix.app }}-apk
-          path: antarkita-*.apk
+          path: |
+            antarkita-*.apk
+            antarkita-*.apk.sha256
 
   release:
+    # GitHub Release (tautan unduh publik & 'releases/latest' di web) HANYA dari main.
+    # Branch lain = internal testing: unduh dari artifact run (butuh login GitHub).
+    if: github.ref == 'refs/heads/main'
     needs: apk
     runs-on: ubuntu-latest
     steps:
