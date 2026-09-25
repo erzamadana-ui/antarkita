@@ -1,4 +1,6 @@
 // Intelijen harga: harga kompetitor (input admin), sesi harga high/middle/low, dan usulan penyesuaian tarif.
+// finpay-v3 (0111): tulis langsung pricing_sessions dicabut → rpc('admin_set_pricing_session', { p_id, p_patch }) (izin pricing + PIN + log);
+// p_id null = buat, { _delete: true } = hapus.
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Switch, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -7,6 +9,7 @@ import { AdminPage, StatCard, Table, FilterBar, AdminSelect, adminFont as font, 
 import { Row, Input, Button, Badge, Chip, toast } from '@/components/ui';
 import { Entrance, PressableScale, ProgressBar } from '@/components/motion';
 import { supabase, rpc } from '@/lib/supabase';
+import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import { colors } from '@/lib/theme';
 import { serviceLabel, rupiah } from '@/lib/format';
 import type { CompetitorPrice, PricingSession, ServiceType } from '@/lib/types';
@@ -49,20 +52,28 @@ export default function PricingIntel() {
   };
   const delComp = async (id: string) => { await supabase.from('competitor_prices').delete().eq('id', id); load(); };
 
+  /** Satu pintu tulis sesi harga (PIN + izin pricing di server). */
+  const setSession = async (id: string | null, patch: Record<string, unknown>) => {
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return false;
+    try { await rpc('admin_set_pricing_session', { p_id: id, p_patch: patch }); return true; }
+    catch (e) { handleAdminError(e); return false; }
+  };
   const addSession = async () => {
     if (!ns.name) return toast.error('Nama sesi wajib');
-    const { error } = await supabase.from('pricing_sessions').insert({ name: ns.name, level: ns.level, days: ns.days, start_time: ns.start_time, end_time: ns.end_time, multiplier: Number(ns.multiplier) || 1, driver_bonus_pct: Number(ns.driver_bonus_pct) || 0, note: ns.note || null, active: true });
-    if (error) return toast.error(error.message);
-    setNs({ ...emptySession }); toast.success('Sesi harga ditambahkan'); load();
+    const ok = await setSession(null, { name: ns.name, level: ns.level, days: ns.days, start_time: ns.start_time, end_time: ns.end_time, multiplier: Number(ns.multiplier) || 1, driver_bonus_pct: Number(ns.driver_bonus_pct) || 0, note: ns.note || null, active: true });
+    if (!ok) return;
+    setNs({ ...emptySession }); toast.success('Sesi harga ditambahkan & tercatat di log'); load();
   };
-  const toggleSession = async (s: PricingSession) => { await supabase.from('pricing_sessions').update({ active: !s.active }).eq('id', s.id); load(); };
-  const delSession = async (id: string) => { await supabase.from('pricing_sessions').delete().eq('id', id); load(); };
+  const toggleSession = async (s: PricingSession) => { if (await setSession(s.id, { active: !s.active })) load(); };
+  const delSession = async (id: string) => { if (await setSession(id, { _delete: true })) { toast.success('Sesi harga dihapus'); load(); } };
   const applySuggestion = async (sg: Suggestion) => {
     // terapkan multiplier usulan ke semua sesi aktif dengan level yang sama (untuk layanan ini)
     const targets = sessions.filter((s) => s.level === sg.level);
     if (targets.length === 0) return toast.error(`Belum ada sesi ${sg.level}. Tambahkan sesi dulu.`);
-    for (const s of targets) await supabase.from('pricing_sessions').update({ multiplier: sg.suggested_multiplier }).eq('id', s.id);
-    toast.success(`Multiplier ${sg.suggested_multiplier}× diterapkan ke ${targets.length} sesi ${sg.level}`); load();
+    let n = 0;
+    for (const s of targets) { if (!(await setSession(s.id, { multiplier: sg.suggested_multiplier }))) break; n++; }
+    if (n) toast.success(`Multiplier ${sg.suggested_multiplier}× diterapkan ke ${n}/${targets.length} sesi ${sg.level}`);
+    load();
   };
 
   const shown = sugg.filter((x) => x.service === svc);

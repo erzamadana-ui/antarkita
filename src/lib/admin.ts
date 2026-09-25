@@ -9,6 +9,8 @@
 //    belum ada), `maskSecret` (kunci tidak pernah tampil penuh), `webhookUrl`, label sumber angka.
 import { create } from 'zustand';
 import { rpc, supabase, friendlyError } from '@/lib/supabase';
+import { toast } from '@/components/ui';
+import { handleAdminError } from '@/store/adminSecurity';
 
 /* ───────────────────────────── RBAC (§5) ───────────────────────────── */
 
@@ -18,11 +20,12 @@ export type AdminRole = 'superadmin' | 'finance' | 'ops' | 'cs' | 'viewer';
  * Bila `my_admin_role().perms` memakai nama lain, cukup sesuaikan daftar ini.
  */
 export type AdminPerm =
-  | 'view' | 'report' | 'audit'
-  | 'fee' | 'pricing' | 'settings' | 'gateway' | 'gateway_secret'
-  | 'ledger' | 'reconcile' | 'payout' | 'wallet_adjust' | 'approvals'
-  | 'refund_approve' | 'refund_execute' | 'dispute' | 'dispute_resolve'
-  | 'ads_review' | 'ads_product' | 'ops' | 'tickets' | 'admin_role';
+  // nama UI (dipetakan ke nama server lewat SERVER_PERM_ALIAS)
+  | 'audit' | 'settings' | 'gateway' | 'approvals' | 'refund_approve' | 'ads_review' | 'ads_product' | 'ops' | 'tickets'
+  // nama server (admin_role_perms, migrasi 0107)
+  | 'view' | 'orders_view' | 'payments_view' | 'ledger' | 'report' | 'refund' | 'refund_execute' | 'payout' | 'reconcile' | 'fee'
+  | 'wallet_adjust' | 'approval' | 'dispute' | 'dispute_resolve' | 'ticket' | 'driver' | 'merchant' | 'city' | 'orders' | 'ads'
+  | 'pricing' | 'promo' | 'gateway_secret' | 'payment_config' | 'admin_role';
 
 export const ADMIN_ROLES: { value: AdminRole; label: string; desc: string }[] = [
   { value: 'superadmin', label: 'Superadmin', desc: 'Semua izin, termasuk mengatur peran admin & rahasia gateway' },
@@ -33,14 +36,16 @@ export const ADMIN_ROLES: { value: AdminRole; label: string; desc: string }[] = 
 ];
 export const adminRoleLabel = (r?: string | null) => ADMIN_ROLES.find((x) => x.value === r)?.label ?? (r || '—');
 
-/** Matriks cadangan (dipakai bila server mengirim `role` tanpa `perms`). Sumber: kontrak §5. */
-export const ROLE_PERMS: Record<AdminRole, AdminPerm[] | ['*']> = {
+/**
+ * Matriks cadangan (dipakai bila server mengirim `role` tanpa `perms`) — SAMA PERSIS dengan `admin_role_perms()` (0107).
+ * Nama izin server; izin UI dipetakan lewat SERVER_PERM_ALIAS.
+ */
+export const ROLE_PERMS: Record<AdminRole, string[]> = {
   superadmin: ['*'],
-  finance: ['view', 'report', 'audit', 'fee', 'ledger', 'reconcile', 'payout', 'wallet_adjust', 'approvals', 'refund_approve', 'refund_execute', 'dispute', 'dispute_resolve'],
-  // 'view' = baca SEMUA menu (hanya viewer/finance). ops & cs sengaja tanpa 'view' agar menu keuangan tersembunyi.
-  ops: ['ops', 'pricing', 'ads_review', 'ads_product', 'tickets'],
-  cs: ['tickets', 'dispute'],
-  viewer: ['view', 'report', 'audit'],
+  finance: ['view', 'orders_view', 'payments_view', 'ledger', 'report', 'refund', 'refund_execute', 'payout', 'reconcile', 'fee', 'wallet_adjust', 'approval', 'dispute', 'dispute_resolve'],
+  ops: ['view', 'orders_view', 'payments_view', 'report', 'driver', 'merchant', 'city', 'orders', 'ads', 'pricing', 'promo', 'dispute', 'ticket'],
+  cs: ['view', 'orders_view', 'payments_view', 'ticket', 'dispute'],
+  viewer: ['view', 'orders_view', 'payments_view', 'ledger', 'report'],
 };
 
 export interface MyAdminRole { role: AdminRole | null; perms: string[] }
@@ -85,7 +90,7 @@ export function permsAllow(info: MyAdminRole | null, perm?: AdminPerm | AdminPer
   if (!perm || (Array.isArray(perm) && perm.length === 0)) return true;
   if (!info || !info.role) return true;
   if (info.role === 'superadmin') return true;
-  const list = info.perms.length ? info.perms : (ROLE_PERMS[info.role] as string[] | undefined) ?? [];
+  const list = info.perms.length ? info.perms : ROLE_PERMS[info.role] ?? [];
   if (list.includes('*') || list.includes('all')) return true;
   const want = Array.isArray(perm) ? perm : [perm];
   // Nama izin UI → nama izin server (admin_role_perms, migrasi 0107). Satu izin UI boleh dipenuhi salah satu alias server.
@@ -99,6 +104,24 @@ export function useAdminCan() {
 export const adminCan = (perm?: AdminPerm | AdminPerm[] | null) => permsAllow(useAdminRole.getState().info, perm);
 
 /* ───────────────────────────── Helper umum ───────────────────────────── */
+
+/**
+ * Galat simpan pengaturan (admin_set_settings v3): SETTING_UNKNOWN (kunci di luar app_setting_specs) dan
+ * izin payment_config diberi pesan jelas; selebihnya diteruskan ke `handleAdminError` (PIN/ADMIN_LOCKED).
+ */
+export function handleSettingsError(e: unknown): void {
+  const msg = String((e as Error)?.message ?? e ?? '');
+  if (msg.includes('SETTING_UNKNOWN')) {
+    const key = /kunci pengaturan (\S+)/.exec(msg)?.[1];
+    toast.error(`Pengaturan ${key ? `“${key}” ` : ''}ditolak server: kunci tidak terdaftar di app_setting_specs. Hubungi pengembang untuk menambah spesifikasinya.`);
+    return;
+  }
+  if (/izin payment_config/i.test(msg)) { toast.error('Menyimpan pengaturan butuh izin payment_config (superadmin).'); return; }
+  const perm = /\(izin ([a-z_]+)\)/i.exec(msg)?.[1];
+  if (perm) { toast.error(`Peran admin Anda tidak punya izin “${perm}” untuk pengaturan ini.`); return; }
+  handleAdminError(e);
+}
+
 
 /** Galat "fungsi/tabel belum ada" dari PostgREST — dipakai untuk fallback. */
 export const isMissing = (e: unknown) =>
@@ -214,6 +237,8 @@ export interface GatewaySecretRow {
   server_key?: string | null; client_key?: string | null; callback_token?: string | null;
   server_key_masked?: string | null; client_key_masked?: string | null; callback_token_masked?: string | null;
   has_server_key?: boolean; has_callback_token?: boolean; configured?: boolean;
+  /** 0105: nama kunci di kolom extra (nilainya tidak pernah dikirim ke klien), mis. ['cron_secret']. */ extra_keys?: string[] | null;
+  /** 0105: baris ini = provider & env aktif. */ active?: boolean;
   updated_at?: string | null; updated_by?: string | null; updated_by_name?: string | null;
 }
 export const SECRET_FIELDS: { key: 'merchant_id' | 'server_key' | 'client_key' | 'callback_token'; label: string; secret: boolean; hint: string }[] = [
@@ -235,11 +260,11 @@ export const payStatusTone = (s?: string | null): SourceTone =>
 
 /** Kolom `payments` v3 yang dipakai panel (query tabel, RLS admin select). */
 export interface PaymentRowV3 {
-  id: string; user_id: string; order_id: string | null; purpose: string; amount: number; method: string | null; provider: string;
+  id: string; user_id: string; order_id: string | null; purpose: string; amount: number; method: string | null; provider: string; env?: string | null;
   status: string; pay_status?: PayStatus | null; external_id: string | null; provider_ref?: string | null; provider_txn_id?: string | null;
   support_ref?: string | null; expires_at?: string | null; paid_at?: string | null; created_at: string; refunded_amount?: number | null; reconciled_at?: string | null;
 }
-export const PAYMENT_COLS_V3 = 'id,user_id,order_id,purpose,amount,method,provider,status,pay_status,external_id,provider_ref,support_ref,expires_at,paid_at,created_at,refunded_amount';
+export const PAYMENT_COLS_V3 = 'id,user_id,order_id,purpose,amount,method,provider,env,status,pay_status,external_id,provider_ref,support_ref,expires_at,paid_at,created_at,refunded_amount';
 
 /** `payment_events` — inbox webhook (append-only). */
 export interface PaymentEvent {

@@ -84,7 +84,7 @@ export default function AdminDisputes() {
   return (
     <AdminPage title="Sengketa (Dispute)" subtitle="Keluhan uang dari pelanggan, driver, dan merchant: nominal tidak sesuai, tidak diterima, chargeback, pencairan belum masuk." onRefresh={load}
       right={<Button size="sm" variant="outline" title="Segarkan" icon="refresh-outline" onPress={load} />}>
-      <RequirePerm perm={['dispute', 'dispute_resolve', 'view']} mode="notice">
+      <RequirePerm perm={['dispute', 'dispute_resolve']} mode="notice">
         <Row gap={adminSpace.md} style={{ flexWrap: 'wrap' }}>
           <StatCard index={0} icon="alert-circle-outline" label="Pada filter ini" value={rows.length} color={adminTone.blue} />
           <StatCard index={1} icon="hourglass-outline" label="Terbuka" value={openCount} color={adminTone.amber} />
@@ -97,14 +97,14 @@ export default function AdminDisputes() {
         <Panel title={`Dispute (${rows.length})`} icon="alert-circle-outline" padded={false}>
           <DataTable rows={rows as unknown as Record<string, unknown>[]} emptyText={loading ? 'Memuat…' : 'Tidak ada dispute pada filter ini'} emptyIcon="checkmark-done-outline" onRowPress={(r) => open(r as unknown as Dispute)}
             columns={[
-              { key: 'created_at', label: 'Dibuka', width: 140, render: (r) => <View><Text style={font.small}>{fmtDate(String(r.created_at))}</Text><Text style={font.tiny}>{fmtAgo(String(r.created_at))}</Text></View> },
-              { key: 'order_code', label: 'Order', width: 150, render: (r) => { const x = r as unknown as Dispute; return <Text style={font.bodyStrong} selectable>{x.order_code ?? shortId(x.order_id)}</Text>; } },
-              { key: 'party_role', label: 'Pelapor', width: 140, render: (r) => { const x = r as unknown as Dispute; return <View><Text style={font.body}>{PARTY_ROLE_LABEL[x.party_role] ?? x.party_role}</Text><Text style={font.tiny} numberOfLines={1}>{x.opened_by_name ?? shortId(x.opened_by)}</Text></View>; } },
-              { key: 'kind', label: 'Jenis', width: 170, render: (r) => <Pill text={DISPUTE_KIND_LABEL[String(r.kind)] ?? String(r.kind)} tone={r.kind === 'chargeback' ? 'bad' : 'neutral'} /> },
-              { key: 'amount', label: 'Nominal', width: 110, align: 'right', mono: true, render: (r) => <Text style={font.mono}>{r.amount != null ? rupiah(Number(r.amount)) : '—'}</Text> },
-              { key: 'description', label: 'Keterangan', width: 260, flex: 1, render: (r) => <Trunc style={font.small} title={String(r.description ?? '')} lines={2}>{String(r.description ?? '—')}</Trunc> },
-              { key: 'status', label: 'Status', width: 170, render: (r) => { const x = r as unknown as Dispute; return <View style={{ gap: 3 }}><Pill text={DISPUTE_STATUS_LABEL[x.status] ?? x.status} tone={TONE_OF[x.status] ?? 'neutral'} />{x.resolved_at ? <Text style={font.tiny}>{fmtDate(x.resolved_at)}</Text> : null}</View>; } },
-              { key: 'actions', label: 'Aksi', width: 110, align: 'right', render: (r) => { const x = r as unknown as Dispute; return x.status === 'resolved_refund' || x.status === 'resolved_no_refund' || x.status === 'closed' ? <Button size="sm" variant="ghost" title="Lihat" onPress={() => open(x)} /> : <Button size="sm" title="Tangani" onPress={() => open(x)} />; } },
+              { key: 'created_at', label: 'Dibuka', width: 110, render: (r) => <View><Text style={font.small}>{fmtDate(String(r.created_at), false)}</Text><Text style={font.tiny}>{fmtAgo(String(r.created_at))}</Text></View> },
+              { key: 'order_code', label: 'Order', width: 130, render: (r) => { const x = r as unknown as Dispute; return <Text style={font.bodyStrong} selectable>{x.order_code ?? shortId(x.order_id)}</Text>; } },
+              { key: 'party_role', label: 'Pelapor', width: 120, render: (r) => { const x = r as unknown as Dispute; return <View><Text style={font.body}>{PARTY_ROLE_LABEL[x.party_role] ?? x.party_role}</Text><Text style={font.tiny} numberOfLines={1}>{x.opened_by_name ?? shortId(x.opened_by)}</Text></View>; } },
+              { key: 'kind', label: 'Jenis', width: 150, render: (r) => <Pill text={DISPUTE_KIND_LABEL[String(r.kind)] ?? String(r.kind)} tone={r.kind === 'chargeback' ? 'bad' : 'neutral'} /> },
+              { key: 'amount', label: 'Nominal', width: 104, align: 'right', mono: true, render: (r) => <Text style={font.mono}>{r.amount != null ? rupiah(Number(r.amount)) : '—'}</Text> },
+              { key: 'description', label: 'Keterangan', width: 160, flex: 1, render: (r) => <Trunc style={font.small} title={String(r.description ?? '')} lines={2}>{String(r.description ?? '—')}</Trunc> },
+              { key: 'status', label: 'Status', width: 150, render: (r) => { const x = r as unknown as Dispute; return <View style={{ gap: 3 }}><Pill text={DISPUTE_STATUS_LABEL[x.status] ?? x.status} tone={TONE_OF[x.status] ?? 'neutral'} />{x.resolved_at ? <Text style={font.tiny}>{fmtDate(x.resolved_at)}</Text> : null}</View>; } },
+              { key: 'actions', label: 'Aksi', width: 100, align: 'right', render: (r) => { const x = r as unknown as Dispute; return x.status === 'resolved_refund' || x.status === 'resolved_no_refund' || x.status === 'closed' ? <Button size="sm" variant="ghost" title="Lihat" onPress={() => open(x)} /> : <Button size="sm" title="Tangani" onPress={() => open(x)} />; } },
             ]} />
           <View style={{ padding: adminSpace.md }}><WideTableHint /></View>
         </Panel>

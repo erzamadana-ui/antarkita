@@ -10,8 +10,14 @@ import type { AdPlacementV3, AdServed, Merchant } from './types';
 /** Label transparansi tunggal untuk semua konten berbayar. */
 export const SPONSORED_LABEL = 'Sponsored';
 
-/** `ads_serve(p_placement, p_lat, p_lng, p_category, p_q, p_limit)`. Galat → [] (blok iklan opsional, dicatat di konsol). */
+/** Iklan hanya untuk pengguna yang sudah login: server menolak klik anon, dan impresi anon tidak perlu dicatat. */
+async function signedIn(): Promise<boolean> {
+  try { const { data } = await supabase.auth.getSession(); return !!data.session; } catch { return false; }
+}
+
+/** `ads_serve(p_placement, p_lat, p_lng, p_category, p_q, p_limit)`. Belum login / galat → [] (blok iklan opsional). */
 export async function serveAds(placement: AdPlacementV3, lat: number, lng: number, o: { category?: string | null; q?: string | null; limit?: number } = {}): Promise<AdServed[]> {
+  if (!(await signedIn())) return [];
   const { data, error } = await supabase.rpc('ads_serve', {
     p_placement: placement, p_lat: lat, p_lng: lng, p_category: o.category ?? null, p_q: o.q ?? null, p_limit: o.limit ?? 3,
   });
@@ -19,8 +25,9 @@ export async function serveAds(placement: AdPlacementV3, lat: number, lng: numbe
   return ((data as AdServed[] | null) ?? []).filter((a) => a && a.campaign_id && a.merchant_id);
 }
 
-/** `ads_click(p_campaign_id, p_placement)` — tidak memblokir navigasi bila gagal. */
+/** `ads_click(p_campaign_id, p_placement)` — tidak memblokir navigasi bila gagal; belum login → tidak dipanggil (diam-diam). */
 export async function clickAd(campaignId: string, placement: AdPlacementV3): Promise<boolean> {
+  if (!(await signedIn())) return false;
   const { data, error } = await supabase.rpc('ads_click', { p_campaign_id: campaignId, p_placement: placement });
   if (error) { console.warn('ads_click:', error.message); return false; }
   return !!(data as { charged?: boolean } | null)?.charged;

@@ -6,9 +6,9 @@
 //   • Eksekusi ke provider: edge function `pay-refund` { refund_id } (status approved → executing → done/failed lewat webhook).
 // Semua aksi butuh PIN panel; server memeriksa izin (admin_require) & checker ≠ maker.
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, Platform } from 'react-native';
+import { View, Text } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { AdminPage, Panel, DataTable, FilterBar, StatCard, Pill, AdminDialog, ReasonPrompt, RequirePerm, adminFont as font, adminTone, adminSpace, adminIcon, TONE } from '@/components/admin';
+import { AdminPage, Panel, DataTable, FilterBar, StatCard, Pill, AdminDialog, ReasonPrompt, RequirePerm, RowActions, adminFont as font, adminTone, adminSpace, adminIcon, adminTable, TONE, type RowAction } from '@/components/admin';
 import { FootNote } from '@/components/reports';
 import { Row, Button, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
@@ -27,12 +27,6 @@ const FILTERS = [
   { key: 'done', label: 'Selesai' }, { key: 'failed', label: 'Gagal' }, { key: 'rejected', label: 'Ditolak' }, { key: 'all', label: 'Semua' },
 ];
 const DEST_LABEL: Record<string, string> = { gateway: 'Ke metode bayar asal', wallet: 'Ke saldo AntarPay' };
-
-/** Tooltip web untuk tombol yang dinonaktifkan. */
-function Tip({ title, children }: { title: string; children: React.ReactNode }) {
-  if (Platform.OS === 'web') return React.createElement('div', { title, style: { display: 'inline-flex' } }, children);
-  return <>{children}</>;
-}
 
 export default function AdminRefunds() {
   const me = useAuth((s) => s.session?.user.id ?? null);
@@ -125,7 +119,7 @@ export default function AdminRefunds() {
   return (
     <AdminPage title="Refund" subtitle={`Antrean refund pelanggan · maker-checker untuk refund ≥ ${rupiah(dualMin)} · semua aksi butuh PIN panel`} onRefresh={load}
       right={<Button size="sm" variant="outline" title="Segarkan" icon="refresh-outline" onPress={load} />}>
-      <RequirePerm perm={['refund_approve', 'refund_execute', 'view']} mode="notice">
+      <RequirePerm perm={['refund_approve', 'refund_execute', 'payments_view']} mode="notice">
         <Row gap={adminSpace.md} style={{ flexWrap: 'wrap' }}>
           <StatCard index={0} icon="return-down-back-outline" label="Nominal pada filter" value={rupiah(kpi.total)} hint={`${rows.length} permintaan`} color={adminTone.blue} />
           <StatCard index={1} icon="person-outline" label="Menunggu maker" value={kpi.maker} color={adminTone.amber} />
@@ -140,32 +134,32 @@ export default function AdminRefunds() {
         <Panel title={`Permintaan refund (${rows.length})`} icon="return-down-back-outline" padded={false}>
           <DataTable rows={pg.rows as unknown as Record<string, unknown>[]} emptyText={loading ? 'Memuat…' : 'Tidak ada refund pada filter ini'} emptyIcon="return-down-back-outline" onRowPress={(r) => openDetail(r as unknown as RefundRequest)}
             columns={[
-              { key: 'created_at', label: 'Diajukan', width: 140, render: (r) => <View><Text style={font.small}>{fmtDate(String(r.created_at))}</Text><Text style={font.tiny}>{fmtAgo(String(r.created_at))}</Text></View> },
-              { key: 'order_code', label: 'Order', width: 150, render: (r) => { const x = r as unknown as RefundRequest; return <View><Text style={font.bodyStrong} selectable>{x.order_code ?? shortId(x.order_id)}</Text>{x.support_ref ? <Text style={font.tiny}>CS {x.support_ref}</Text> : null}</View>; } },
-              { key: 'amount', label: 'Nominal', width: 130, align: 'right', mono: true, render: (r) => { const x = r as unknown as RefundRequest; return <View style={{ alignItems: 'flex-end' }}><Text style={font.mono}>{rupiah(x.amount)}</Text><Text style={font.tiny}>{x.kind === 'full' ? 'penuh' : 'sebagian'}{needsChecker(x) ? ' · 2 admin' : ''}</Text></View>; } },
-              { key: 'reason', label: 'Alasan · tujuan', width: 220, render: (r) => { const x = r as unknown as RefundRequest; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.small} title={x.reason ?? ''}>{x.reason ?? '—'}</Trunc><Text style={font.tiny}>{DEST_LABEL[x.destination] ?? x.destination}</Text></View>; } },
-              { key: 'status', label: 'Status', width: 190, render: (r) => { const x = r as unknown as RefundRequest; return (
-                <View style={{ gap: 3 }}>
+              // Lebar total ±1.000 px → muat di layar 1366 (isi ±1.070 px) tanpa kolom Aksi terpotong.
+              { key: 'created_at', label: 'Diajukan', width: 116, render: (r) => <View><Text style={font.small}>{fmtDate(String(r.created_at), false)}</Text><Text style={font.tiny}>{fmtAgo(String(r.created_at))}</Text></View> },
+              { key: 'order_code', label: 'Order', width: 136, render: (r) => { const x = r as unknown as RefundRequest; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.bodyStrong} title={x.order_code ?? x.order_id ?? ''}>{x.order_code ?? shortId(x.order_id)}</Trunc>{x.support_ref ? <Text style={font.tiny}>CS {x.support_ref}</Text> : null}</View>; } },
+              { key: 'amount', label: 'Nominal', width: 118, align: 'right', mono: true, render: (r) => { const x = r as unknown as RefundRequest; return <View style={{ alignItems: 'flex-end' }}><Text style={font.mono}>{rupiah(x.amount)}</Text><Text style={font.tiny}>{x.kind === 'full' ? 'penuh' : 'sebagian'}{needsChecker(x) ? ' · 2 admin' : ''}</Text></View>; } },
+              { key: 'reason', label: 'Alasan · tujuan', width: 170, flex: 1, render: (r) => { const x = r as unknown as RefundRequest; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.small} title={x.reason ?? ''}>{x.reason ?? '—'}</Trunc><Text style={font.tiny} numberOfLines={1}>{DEST_LABEL[x.destination] ?? x.destination}</Text></View>; } },
+              { key: 'status', label: 'Status · ref', width: 200, render: (r) => { const x = r as unknown as RefundRequest; return (
+                <View style={{ gap: 3, minWidth: 0, alignSelf: 'stretch' }}>
                   <Pill text={awaitingChecker(x) ? 'Menunggu checker' : REFUND_STATUS_LABEL[x.status] ?? x.status} tone={awaitingChecker(x) ? 'wait' : refundTone(x.status)} />
-                  <Text style={font.tiny} numberOfLines={1}>maker {who(x.maker, x.maker_name)}{x.checker ? ` · checker ${who(x.checker, x.checker_name)}` : ''}</Text>
+                  <Trunc style={font.tiny} title={`maker ${who(x.maker, x.maker_name)}${x.checker ? ` · checker ${who(x.checker, x.checker_name)}` : ''}${x.provider_ref ? ` · ref ${x.provider_ref}` : ''}`}>
+                    {x.provider_ref ? `ref ${x.provider_ref}` : `maker ${who(x.maker, x.maker_name)}${x.checker ? ` · checker ${who(x.checker, x.checker_name)}` : ''}`}
+                  </Trunc>
                 </View>
               ); } },
-              { key: 'provider_ref', label: 'Ref provider', width: 150, render: (r) => <Text style={font.tiny} selectable>{r.provider_ref ? String(r.provider_ref) : '—'}{r.executed_at ? `\n${fmtDate(String(r.executed_at))}` : ''}</Text> },
-              { key: 'actions', label: 'Aksi', width: 260, align: 'right', render: (r) => {
+              { key: 'actions', label: 'Aksi', width: adminTable.actionsWideW, align: 'right', render: (r) => {
                 const x = r as unknown as RefundRequest;
                 const isMaker = !!me && x.maker === me;
+                const main: RowAction | null =
+                  awaitingMaker(x) && can('refund_approve') ? { key: 'ok', label: 'Setujui', icon: 'checkmark', variant: 'solid', color: colors.success, busy: busy === `a:${x.id}`, onPress: () => { approve(x); } }
+                  : awaitingChecker(x) && can('refund_approve') ? { key: 'cf', label: 'Konfirmasi', icon: 'shield-checkmark-outline', variant: 'soft', disabled: isMaker, busy: busy === `c:${x.id}`, title: isMaker ? 'Anda maker refund ini — konfirmasi harus oleh admin lain' : 'Konfirmasi sebagai checker', onPress: () => { confirm(x); } }
+                  : x.status === 'approved' && can('refund_execute') ? { key: 'ex', label: 'Eksekusi', icon: 'send-outline', variant: 'solid', color: adminTone.teal, onPress: () => setExec(x) }
+                  : null;
                 return (
-                  <Row gap={6} style={{ justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                    {awaitingMaker(x) && can('refund_approve') ? <Button size="sm" title="Setujui" icon="checkmark" color={colors.success} loading={busy === `a:${x.id}`} onPress={() => { approve(x); }} /> : null}
-                    {awaitingChecker(x) && can('refund_approve') ? (
-                      <Tip title={isMaker ? 'Anda maker refund ini — konfirmasi harus oleh admin lain' : 'Konfirmasi sebagai checker'}>
-                        <Button size="sm" title="Konfirmasi" icon="shield-checkmark-outline" disabled={isMaker} loading={busy === `c:${x.id}`} onPress={() => { confirm(x); }} />
-                      </Tip>
-                    ) : null}
-                    {x.status === 'approved' && can('refund_execute') ? <Button size="sm" title="Eksekusi" icon="send-outline" color={adminTone.teal} onPress={() => setExec(x)} /> : null}
-                    {x.status === 'requested' && can('refund_approve') ? <Button size="sm" variant="outline" color={colors.danger} title="Tolak" onPress={() => setReject(x)} /> : null}
-                    <Button size="sm" variant="ghost" title="Detail" onPress={() => openDetail(x)} />
-                  </Row>
+                  <RowActions
+                    primary={[main, { key: 'dt', label: 'Detail & pratinjau', icon: 'document-text-outline', onPress: () => openDetail(x) }]}
+                    menu={[x.status === 'requested' && can('refund_approve') && { key: 'rj', label: 'Tolak refund…', icon: 'close-circle-outline', danger: true, onPress: () => setReject(x) }]}
+                  />
                 );
               } },
             ]} />

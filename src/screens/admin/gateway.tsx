@@ -8,7 +8,7 @@
 // admin_set_settings; kredensial per (provider, env) lewat admin_gateway_secrets()/admin_set_gateway_secret (tersamar,
 // PIN); URL webhook pay-webhook/{provider}; "Uji koneksi" = payment_provider_public() (tanpa kontrak baru).
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Switch } from 'react-native';
+import { View, Text, StyleSheet, Switch, Pressable } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Clipboard from 'expo-clipboard';
 import { AdminPage, Table, StatCard, Pill, AdminDialog, RequirePerm, adminFont as font, adminTone, adminSpace, adminRadius, AdminCard as Card, TONE } from '@/components/admin';
@@ -24,6 +24,7 @@ import { fmtDate, WideTableHint, ErrorNote } from './_shared';
 import {
   PROVIDERS, SECRET_FIELDS, asList, maskSecret, providerLabel, webhookUrl, SUPABASE_BASE,
   type GatewaySecretRow, type PaymentEnv, type PaymentProvider, type PaymentProviderPublic,
+  handleSettingsError,
 } from '@/lib/admin';
 
 const WEBHOOK_URL = 'https://qwltshvzrsykxdvhbxcv.supabase.co/functions/v1/midtrans-webhook';
@@ -393,7 +394,7 @@ function ProviderActiveCard() {
       setConfirm(false); setConfirmText(''); setTest(null);
       useAppSettingsStore.getState().load(true);
       await load();
-    } catch (e) { handleAdminError(e); } finally { setBusy(false); }
+    } catch (e) { handleSettingsError(e); } finally { setBusy(false); }
   };
   const save = () => { if (toProd || (dirty && saved?.provider !== f.provider)) { setConfirmText(''); setConfirm(true); } else doSave(); };
 
@@ -461,7 +462,7 @@ function ProviderActiveCard() {
           </Row>
         </View>
       </Row>
-      <RequirePerm perm={['gateway', 'settings']}>
+      <RequirePerm perm="settings" fallback={<Text style={font.tiny}>Mengganti provider/lingkungan butuh izin payment_config (superadmin).</Text>}>
         <Row gap={8} style={{ justifyContent: 'flex-end' }}>
           {dirty ? <Button size="sm" variant="ghost" title="Batalkan" onPress={() => saved && setF(saved)} /> : null}
           <Button size="sm" title="Simpan provider" icon="save-outline" disabled={!dirty} loading={busy} color={f.env === 'production' ? colors.danger : undefined} onPress={save} />
@@ -515,6 +516,7 @@ function SecretsCard() {
   const [edit, setEdit] = useState<{ provider: PaymentProvider; env: PaymentEnv } | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [extraAck, setExtraAck] = useState(false);
 
   const load = useCallback(async () => {
     try { setRows(asList<GatewaySecretRow>(await rpc('admin_gateway_secrets'))); setErr(null); }
@@ -523,13 +525,22 @@ function SecretsCard() {
   useEffect(() => { load(); }, [load]);
 
   const find = (p: string, e: string) => rows.find((r) => r.provider === p && (r.env ?? 'sandbox') === e);
-  const open = (provider: PaymentProvider, env: PaymentEnv) => { setForm({}); setEdit({ provider, env }); };
-  const close = () => { setForm({}); setEdit(null); };   // isian rahasia langsung dibuang dari memori layar
+  const open = (provider: PaymentProvider, env: PaymentEnv) => { setForm({}); setExtraAck(false); setEdit({ provider, env }); };
+  const close = () => { setForm({}); setExtraAck(false); setEdit(null); };   // isian rahasia langsung dibuang dari memori layar
+  /** Kunci extra lain yang akan HILANG bila extra dikirim (server mengganti seluruh objek extra, bukan menggabung). */
+  const otherExtra = (p?: string, e?: string) => (p && e ? (find(p, e)?.extra_keys ?? []).filter((k) => k !== 'cron_secret') : []);
+  const cronSet = rows.some((r) => (r.extra_keys ?? []).includes('cron_secret'));
 
   const submit = async () => {
     if (!edit) return;
-    const patch: Record<string, string> = {};
+    const patch: Record<string, unknown> = {};
     for (const f of SECRET_FIELDS) { const v = (form[f.key] ?? '').trim(); if (v) patch[f.key] = v; }
+    const cron = (form.cron_secret ?? '').trim();
+    if (cron) {
+      if (cron.length < 16) return toast.error('Cron secret minimal 16 karakter (samakan dengan env CRON_SECRET edge function)');
+      if (otherExtra(edit.provider, edit.env).length && !extraAck) return toast.error('Centang konfirmasi: kunci extra lain akan terhapus');
+      patch.extra = { cron_secret: cron };
+    }
     if (!Object.keys(patch).length) return toast.error('Isi minimal satu kolom (kolom kosong = tidak diubah)');
     if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
     setBusy(true);
@@ -567,7 +578,13 @@ function SecretsCard() {
                   <Text selectable={!f.secret} style={[font.small, { color: adminTone.ink, fontFamily: 'monospace' }]} numberOfLines={1}>{secretShown(r, f.key) ?? '—'}</Text>
                 </Row>
               ))}
-              <Text style={font.tiny}>{r?.updated_at ? `Diubah ${fmtDate(r.updated_at)}${r.updated_by_name ? ` oleh ${r.updated_by_name}` : ''}` : 'Belum diisi'}</Text>
+              {p.value === 'finpay' ? (
+                <Row between style={{ gap: 8 }}>
+                  <Text style={font.tiny}>Cron secret (extra)</Text>
+                  <Text style={[font.small, { color: adminTone.ink }]}>{(r?.extra_keys ?? []).includes('cron_secret') ? 'terisi ••••' : '—'}</Text>
+                </Row>
+              ) : null}
+              <Text style={font.tiny}>{r?.updated_at ? `Diubah ${fmtDate(r.updated_at)}${r.updated_by_name ?? r.updated_by ? ` oleh ${r.updated_by_name ?? r.updated_by}` : ''}` : 'Belum diisi'}{r?.active ? ' · AKTIF' : ''}</Text>
               <Row gap={6} style={{ flexWrap: 'wrap' }}>
                 <Pill text={has ? 'Terkonfigurasi' : 'Belum lengkap'} tone={has ? 'ok' : 'wait'} />
                 <Button size="sm" variant="secondary" title={has ? 'Ganti kunci' : 'Isi kredensial'} icon="key-outline" onPress={() => open(p.value, env)} />
@@ -576,6 +593,20 @@ function SecretsCard() {
           );
         }))}
       </Row>
+      <View style={[s.note, { backgroundColor: adminTone.blue + '10', borderColor: adminTone.blue + '40', gap: 6 }]}>
+        <Row gap={8} style={{ alignItems: 'center' }}>
+          <Ionicons name="link-outline" size={18} color={adminTone.blue} />
+          <Text style={font.h3}>Pengikatan lingkungan (env)</Text>
+        </Row>
+        <Text style={font.small}>• Setiap intent pembayaran menyimpan <Text style={{ fontWeight: '700' }}>payments.env</Text> (sandbox/production) saat dibuat. Mengganti lingkungan aktif hanya berlaku untuk transaksi BARU.</Text>
+        <Text style={font.small}>• Webhook & cek status hanya diverifikasi dengan kunci <Text style={{ fontWeight: '700' }}>(provider, env) milik transaksi itu</Text> — notifikasi sandbox tidak bisa menandai transaksi production (dan sebaliknya). Jangan hapus kunci sandbox selama masih ada transaksi sandbox yang menunggu.</Text>
+        <Text style={font.small}>• <Text style={{ fontWeight: '700' }}>gateway_secrets.extra.cron_secret</Text> harus sama dengan env <Text style={{ fontWeight: '700' }}>CRON_SECRET</Text> edge function — pg_cron memanggil pay-reconcile dengan header x-cron-secret dari nilai ini; bila kosong, rekonsiliasi terjadwal dilewati.</Text>
+        <Row gap={6} style={{ flexWrap: 'wrap' }}>
+          <Pill text={cronSet ? 'cron_secret terisi' : 'cron_secret BELUM diisi'} tone={cronSet ? 'ok' : 'bad'} icon={cronSet ? 'checkmark-circle' : 'alert-circle'} />
+          <Text style={font.tiny}>Isi lewat tombol kredensial Finpay (kolom “Cron secret”).</Text>
+        </Row>
+      </View>
+
       <View style={{ gap: 6 }}>
         <Text style={font.label}>URL webhook yang harus didaftarkan di dashboard provider</Text>
         {PROVIDERS.map((p) => (
@@ -594,6 +625,19 @@ function SecretsCard() {
           <Input key={f.key} label={f.label} placeholder={edit ? (secretShown(find(edit.provider, edit.env), f.key) ?? f.hint) : f.hint} value={form[f.key] ?? ''}
             onChangeText={(v) => setForm((x) => ({ ...x, [f.key]: v }))} secureTextEntry={f.secret} autoCapitalize="none" autoCorrect={false} />
         ))}
+        {edit?.provider === 'finpay' ? (
+          <View style={{ gap: 6 }}>
+            <Input label="Cron secret (disimpan di extra.cron_secret)" placeholder={(find(edit.provider, edit.env)?.extra_keys ?? []).includes('cron_secret') ? 'terisi — kosongkan bila tidak diganti' : 'sama persis dengan env CRON_SECRET edge function'}
+              value={form.cron_secret ?? ''} onChangeText={(v) => setForm((x) => ({ ...x, cron_secret: v }))} secureTextEntry autoCapitalize="none" autoCorrect={false} />
+            <Text style={font.tiny}>Dipakai pg_cron → pay-reconcile (header x-cron-secret). Harus sama dengan secret CRON_SECRET di Edge Functions; tidak pernah ditulis ke log.</Text>
+            {(form.cron_secret ?? '').trim() && otherExtra(edit.provider, edit.env).length ? (
+              <Pressable onPress={() => setExtraAck((v) => !v)} style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+                <Ionicons name={extraAck ? 'checkbox' : 'square-outline'} size={18} color={extraAck ? colors.danger : adminTone.muted} />
+                <Text style={[font.small, { flex: 1, color: colors.danger }]}>Server mengganti SELURUH objek extra. Kunci extra lain ({otherExtra(edit.provider, edit.env).join(', ')}) akan terhapus — saya mengerti.</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
         <Row gap={8} style={{ justifyContent: 'flex-end' }}>
           <Button size="sm" variant="ghost" title="Batal" onPress={close} />
           <Button size="sm" title="Simpan kredensial" icon="lock-closed-outline" loading={busy} onPress={submit} />

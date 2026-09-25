@@ -50,7 +50,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/(admin)/market', label: 'AntarMarket · Pasar', icon: 'storefront-outline', iconActive: 'storefront' },
       { href: '/(admin)/places', label: 'Data Tempat', icon: 'map-outline', iconActive: 'map' },
       { href: '/(admin)/data-tempat', label: 'Impor Peta (OSM)', icon: 'cloud-download-outline', iconActive: 'cloud-download' },
-      { href: '/(admin)/pricing', label: 'Tarif & Promo', icon: 'pricetags-outline', iconActive: 'pricetags', perm: ['pricing', 'view'] },
+      { href: '/(admin)/pricing', label: 'Tarif & Promo', icon: 'pricetags-outline', iconActive: 'pricetags', perm: ['pricing', 'promo'] },
       { href: '/(admin)/pricing-intel', label: 'Intelijen Harga', icon: 'trending-up-outline', iconActive: 'trending-up' },
       { href: '/(admin)/blast', label: 'Blast Promo', icon: 'megaphone-outline', iconActive: 'megaphone' },
     ],
@@ -58,35 +58,35 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Keuangan',
     items: [
-      { href: '/(admin)/finance', label: 'Top up & Payout', icon: 'cash-outline', iconActive: 'cash', perm: ['payout', 'view'] },
-      { href: '/(admin)/refunds', label: 'Refund', icon: 'return-down-back-outline', iconActive: 'return-down-back', perm: ['refund_approve', 'refund_execute', 'view'] },
-      { href: '/(admin)/disputes', label: 'Sengketa (Dispute)', icon: 'alert-circle-outline', iconActive: 'alert-circle', perm: ['dispute', 'dispute_resolve', 'view'] },
-      { href: '/(admin)/approvals', label: 'Persetujuan (Maker-Checker)', icon: 'git-pull-request-outline', iconActive: 'git-pull-request', perm: ['approvals', 'view'] },
-      { href: '/(admin)/ledger', label: 'Buku Besar Order', icon: 'book-outline', iconActive: 'book', perm: ['ledger', 'view'] },
-      { href: '/(admin)/reconciliation', label: 'Rekonsiliasi', icon: 'git-compare-outline', iconActive: 'git-compare', perm: ['reconcile', 'view'] },
-      { href: '/(admin)/economics', label: 'Aturan Bisnis', icon: 'options-outline', iconActive: 'options', perm: ['fee', 'pricing', 'view'] },
-      { href: '/(admin)/city-costs', label: 'Biaya Tetap Kota', icon: 'business-outline', iconActive: 'business', perm: ['report', 'view'] },
+      { href: '/(admin)/finance', label: 'Top up & Payout', icon: 'cash-outline', iconActive: 'cash', perm: ['payout', 'payments_view'] },
+      { href: '/(admin)/refunds', label: 'Refund', icon: 'return-down-back-outline', iconActive: 'return-down-back', perm: ['refund_approve', 'refund_execute', 'payments_view'] },
+      { href: '/(admin)/disputes', label: 'Sengketa (Dispute)', icon: 'alert-circle-outline', iconActive: 'alert-circle', perm: ['dispute', 'dispute_resolve'] },
+      { href: '/(admin)/approvals', label: 'Persetujuan (Maker-Checker)', icon: 'git-pull-request-outline', iconActive: 'git-pull-request', perm: ['approvals'] },
+      { href: '/(admin)/ledger', label: 'Buku Besar Order', icon: 'book-outline', iconActive: 'book', perm: ['ledger'] },
+      { href: '/(admin)/reconciliation', label: 'Rekonsiliasi', icon: 'git-compare-outline', iconActive: 'git-compare', perm: ['reconcile', 'ledger'] },
+      { href: '/(admin)/economics', label: 'Aturan Bisnis', icon: 'options-outline', iconActive: 'options', perm: ['fee', 'pricing', 'report'] },
+      { href: '/(admin)/city-costs', label: 'Biaya Tetap Kota', icon: 'business-outline', iconActive: 'business', perm: ['report'] },
     ],
   },
   {
     title: 'Pembayaran',
     items: [
-      { href: '/(admin)/gateway', label: 'Payment Gateway', icon: 'card-outline', iconActive: 'card', perm: ['gateway', 'gateway_secret', 'view'] },
-      { href: '/(admin)/pg-fees', label: 'Biaya Payment Gateway', icon: 'swap-horizontal-outline', iconActive: 'swap-horizontal', perm: ['fee', 'view'] },
+      { href: '/(admin)/gateway', label: 'Payment Gateway', icon: 'card-outline', iconActive: 'card', perm: ['gateway', 'gateway_secret', 'fee'] },
+      { href: '/(admin)/pg-fees', label: 'Biaya Payment Gateway', icon: 'swap-horizontal-outline', iconActive: 'swap-horizontal', perm: ['fee', 'report'] },
     ],
   },
   {
     title: 'Iklan',
     items: [
-      { href: '/(admin)/ads', label: 'Iklan & Kampanye', icon: 'rocket-outline', iconActive: 'rocket', perm: ['ads_review', 'ads_product', 'view'] },
+      { href: '/(admin)/ads', label: 'Iklan & Kampanye', icon: 'rocket-outline', iconActive: 'rocket', perm: ['ads_review', 'ads_product'] },
     ],
   },
   {
     title: 'Laporan',
     items: [
-      { href: '/(admin)/contribution', label: 'Contribution Margin', icon: 'bar-chart-outline', iconActive: 'bar-chart', perm: ['report', 'view'] },
-      { href: '/(admin)/finance-report', label: 'Laporan Keuangan', icon: 'document-text-outline', iconActive: 'document-text', perm: ['report', 'view'] },
-      { href: '/(admin)/economics-report', label: 'Laporan Skema Bisnis', icon: 'analytics-outline', iconActive: 'analytics', perm: ['report', 'view'] },
+      { href: '/(admin)/contribution', label: 'Contribution Margin', icon: 'bar-chart-outline', iconActive: 'bar-chart', perm: ['report'] },
+      { href: '/(admin)/finance-report', label: 'Laporan Keuangan', icon: 'document-text-outline', iconActive: 'document-text', perm: ['report'] },
+      { href: '/(admin)/economics-report', label: 'Laporan Skema Bisnis', icon: 'analytics-outline', iconActive: 'analytics', perm: ['report'] },
     ],
   },
   {
@@ -101,7 +101,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'Keamanan',
     items: [
       { href: '/(admin)/security', label: 'Pusat Keamanan', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
-      { href: '/(admin)/activity', label: 'Log Audit', icon: 'time-outline', iconActive: 'time', perm: ['audit', 'view'] },
+      { href: '/(admin)/activity', label: 'Log Audit', icon: 'time-outline', iconActive: 'time', perm: ['audit'] },
     ],
   },
   {
@@ -109,7 +109,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/(admin)/automation', label: 'Otomasi', icon: 'flash-outline', iconActive: 'flash' },
       { href: '/(admin)/map', label: 'Peta', icon: 'globe-outline', iconActive: 'globe' },
-      { href: '/(admin)/settings', label: 'Pengaturan', icon: 'settings-outline', iconActive: 'settings', perm: ['settings', 'view'] },
+      { href: '/(admin)/settings', label: 'Pengaturan', icon: 'settings-outline', iconActive: 'settings', perm: ['settings', 'orders'] },
     ],
   },
 ];

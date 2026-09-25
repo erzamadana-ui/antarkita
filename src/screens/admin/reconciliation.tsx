@@ -276,7 +276,7 @@ function HangingAndInbox() {
         <DataTable rows={hang as unknown as Record<string, unknown>[]} emptyText="Tidak ada transaksi menggantung" emptyIcon="checkmark-done-outline" maxHeight={420} columns={[
           { key: 'created_at', label: 'Dibuat', width: 140, render: (r) => <View><Text style={font.small}>{fmtDate(String(r.created_at))}</Text><Text style={[font.tiny, { color: adminTone.red }]}>{fmtAgo(String(r.created_at))}</Text></View> },
           { key: 'external_id', label: 'External ID / ref', width: 210, render: (r) => <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.small} title={String(r.external_id ?? '')}>{String(r.external_id ?? r.provider_ref ?? r.id)}</Trunc>{r.support_ref ? <Text style={font.tiny}>CS {String(r.support_ref)}</Text> : null}</View> },
-          { key: 'provider', label: 'Provider', width: 96, render: (r) => <Text style={font.small}>{providerLabel(String(r.provider))}</Text> },
+          { key: 'provider', label: 'Provider · env', width: 110, render: (r) => <View><Text style={font.small}>{providerLabel(String(r.provider))}</Text>{r.env ? <Text style={[font.tiny, r.env === 'production' ? { color: adminTone.red } : null]}>{String(r.env)}</Text> : null}</View> },
           { key: 'purpose', label: 'Tujuan', width: 80, render: (r) => <Text style={font.small}>{r.purpose === 'topup' ? 'Top up' : 'Pesanan'}</Text> },
           moneyCol('amount', 'Nominal', 110),
           { key: 'expires_at', label: 'Kedaluwarsa', width: 130, render: (r) => <Text style={font.tiny}>{r.expires_at ? fmtDate(String(r.expires_at)) : '—'}</Text> },

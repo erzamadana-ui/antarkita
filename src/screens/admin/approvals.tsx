@@ -65,7 +65,7 @@ export default function AdminApprovals() {
   return (
     <AdminPage title="Persetujuan (Maker-Checker)" subtitle="Tindakan uang bernilai besar menunggu admin kedua. Admin yang membuat permintaan (maker) tidak bisa menyetujui permintaannya sendiri." onRefresh={load}
       right={<Button size="sm" variant="outline" title="Segarkan" icon="refresh-outline" onPress={load} />}>
-      <RequirePerm perm={['approvals', 'view']} mode="notice">
+      <RequirePerm perm={['approvals']} mode="notice">
         <Row gap={adminSpace.md} style={{ flexWrap: 'wrap' }}>
           <StatCard index={0} icon="git-pull-request-outline" label="Menunggu" value={pending.length} color={adminTone.amber} />
           <StatCard index={1} icon="person-outline" label="Dibuat oleh Anda" value={mine} hint="perlu admin lain" color={adminTone.slate} />
@@ -77,13 +77,13 @@ export default function AdminApprovals() {
         <Panel title={`Permintaan (${rows.length})`} icon="git-pull-request-outline" padded={false}>
           <DataTable rows={rows as unknown as Record<string, unknown>[]} emptyText={loading ? 'Memuat…' : 'Tidak ada permintaan pada filter ini'} emptyIcon="checkmark-done-outline" onRowPress={(r) => setView(r as unknown as ApprovalRequest)}
             columns={[
-              { key: 'created_at', label: 'Dibuat', width: 140, render: (r) => <View><Text style={font.small}>{fmtDate(String(r.created_at))}</Text><Text style={font.tiny}>{fmtAgo(String(r.created_at))}</Text></View> },
-              { key: 'kind', label: 'Jenis', width: 160, render: (r) => <Pill text={APPROVAL_KIND_LABEL[String(r.kind)] ?? String(r.kind)} tone="info" /> },
-              { key: 'amount', label: 'Nominal', width: 120, align: 'right', mono: true, render: (r) => <Text style={[font.mono, Number(r.amount) < 0 ? { color: adminTone.red } : null]}>{r.amount != null ? rupiah(Number(r.amount)) : '—'}</Text> },
-              { key: 'payload', label: 'Rincian', width: 280, flex: 1, render: (r) => { const a = r as unknown as ApprovalRequest; const t = payloadSummary(a); return <Trunc style={font.small} title={t} lines={2}>{t}</Trunc>; } },
-              { key: 'maker', label: 'Maker · checker', width: 190, render: (r) => { const a = r as unknown as ApprovalRequest; return <View><Text style={font.small} numberOfLines={1}>{a.maker_name ?? shortId(a.maker)}{a.maker === me ? ' (Anda)' : ''}</Text><Text style={font.tiny} numberOfLines={1}>{a.checker ? `checker ${a.checker_name ?? shortId(a.checker)}` : '—'}</Text></View>; } },
-              { key: 'status', label: 'Status', width: 120, render: (r) => <Pill text={APPROVAL_STATUS_LABEL[r.status as keyof typeof APPROVAL_STATUS_LABEL] ?? String(r.status)} tone={TONE_OF[String(r.status)] ?? 'neutral'} /> },
-              { key: 'actions', label: 'Aksi', width: 210, align: 'right', render: (r) => {
+              { key: 'created_at', label: 'Dibuat', width: 112, render: (r) => <View><Text style={font.small}>{fmtDate(String(r.created_at), false)}</Text><Text style={font.tiny}>{fmtAgo(String(r.created_at))}</Text></View> },
+              { key: 'kind', label: 'Jenis', width: 140, render: (r) => <Pill text={APPROVAL_KIND_LABEL[String(r.kind)] ?? String(r.kind)} tone="info" /> },
+              { key: 'amount', label: 'Nominal', width: 112, align: 'right', mono: true, render: (r) => <Text style={[font.mono, Number(r.amount) < 0 ? { color: adminTone.red } : null]}>{r.amount != null ? rupiah(Number(r.amount)) : '—'}</Text> },
+              { key: 'payload', label: 'Rincian', width: 180, flex: 1, render: (r) => { const a = r as unknown as ApprovalRequest; const t = payloadSummary(a); return <Trunc style={font.small} title={t} lines={2}>{t}</Trunc>; } },
+              { key: 'maker', label: 'Maker · checker', width: 160, render: (r) => { const a = r as unknown as ApprovalRequest; return <View><Text style={font.small} numberOfLines={1}>{a.maker_name ?? shortId(a.maker)}{a.maker === me ? ' (Anda)' : ''}</Text><Text style={font.tiny} numberOfLines={1}>{a.checker ? `checker ${a.checker_name ?? shortId(a.checker)}` : '—'}</Text></View>; } },
+              { key: 'status', label: 'Status', width: 108, render: (r) => <Pill text={APPROVAL_STATUS_LABEL[r.status as keyof typeof APPROVAL_STATUS_LABEL] ?? String(r.status)} tone={TONE_OF[String(r.status)] ?? 'neutral'} /> },
+              { key: 'actions', label: 'Aksi', width: 196, align: 'right', render: (r) => {
                 const a = r as unknown as ApprovalRequest;
                 if (a.status !== 'pending') return <Text style={font.tiny} numberOfLines={2}>{a.note ?? fmtDate(a.decided_at)}</Text>;
                 const self = !!me && a.maker === me;

@@ -193,7 +193,7 @@ export default function CustomerHome() {
             {/* Iklan v3 (§7): banner_home — blok Sponsored terpisah, bukan bagian konten organik */}
             <Entrance index={12}>
               <View style={{ marginTop: 22 }}>
-                <SponsoredRow placement="banner_home" near={location} limit={1} variant="banner" title="Sponsored" />
+                <SponsoredRow placement="banner_home" near={location} limit={1} variant="banner" title="Rekomendasi bersponsor" />
               </View>
             </Entrance>
 

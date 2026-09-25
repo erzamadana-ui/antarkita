@@ -86,7 +86,7 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
             <View key={x.key} style={{ width: '31%', flexGrow: 1 }}>
               <PressableScale onPress={() => pick('ewallet', x.key)} scaleTo={0.95} style={[s.method, ew === x.key && method === 'ewallet' && { borderColor: x.color, backgroundColor: x.color + '14', ...shadow.glow(x.color) }]}>
                 <View style={[s.mIcon, { backgroundColor: x.color }]}><Ionicons name={x.icon as never} size={20} color="#fff" /></View>
-                <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }} numberOfLines={1}>{x.label}</Text>
+                <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14, textAlign: 'center' }} numberOfLines={2}>{x.label}</Text>
                 {x.fee ? <Text style={[font.tiny, { color: x.fee === 'gratis' ? colors.success : colors.textSecondary, fontWeight: '700' }]} numberOfLines={1}>{x.fee}</Text> : null}
                 {ew === x.key && method === 'ewallet' && <Ionicons name="checkmark-circle" size={16} color={x.color} style={{ position: 'absolute', top: 6, right: 6 }} />}
               </PressableScale>

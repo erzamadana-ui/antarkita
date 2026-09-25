@@ -9,14 +9,14 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Switch, Pressable, Image } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import {
-  AdminPage, Panel, DataTable, FilterBar, Toolbar, Pill, AdminSelect, AdminDialog, StatCard, RequirePerm,
-  adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, TONE, type ToneKey,
+  AdminPage, Panel, DataTable, FilterBar, Toolbar, Pill, AdminSelect, AdminDialog, StatCard, RequirePerm, RowActions,
+  adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, adminTable, TONE, type ToneKey,
 } from '@/components/admin';
 import { DateField, FootNote, RANGE_PRESETS, presetRange, rangeError, rangeLabel, type DateRange, type RangePreset } from '@/components/reports';
 import { Row, Input, Button, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors } from '@/lib/theme';
-import { rupiah } from '@/lib/format';
+import { rupiah, pctLabel } from '@/lib/format';
 import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import {
   BRAND_SAFETY, CAMPAIGN_STATUS_LABEL, PRICING_MODEL_LABEL, asList, campaignTone, idNum, useAdminCan,
@@ -34,13 +34,15 @@ const STATUS_FILTERS = [
 ];
 const MODEL_OPTS = (Object.keys(PRICING_MODEL_LABEL) as PricingModel[]).map((k) => ({ value: k, label: PRICING_MODEL_LABEL[k] }));
 const unitHint = (m?: string | null) => (m === 'cpc' ? 'per klik' : m === 'cpm' ? 'per 1.000 impresi' : m === 'cpa' ? 'per konversi (Rp atau % di catatan)' : 'per hari/periode');
+/** ROAS format Indonesia: "2,35×". */
+const roasLabel = (value: number, spent: number) => (spent ? `${idNum(value / spent, 2)}×` : '—');
 const num = (o: Record<string, unknown> | null | undefined, ...keys: string[]) => { for (const k of keys) { const v = o?.[k]; if (v != null && v !== '' && Number.isFinite(Number(v))) return Number(v); } return 0; };
 
 export default function AdminAds() {
   const [tab, setTab] = useState<Tab>('review');
   return (
     <AdminPage title="Iklan & Kampanye" subtitle="Review materi iklan merchant (brand safety), kendali kampanye, katalog produk iklan, dan laporan pendapatan. Iklan selalu berlabel “Sponsored”.">
-      <RequirePerm perm={['ads_review', 'ads_product', 'view']} mode="notice">
+      <RequirePerm perm={['ads_review', 'ads_product']} mode="notice">
         <FilterBar options={TABS} value={tab} onChange={(v) => setTab(v as Tab)} />
         {tab === 'review' ? <ReviewQueue /> : tab === 'campaigns' ? <CampaignList /> : tab === 'catalog' ? <Catalog /> : <AdsReport />}
       </RequirePerm>
@@ -193,32 +195,36 @@ function CampaignList() {
       <Row gap={adminSpace.md} style={{ flexWrap: 'wrap' }}>
         <StatCard index={0} icon="megaphone-outline" label="Kampanye" value={rows.length} color={adminTone.blue} />
         <StatCard index={1} icon="cash-outline" label="Terpakai (spent)" value={rupiah(tot.spent)} color={adminTone.teal} hint="= pendapatan iklan diakui" />
-        <StatCard index={2} icon="eye-outline" label="Impresi · klik" value={`${idNum(tot.impr)} · ${idNum(tot.clicks)}`} color={adminTone.violet} hint={tot.impr ? `CTR ${((tot.clicks / tot.impr) * 100).toFixed(2)}%` : undefined} />
-        <StatCard index={3} icon="trending-up-outline" label="ROAS" value={tot.spent ? `${(tot.conv / tot.spent).toFixed(2)}×` : '—'} color={adminTone.green} hint="nilai konversi ÷ spent" />
+        <StatCard index={2} icon="eye-outline" label="Impresi · klik" value={`${idNum(tot.impr)} · ${idNum(tot.clicks)}`} color={adminTone.violet} hint={tot.impr ? `CTR ${pctLabel((tot.clicks / tot.impr) * 100)}` : undefined} />
+        <StatCard index={3} icon="trending-up-outline" label="ROAS" value={tot.spent ? roasLabel(tot.conv, tot.spent) : '—'} color={adminTone.green} hint="nilai konversi ÷ spent" />
       </Row>
       <Panel title={`Kampanye (${rows.length})`} icon="megaphone-outline" padded={false}>
         <DataTable rows={rows as unknown as Record<string, unknown>[]} emptyText="Tidak ada kampanye pada filter ini" emptyIcon="megaphone-outline" columns={[
-          { key: 'name', label: 'Kampanye', width: 220, render: (r) => { const c = r as unknown as AdCampaign; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.bodyStrong} title={c.name ?? ''}>{c.name ?? c.creative?.headline ?? '—'}</Trunc><Trunc style={font.tiny} title={c.merchant_name ?? ''}>{c.merchant_name ?? '—'}</Trunc></View>; } },
-          { key: 'product_code', label: 'Produk', width: 150, render: (r) => { const c = r as unknown as AdCampaign; return <View><Text style={font.small} numberOfLines={1}>{c.product_name ?? c.product_code}</Text><Text style={font.tiny}>{c.pricing_model?.toUpperCase() ?? ''}{c.radius_km ? ` · ${c.radius_km} km` : ''}</Text></View>; } },
-          { key: 'status', label: 'Status', width: 150, render: (r) => { const c = r as unknown as AdCampaign; return <View style={{ gap: 3 }}><Pill text={CAMPAIGN_STATUS_LABEL[c.status] ?? c.status} tone={campaignTone(c.status) as ToneKey} />{c.paused_by ? <Text style={font.tiny}>dijeda oleh {c.paused_by}</Text> : null}</View>; } },
-          { key: 'budget', label: 'Budget · terpakai', width: 170, render: (r) => { const c = r as unknown as AdCampaign; const pct = c.budget ? Math.min(100, (Number(c.spent) / Number(c.budget)) * 100) : 0; return (
+          // Lebar total ±1.030 px → kolom Aksi tetap terlihat di layar 1366.
+          { key: 'name', label: 'Kampanye', width: 190, flex: 1, render: (r) => { const c = r as unknown as AdCampaign; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.bodyStrong} title={c.name ?? ''}>{c.name ?? c.creative?.headline ?? '—'}</Trunc><Trunc style={font.tiny} title={c.merchant_name ?? ''}>{c.merchant_name ?? '—'}</Trunc></View>; } },
+          { key: 'product_code', label: 'Produk', width: 130, render: (r) => { const c = r as unknown as AdCampaign; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.small} title={c.product_name ?? c.product_code}>{c.product_name ?? c.product_code}</Trunc><Text style={font.tiny} numberOfLines={1}>{c.pricing_model?.toUpperCase() ?? ''}{c.radius_km ? ` · ${idNum(c.radius_km, 1)} km` : ''}</Text></View>; } },
+          { key: 'status', label: 'Status', width: 128, render: (r) => { const c = r as unknown as AdCampaign; return <View style={{ gap: 3 }}><Pill text={CAMPAIGN_STATUS_LABEL[c.status] ?? c.status} tone={campaignTone(c.status) as ToneKey} />{c.paused_by ? <Text style={font.tiny}>oleh {c.paused_by}</Text> : null}</View>; } },
+          { key: 'budget', label: 'Terpakai / budget', width: 160, render: (r) => { const c = r as unknown as AdCampaign; const pct = c.budget ? Math.min(100, (Number(c.spent) / Number(c.budget)) * 100) : 0; return (
             <View style={{ gap: 3, alignSelf: 'stretch' }}>
-              <Text style={font.mono}>{rupiah(c.spent)} / {rupiah(c.budget)}</Text>
+              <Text style={font.mono} numberOfLines={1}>{rupiah(c.spent)}</Text>
               <View style={st.track}><View style={[st.fill, { width: `${Math.max(2, pct)}%`, backgroundColor: pct >= 90 ? adminTone.red : adminTone.teal }]} /></View>
+              <Text style={font.tiny} numberOfLines={1}>dari {rupiah(c.budget)}</Text>
             </View>
           ); } },
-          countCol('impressions', 'Impresi', 90),
-          { key: 'clicks', label: 'Klik · CTR', width: 110, align: 'right', mono: true, render: (r) => <View style={{ alignItems: 'flex-end' }}><Text style={font.mono}>{idNum(Number(r.clicks))}</Text><Text style={font.tiny}>{Number(r.impressions) ? `${((Number(r.clicks) / Number(r.impressions)) * 100).toFixed(2)}%` : '—'}</Text></View> },
-          { key: 'conversions', label: 'Konversi · ROAS', width: 130, align: 'right', mono: true, render: (r) => <View style={{ alignItems: 'flex-end' }}><Text style={font.mono}>{idNum(Number(r.conversions))}</Text><Text style={font.tiny}>{Number(r.spent) ? `${(Number(r.conversion_value) / Number(r.spent)).toFixed(2)}×` : '—'}</Text></View> },
-          { key: 'actions', label: 'Aksi', width: 220, align: 'right', render: (r) => {
+          { key: 'clicks', label: 'Impresi · klik', width: 132, align: 'right', mono: true, render: (r) => <View style={{ alignItems: 'flex-end' }}><Text style={font.mono}>{idNum(Number(r.impressions))} · {idNum(Number(r.clicks))}</Text><Text style={font.tiny}>CTR {Number(r.impressions) ? pctLabel((Number(r.clicks) / Number(r.impressions)) * 100) : '—'}</Text></View> },
+          { key: 'conversions', label: 'Konversi · ROAS', width: 120, align: 'right', mono: true, render: (r) => <View style={{ alignItems: 'flex-end' }}><Text style={font.mono}>{idNum(Number(r.conversions))}</Text><Text style={font.tiny}>{roasLabel(Number(r.conversion_value), Number(r.spent))}</Text></View> },
+          { key: 'actions', label: 'Aksi', width: adminTable.actionsW, align: 'right', render: (r) => {
             const c = r as unknown as AdCampaign;
             if (!can('ads_review')) return <Text style={font.tiny}>—</Text>;
+            const stoppable = ['active', 'paused', 'approved', 'budget_exhausted'].includes(c.status);
             return (
-              <Row gap={6} style={{ justifyContent: 'flex-end' }}>
-                {c.status === 'active' ? <Button size="sm" variant="outline" title="Jeda" icon="pause" loading={busy === `pause:${c.id}`} onPress={() => { act(c, 'pause'); }} /> : null}
-                {c.status === 'paused' ? <Button size="sm" variant="outline" title="Lanjutkan" icon="play" loading={busy === `resume:${c.id}`} onPress={() => { act(c, 'resume'); }} /> : null}
-                {['active', 'paused', 'approved', 'budget_exhausted'].includes(c.status) ? <Button size="sm" variant="outline" color={colors.danger} title="Hentikan" onPress={() => setStop(c)} /> : null}
-              </Row>
+              <RowActions
+                primary={[
+                  c.status === 'active' && { key: 'pause', label: 'Jeda', icon: 'pause', busy: busy === `pause:${c.id}`, onPress: () => { act(c, 'pause'); } },
+                  c.status === 'paused' && { key: 'resume', label: 'Lanjutkan', icon: 'play', color: adminTone.green, busy: busy === `resume:${c.id}`, onPress: () => { act(c, 'resume'); } },
+                ]}
+                menu={[stoppable && { key: 'stop', label: 'Hentikan kampanye…', icon: 'stop-circle-outline', danger: true, hint: 'sisa budget kembali ke merchant', onPress: () => setStop(c) }]}
+              />
             );
           } },
         ]} />
@@ -422,8 +428,8 @@ function AdsReport() {
       <Row gap={adminSpace.md} style={{ flexWrap: 'wrap' }}>
         <StatCard index={0} icon="cash-outline" label="Pendapatan iklan" value={rupiah(revenue)} color={adminTone.teal} hint="charge billable (spent)" />
         <StatCard index={1} icon="eye-outline" label="Impresi" value={impr} color={adminTone.blue} />
-        <StatCard index={2} icon="hand-left-outline" label="Klik" value={clicks} color={adminTone.violet} hint={impr ? `CTR ${((clicks / impr) * 100).toFixed(2)}%` : undefined} />
-        <StatCard index={3} icon="bag-check-outline" label="Konversi" value={conv} color={adminTone.green} hint={revenue ? `ROAS ${(convVal / revenue).toFixed(2)}×` : undefined} />
+        <StatCard index={2} icon="hand-left-outline" label="Klik" value={clicks} color={adminTone.violet} hint={impr ? `CTR ${pctLabel((clicks / impr) * 100)}` : undefined} />
+        <StatCard index={3} icon="bag-check-outline" label="Konversi" value={conv} color={adminTone.green} hint={revenue ? `ROAS ${roasLabel(convVal, revenue)}` : undefined} />
         <StatCard index={4} icon="shield-outline" label="Klik/impresi ter-dedupe" value={fraud} color={fraud ? adminTone.amber : adminTone.slate} hint="tidak ditagih (anti-fraud)" />
       </Row>
       <Panel title="Per produk" icon="pricetag-outline" padded={false}>

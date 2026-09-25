@@ -6,6 +6,7 @@ import { AdminPage, FilterBar, StatCard, Table, ReasonPrompt, RowActions, adminF
 import { Row, Button, Badge, Input, toast } from '@/components/ui';
 import { Entrance, Skeleton } from '@/components/motion';
 import { rpc } from '@/lib/supabase';
+import { handleSettingsError } from '@/lib/admin';
 import { useAdminSecurity, handleAdminError } from '@/store/adminSecurity';
 import { useAuth } from '@/store/auth';
 import { colors } from '@/lib/theme';
@@ -93,7 +94,8 @@ export default function AdminSecurity() {
   const saveMinutes = async () => {
     const m = Number(minutes);
     if (!m || m < 5 || m > 720) return toast.error('Durasi 5–720 menit');
-    try { await rpc('admin_set_settings', { p: { admin_session_minutes: m } }); toast.success('Durasi sesi disimpan (berlaku pada pembukaan berikutnya)'); load(); } catch (e) { toast.error((e as Error).message); }
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    try { await rpc('admin_set_settings', { p: { admin_session_minutes: m } }); toast.success('Durasi sesi disimpan (berlaku pada pembukaan berikutnya)'); load(); } catch (e) { handleSettingsError(e); }
   };
   const reviewFlag = async (f: FraudFlag, status: 'confirmed' | 'dismissed', reinstate: boolean, note?: string) => {
     try {

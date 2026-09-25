@@ -15,7 +15,7 @@ import { DriverEarningBreakdown } from '@/components/EarningBreakdown';
 import { channelLabel } from '@/store/payprefs';
 import { colors, font, radius, glass, shadow } from '@/lib/theme';
 import { rupiah, km, formatTime, formatDate, merchantStatusLabel, phoneDisplay, phoneMasked, extraKindLabel, promoOwnerLabel, paidViaLabel, pctLabel, payStatusLabel, payStatusColor, disputeKindLabel } from '@/lib/format';
-import { usePaymentStatus, useProviderPublic, providerLabel, fetchRefundPolicy, requestRefund, openDispute } from '@/lib/payments';
+import { usePaymentStatus, useProviderPublic, providerLabel, fetchRefundPolicy, requestRefund, openDispute, REFUND_OPEN_TEXT, DISPUTE_OPEN_TEXT } from '@/lib/payments';
 import { IS_CUSTOMER_APP } from '@/lib/app';
 import { useT } from '@/lib/i18n';
 import { useAuth } from '@/store/auth';
@@ -269,7 +269,7 @@ function RefundBox({ orderId, onDone, onCancel }: { orderId: string; onDone: () 
   const submit = async () => {
     setBusy(true);
     try { await requestRefund(orderId, reason.trim() || 'Pesanan dibatalkan/ditolak'); toast.success('Pengajuan pengembalian dana dikirim'); onDone(); }
-    catch (e) { toast.error((e as Error).message); }
+    catch (e) { const m = (e as Error).message; if (m === REFUND_OPEN_TEXT) { toast.show(m); onDone(); } else toast.error(m); }
     finally { setBusy(false); }
   };
   return (
@@ -313,7 +313,7 @@ function DisputeBox({ orderId, amount, onDone, onCancel }: { orderId: string; am
       toast.success('Laporan masalah pembayaran dikirim — pantau di Pusat Bantuan');
       onDone();
       router.push('/support' as never);
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) { const m = (e as Error).message; if (m === DISPUTE_OPEN_TEXT) { toast.show(m); onDone(); } else toast.error(m); }
     finally { setBusy(false); }
   };
   return (

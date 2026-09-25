@@ -68,10 +68,8 @@ export function SponsoredRow({ placement, near, category, q, limit = 3, title, o
   return (
     <Animated.View entering={FadeInDown.duration(motion.base)} style={s.wrap} accessibilityRole="summary">
       <Row between style={{ marginBottom: 8 }}>
-        <Row gap={8} style={{ flex: 1 }}>
-          <SponsoredPill />
-          <Text style={[font.h3, { flex: 1 }]} numberOfLines={1}>{title ?? 'Pilihan bersponsor'}</Text>
-        </Row>
+        {/* Header tanpa pil (tidak redundan dengan judul); SETIAP kartu di bawah tetap berpil "Sponsored". */}
+        <Text style={[font.h3, { flex: 1 }]} numberOfLines={1}>{title ?? 'Rekomendasi bersponsor'}</Text>
       </Row>
       <Text style={[font.tiny, { marginTop: -4, marginBottom: 8 }]}>Iklan berbayar dari merchant — terpisah dari hasil biasa.</Text>
       {variant === 'banner' ? (
@@ -81,7 +79,7 @@ export function SponsoredRow({ placement, near, category, q, limit = 3, title, o
               {a.image_url ? <Image source={{ uri: a.image_url }} style={s.bannerImg} /> : <View style={[s.bannerImg, s.ph]}><Ionicons name="restaurant" size={28} color={colors.food} /></View>}
               <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                 <SponsoredPill />
-                <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={1}>{a.headline || a.merchant}</Text>
+                <Text style={[font.body, { fontWeight: '700' }]} numberOfLines={2}>{a.headline || a.merchant}</Text>
                 <Text style={font.tiny} numberOfLines={1}>{a.merchant}{a.distance_km != null ? ` · ${km(a.distance_km)}` : ''}</Text>
               </View>
               <Text style={s.cta} numberOfLines={1}>{a.cta || 'Lihat'} →</Text>

@@ -91,12 +91,15 @@ const num = (v: unknown, d: number) => { const n = Number(v); return Number.isFi
 const prov = (v: unknown, d: MapProvider): MapProvider =>
   v === 'stadia' || v === 'mapbox' || v === 'google' || v === 'osm_free' ? v : d;
 
+const stripUnfilledKey = (u: string) => u.includes('{key}') ? u.replace(/([?&])api_key=\{key\}/, '').replace(/\{key\}/g, '') : u;
+
 export function normalizeMapConfig(raw: unknown): MapConfig {
   const r = (raw ?? {}) as Record<string, unknown>;
   const d = DEFAULT_MAP_CONFIG;
   return {
     tile_provider: prov(r.tile_provider, d.tile_provider),
-    tile_url: str(r.tile_url, d.tile_url),
+    // Placeholder {key} hanya boleh sampai ke Leaflet setelah server menyisipkan kunci; tanpa kunci, lepas parameter agar tidak melempar "No value provided for variable {key}" (bug peta crash saat cold start).
+    tile_url: stripUnfilledKey(str(r.tile_url, d.tile_url)),
     tile_attribution: str(r.tile_attribution, d.tile_attribution),
     tile_max_zoom: Math.min(22, Math.max(10, num(r.tile_max_zoom, d.tile_max_zoom))),
     geocode_provider: prov(r.geocode_provider, d.geocode_provider),

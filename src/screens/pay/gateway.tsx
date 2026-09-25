@@ -119,7 +119,7 @@ function ChannelGrid({ channels, value, onPick, base, disabled }: { channels: Pr
           <View key={x.key} style={{ width: '31%', flexGrow: 1 }}>
             <PressableScale onPress={() => { if (!disabled && !on) onPick(x.key); }} scaleTo={0.95} disabled={disabled} style={[s.method, on && { borderColor: m.color, backgroundColor: m.color + '14', ...shadow.glow(m.color) }, disabled && !on && { opacity: 0.5 }]}>
               <View style={[s.mIcon, { backgroundColor: m.color }]}><Ionicons name={m.icon as never} size={20} color="#fff" /></View>
-              <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }} numberOfLines={1}>{x.label}</Text>
+              <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14, textAlign: 'center' }} numberOfLines={2}>{x.label}</Text>
               <Text style={[font.tiny, { color: fee === 'gratis' ? colors.success : colors.textSecondary, fontWeight: '700' }]} numberOfLines={1}>{fee}</Text>
               {on && <Ionicons name="checkmark-circle" size={16} color={m.color} style={{ position: 'absolute', top: 6, right: 6 }} />}
             </PressableScale>

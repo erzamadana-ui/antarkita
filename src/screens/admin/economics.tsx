@@ -8,10 +8,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { AdminPage, Panel, DataTable, AdminSelect, Pill, StatCard, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, TONE } from '@/components/admin';
+import { AdminPage, Panel, DataTable, AdminSelect, Pill, StatCard, RequirePerm, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, TONE } from '@/components/admin';
 import { LineItem, FootNote } from '@/components/reports';
 import { Row, Input, Button, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
+import { handleSettingsError } from '@/lib/admin';
 import { rupiah, serviceLabel } from '@/lib/format';
 import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import { channelLabel } from '@/store/payprefs';
@@ -306,7 +307,7 @@ function BusinessThresholds({ onSaved }: { onSaved?: (saved: Record<string, numb
       toast.success(`Ambang bisnis disimpan (${Object.keys(p).length} parameter)`);
       await load();
       onSaved?.(p);
-    } catch (e) { handleAdminError(e); }
+    } catch (e) { handleSettingsError(e); }
     finally { setSaving(false); }
   };
   const reset = () => setDraft(Object.fromEntries(rows.map((x) => [x.key, String(x.value)])));
@@ -316,7 +317,9 @@ function BusinessThresholds({ onSaved }: { onSaved?: (saved: Record<string, numb
       icon="speedometer-outline" padded={false}
       right={<>
         {changed.length ? <Button size="sm" variant="ghost" title="Batalkan" onPress={reset} /> : null}
-        <Button size="sm" title={changed.length ? `Simpan (${changed.length})` : 'Simpan'} variant={changed.length ? 'primary' : 'outline'} disabled={!changed.length} loading={saving} onPress={save} />
+        <RequirePerm perm="settings" fallback={<Text style={font.tiny}>Simpan: superadmin (payment_config)</Text>}>
+          <Button size="sm" title={changed.length ? `Simpan (${changed.length})` : 'Simpan'} variant={changed.length ? 'primary' : 'outline'} disabled={!changed.length} loading={saving} onPress={save} />
+        </RequirePerm>
       </>}>
       {err ? <View style={{ padding: adminSpace.lg }}><ErrorNote text={err} onRetry={load} /></View> : null}
       <ScrollView horizontal showsHorizontalScrollIndicator>

@@ -80,6 +80,16 @@ function buildPatch(row: ChannelFeeV3 | null, d: Draft, full = false): { patch: 
   return { patch };
 }
 
+/**
+ * Sel kepala tabel: huruf biasa (bukan kapital berjarak) sampai 3 baris supaya label panjang seperti
+ * "PPN termasuk" / "Lolos kajian legal" tidak terpotong di kolom sempit; teks lengkap + penjelasan di tooltip web.
+ */
+function Th({ w, text, right, tip }: { w: number; text: string; right?: boolean; tip?: string }) {
+  const t = <Text style={[font.label, { width: w, textAlign: right ? 'right' : 'left', textTransform: 'none', letterSpacing: 0, color: adminTone.muted }]} numberOfLines={3}>{text}</Text>;
+  if (Platform.OS === 'web' && (tip || text)) return React.createElement('div', { title: tip ? `${text} — ${tip}` : text, style: { display: 'flex', width: w, flexShrink: 0 } }, t);
+  return t;
+}
+
 /** Tooltip web untuk kontrol yang dikunci. */
 function Tip({ title, children }: { title: string; children: React.ReactNode }) {
   if (Platform.OS === 'web') return React.createElement('div', { title, style: { display: 'inline-flex' } }, children);
@@ -220,17 +230,17 @@ export default function AdminPgFees() {
         right={<Input label="Contoh nominal (Rp)" value={sample} keyboardType="number-pad" onChangeText={setSample} containerStyle={{ width: 150 }} style={{ paddingVertical: 4 }} />}>
         <ScrollView horizontal showsHorizontalScrollIndicator>
           <View style={{ minWidth: 1660 }}>
-            <Row gap={8} style={st.th}>
-              <Text style={[font.label, { width: 220 }]}>Saluran · sumber</Text>
-              {NUM_FIELDS.slice(0, 3).map((f) => <Text key={f.key} style={[font.label, { width: f.width, textAlign: 'right' }]} numberOfLines={2}>{f.label}</Text>)}
-              <Text style={[font.label, { width: 70 }]} numberOfLines={2}>PPN termasuk</Text>
-              {NUM_FIELDS.slice(3).map((f) => <Text key={f.key} style={[font.label, { width: f.width, textAlign: 'right' }]} numberOfLines={2}>{f.label}</Text>)}
-              <Text style={[font.label, { width: 96 }]} numberOfLines={2}>Bebankan ke pelanggan</Text>
-              <Text style={[font.label, { width: 84 }]} numberOfLines={2}>Lolos kajian legal</Text>
-              <Text style={[font.label, { width: 54 }]}>Aktif</Text>
-              <Text style={[font.label, { width: 130, textAlign: 'right' }]} numberOfLines={2}>Biaya contoh (+PPN)</Text>
-              <Text style={[font.label, { width: 190 }]}>Label & catatan</Text>
-              <Text style={[font.label, { width: 110 }]} />
+            <Row gap={8} style={[st.th, { alignItems: 'flex-end' }]}>
+              <Th w={220} text="Saluran · sumber" />
+              {NUM_FIELDS.slice(0, 3).map((f) => <Th key={f.key} w={f.width} right text={f.label} />)}
+              <Th w={70} text="PPN termasuk" tip="Biaya sudah termasuk PPN (PPN tidak ditambahkan lagi)" />
+              {NUM_FIELDS.slice(3).map((f) => <Th key={f.key} w={f.width} right text={f.label} />)}
+              <Th w={96} text="Bebankan ke pelanggan" tip="pass_to_customer — biaya PG ditambahkan ke tagihan pelanggan (hanya bila juga lolos kajian legal)" />
+              <Th w={84} text="Lolos kajian legal" tip="pass_to_customer_legal_ok — diisi setelah kajian legal & klausul PKS" />
+              <Th w={54} text="Aktif" />
+              <Th w={130} right text="Biaya contoh (+PPN)" />
+              <Th w={190} text="Label & catatan" />
+              <Th w={110} text="" />
             </Row>
             {loading && rows.length === 0 ? <Text style={[font.small, { padding: adminSpace.lg }]}>Memuat tarif…</Text> : null}
             {!loading && rows.length === 0 && errs.length === 0 ? <Text style={[font.small, { padding: adminSpace.lg }]}>Belum ada tarif untuk provider ini — migrasi v3 (payment_channel_fees per provider) belum diterapkan?</Text> : null}

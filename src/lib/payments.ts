@@ -259,10 +259,25 @@ export const fetchReceipt = (orderId: string) => rpc<Receipt>('my_receipt', { p_
 export const fetchPaymentHistory = (limit = 50) => rpc<PaymentHistoryRow[]>('my_payment_history', { p_limit: limit }).then((d) => d ?? []);
 export const fetchRefundPolicy = (orderId: string) => rpc<RefundPolicy>('refund_policy_calc', { p_order: orderId });
 /** `amount` null = pengembalian penuh atas komponen yang bisa dikembalikan. */
+export const REFUND_OPEN_TEXT = 'Pengajuan pengembalian dana untuk pesanan ini masih diproses. Tunggu hasilnya sebelum mengajukan lagi — statusnya tampil di detail pesanan.';
+export const DISPUTE_OPEN_TEXT = 'Anda sudah punya laporan masalah pembayaran yang masih terbuka untuk pesanan ini. Pantau perkembangannya di Pusat Bantuan.';
+/**
+ * RPC dengan kode galat bisnis yang harus diterjemahkan SEBELUM friendlyError (yang memangkas awalan "KODE: …").
+ * `codes`: kode server → pesan ramah.
+ */
+async function rpcCoded<T>(fn: string, params: Record<string, unknown>, codes: Record<string, string>): Promise<T> {
+  const { data, error } = await supabase.rpc(fn, params as never);
+  if (error) {
+    const raw = [error.message, (error as { details?: string }).details, (error as { hint?: string }).hint, (error as { code?: string }).code].filter(Boolean).join(' ');
+    const hit = Object.keys(codes).find((c) => raw.includes(c));
+    throw new Error(hit ? codes[hit] : friendlyError(error.message));
+  }
+  return data as T;
+}
 export const requestRefund = (orderId: string, reason: string, amount: number | null = null) =>
-  rpc<unknown>('refund_request', { p_order: orderId, p_amount: amount, p_reason: reason });
+  rpcCoded<unknown>('refund_request', { p_order: orderId, p_amount: amount, p_reason: reason }, { REFUND_OPEN: REFUND_OPEN_TEXT });
 export const openDispute = (orderId: string, kind: DisputeKind, amount: number | null, description: string) =>
-  rpc<unknown>('dispute_open', { p_order: orderId, p_kind: kind, p_amount: amount, p_description: description });
+  rpcCoded<unknown>('dispute_open', { p_order: orderId, p_kind: kind, p_amount: amount, p_description: description }, { DISPUTE_OPEN: DISPUTE_OPEN_TEXT });
 export const fetchMyDisputes = () => rpc<DisputeRow[]>('my_disputes').then((d) => d ?? []);
 
 /** Baris bukti transaksi: `lines` dari server bila ada; bila tidak, disusun dari kolom datar `my_receipt` dengan urutan §0.4. */
