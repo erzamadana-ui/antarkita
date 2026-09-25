@@ -174,6 +174,29 @@ Fungsi baru: `payment_channel_keys()`, `payment_gateway_channel_keys()`, `paymen
 - Order berbayar e-wallet tetap memotong saldo AntarPay (gateway hanya menutup kekurangan); 0089 hanya
   memeriksa saluran e-wallet yang dipakai, **bukan** saluran `antarpay` sekaligus — sesuai pemetaan di atas.
 
+## Bayar per pesanan lewat gateway, terpisah dari AntarPay (migrasi 0104)
+
+Sakelar `app_settings.gateway_order_payment_enabled` (default **false**), diubah hanya lewat
+`admin_set_gateway_order_payment(p_enabled)` (is_admin + PIN, audit `gateway_order_payment.toggle`).
+
+**Alasannya.** PKS Midtrans (M568767786_825925, Ver.Aug-26) **Pasal 7 ayat 4(b)**: fitur uang elektronik /
+dompet elektronik (stored value, isi saldo) yang membutuhkan izin Bank Indonesia tanpa izin itu → Midtrans
+berhak menghentikan layanan. Karena itu **top up AntarPay tetap nonaktif** sampai ada izin/review legal. Menagih
+**satu pesanan** lewat gateway (`purpose='order'`, 0100) lain halnya: dana langsung untuk transaksi itu, tidak
+disimpan sebagai saldo → bukan stored value. Sakelar ini membuka jalur itu **tanpa** menyalakan AntarPay.
+
+| | sakelar mati (default) | sakelar menyala |
+|---|---|---|
+| order `paid_via` = gopay/qris/VA/… saat AntarPay mati | ditolak "AntarPay sedang dinonaktifkan…" (perilaku 0088, e2e S54) | diterima → `awaiting_payment` → Snap per order → webhook → `searching` |
+| syarat saluran | `payment_channel_require` (0089: global → `antarpay` → saluran) | `payment_channel_require_order`: cukup sakelar saluran itu sendiri |
+| order saldo (`wallet`), top up, pencairan, travel | diatur sakelar AntarPay | **tetap** diatur sakelar AntarPay |
+
+Klien membaca `app_public_settings()` / `gateway_public_config()` → `gateway_order_payment_enabled` dan
+`order_payment_channels` (saluran yang boleh untuk membayar pesanan), di samping `payment_channels` (saldo/top up).
+
+Catatan risiko: pesanan gateway yang dibatalkan **setelah** dibayar direfund ke saldo AntarPay (closed-loop, 0100).
+Saat AntarPay mati saldo itu tidak bisa dipakai pelanggan; refund ke sumber dana (API refund Midtrans) belum ada.
+
 ## Uji
 
 - `npx tsc --noEmit` = 0 error.

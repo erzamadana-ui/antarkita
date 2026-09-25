@@ -1,4 +1,6 @@
-// Admin · Log Aktivitas — jejak semua kejadian (pesanan, driver, merchant, saldo, tarif, tiket, SOS) realtime
+// Admin · Log Aktivitas / Audit — jejak semua kejadian (pesanan, driver, merchant, saldo, tarif, tiket, SOS) realtime.
+// v3 (finpay-v3 §5): audit_logs APPEND-ONLY (trigger menolak UPDATE/DELETE, termasuk admin). Kategori "Keuangan"
+// menggabungkan entitas & aksi uang: pembayaran/webhook, refund, dispute, maker-checker, payout, fee, gateway, ledger, rekonsiliasi.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -21,10 +23,16 @@ const ENTITIES: { key: string; label: string; icon: string; color: string }[] = 
   { key: 'payments', label: 'Gateway', icon: 'card', color: colors.pay },
   { key: 'tickets', label: 'Tiket', icon: 'chatbubbles', color: colors.accent },
   { key: 'sos_alerts', label: 'SOS', icon: 'warning', color: colors.danger },
+  { key: 'finance', label: 'Keuangan (semua)', icon: 'cash', color: colors.success },
   { key: 'pricing', label: 'Tarif & promo', icon: 'pricetags', color: colors.warning },
   { key: 'profiles', label: 'Pengguna', icon: 'people', color: colors.textSecondary },
 ];
-const entityOf = (e: string) => ENTITIES.find((x) => x.key === e) ?? (['pricing_sessions', 'promos', 'app_settings', 'competitor_prices'].includes(e) ? ENTITIES.find((x) => x.key === 'pricing')! : e === 'merchant_documents' ? ENTITIES.find((x) => x.key === 'merchants')! : ['topup_requests', 'withdrawal_requests'].includes(e) ? ENTITIES.find((x) => x.key === 'wallet_transactions')! : ENTITIES[0]);
+const entityOf = (e: string) => ENTITIES.find((x) => x.key === e) ?? (FIN_ENTITIES.includes(e) ? ENTITIES.find((x) => x.key === 'finance')! : null) ?? (['pricing_sessions', 'promos', 'app_settings', 'competitor_prices'].includes(e) ? ENTITIES.find((x) => x.key === 'pricing')! : e === 'merchant_documents' ? ENTITIES.find((x) => x.key === 'merchants')! : ['topup_requests', 'withdrawal_requests'].includes(e) ? ENTITIES.find((x) => x.key === 'wallet_transactions')! : ENTITIES[0]);
+/** Entitas & awalan aksi yang masuk kategori Keuangan (v3). */
+const FIN_ENTITIES = ['payments', 'payment_events', 'refund_requests', 'disputes', 'approval_requests', 'withdrawal_requests', 'topup_requests', 'wallet_transactions',
+  'payment_channel_fees', 'gateway_secrets', 'reconciliation_runs', 'order_ledger', 'service_economics', 'ad_budget_ledger', 'merchant_ads', 'ad_products'];
+const FIN_ACTION_PREFIX = ['refund', 'dispute', 'approval', 'payment', 'payout', 'withdrawal', 'wallet', 'pg_fee', 'gateway', 'ledger', 'reconcile', 'economics', 'ads'];
+const isFinance = (r: { entity: string; action: string }) => FIN_ENTITIES.includes(r.entity) || FIN_ACTION_PREFIX.some((p) => r.action.startsWith(`${p}.`) || r.action.startsWith(`${p}_`));
 const RANGES = [{ key: '1h', label: '1 jam', ms: 3600e3 }, { key: '24h', label: '24 jam', ms: 86400e3 }, { key: '7d', label: '7 hari', ms: 7 * 86400e3 }, { key: '30d', label: '30 hari', ms: 30 * 86400e3 }];
 
 export default function AdminActivity() {
@@ -39,7 +47,9 @@ export default function AdminActivity() {
   const load = useCallback(async () => {
     const since = new Date(Date.now() - (RANGES.find((r) => r.key === range)?.ms ?? 86400e3)).toISOString();
     let qq = supabase.from('audit_logs').select('*').gte('created_at', since).order('id', { ascending: false }).limit(500);
-    if (entity !== 'all') {
+    if (entity === 'finance') {
+      qq = qq.or([`entity.in.(${FIN_ENTITIES.join(',')})`, ...FIN_ACTION_PREFIX.map((p) => `action.like.${p}.*`)].join(','));
+    } else if (entity !== 'all') {
       const group = entity === 'pricing' ? ['pricing', 'pricing_sessions', 'promos', 'app_settings', 'competitor_prices'] : entity === 'merchants' ? ['merchants', 'merchant_documents'] : entity === 'wallet_transactions' ? ['wallet_transactions', 'topup_requests', 'withdrawal_requests'] : [entity];
       qq = qq.in('entity', group);
     }
@@ -61,7 +71,7 @@ export default function AdminActivity() {
   const counts = useMemo(() => ({
     orders: rows.filter((r) => r.entity === 'orders').length,
     admin: rows.filter((r) => r.actor_role === 'admin').length,
-    money: rows.filter((r) => r.entity === 'wallet_transactions').length,
+    money: rows.filter(isFinance).length,
     alerts: rows.filter((r) => r.entity === 'sos_alerts' || (r.entity === 'tickets' && r.action === 'ticket.created')).length,
   }), [rows]);
 
@@ -74,12 +84,19 @@ export default function AdminActivity() {
   };
 
   return (
-    <AdminPage title="Log Aktivitas" subtitle={`${rows.length} kejadian · ${RANGES.find((r) => r.key === range)?.label} terakhir`} onRefresh={load}
+    <AdminPage title="Log Audit" subtitle={`${rows.length} kejadian · ${RANGES.find((r) => r.key === range)?.label} terakhir · append-only`} onRefresh={load}
       right={<Row gap={8}><Pressable onPress={() => setLive(!live)}><Row gap={6}><LiveDot color={live ? colors.success : colors.textMuted} size={8} /><Text style={font.tiny}>{live ? 'Realtime' : 'Jeda'}</Text></Row></Pressable><Button size="sm" variant="outline" title="CSV" icon="download-outline" onPress={exportCsv} /></Row>}>
+      <View style={s.lock}>
+        <Ionicons name="lock-closed" size={adminIcon.md} color={colors.success} />
+        <Text style={[font.small, { flex: 1, color: adminTone.ink2 }]}>
+          <Text style={{ fontWeight: '700', color: adminTone.ink }}>Log append-only. </Text>
+          Setiap baris hanya bisa ditambahkan — trigger basis data menolak ubah/hapus oleh siapa pun, termasuk admin. Sama untuk buku besar order dan inbox webhook pembayaran.
+        </Text>
+      </View>
       <Row gap={adminSpace.lg} style={{ flexWrap: 'wrap' }}>
         <StatCard icon="receipt-outline" label="Aktivitas pesanan" value={counts.orders} color={adminTone.teal} index={0} />
         <StatCard icon="shield-outline" label="Aksi admin" value={counts.admin} color={adminTone.violet} index={1} />
-        <StatCard icon="wallet-outline" label="Mutasi saldo" value={counts.money} color={adminTone.green} index={2} />
+        <StatCard icon="wallet-outline" label="Kejadian keuangan" value={counts.money} color={adminTone.green} index={2} hint="uang, refund, payout, fee, gateway" onPress={() => setEntity('finance')} />
         <StatCard icon="warning-outline" label="Tiket & SOS baru" value={counts.alerts} color={adminTone.red} index={3} />
       </Row>
       <Row gap={adminSpace.md} style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -123,6 +140,7 @@ export default function AdminActivity() {
 }
 
 const s = StyleSheet.create({
+  lock: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', padding: adminSpace.md, borderRadius: adminRadius.card, backgroundColor: '#E8F7F0', borderWidth: 1, borderColor: '#C6EADB' },
   row: { flexDirection: 'row', gap: 10, alignItems: 'center', padding: adminSpace.md, borderRadius: adminRadius.card, backgroundColor: adminTone.surface, borderWidth: 1, borderColor: adminTone.border, minHeight: 56 },
   icon: { width: 30, height: 30, borderRadius: adminRadius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   detail: { fontFamily: 'monospace', fontSize: 12, lineHeight: 17, color: adminTone.ink2, backgroundColor: adminTone.surfaceAlt, padding: adminSpace.sm, borderRadius: adminRadius.sm, marginTop: 6 },

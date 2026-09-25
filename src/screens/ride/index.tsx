@@ -10,7 +10,7 @@ import { Screen, Button, Row, Badge, toast } from '@/components/ui';
 import { PressableScale } from '@/components/motion';
 import { LocationFields } from '@/components/LocationField';
 import { DestinationSuggestions, VehicleClassPicker, SchedulePicker, MerchantAds, RoutePreview } from '@/components/BookingExtras';
-import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
+import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, goAfterOrder, useCheckoutFees, checkoutRows, checkoutNote, type PayChoice } from '@/components/BookingSheet';
 import { ServiceArt } from '@/components/ServiceArt';
 import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
@@ -27,7 +27,7 @@ import { createOrder } from '@/lib/orders';
 import { colors, font, radius, motion, glass } from '@/lib/theme';
 import { rupiah, minutes, km } from '@/lib/format';
 import { serviceDef } from '@/lib/services';
-import type { FareOptions, ServiceType } from '@/lib/types';
+import type { FareOptions, PromoFunder, ServiceType } from '@/lib/types';
 
 export default function RideScreen() {
   const router = useRouter();
@@ -52,6 +52,7 @@ export default function RideScreen() {
   const payPrefs = usePayPrefs((st) => st.prefs);
   const [promo, setPromo] = useState('');
   const [discount, setDiscount] = useState(0);
+  const [promoFunder, setPromoFunder] = useState<PromoFunder | null>(null);
   const [notes, setNotes] = useState('');
   const [showDetails, setShowDetails] = useState(false);
   const [ordering, setOrdering] = useState(false);
@@ -98,7 +99,11 @@ export default function RideScreen() {
   }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, service, fareTry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const chosen = useMemo(() => opts?.classes.find((c) => c.code === cls) ?? null, [opts, cls]);
-  const total = chosen ? Math.max(0, chosen.total - discount) : 0;
+  // §9: biaya platform dari fare_options (customer_platform_fee, 0099) — bukan konstanta klien
+  const platformFee = opts?.customer_platform_fee ?? opts?.platform_fee ?? 0;
+  const baseTotal = chosen ? Math.max(0, chosen.fare + platformFee - discount) : 0;
+  const fees = useCheckoutFees({ service, method, ewallet: payPrefs?.ewallet, amount: baseTotal });
+  const total = chosen ? baseTotal + fees.payFee : 0;
   // Batas jarak dalam kota & status layanan dari server (create_order juga menolak, ini agar pelanggan tahu lebih awal)
   const blocked = limitBlocked(opts?.limit);
   const serviceOff = opts?.service_enabled === false || !isEnabled(service);
@@ -119,8 +124,7 @@ export default function RideScreen() {
       });
       await refreshWallet();
       useBooking.getState().reset();
-      toast.success(when ? 'Booking terjadwal tersimpan' : 'Pesanan dibuat, mencari driver…');
-      router.replace(`/order/${o.id}` as never);
+      goAfterOrder(router, o, when ? 'Booking terjadwal tersimpan' : 'Pesanan dibuat, mencari driver…');
     } catch (e) { if (!handleShortfall(e, router, payPrefs?.ewallet)) toast.error((e as Error).message); }
     finally { setOrdering(false); }
   };
@@ -193,7 +197,10 @@ export default function RideScreen() {
                   </Row>
                   {showDetails && (
                     <Animated.View entering={FadeInDown.duration(motion.fast)} style={{ marginTop: 10 }}>
-                      <PriceSummary rows={[{ label: `${chosen.label} (${km(opts?.distance_km ?? 0)})`, value: chosen.fare }, { label: 'Biaya layanan', value: opts?.platform_fee ?? 0 }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />
+                      <PriceSummary total={total} note={checkoutNote(fees.pay, fees.econError)} rows={checkoutRows({
+                        service, econ: fees.econ, ongkir: chosen.fare, ongkirLabel: `Tarif perjalanan · ${chosen.label} (${km(opts?.distance_km ?? 0)})`,
+                        platformFee, pay: fees.pay, discount, promoCode: promo || null, promoFunder,
+                      })} />
                     </Animated.View>
                   )}
                   <LimitInfo limit={opts?.limit} service={service} style={{ marginTop: 8 }} />
@@ -201,7 +208,7 @@ export default function RideScreen() {
               </PressableScale>
             )}
             <AntarNowSection service={service} accent={accent} />
-            <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={chosen?.fare ?? 0} service={service} onDiscount={setDiscount} />
+            <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={chosen?.fare ?? 0} service={service} feeBase={baseTotal} onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} />
             <MerchantAds near={dropoff} title="Lapar sesampainya? Merchant dekat tujuan" />
           </Animated.View>
         )}

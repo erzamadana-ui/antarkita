@@ -96,6 +96,8 @@ jobs:
           path: dist
 
   deploy:
+    # Produksi hanya dari main — workflow_dispatch pada branch lain berhenti di build (artefak) tanpa menimpa situs live.
+    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:

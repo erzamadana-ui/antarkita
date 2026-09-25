@@ -1,17 +1,25 @@
-import React from 'react';
-import { View, Text, StyleSheet, Linking } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Linking, TextInput } from 'react-native';
+import { useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import { signedUrl } from '@/lib/upload';
 import { toast } from '@/components/ui';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Row, Avatar, Stars, Badge, Divider } from '@/components/ui';
+import { Row, Avatar, Stars, Badge, Divider, Button, Chip } from '@/components/ui';
 import { PressableScale } from '@/components/motion';
 import { CallButton } from '@/components/call/IncomingCall';
 import { ModerationMenu } from '@/components/moderation';
 import type { CallPeer } from '@/lib/call';
 import { PriceSummary } from '@/components/BookingSheet';
+import { DriverEarningBreakdown } from '@/components/EarningBreakdown';
+import { channelLabel } from '@/store/payprefs';
 import { colors, font, radius, glass, shadow } from '@/lib/theme';
-import { rupiah, km, formatTime, merchantStatusLabel, phoneDisplay, phoneMasked, extraKindLabel } from '@/lib/format';
-import type { Driver, Order, OrderEvent, Profile, ShoppingItem } from '@/lib/types';
+import { rupiah, km, formatTime, formatDate, merchantStatusLabel, phoneDisplay, phoneMasked, extraKindLabel, promoOwnerLabel, paidViaLabel, pctLabel, payStatusLabel, payStatusColor, disputeKindLabel } from '@/lib/format';
+import { usePaymentStatus, useProviderPublic, providerLabel, fetchRefundPolicy, requestRefund, openDispute, REFUND_OPEN_TEXT, DISPUTE_OPEN_TEXT } from '@/lib/payments';
+import { IS_CUSTOMER_APP } from '@/lib/app';
+import { useT } from '@/lib/i18n';
+import { useAuth } from '@/store/auth';
+import type { DisputeKind, Driver, Order, OrderEvent, PayStatus, Profile, RefundPolicy, ShoppingItem } from '@/lib/types';
 
 /** Kartu driver (untuk customer) atau kartu customer (untuk driver). */
 /** phone tidak lagi ditampilkan/dipakai (UU PDP) — telepon lewat aplikasi via `callPeer`. */
@@ -51,7 +59,7 @@ export function RouteBlock({ order }: { order: Order }) {
         <View style={[s.dot, { backgroundColor: colors.danger, borderRadius: 2, marginTop: 4 }]} />
         <View style={{ flex: 1 }}><Text style={font.tiny}>{order.service === 'send' ? 'Antar ke' : 'Tujuan'}</Text><Text style={s.addr}>{order.dropoff_address}</Text></View>
       </Row>
-      <Row gap={8}><Badge text={km(order.distance_km)} color={colors.info} /><Badge text={`±${order.duration_min} mnt`} color={colors.info} /><Badge text={order.payment_method === 'wallet' ? 'AntarPay' : 'Tunai'} color={colors.textSecondary} /></Row>
+      <Row gap={8}><Badge text={km(order.distance_km)} color={colors.info} /><Badge text={`±${order.duration_min} mnt`} color={colors.info} /><Badge text={order.payment_method === 'cash' ? 'Tunai' : paidViaLabel(order.paid_via ?? 'wallet')} color={colors.textSecondary} /></Row>
     </View>
   );
 }
@@ -144,14 +152,181 @@ export function ShoppingListBlock({ order }: { order: Order }) {
   );
 }
 
-export function PriceBlock({ order, forDriver }: { order: Order; forDriver?: boolean }) {
-  if (forDriver) {
-    return (
-      <PriceSummary rows={[{ label: 'Tarif perjalanan', value: order.fare_delivery }, { label: 'Biaya tambahan disetujui', value: order.extras_total ?? 0 }, { label: 'Tip pelanggan', value: order.tip ?? 0 }, { label: 'Potongan platform', value: Math.max(0, order.fare_delivery - (order.driver_earning - (order.status === 'completed' ? (order.tip ?? 0) + (order.extras_total ?? 0) : 0))), minus: true }]} total={order.status === 'completed' ? order.driver_earning : order.driver_earning + (order.tip ?? 0) + (order.extras_total ?? 0)} />
-    );
+export function PriceBlock({ order, forDriver, providerName }: { order: Order; forDriver?: boolean; providerName?: string | null }) {
+  // Driver: rincian dari buku besar (driver_order_breakdown, 0099) — bukan rekonstruksi dari driver_earning.
+  if (forDriver) return <DriverEarningBreakdown orderId={order.id} status={order.status} title={null} />;
+  // Pelanggan (§0.4): harga barang · ongkir · biaya platform · biaya metode pembayaran · biaya tambahan · diskon (+ penanggung) · total
+  const shopping = order.service === 'shop' || order.service === 'market';
+  const payFee = order.pg_fee_borne_by === 'customer' ? (order.pg_fee ?? 0) + (order.pg_fee_ppn ?? 0) : 0;
+  const funder = order.discount > 0 ? order.promo_funded_by ?? null : null;
+  const comm = order.driver_commission_pct_snap;
+  const ride = order.service === 'ride_motor' || order.service === 'ride_car';
+  const payLabel = order.pg_channel ? (providerName ?? channelLabel(order.pg_channel)) : order.payment_method === 'cash' ? 'Tunai' : 'AntarVoucher';
+  return (
+    <PriceSummary rows={[
+      { label: order.service === 'food' ? 'Harga makanan' : 'Harga barang', value: order.items_subtotal },
+      { label: ride ? 'Tarif perjalanan' : shopping ? `Ongkir${order.shop_vehicle === 'car' ? ' (mobil)' : ''}` : 'Ongkir', value: order.fare_delivery, keep: true,
+        hint: comm == null ? null : Number(comm) === 0 ? '100 % untuk driver' : `Komisi platform ${pctLabel(comm)}` },
+      { label: 'Ongkir antar kota', value: order.intercity_fare ?? 0 },
+      { label: 'Jasa belanja', value: shopping ? (order.service_fee ?? 0) : 0 },
+      { label: 'Biaya platform AntarKita', value: order.platform_fee, keep: true },
+      { label: `Biaya metode pembayaran (${payLabel})`, value: payFee, keep: true,
+        hint: order.pg_channel ? `${channelLabel(order.pg_channel)}${payFee ? '' : ' · ditanggung AntarKita'}` : 'Tanpa biaya metode pembayaran' },
+      { label: 'Biaya tambahan (parkir/tol/tunggu)', value: order.extras_total ?? 0 },
+      { label: 'Tip driver', value: order.tip ?? 0 },
+      { label: `Diskon promo${order.promo_code ? ` (${order.promo_code})` : ''}`, value: order.discount, minus: true, hint: funder ? promoOwnerLabel[funder] : null },
+    ]} total={order.total + (order.tip ?? 0)} />
+  );
+}
+
+/** Baris "Kode bantuan CS: AK-xxxxxx" + tombol salin — ditampilkan di detail, bukti, gateway, riwayat (§2 support_ref). */
+export function SupportRef({ code, compact }: { code?: string | null; compact?: boolean }) {
+  if (!code) return null;
+  const copy = async () => { try { await Clipboard.setStringAsync(code); toast.success('Kode bantuan disalin'); } catch { toast.error('Gagal menyalin'); } };
+  return (
+    <PressableScale onPress={copy} scaleTo={0.98} haptic={false} accessibilityRole="button" accessibilityLabel={`Salin kode bantuan ${code}`} style={[s.ref, compact && { paddingVertical: 4 }]}>
+      <Ionicons name="headset-outline" size={16} color={colors.primary} />
+      <Text style={[font.small, { flex: 1, color: colors.text }]} numberOfLines={1}>Kode bantuan CS: <Text style={{ fontWeight: '700', fontVariant: ['tabular-nums'] }}>{code}</Text></Text>
+      <Ionicons name="copy-outline" size={16} color={colors.primary} />
+    </PressableScale>
+  );
+}
+
+const fmtLeft = (ms: number) => { const t = Math.max(0, Math.floor(ms / 1000)); return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
+const REFUND_STATES: PayStatus[] = ['REFUND_REQUESTED', 'PARTIALLY_REFUNDED', 'REFUNDED'];
+
+/**
+ * Panel pembayaran di detail pesanan (pelanggan saja): status real-time, kode bantuan CS, lanjutkan pembayaran
+ * (bila masih PENDING — mis. pelanggan menutup aplikasi), bukti transaksi, pengembalian dana & laporan masalah.
+ */
+export function PaymentPanel({ order, onChanged }: { order: Order; onChanged?: () => void }) {
+  const router = useRouter();
+  const t = useT();
+  const uid = useAuth((st) => st.session?.user.id);
+  const mine = IS_CUSTOMER_APP && !!uid && uid === order.customer_id;
+  const awaiting = order.status === 'awaiting_payment';
+  const nonCash = order.payment_method !== 'cash' || !!order.pg_channel;
+  const { status, refresh } = usePaymentStatus(mine && nonCash ? order.id : null, { stopOnFinal: !awaiting, intervalMs: awaiting ? 5000 : 30000 });
+  const { providerName } = useProviderPublic();
+  const [now, setNow] = useState(Date.now());
+  const [box, setBox] = useState<'refund' | 'dispute' | null>(null);
+  useEffect(() => { if (!awaiting) return; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [awaiting]);
+  if (!mine) return null;
+  const ps = status?.pay_status ?? null;
+  const supportRef = status?.support_ref ?? order.payment_support_ref ?? null;
+  const left = status?.expires_at ? new Date(status.expires_at).getTime() - now : null;
+  const pending = ps === 'PENDING' && (left == null || left > 0);
+  const rejected = order.status === 'cancelled' || order.merchant_status === 'rejected';
+  const canRefund = rejected && ps === 'PAID';
+  const refundState = ps && REFUND_STATES.includes(ps);
+  const pgName = status?.provider_label ?? (status?.provider ? providerLabel(status.provider) : providerName);
+  const goPay = () => router.push({ pathname: '/pay/gateway', params: { purpose: 'order', order_id: order.id, method: status?.channel ?? order.pg_channel ?? order.paid_via ?? '' } } as never);
+  const done = () => { refresh(); onChanged?.(); setBox(null); };
+  if (!awaiting && !status && !supportRef && order.payment_method === 'cash' && !order.pg_channel) {
+    return <Button title="Lihat bukti transaksi" variant="ghost" icon="receipt-outline" color={colors.textSecondary} onPress={() => router.push({ pathname: '/orders/receipt', params: { id: order.id } } as never)} />;
   }
   return (
-    <PriceSummary rows={[{ label: order.service === 'shop' || order.service === 'market' ? 'Belanja' : 'Harga makanan', value: order.items_subtotal }, { label: 'Jasa belanja', value: order.service === 'shop' || order.service === 'market' ? (order.service_fee ?? 0) : 0 }, { label: order.service === 'food' || order.service === 'send' ? 'Ongkos kirim' : order.service === 'shop' || order.service === 'market' ? `Ongkir${order.shop_vehicle === 'car' ? ' (mobil)' : ''}` : 'Tarif perjalanan', value: order.fare_delivery }, { label: 'Biaya layanan', value: order.platform_fee }, { label: 'Biaya tambahan', value: order.extras_total ?? 0 }, { label: 'Tip driver', value: order.tip ?? 0 }, { label: `Diskon${order.promo_code ? ` (${order.promo_code})` : ''}`, value: order.discount, minus: true }]} total={order.total + (order.tip ?? 0)} />
+    <View style={[s.payBox, awaiting && { borderColor: colors.warning + '66' }]}>
+      <Row between style={{ alignItems: 'flex-start' }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={font.h3}>{awaiting ? 'Menunggu pembayaran' : 'Pembayaran'}</Text>
+          <Text style={font.tiny} numberOfLines={2}>{status ? `${pgName ?? 'Payment gateway'} · ${status.channel_label ?? (status.channel ? channelLabel(status.channel) : '—')}${status.paid_at ? ` · dibayar ${formatDate(status.paid_at)}` : ''}` : order.payment_method === 'cash' ? 'Tunai ke driver' : paidViaLabel(order.paid_via ?? 'wallet')}</Text>
+        </View>
+        {ps ? <Badge text={payStatusLabel[ps] ?? ps} color={payStatusColor(ps)} /> : awaiting ? <Badge text="Belum ada tagihan" color={colors.warning} /> : null}
+      </Row>
+      <SupportRef code={supportRef} />
+      {awaiting && pending && left != null && (
+        <Row gap={6}><Ionicons name="time-outline" size={16} color={left < 120000 ? colors.danger : colors.warning} /><Text style={{ fontWeight: '700', color: left < 120000 ? colors.danger : colors.text, fontVariant: ['tabular-nums'] }}>Bayar dalam {fmtLeft(left)}</Text></Row>
+      )}
+      {awaiting && (
+        <>
+          <Text style={font.small}>{pending ? `Tagihan ${rupiah(status?.amount ?? order.total)} masih aktif. Driver dicarikan otomatis setelah pembayaran diterima.` : ps === 'EXPIRED' ? 'Tagihan sebelumnya kedaluwarsa. Buat tagihan baru selama pesanan belum dibatalkan.' : ps === 'FAILED' ? 'Pembayaran sebelumnya gagal. Coba lagi atau ganti metode.' : `Selesaikan pembayaran ${rupiah(order.total)} agar driver dicarikan. Pesanan batal otomatis bila tidak dibayar dalam batas waktu.`}</Text>
+          <Button title={pending ? t('continue_payment') : ps === 'EXPIRED' ? t('new_invoice') : t('pay_now')} icon="card-outline" onPress={goPay} />
+        </>
+      )}
+      {refundState && (
+        <Text style={font.small}>{ps === 'REFUND_REQUESTED' ? 'Pengembalian dana sedang diproses. Status diperbarui otomatis.' : `Dana dikembalikan ${rupiah(status?.refunded_amount ?? 0)}${ps === 'PARTIALLY_REFUNDED' ? ' (sebagian)' : ''}.`}</Text>
+      )}
+      {ps === 'DISPUTED' && <Text style={font.small}>Laporan masalah pembayaran sedang ditangani CS. Pantau di Pusat Bantuan.</Text>}
+      <Row gap={8} style={{ flexWrap: 'wrap' }}>
+        {!awaiting && <Button title={t('receipt_title')} size="sm" variant="secondary" icon="receipt-outline" onPress={() => router.push({ pathname: '/orders/receipt', params: { id: order.id } } as never)} />}
+        {canRefund && box !== 'refund' && <Button title={t('request_refund')} size="sm" variant="outline" icon="return-down-back-outline" onPress={() => setBox('refund')} />}
+        {status && box !== 'dispute' && <Button title={t('report_payment_issue')} size="sm" variant="ghost" color={colors.textSecondary} icon="alert-circle-outline" onPress={() => setBox('dispute')} />}
+      </Row>
+      {box === 'refund' && <RefundBox orderId={order.id} onDone={done} onCancel={() => setBox(null)} />}
+      {box === 'dispute' && <DisputeBox orderId={order.id} amount={status?.amount ?? order.total} onDone={done} onCancel={() => setBox(null)} />}
+    </View>
+  );
+}
+
+/** Pratinjau `refund_policy_calc` (komponen yang bisa / tidak bisa dikembalikan) lalu `refund_request`. */
+function RefundBox({ orderId, onDone, onCancel }: { orderId: string; onDone: () => void; onCancel: () => void }) {
+  const [pol, setPol] = useState<RefundPolicy | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { fetchRefundPolicy(orderId).then(setPol, (e: Error) => setErr(e.message)); }, [orderId]);
+  const submit = async () => {
+    setBusy(true);
+    try { await requestRefund(orderId, reason.trim() || 'Pesanan dibatalkan/ditolak'); toast.success('Pengajuan pengembalian dana dikirim'); onDone(); }
+    catch (e) { const m = (e as Error).message; if (m === REFUND_OPEN_TEXT) { toast.show(m); onDone(); } else toast.error(m); }
+    finally { setBusy(false); }
+  };
+  return (
+    <View style={s.subBox}>
+      <Text style={font.label}>Pratinjau pengembalian dana</Text>
+      {err ? <Text style={[font.small, { color: colors.danger }]}>{err}</Text> : !pol ? <Text style={font.small}>Menghitung…</Text> : (
+        <View style={{ gap: 4 }}>
+          {pol.lines.map((l, i) => (
+            <Row key={`${l.label}-${i}`} between style={{ gap: 8 }}>
+              <Row gap={6} style={{ flex: 1 }}><Ionicons name={l.refundable ? 'checkmark-circle' : 'close-circle'} size={16} color={l.refundable ? colors.success : colors.textMuted} /><Text style={[font.small, { flex: 1 }]}>{l.label}</Text></Row>
+              <Text style={{ fontWeight: '600', color: l.refundable ? colors.text : colors.textMuted, textDecorationLine: l.refundable ? 'none' : 'line-through' }}>{rupiah(l.amount)}</Text>
+            </Row>
+          ))}
+          <Row between style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 6, marginTop: 2 }}><Text style={font.h3}>Dikembalikan</Text><Text style={[font.h3, { color: colors.success }]}>{rupiah(pol.refundable)}</Text></Row>
+          {pol.non_refundable > 0 && <Text style={font.tiny}>Tidak dapat dikembalikan: {rupiah(pol.non_refundable)}{pol.note ? ` — ${pol.note}` : ''}</Text>}
+        </View>
+      )}
+      <TextInput placeholder="Alasan (opsional)" placeholderTextColor={colors.textMuted} value={reason} onChangeText={setReason} style={s.input} />
+      <Row gap={8}>
+        <Button title="Batal" variant="ghost" size="sm" onPress={onCancel} />
+        <Button title="Ajukan pengembalian" size="sm" icon="checkmark" loading={busy} disabled={!pol || pol.refundable <= 0} onPress={submit} style={{ flex: 1 }} />
+      </Row>
+    </View>
+  );
+}
+
+const DISPUTE_KINDS: DisputeKind[] = ['amount_mismatch', 'not_received', 'other'];
+/** Form `dispute_open` (jenis, nominal, deskripsi). Daftar laporan ada di Pusat Bantuan (`my_disputes`). */
+function DisputeBox({ orderId, amount, onDone, onCancel }: { orderId: string; amount: number; onDone: () => void; onCancel: () => void }) {
+  const router = useRouter();
+  const [kind, setKind] = useState<DisputeKind>('amount_mismatch');
+  const [nominal, setNominal] = useState(String(amount || ''));
+  const [desc, setDesc] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (desc.trim().length < 10) { toast.error('Jelaskan masalahnya minimal 10 karakter'); return; }
+    setBusy(true);
+    try {
+      const n = Number(nominal.replace(/\D/g, ''));
+      await openDispute(orderId, kind, n > 0 ? n : null, desc.trim());
+      toast.success('Laporan masalah pembayaran dikirim — pantau di Pusat Bantuan');
+      onDone();
+      router.push('/support' as never);
+    } catch (e) { const m = (e as Error).message; if (m === DISPUTE_OPEN_TEXT) { toast.show(m); onDone(); } else toast.error(m); }
+    finally { setBusy(false); }
+  };
+  return (
+    <View style={s.subBox}>
+      <Text style={font.label}>Laporkan masalah pembayaran</Text>
+      <Row gap={6} style={{ flexWrap: 'wrap' }}>{DISPUTE_KINDS.map((k) => <Chip key={k} label={disputeKindLabel[k]} active={kind === k} onPress={() => setKind(k)} />)}</Row>
+      <TextInput placeholder="Nominal terkait (Rp)" placeholderTextColor={colors.textMuted} keyboardType="number-pad" value={nominal} onChangeText={(v) => setNominal(v.replace(/\D/g, ''))} style={s.input} />
+      <TextInput placeholder="Ceritakan masalahnya (mis. saldo terpotong dua kali)" placeholderTextColor={colors.textMuted} value={desc} onChangeText={setDesc} multiline style={[s.input, { height: 80, paddingTop: 10, textAlignVertical: 'top' }]} />
+      <Row gap={8}>
+        <Button title="Batal" variant="ghost" size="sm" onPress={onCancel} />
+        <Button title="Kirim laporan" size="sm" icon="send" loading={busy} onPress={submit} style={{ flex: 1 }} />
+      </Row>
+    </View>
   );
 }
 
@@ -199,4 +374,8 @@ const s = StyleSheet.create({
   note: { flexDirection: 'row', gap: 8, backgroundColor: 'rgba(245,158,11,0.12)', padding: 10, borderRadius: radius.md, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(245,158,11,0.25)' },
   tdot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.border, marginTop: 4 },
   tline: { width: 2, flex: 1, minHeight: 14, backgroundColor: colors.border, marginVertical: 2 },
+  ref: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.md, backgroundColor: colors.tint, borderWidth: 1, borderColor: colors.primaryLight },
+  payBox: { gap: 10, padding: 16, backgroundColor: '#fff', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, ...shadow.soft },
+  subBox: { gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border },
+  input: { backgroundColor: '#fff', borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, height: 44, color: colors.text, fontSize: 14 },
 });

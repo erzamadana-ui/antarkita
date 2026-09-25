@@ -56,7 +56,7 @@ export default function TravelPartnerHome() {
     const minsLeft = Math.round((new Date(t.depart_at).getTime() - Date.now()) / 60000);
     const soonTxt = minsLeft <= 0 ? 'Jadwal ini sudah lewat jam berangkat.' : minsLeft < 120 ? `Berangkat ${minsLeft < 60 ? `${minsLeft} menit` : `${Math.round(minsLeft / 60)} jam`} lagi — pembatalan mendadak menurunkan rating & prioritas Anda.` : '';
     const msg = st === 'departed' ? 'Tandai berangkat? Pastikan semua penumpang sudah dijemput.'
-      : st === 'arrived' ? 'Tandai tiba? Pendapatan akan masuk ke AntarPay.'
+      : st === 'arrived' ? 'Tandai tiba? Pendapatan akan masuk ke AntarVoucher.'
       : `Batalkan jadwal ini? ${t.seats_booked > 0 ? `${t.seats_booked} kursi sudah dipesan — penumpang akan di-refund & diberi tahu. ` : ''}${soonTxt}`.trim();
     const doIt = async () => { try { await rpc('travel_trip_set_status', { p_trip: t.id, p_status: st, p_note: st === 'cancelled' ? 'Dibatalkan mitra travel' : null }); toast.success('Status diperbarui'); reload(); } catch (e) { toast.error((e as Error).message); } };
     if (Platform.OS === 'web') { if (confirm(msg)) doIt(); return; }
@@ -107,7 +107,7 @@ export default function TravelPartnerHome() {
             </View>
           </Row>
           <Row between style={s.balance}>
-            <Row gap={8}><Ionicons name="wallet-outline" size={20} color={colors.primary} /><Text style={font.small}>Saldo AntarPay</Text></Row>
+            <Row gap={8}><Ionicons name="wallet-outline" size={20} color={colors.primary} /><Text style={font.small}>Saldo AntarVoucher</Text></Row>
             <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 18 }}>{rupiah(wallet?.balance ?? 0)}</Text>
           </Row>
         </Card></Entrance>
@@ -168,7 +168,7 @@ export default function TravelPartnerHome() {
                       <Avatar name={b.customer.name} url={b.customer.avatar_url} size={36} />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Row between><Text style={{ fontWeight: '700', color: colors.text, flex: 1 }} numberOfLines={1}>{b.customer.name} · {b.pax} pax{b.is_private ? ' (private)' : ''}</Text><Badge text={travelStatusLabel[b.status]} /></Row>
-                        <Text style={font.tiny}>{b.code} · {b.payment_method === 'cash' ? `Tunai ${rupiah(b.price)} (tagih saat jemput)` : 'Dibayar AntarPay'}{b.passengers?.length ? ` · ${b.passengers.map((x) => x.name).join(', ')}` : ''}</Text>
+                        <Text style={font.tiny}>{b.code} · {b.payment_method === 'cash' ? `Tunai ${rupiah(b.price)} (tagih saat jemput)` : 'Dibayar AntarVoucher'}{b.passengers?.length ? ` · ${b.passengers.map((x) => x.name).join(', ')}` : ''}</Text>
                         <Row gap={4} style={{ marginTop: 2 }}><Ionicons name="location-outline" size={12} color={colors.primary} /><Text style={[font.small, { flex: 1 }]}>{b.pickup_address}</Text></Row>
                         {!!b.dropoff_address && <Row gap={4}><Ionicons name="flag-outline" size={12} color={colors.textMuted} /><Text style={[font.tiny, { flex: 1 }]}>{b.dropoff_address}</Text></Row>}
                       </View>
@@ -266,7 +266,7 @@ function RequestCard({ r, me, open, onToggle, onDone }: { r: TravelOpenRequest; 
     } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
   };
   const setSt = (st: 'ongoing' | 'completed') => {
-    const msg = st === 'ongoing' ? 'Mulai perjalanan? Pastikan penumpang sudah dijemput.' : 'Tandai selesai? Pendapatan akan diteruskan ke AntarPay Anda.';
+    const msg = st === 'ongoing' ? 'Mulai perjalanan? Pastikan penumpang sudah dijemput.' : 'Tandai selesai? Pendapatan akan diteruskan ke AntarVoucher Anda.';
     const doIt = async () => { try { await rpc('travel_request_set_status', { p_request: r.id, p_status: st, p_note: null }); toast.success('Status diperbarui'); onDone(); } catch (e) { toast.error((e as Error).message); } };
     if (Platform.OS === 'web') { if (confirm(msg)) doIt(); return; }
     Alert.alert('Konfirmasi', msg, [{ text: 'Batal' }, { text: 'Ya', onPress: doIt }]);
@@ -309,7 +309,7 @@ function RequestCard({ r, me, open, onToggle, onDone }: { r: TravelOpenRequest; 
             <Row gap={8} style={{ flexWrap: 'wrap' }}>
               {r.status !== 'ongoing' && <Button size="sm" title="Mulai perjalanan" icon="play" onPress={() => setSt('ongoing')} />}
               {r.status === 'ongoing' && <Button size="sm" title="Selesai" icon="flag" onPress={() => setSt('completed')} />}
-              {!!r.my_offer && <Text style={[font.tiny, { flex: 1 }]}>Harga disepakati {rupiah(r.my_offer.price)}{r.status === 'accepted' ? ' · tagih tunai saat berangkat' : ' · dibayar AntarPay'}</Text>}
+              {!!r.my_offer && <Text style={[font.tiny, { flex: 1 }]}>Harga disepakati {rupiah(r.my_offer.price)}{r.status === 'accepted' ? ' · tagih tunai saat berangkat' : ' · dibayar AntarVoucher'}</Text>}
             </Row>
           )}
 
@@ -394,7 +394,7 @@ function SendParcelTab({ uid }: { uid?: string | null }) {
             <Text style={font.tiny}>Bawa paket pelanggan sekalian jalan. Batas mitra travel: maks. {numId(lim.max_kg)} kg · sisi terpanjang {numId(lim.max_cm)} cm.</Text>
           </View>
         </Row>
-        <Text style={font.tiny}>Ambil titipan → jemput ke alamat pengirim → antar ke alamat penerima di kota tujuan. Pendapatan masuk ke AntarPay setelah Anda menandai titipan sampai.</Text>
+        <Text style={font.tiny}>Ambil titipan → jemput ke alamat pengirim → antar ke alamat penerima di kota tujuan. Pendapatan masuk ke AntarVoucher setelah Anda menandai titipan sampai.</Text>
       </Card>
 
       <Text style={font.label}>Titipan aktif Anda ({mine.length})</Text>
@@ -410,7 +410,7 @@ function SendParcelTab({ uid }: { uid?: string | null }) {
                 <Badge text={o.status === 'in_progress' ? 'Dalam perjalanan' : 'Menunggu dijemput'} color={o.status === 'in_progress' ? colors.info : colors.warning} />
                 {o.weight_kg != null && <Badge text={`${numId(o.weight_kg)} kg`} color={colors.textSecondary} />}
                 {parcelSize(o) != null && <Badge text={`sisi ${numId(parcelSize(o))} cm`} color={colors.textSecondary} />}
-                <Badge text={o.payment_method === 'cash' ? `Tunai ${rupiah(o.total)}` : 'Dibayar AntarPay'} color={o.payment_method === 'cash' ? colors.accent : colors.success} />
+                <Badge text={o.payment_method === 'cash' ? `Tunai ${rupiah(o.total)}` : 'Dibayar AntarVoucher'} color={o.payment_method === 'cash' ? colors.accent : colors.success} />
               </Row>
             </View>
           </Row>
@@ -421,7 +421,7 @@ function SendParcelTab({ uid }: { uid?: string | null }) {
           <Row gap={8} style={{ marginTop: 10, flexWrap: 'wrap' }}>
             {!!o.pickup_lat && <Button size="sm" variant="outline" icon="navigate" title="Navigasi" onPress={() => Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${o.status === 'in_progress' ? `${o.dropoff_lat},${o.dropoff_lng}` : `${o.pickup_lat},${o.pickup_lng}`}`)} />}
             {o.status === 'accepted' && <Button size="sm" icon="checkmark" title="Sudah dijemput" loading={busy === o.id} onPress={() => confirmThen('Tandai titipan sudah dijemput dari pengirim?', () => act(o.id, 'travel_pickup_send', 'Titipan dalam perjalanan'))} />}
-            {o.status === 'in_progress' && <Button size="sm" icon="flag" title="Sudah sampai" loading={busy === o.id} onPress={() => confirmThen('Tandai titipan sudah sampai ke penerima? Pendapatan diteruskan ke AntarPay.', () => act(o.id, 'travel_complete_send', 'Titipan selesai'))} />}
+            {o.status === 'in_progress' && <Button size="sm" icon="flag" title="Sudah sampai" loading={busy === o.id} onPress={() => confirmThen('Tandai titipan sudah sampai ke penerima? Pendapatan diteruskan ke AntarVoucher.', () => act(o.id, 'travel_complete_send', 'Titipan selesai'))} />}
           </Row>
         </Animated.View>
       ))}
@@ -441,7 +441,7 @@ function SendParcelTab({ uid }: { uid?: string | null }) {
               <Row gap={6} style={{ marginTop: 6, flexWrap: 'wrap' }}>
                 {r.weight_kg != null && <Badge text={`${numId(r.weight_kg)} kg`} color={over.length ? colors.danger : colors.textSecondary} />}
                 {r.size_cm != null && <Badge text={`sisi ${numId(r.size_cm)} cm`} color={over.length ? colors.danger : colors.textSecondary} />}
-                <Badge text={r.payment_method === 'cash' ? `Tunai ${rupiah(r.total)}` : 'Dibayar AntarPay'} color={r.payment_method === 'cash' ? colors.accent : colors.success} />
+                <Badge text={r.payment_method === 'cash' ? `Tunai ${rupiah(r.total)}` : 'Dibayar AntarVoucher'} color={r.payment_method === 'cash' ? colors.accent : colors.success} />
               </Row>
             </View>
           </Row>

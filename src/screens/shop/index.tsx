@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Card, Row, Button, Badge, Input, Chip, Stepper, Empty, toast } from '@/components/ui';
 import { Entrance, PressableScale, Skeleton } from '@/components/motion';
-import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
+import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, goAfterOrder, useCheckoutFees, checkoutRows, checkoutNote, type PayChoice } from '@/components/BookingSheet';
 import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { usePayPrefs } from '@/store/payprefs';
 import { useBooking } from '@/store/booking';
@@ -22,7 +22,7 @@ import { createOrder } from '@/lib/orders';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { ServiceIllustration } from '@/components/ServiceArt';
 import { rupiah, km, minutes, storeCategoryLabel, productCategoryLabel } from '@/lib/format';
-import type { CartLine, Place, ShopProduct, ShopStore, ShoppingEstimate } from '@/lib/types';
+import type { CartLine, Place, PromoFunder, ShopProduct, ShopStore, ShoppingEstimate } from '@/lib/types';
 
 const FILTERS: { key: string; label: string; category: string | null }[] = [
   { key: 'all', label: 'Semua', category: null },
@@ -75,6 +75,7 @@ export default function ShopScreen() {
   const [fareTry, setFareTry] = useState(0);
   const [method, setMethod] = useState<PayChoice>('wallet');
   const [promo, setPromo] = useState(''); const [discount, setDiscount] = useState(0); const [notes, setNotes] = useState('');
+  const [promoFunder, setPromoFunder] = useState<PromoFunder | null>(null);
   const [ordering, setOrdering] = useState(false);
   const [gridW, setGridW] = useState(0);
 
@@ -170,7 +171,11 @@ export default function ShopScreen() {
     return () => { cancelled = true; clearTimeout(t); };
   }, [origin?.lat, origin?.lng, dropoff?.lat, dropoff?.lng, subtotal, vehicle, route?.distance_km, fareTry]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const total = est ? Math.max(0, est.fare + est.platform_fee + est.service_fee - discount) + subtotal : 0;
+  // §9: biaya platform dari shopping_estimate (customer_platform_fee, 0099) — bukan konstanta klien
+  const platformFee = est ? est.customer_platform_fee ?? est.platform_fee : 0;
+  const baseTotal = est ? Math.max(0, est.fare + platformFee + est.service_fee - discount) + subtotal : 0;
+  const fees = useCheckoutFees({ service: 'shop', method, ewallet: payPrefs?.ewallet, amount: baseTotal });
+  const total = est ? baseTotal + fees.payFee : 0;
   const blocked = limitBlocked(est?.limit);
   const serviceOff = est?.service_enabled === false || !isEnabled('shop');
   // Gerbang wilayah: create_order memakai LOKASI TOKO sebagai titik jemput, jadi
@@ -207,7 +212,7 @@ export default function ShopScreen() {
         : { ...base, shop_store_id: store!.id, shopping_list: cart.map((l) => ({ product_id: l.product_id, name: l.name, qty: l.qty, note: l.note ?? null })) };
       const o = await createOrder(p);
       await refreshWallet(); useBooking.getState().reset();
-      router.replace(`/order/${o.id}` as never);
+      goAfterOrder(router, o);
     } catch (e) { if (!handleShortfall(e, router, payPrefs?.ewallet)) toast.error((e as Error).message); }
     // `finally`: tanpa ini tombol "Pesan" bisa tersangkut memutar selamanya bila ada
     // kegagalan di luar blok try lama (mis. finalizeRoute) — pengguna harus menutup layar.
@@ -360,7 +365,7 @@ export default function ShopScreen() {
               </Card>
               <Card solid style={{ gap: 10 }}>
                 <Text style={font.label}>Perkiraan anggaran belanja</Text>
-                <Text style={font.tiny}>Ditahan dari AntarPay saat pesan; selisih dikembalikan atau ditagih sesuai nota. Maks. Rp5.000.000.</Text>
+                <Text style={font.tiny}>Ditahan dari AntarVoucher saat pesan; selisih dikembalikan atau ditagih sesuai nota. Maks. Rp5.000.000.</Text>
                 <Row gap={8} style={{ flexWrap: 'wrap' }}>{BUDGETS.map((b) => <Chip key={b} label={rupiah(b)} active={budget === b} onPress={() => setBudget(b)} />)}</Row>
                 <Input placeholder="Nominal lain" keyboardType="number-pad" icon="cash-outline" value={BUDGETS.includes(budget) ? '' : String(budget)} onChangeText={(v) => setBudget(Math.min(5000000, Number(v.replace(/\D/g, '')) || 0))} />
                 {freeSubtotal > budget && <Text style={[font.tiny, { color: colors.warning }]}>Perkiraan harga barang ({rupiah(freeSubtotal)}) lebih besar dari anggaran; anggaran yang ditahan mengikuti perkiraan barang.</Text>}
@@ -396,7 +401,11 @@ export default function ShopScreen() {
         {/* Rincian & pembayaran */}
         {origin && dropoff && (
           <Card solid>
-            {est ? <PriceSummary rows={[{ label: free ? 'Anggaran belanja (perkiraan)' : 'Belanja', value: subtotal }, { label: 'Jasa belanja', value: est.service_fee }, { label: `Ongkir ${vehicle === 'car' ? 'mobil' : 'motor'} (${km(est.distance_km)})`, value: est.fare }, { label: 'Biaya layanan', value: est.platform_fee }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />
+            {est ? <PriceSummary total={total} note={checkoutNote(fees.pay, fees.econError)} rows={checkoutRows({
+              service: 'shop', econ: fees.econ, ongkir: est.fare, ongkirLabel: `Ongkir ${vehicle === 'car' ? 'mobil' : 'motor'} (${km(est.distance_km)})`,
+              items: subtotal, itemsLabel: free ? 'Harga barang (anggaran perkiraan)' : 'Harga barang', itemsHint: 'Dibayar driver ke toko sesuai nota; disesuaikan dengan harga riil',
+              platformFee, serviceFee: est.service_fee, pay: fees.pay, discount, promoCode: promo || null, promoFunder,
+            })} />
               : fareFailed ? (
                 <View style={s.fareErr}>
                   <Row gap={8}><Ionicons name="alert-circle" size={18} color={colors.warning} /><Text style={{ fontWeight: '700', color: colors.text }}>Estimasi biaya belum bisa ditampilkan</Text></Row>
@@ -410,7 +419,7 @@ export default function ShopScreen() {
         )}
         <Card solid>
           <AntarNowSection service="shop" accent={colors.shop} />
-          <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={est?.fare ?? 0} service="shop" onDiscount={setDiscount} notesPlaceholder="Catatan (mis. merek pengganti jika kosong)" />
+          <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={est?.fare ?? 0} service="shop" feeBase={baseTotal} onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} notesPlaceholder="Catatan (mis. merek pengganti jika kosong)" />
         </Card>
         <Text style={font.tiny}>Driver mengirim foto nota. Barang yang tidak tersedia dikonfirmasi lewat chat/telepon dan tidak ditagihkan.</Text>
       </View>

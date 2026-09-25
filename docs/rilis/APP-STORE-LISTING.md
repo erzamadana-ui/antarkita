@@ -65,14 +65,14 @@ Ojek, antar makanan & barang
 **Promotional text (≤170)** — bisa diganti kapan saja **tanpa** mengajukan versi baru. Pakai untuk promo musiman:
 
 ```
-Pesan ojek, mobil, makanan, dan belanja pasar, lalu bayar dengan satu dompet AntarPay. Lacak mitra di peta, chat tanpa membagikan nomor HP Anda.
+Pesan ojek, mobil, makanan, dan belanja pasar, lalu bayar dengan satu dompet AntarVoucher. Lacak mitra di peta, chat tanpa membagikan nomor HP Anda.
 ```
 *144 karakter.*
 
 **Description (≤4000):**
 
 ```
-AntarKita adalah aplikasi super lokal untuk kebutuhan harian Anda: pesan ojek dan mobil, antar makanan, kirim barang, belanja di toko dan pasar tradisional, sewa mobil box, sampai perjalanan antar kota — semuanya dalam satu aplikasi dengan satu dompet AntarPay.
+AntarKita adalah aplikasi super lokal untuk kebutuhan harian Anda: pesan ojek dan mobil, antar makanan, kirim barang, belanja di toko dan pasar tradisional, sewa mobil box, sampai perjalanan antar kota — semuanya dalam satu aplikasi dengan satu dompet AntarVoucher.
 
 LAYANAN DI DALAM ANTARKITA
 • AntarRide — ojek motor cepat dan hemat untuk perjalanan dalam kota. Tarif jelas sebelum pesan.
@@ -83,7 +83,7 @@ LAYANAN DI DALAM ANTARKITA
 • AntarShop — titip beli di toko: tulis daftar belanja, mitra membelikan dan mengantar.
 • AntarMarket — belanja sayur, buah, daging, ikan, dan sembako langsung dari pedagang pasar tradisional dengan harga pasar hari itu.
 • AntarTravel — perjalanan antar kota dengan mitra travel terverifikasi: pilih jadwal, kursi, atau sewa privat satu mobil.
-• AntarPay — dompet dalam aplikasi untuk membayar semua layanan tanpa uang tunai. Top up lewat transfer bank, e-wallet, dan QRIS (diproses Midtrans).
+• AntarVoucher — dompet dalam aplikasi untuk membayar semua layanan tanpa uang tunai. Top up lewat transfer bank, e-wallet, dan QRIS (diproses Midtrans).
 
 KENAPA ANTARKITA
 • Tarif transparan: lihat estimasi total sebelum memesan, termasuk biaya layanan.
@@ -91,7 +91,7 @@ KENAPA ANTARKITA
 • Chat dan panggilan di dalam aplikasi — nomor HP Anda tidak dibagikan ke siapa pun.
 • Pusat Keamanan: tombol SOS, bagikan perjalanan ke keluarga, kontak darurat, mitra terverifikasi dengan foto dan plat nomor.
 • Laporkan dan blokir pengguna langsung dari halaman pesanan atau layar chat.
-• Bayar tunai atau AntarPay — Anda yang pilih.
+• Bayar tunai atau AntarVoucher — Anda yang pilih.
 • Alamat tersimpan (rumah, kantor) dan riwayat pesanan untuk pesan ulang cepat.
 • Bantuan cepat lewat tiket aduan dengan CS yang responsif.
 
@@ -162,7 +162,7 @@ Terima order, cairkan hasilnya
 **Promotional text (≤170):**
 
 ```
-Nyalakan Online, terima pesanan di sekitar Anda, dan lihat pendapatan bersih sebelum menerima. Pencairan ke rekening bank kapan saja lewat dompet AntarPay.
+Nyalakan Online, terima pesanan di sekitar Anda, dan lihat pendapatan bersih sebelum menerima. Pencairan ke rekening bank kapan saja lewat dompet AntarVoucher.
 ```
 *155 karakter.*
 
@@ -196,7 +196,7 @@ UNTUK MITRA TRAVEL (AntarTravel)
 UNTUK MOBIL BOX (AntarBox)
 • Terima pesanan angkut barang besar dan pindahan dengan tarif berdasarkan jarak dan kelas kendaraan.
 
-DOMPET MITRA (AntarPay)
+DOMPET MITRA (AntarVoucher)
 • Pendapatan masuk otomatis ke saldo setelah pesanan selesai. Cairkan ke rekening bank kapan saja sesuai batas minimum.
 • Top up saldo deposit untuk menerima pesanan tunai (diproses Midtrans).
 
@@ -255,7 +255,7 @@ macOS dengan perangkat **iPhone 17 Pro Max**, lalu `Cmd+S` — Simulator menyimp
 Screenshot dari Android atau dari peramban desktop **tidak** memenuhi rasio yang diminta.
 
 Urutan yang disarankan (sama dengan Play): Pelanggan — Beranda layanan → Pesan AntarRide
-(peta + estimasi) → Lacak pesanan → AntarFood → AntarMarket → AntarPay. Mitra — Beranda
+(peta + estimasi) → Lacak pesanan → AntarFood → AntarMarket → AntarVoucher. Mitra — Beranda
 Online + pesanan masuk → Rincian pendapatan → Menu merchant → Lapak pasar → Jadwal travel.
 
 ---
@@ -283,7 +283,7 @@ tracking?**, plus **tujuan**.
 | | Physical Address | Ya | Ya | Tidak | App Functionality *(alamat jemput/antar & alamat tersimpan)* |
 | | Other User Contact Info | Ya | Ya | Tidak | App Functionality *(kontak darurat)* |
 | **Financial Info** | Payment Info | **Tidak** | — | — | Nomor kartu/e-wallet ditangani penuh Midtrans; aplikasi tidak pernah melihatnya |
-| | Other Financial Info | Ya | Ya | Tidak | App Functionality *(saldo AntarPay, rekening pencairan mitra)* |
+| | Other Financial Info | Ya | Ya | Tidak | App Functionality *(saldo AntarVoucher, rekening pencairan mitra)* |
 | **Location** | Precise Location | Ya | Ya | Tidak | App Functionality |
 | | Coarse Location | Ya | Ya | Tidak | App Functionality |
 | **Sensitive Info** | Sensitive Info | **Tidak** | — | — | Tidak ada data ras/agama/orientasi/biometrik. Selfie verifikasi disimpan sebagai **foto** untuk ditinjau admin, bukan template biometrik |
@@ -297,7 +297,7 @@ tracking?**, plus **tujuan**.
 | **Search History** | Search History | Ya | Ya | Tidak | App Functionality *(pencarian alamat & merchant)* |
 | **Identifiers** | User ID | Ya | Ya | Tidak | App Functionality |
 | | Device ID | Ya | Ya | Tidak | App Functionality *(token push notification — **bukan** IDFA)* |
-| **Purchases** | Purchase History | Ya | Ya | Tidak | App Functionality, Analytics *(riwayat pesanan & mutasi AntarPay)* |
+| **Purchases** | Purchase History | Ya | Ya | Tidak | App Functionality, Analytics *(riwayat pesanan & mutasi AntarVoucher)* |
 | **Usage Data** | Product Interaction | Ya | Ya | Tidak | Analytics, App Functionality *(log aktivitas & audit)* |
 | | Advertising Data | **Tidak** | — | — | Tidak ada iklan |
 | **Diagnostics** | Crash Data | Ya | **Tidak** | Tidak | App Functionality *(log kesalahan server, tanpa identitas)* |
@@ -370,7 +370,7 @@ Di bagian **Age Rating → "Made for Kids"**: **No**.
 
 ---
 
-## 7. In-App Purchase — apakah top up AntarPay kena potongan 30% Apple?
+## 7. In-App Purchase — apakah top up AntarVoucher kena potongan 30% Apple?
 
 **Jawaban: TIDAK. Bahkan sebaliknya — Apple MELARANG memakai In-App Purchase untuk ini.**
 
@@ -382,7 +382,7 @@ Dasarnya Guideline **3.1.3(e) Goods and Services Outside of the App**, dikutip u
 > payments, such as Apple Pay or traditional credit card entry."*
 
 Perhatikan kata **"must"**: ini kewajiban memakai metode **selain** IAP, bukan sekadar izin.
-Semua yang dibeli dengan AntarPay — perjalanan ojek/mobil, makanan yang diantar, pengiriman
+Semua yang dibeli dengan AntarVoucher — perjalanan ojek/mobil, makanan yang diantar, pengiriman
 paket, belanja pasar, sewa mobil box, tiket travel — adalah **barang dan jasa fisik yang
 dikonsumsi di dunia nyata**, bukan konten digital di dalam aplikasi.
 
@@ -392,13 +392,13 @@ menyebut satu-satunya bentuk voucher yang wajib IAP:
 > *"Digital gift cards, certificates, vouchers, and coupons which can be redeemed for digital
 > goods or services can only be sold in your app using in-app purchase."*
 
-Kuncinya **"redeemed for digital goods or services"**. Saldo AntarPay hanya bisa ditukar dengan
+Kuncinya **"redeemed for digital goods or services"**. Saldo AntarVoucher hanya bisa ditukar dengan
 jasa fisik dunia nyata di dalam platform AntarKita. Selama itu benar, top up berada di luar
 kewajiban IAP — dan justru masuk 3.1.3(e).
 
 **Tiga syarat yang HARUS terus dipenuhi agar jawaban ini tetap benar:**
 
-1. **Saldo AntarPay tidak boleh pernah bisa membeli barang/jasa digital di dalam aplikasi.**
+1. **Saldo AntarVoucher tidak boleh pernah bisa membeli barang/jasa digital di dalam aplikasi.**
    Begitu saldo dipakai untuk membuka fitur premium, langganan, stiker, tema, atau konten
    digital apa pun, bagian itu WAJIB memakai IAP dan Apple memotong komisinya. Hari ini tidak
    ada fitur seperti itu (`src/screens/pay/`, `src/components/WalletView.tsx`) — jaga tetap begitu.
@@ -417,7 +417,7 @@ salah menandai:
 
 > AntarKita is a ride-hailing and delivery marketplace. All payments in the app are for physical
 > goods and real-world services delivered offline (rides, food delivery, courier, groceries,
-> intercity travel). AntarPay is a closed-loop stored-value balance that can only be spent on
+> intercity travel). AntarVoucher is a closed-loop stored-value balance that can only be spent on
 > those real-world services within AntarKita; it cannot be used to buy any digital content,
 > features, or subscriptions, and it cannot be transferred between users. Per Guideline 3.1.3(e),
 > these payments are collected using methods other than in-app purchase (Midtrans, a licensed
@@ -430,7 +430,7 @@ hanya memuat peta Leaflet yang dibundel sendiri (`src/components/map/leaflet-bun
 halaman pembayaran Midtrans. Merchant di AntarKita menjual **makanan dan barang**, bukan
 perangkat lunak.
 
-**Guideline 3.1.5 (Cryptocurrencies) tidak berlaku.** AntarPay adalah saldo Rupiah tertutup,
+**Guideline 3.1.5 (Cryptocurrencies) tidak berlaku.** AntarVoucher adalah saldo Rupiah tertutup,
 bukan mata uang virtual/kripto. (Tetap catat: aturan 3.1.5(i) mewajibkan pengembang berbentuk
 **organisasi** untuk dompet mata uang virtual — pengingat bahwa apa pun yang berbau keuangan
 lebih aman di akun organisasi; lihat §11 dan RUNBOOK-LISTING-IOS.md.)
@@ -490,7 +490,7 @@ maupun SDK login sosial mana pun. **Sign in with Apple tidak wajib.**
 > sensitive user information should be submitted by a legal entity that provides the services,
 > and not by an individual developer."*
 
-AntarKita **bukan** bank dan bukan bursa kripto: AntarPay adalah saldo tertutup, dan seluruh
+AntarKita **bukan** bank dan bukan bursa kripto: AntarVoucher adalah saldo tertutup, dan seluruh
 pembayaran diproses PT Midtrans (penyelenggara berizin Bank Indonesia). Tetapi aplikasi ini
 **meminta informasi pengguna yang sensitif** (KTP/NIK, SIM, STNK untuk mitra) dan memuat fitur
 dompet. Itu cukup membuat reviewer mempertanyakan akun perorangan.
@@ -572,7 +572,7 @@ dan tidak akan melihat satu pun mitra online kalau tidak disiapkan.
 
 | Aplikasi | Username | Password | Catatan |
 |---|---|---|---|
-| Pelanggan | `applereview@antarkita.id` | *(isi, simpan di pengelola kata sandi)* | Saldo AntarPay uji ≥ Rp500.000, alamat tersimpan sudah diisi |
+| Pelanggan | `applereview@antarkita.id` | *(isi, simpan di pengelola kata sandi)* | Saldo AntarVoucher uji ≥ Rp500.000, alamat tersimpan sudah diisi |
 | Mitra | `applereview.mitra@antarkita.id` | *(isi)* | Status **approved**, dokumen sudah terverifikasi, bisa langsung Online |
 
 **Contact Information:** nama lengkap pemilik · `erzamadana@gmail.com` · nomor telepon yang
@@ -603,7 +603,7 @@ address manually.
 
 PAYMENTS - NO IN-APP PURCHASE
 All payments are for physical goods and real-world services consumed outside the app (rides,
-food delivery, courier, market groceries, intercity travel). AntarPay is a closed-loop
+food delivery, courier, market groceries, intercity travel). AntarVoucher is a closed-loop
 stored-value balance that can only be spent on those real-world services inside AntarKita. It
 cannot buy digital content, features or subscriptions, and cannot be transferred between users.
 Per Guideline 3.1.3(e), these payments use methods other than in-app purchase. Payment
@@ -658,7 +658,7 @@ Siapkan jawabannya sekarang; menjawab cepat memangkas hari, bukan jam.
 | "Why does your app need the microphone?" | Panggilan suara dalam aplikasi antara pelanggan dan mitra agar nomor HP tidak dibagikan. Tidak direkam. |
 | "Why does the app collect government ID documents?" | Hanya di aplikasi **Mitra**, untuk verifikasi pengemudi sesuai regulasi transportasi Indonesia. Tidak diminta dari pelanggan. |
 | "Your app appears to sell digital content / should use IAP." | Balas dengan kutipan 3.1.3(e) dan penjelasan closed-loop di §7. |
-| "Is your app a financial institution? Do you have a licence?" | Bukan. AntarPay adalah saldo tertutup di dalam platform; pembayaran diproses PT Midtrans (berizin Bank Indonesia). AntarKita tidak menerbitkan uang elektronik, tidak memberi pinjaman, tidak menyimpan data kartu. |
+| "Is your app a financial institution? Do you have a licence?" | Bukan. AntarVoucher adalah saldo tertutup di dalam platform; pembayaran diproses PT Midtrans (berizin Bank Indonesia). AntarKita tidak menerbitkan uang elektronik, tidak memberi pinjaman, tidak menyimpan data kartu. |
 | "How do users report or block other users?" | Jalur menu persis di §8.2 dan di `PLAY-STORE-LISTING.md` §4.11. |
 | "Your app requires a phone number / Indonesian bank account to sign up." | Akun demo yang sudah jadi menghindari ini sepenuhnya — pastikan reviewer tidak perlu OTP nomor Indonesia. **Uji sendiri**: masuk dengan akun demo dari jaringan luar negeri (VPN) sebelum submit. |
 | "Does the app work outside Indonesia?" | Availability disetel **Indonesia saja**, sehingga pertanyaan ini jarang muncul; tetapi akun demo tetap harus bisa masuk dari mana pun. |

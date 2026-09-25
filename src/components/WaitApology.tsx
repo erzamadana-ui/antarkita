@@ -20,7 +20,7 @@ const FACTS: string[] = [
   'AntarBox menyediakan mobil box & pick up plus pembantu angkat untuk pindahan kost dan rumah.',
   'AntarMarket membelikan bahan masak dari pasar tradisional terdekat, harganya mengikuti acuan pasar.',
   'AntarShop bisa memesan dari Indomaret, Alfamart, apotek, sampai supermarket langganan Anda.',
-  'Saldo AntarPay bisa diisi lewat QRIS, e-wallet, atau transfer manual dengan bukti bayar.',
+  'Saldo AntarVoucher bisa diisi lewat QRIS, e-wallet, atau transfer manual dengan bukti bayar.',
   'Perjalanan Anda bisa dibagikan ke keluarga lewat tombol Bagikan di pusat keamanan.',
   'AntarRide & AntarCar bisa dipesan terjadwal — atur jam jemput dari sekarang.',
   'Nomor HP Anda disamarkan; panggilan ke driver berjalan lewat aplikasi.',

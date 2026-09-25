@@ -1,5 +1,5 @@
 // Kerangka Panel Admin — sidebar berkelompok (gaya dashboard SaaS), latar abu muda, konten putih.
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 import { Slot, usePathname, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,12 +12,17 @@ import { BrandLogo } from '@/components/Logo';
 import { useAuth } from '@/store/auth';
 import { adminFont, adminTone, adminRadius, adminShadow, adminIcon, AdminCallBar } from '@/components/admin';
 import { colors, fam, motion } from '@/lib/theme';
+import { useAdminRole, permsAllow, adminRoleLabel, type AdminPerm } from '@/lib/admin';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
-type NavItem = { href: string; label: string; icon: IconName; iconActive: IconName };
+/** `perm` (opsional): menu disembunyikan bila peran admin (my_admin_role) tidak punya izin tsb. */
+type NavItem = { href: string; label: string; icon: IconName; iconActive: IconName; perm?: AdminPerm | AdminPerm[] };
 type NavGroup = { title: string; items: NavItem[] };
 
-/** Struktur menu panel admin — dikelompokkan agar mudah dipindai. */
+/**
+ * Struktur menu panel admin — dikelompokkan agar mudah dipindai.
+ * v3 (finpay-v3): kelompok Keuangan / Pembayaran / Iklan / Laporan / Keamanan; menu disaring per izin RBAC.
+ */
 export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Ringkasan',
@@ -45,7 +50,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/(admin)/market', label: 'AntarMarket · Pasar', icon: 'storefront-outline', iconActive: 'storefront' },
       { href: '/(admin)/places', label: 'Data Tempat', icon: 'map-outline', iconActive: 'map' },
       { href: '/(admin)/data-tempat', label: 'Impor Peta (OSM)', icon: 'cloud-download-outline', iconActive: 'cloud-download' },
-      { href: '/(admin)/pricing', label: 'Tarif & Promo', icon: 'pricetags-outline', iconActive: 'pricetags' },
+      { href: '/(admin)/pricing', label: 'Tarif & Promo', icon: 'pricetags-outline', iconActive: 'pricetags', perm: ['pricing', 'promo'] },
       { href: '/(admin)/pricing-intel', label: 'Intelijen Harga', icon: 'trending-up-outline', iconActive: 'trending-up' },
       { href: '/(admin)/blast', label: 'Blast Promo', icon: 'megaphone-outline', iconActive: 'megaphone' },
     ],
@@ -53,9 +58,36 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Keuangan',
     items: [
-      { href: '/(admin)/finance', label: 'Keuangan', icon: 'cash-outline', iconActive: 'cash' },
-      { href: '/(admin)/finance-report', label: 'Laporan Keuangan', icon: 'document-text-outline', iconActive: 'document-text' },
-      { href: '/(admin)/gateway', label: 'Payment Gateway', icon: 'card-outline', iconActive: 'card' },
+      { href: '/(admin)/finance', label: 'Top up & Payout', icon: 'cash-outline', iconActive: 'cash', perm: ['payout', 'payments_view'] },
+      { href: '/(admin)/voucher', label: 'AntarVoucher', icon: 'ticket-outline', iconActive: 'ticket', perm: ['reconcile', 'wallet_adjust', 'payments_view'] },
+      { href: '/(admin)/refunds', label: 'Refund', icon: 'return-down-back-outline', iconActive: 'return-down-back', perm: ['refund_approve', 'refund_execute', 'payments_view'] },
+      { href: '/(admin)/disputes', label: 'Sengketa (Dispute)', icon: 'alert-circle-outline', iconActive: 'alert-circle', perm: ['dispute', 'dispute_resolve'] },
+      { href: '/(admin)/approvals', label: 'Persetujuan (Maker-Checker)', icon: 'git-pull-request-outline', iconActive: 'git-pull-request', perm: ['approvals'] },
+      { href: '/(admin)/ledger', label: 'Buku Besar Order', icon: 'book-outline', iconActive: 'book', perm: ['ledger'] },
+      { href: '/(admin)/reconciliation', label: 'Rekonsiliasi', icon: 'git-compare-outline', iconActive: 'git-compare', perm: ['reconcile', 'ledger'] },
+      { href: '/(admin)/economics', label: 'Aturan Bisnis', icon: 'options-outline', iconActive: 'options', perm: ['fee', 'pricing', 'report'] },
+      { href: '/(admin)/city-costs', label: 'Biaya Tetap Kota', icon: 'business-outline', iconActive: 'business', perm: ['report'] },
+    ],
+  },
+  {
+    title: 'Pembayaran',
+    items: [
+      { href: '/(admin)/gateway', label: 'Payment Gateway', icon: 'card-outline', iconActive: 'card', perm: ['gateway', 'gateway_secret', 'fee'] },
+      { href: '/(admin)/pg-fees', label: 'Biaya Payment Gateway', icon: 'swap-horizontal-outline', iconActive: 'swap-horizontal', perm: ['fee', 'report'] },
+    ],
+  },
+  {
+    title: 'Iklan',
+    items: [
+      { href: '/(admin)/ads', label: 'Iklan & Kampanye', icon: 'rocket-outline', iconActive: 'rocket', perm: ['ads_review', 'ads_product'] },
+    ],
+  },
+  {
+    title: 'Laporan',
+    items: [
+      { href: '/(admin)/contribution', label: 'Contribution Margin', icon: 'bar-chart-outline', iconActive: 'bar-chart', perm: ['report'] },
+      { href: '/(admin)/finance-report', label: 'Laporan Keuangan', icon: 'document-text-outline', iconActive: 'document-text', perm: ['report'] },
+      { href: '/(admin)/economics-report', label: 'Laporan Skema Bisnis', icon: 'analytics-outline', iconActive: 'analytics', perm: ['report'] },
     ],
   },
   {
@@ -67,17 +99,21 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    title: 'Keamanan',
+    items: [
+      { href: '/(admin)/security', label: 'Pusat Keamanan', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
+      { href: '/(admin)/activity', label: 'Log Audit', icon: 'time-outline', iconActive: 'time', perm: ['audit'] },
+    ],
+  },
+  {
     title: 'Sistem',
     items: [
       { href: '/(admin)/automation', label: 'Otomasi', icon: 'flash-outline', iconActive: 'flash' },
-      { href: '/(admin)/security', label: 'Pusat Keamanan', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
-      { href: '/(admin)/activity', label: 'Log Aktivitas', icon: 'time-outline', iconActive: 'time' },
       { href: '/(admin)/map', label: 'Peta', icon: 'globe-outline', iconActive: 'globe' },
-      { href: '/(admin)/settings', label: 'Pengaturan', icon: 'settings-outline', iconActive: 'settings' },
+      { href: '/(admin)/settings', label: 'Pengaturan', icon: 'settings-outline', iconActive: 'settings', perm: ['settings', 'orders'] },
     ],
   },
 ];
-const NAV_FLAT = NAV_GROUPS.flatMap((g) => g.items);
 
 export default function AdminLayout() {
   const { width } = useWindowDimensions();
@@ -86,6 +122,15 @@ export default function AdminLayout() {
   const router = useRouter();
   const { profile, signOut } = useAuth();
   const reduce = useReducedMotion();
+  // RBAC v3: muat peran admin sekali; menu tanpa izin disembunyikan (server tetap memeriksa setiap RPC).
+  const roleInfo = useAdminRole((st) => st.info);
+  const loadRole = useAdminRole((st) => st.load);
+  useEffect(() => { if (profile?.id) loadRole(true); }, [profile?.id, loadRole]);
+  const groups = useMemo(
+    () => NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((n) => permsAllow(roleInfo, n.perm)) })).filter((g) => g.items.length > 0),
+    [roleInfo],
+  );
+  const NAV_FLAT = groups.flatMap((g) => g.items);
   const isActive = (href: string) => {
     const p = href.replace('/(admin)', '') || '/';
     return pathname === p || (p !== '/' && pathname.startsWith(p + '/'));
@@ -107,7 +152,7 @@ export default function AdminLayout() {
                   </View>
                 </View>
                 <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 10, paddingBottom: 12, gap: 2 }} showsVerticalScrollIndicator={false}>
-                  {NAV_GROUPS.map((g) => (
+                  {groups.map((g) => (
                     <View key={g.title} style={{ marginTop: 12 }}>
                       <Text style={[adminFont.label, s.groupTitle]}>{g.title}</Text>
                       {g.items.map((n) => {
@@ -125,6 +170,7 @@ export default function AdminLayout() {
                 </ScrollView>
                 <View style={s.foot}>
                   <Text style={{ color: adminTone.ink, fontSize: 14, ...fam(700) }} numberOfLines={1}>{profile?.full_name ?? 'Admin'}</Text>
+                  {roleInfo?.role ? <Text style={adminFont.tiny} numberOfLines={1}>Peran: {adminRoleLabel(roleInfo.role)}</Text> : null}
                   <PressableScale haptic={false} onPress={async () => { await signOut(); router.replace('/(auth)/welcome'); }} style={s.footBtn}>
                     <Ionicons name="log-out-outline" size={adminIcon.md} color={colors.danger} />
                     <Text style={{ color: colors.danger, fontSize: 14, ...fam(700) }}>Keluar</Text>

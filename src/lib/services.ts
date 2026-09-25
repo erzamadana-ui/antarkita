@@ -20,11 +20,11 @@ export const SERVICES: ServiceDef[] = [
   { id: 'travel', label: 'AntarTravel', tagline: 'Travel antar kota, jemput di rumah', icon: 'bus-outline', art: 'travel', color: colors.travel, route: '/travel' },
   { id: 'shop', label: 'AntarShop', tagline: 'Belanja Indomaret, Alfamart, apotek & supermarket', icon: 'basket', art: 'shop', color: colors.shop, route: '/shop' },
   { id: 'market', label: 'AntarMarket', tagline: 'Bahan masak dari pasar tradisional terdekat', icon: 'storefront', art: 'market', color: colors.market, route: '/market' },
-  { id: 'pay', label: 'AntarPay', tagline: 'Saldo, e-wallet & metode bayar', icon: 'wallet', art: 'pay', color: colors.pay, route: '/(customer)/pay' },
+  { id: 'pay', label: 'AntarVoucher', tagline: 'Saldo, e-wallet & metode bayar', icon: 'wallet', art: 'pay', color: colors.pay, route: '/(customer)/pay' },
 ];
 
 export const serviceDef = (id: ServiceType) => SERVICES.find((s) => s.id === id)!;
-/** Urutan tile beranda (AntarPay tidak di grid — sudah ada tab Pembayaran). */
+/** Urutan tile beranda (AntarVoucher tidak di grid — sudah ada tab Pembayaran). */
 export const HOME_SERVICES = SERVICES.filter((s) => s.id !== 'pay');
 
 // Pusat kota default saat GPS belum tersedia (Padang, Sumatera Barat)

@@ -40,7 +40,7 @@ export function OrderCard({ order, href, compact }: { order: Order; href?: strin
           {active && <LiveDot color={sc} size={7} />}
           <Badge text={statusLabel(order.status, order.service, order.merchant_status)} color={sc} />
         </Row>
-        <Text style={font.tiny}>{order.payment_method === 'wallet' ? 'AntarPay' : 'Tunai'}</Text>
+        <Text style={font.tiny}>{order.payment_method === 'wallet' ? 'AntarVoucher' : 'Tunai'}</Text>
       </Row>
     </PressableScale>
   );

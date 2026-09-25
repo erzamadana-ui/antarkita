@@ -1,102 +1,81 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
+// Isi AntarVoucher (`/pay/topup`) — dua jalur resmi:
+//  1. Top up instan lewat payment gateway (`/pay/gateway`) — saldo masuk otomatis.
+//  2. Transfer ke rekening resmi PT Antar Kita Indonesia (`/pay/voucher`, migrasi 0112) — saldo masuk setelah
+//     tim Finance mencocokkan mutasi bank.
+// Alur lama "transfer manual + unggah screenshot" (app_settings.bank_account + request_topup) DIHAPUS:
+// rekening non-resmi & saldo berbasis screenshot adalah risiko P0.
+import React from 'react';
+import { WALLET_UI } from '@/lib/features';
+import { FeatureUnavailable } from '@/components/FeatureUnavailable';
+import { View, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import * as Clipboard from 'expo-clipboard';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Screen, Card, Row, Input, Button, toast, Chip } from '@/components/ui';
-import { Entrance } from '@/components/motion';
-import { useAuth } from '@/store/auth';
-import { useAntarPay, ANTARPAY_OFF_TEXT } from '@/hooks/useAppSettings';
-import { AntarPayOffBanner } from '@/components/AntarPayNotice';
-import { rpc, supabase } from '@/lib/supabase';
-import { pickAndUpload } from '@/lib/upload';
+import { Screen } from '@/components/ui';
+import { Entrance, PressableScale } from '@/components/motion';
+import { useAntarVoucher } from '@/hooks/useAppSettings';
+import { AntarVoucherOffBanner } from '@/components/AntarVoucherNotice';
 import { colors, font, radius } from '@/lib/theme';
-import { rupiah } from '@/lib/format';
 
-const PRESETS = [20000, 50000, 100000, 200000, 500000];
-
-export default function TopUp() {
+function TopUpScreen() {
   const router = useRouter();
-  const uid = useAuth((s) => s.session?.user.id);
-  const [amount, setAmount] = useState('50000');
-  const [bank, setBank] = useState<{ bank: string; number: string; name: string } | null>(null);
-  const [proof, setProof] = useState<{ path: string; uri?: string } | null>(null);
-  const [note, setNote] = useState('');
-  const { enabled: antarpayOn } = useAntarPay();   // 0088: request_topup ditolak server saat nonaktif
-
-  useEffect(() => { supabase.from('app_settings').select('value').eq('key', 'bank_account').maybeSingle().then(({ data }) => setBank((data?.value as typeof bank) ?? null)); }, []);
-
-  const upload = async () => {
-    if (!uid) return;
-    try { const r = await pickAndUpload('proofs', uid); if (r) { setProof({ path: r.path }); toast.success('Bukti transfer terunggah'); } }
-    catch (e) { toast.error((e as Error).message); }
-  };
-  const submit = async () => {
-    if (!antarpayOn) return toast.error(ANTARPAY_OFF_TEXT);
-    const n = Number(amount.replace(/\D/g, ''));
-    if (n < 10000) return toast.error('Minimal top up Rp10.000');
-    try {
-      await rpc('request_topup', { p_amount: n, p_method: 'bank_transfer', p_proof_url: proof?.path ?? null, p_note: note || null });
-      toast.success('Permintaan top up dikirim, tunggu verifikasi admin');
-      router.back();
-    } catch (e) { toast.error((e as Error).message); }
-  };
+  const { enabled: antarVoucherOn } = useAntarVoucher();   // 0088: gateway top up ditolak server saat nonaktif
 
   return (
-    <Screen title="Top Up AntarPay" back footer={<Button title={antarpayOn ? `Kirim Permintaan Top Up ${rupiah(Number(amount.replace(/\D/g, '')) || 0)}` : 'Top up sementara nonaktif'} size="lg" disabled={!antarpayOn} onPress={submit} />}>
+    <Screen title="Isi AntarVoucher" back maxWidth={560}>
       <View style={{ gap: 16 }}>
-        {!antarpayOn && <Entrance index={0}><AntarPayOffBanner /></Entrance>}
+        {!antarVoucherOn && <Entrance index={0}><AntarVoucherOffBanner /></Entrance>}
         <Entrance index={0}>
-          <Pressable disabled={!antarpayOn} onPress={() => router.push({ pathname: '/pay/gateway', params: { amount: amount || '50000' } } as never)} style={[s.gw, !antarpayOn && { opacity: 0.5 }]}>
-            <View style={s.gwIcon}><Ionicons name="flash" size={20} color="#fff" /></View>
-            <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text }}>Top up instan — GoPay, OVO, DANA, ShopeePay, QRIS, VA</Text><Text style={font.tiny}>Saldo langsung masuk otomatis lewat payment gateway.</Text></View>
-            <Ionicons name="chevron-forward" size={20} color={colors.primary} />
-          </Pressable>
-          <Text style={[font.tiny, { textAlign: 'center', marginTop: 10 }]}>— atau transfer bank manual (verifikasi admin) —</Text>
+          <Option
+            icon="flash"
+            color={colors.primary}
+            title="Top up instan"
+            subtitle="GoPay, OVO, DANA, ShopeePay, QRIS, atau virtual account. Saldo langsung masuk otomatis lewat payment gateway."
+            disabled={!antarVoucherOn}
+            onPress={() => router.push('/pay/gateway' as never)}
+          />
         </Entrance>
         <Entrance index={1}>
-          <Card>
-            <Text style={font.label}>Nominal</Text>
-            <Input value={amount} onChangeText={(v) => setAmount(v.replace(/\D/g, ''))} keyboardType="number-pad" icon="cash-outline" containerStyle={{ marginTop: 8 }} />
-            <Row gap={8} style={{ flexWrap: 'wrap', marginTop: 10 }}>
-              {PRESETS.map((p) => <Chip key={p} label={rupiah(p)} active={amount === String(p)} onPress={() => setAmount(String(p))} />)}
-            </Row>
-          </Card>
-        </Entrance>
-        <Entrance index={1}>
-          <Card>
-            <Text style={font.label}>1. Transfer ke rekening AntarKita</Text>
-            {bank ? (
-              <View style={s.bank}>
-                <Text style={font.tiny}>{bank.bank} a.n. {bank.name}</Text>
-                <Row between>
-                  <Text style={{ fontSize: 22, fontWeight: '700', color: colors.text, letterSpacing: 1 }}>{bank.number}</Text>
-                  <Pressable onPress={async () => { await Clipboard.setStringAsync(bank.number); toast.show('Nomor rekening disalin'); }} style={s.copy}><Ionicons name="copy-outline" size={20} color={colors.primary} /></Pressable>
-                </Row>
-              </View>
-            ) : <Text style={font.small}>Memuat rekening…</Text>}
-            <Text style={[font.small, { marginTop: 8 }]}>Transfer tepat sesuai nominal. Saldo masuk setelah admin memverifikasi (maks. 1×24 jam).</Text>
-          </Card>
+          <Option
+            icon="business"
+            color={colors.info}
+            title="Transfer ke rekening resmi AntarKita"
+            subtitle="Transfer bank ke rekening atas nama PT Antar Kita Indonesia. Saldo masuk setelah dana dicocokkan tim Finance — tanpa unggah bukti."
+            onPress={() => router.push('/pay/voucher' as never)}
+          />
         </Entrance>
         <Entrance index={2}>
-          <Card>
-            <Text style={font.label}>2. Unggah bukti transfer</Text>
-            <Pressable onPress={upload} style={s.upload}>
-              <Ionicons name={proof ? 'checkmark-circle' : 'cloud-upload-outline'} size={32} color={proof ? colors.success : colors.primary} />
-              <Text style={{ color: proof ? colors.success : colors.primary, fontWeight: '700' }}>{proof ? 'Bukti terunggah · ganti' : 'Pilih foto bukti transfer'}</Text>
-            </Pressable>
-            <Input placeholder="Catatan (nama pengirim / bank asal)" value={note} onChangeText={setNote} containerStyle={{ marginTop: 10 }} />
-          </Card>
+          <View style={s.warn}>
+            <Ionicons name="shield-checkmark-outline" size={20} color={colors.danger} />
+            <Text style={[font.small, { flex: 1, minWidth: 0, color: colors.text }]}>Jangan transfer ke rekening selain yang tertera di aplikasi. AntarKita tidak pernah meminta transfer lewat chat atau telepon.</Text>
+          </View>
         </Entrance>
       </View>
     </Screen>
   );
 }
 
+function Option({ icon, color, title, subtitle, onPress, disabled }: { icon: React.ComponentProps<typeof Ionicons>['name']; color: string; title: string; subtitle: string; onPress: () => void; disabled?: boolean }) {
+  return (
+    <PressableScale disabled={disabled} onPress={onPress} scaleTo={0.98} accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ disabled: !!disabled }}
+      style={[s.opt, { backgroundColor: color + '14', borderColor: color + '44' }, disabled && { opacity: 0.5 }]}>
+      <View style={[s.optIcon, { backgroundColor: color }]}><Ionicons name={icon} size={20} color="#fff" /></View>
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text style={{ fontWeight: '700', color: colors.text, fontSize: 16 }}>{title}</Text>
+        <Text style={font.tiny}>{subtitle}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={color} />
+    </PressableScale>
+  );
+}
+
 const s = StyleSheet.create({
-  gw: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: radius.lg, backgroundColor: colors.primary + '14', borderWidth: 1.5, borderColor: colors.primary + '44' },
-  gwIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  bank: { backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: 12, marginTop: 8 },
-  copy: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  upload: { alignItems: 'center', gap: 6, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.primary, borderRadius: radius.md, padding: 18, marginTop: 8 },
+  opt: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 72, padding: 14, borderRadius: radius.lg, borderWidth: 1.5 },
+  optIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  warn: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: colors.dangerLight },
 });
+
+/** Build Google Play tanpa dompet (EXPO_PUBLIC_WALLET_UI=off) → rute ini diganti layar informasi. */
+export default function TopUp() {
+  if (!WALLET_UI) return <FeatureUnavailable title="Isi AntarVoucher" text="Fitur saldo belum tersedia di aplikasi versi Play Store. Pembayaran tunai dan pembayaran langsung per pesanan tetap bisa dipakai." />;
+  return <TopUpScreen />;
+}

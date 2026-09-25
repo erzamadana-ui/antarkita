@@ -13,6 +13,8 @@ import { useBooking } from '@/store/booking';
 import { rpc } from '@/lib/supabase';
 import { pickAndUpload } from '@/lib/upload';
 import { colors, font, radius, shadow } from '@/lib/theme';
+import { pctLabel } from '@/lib/format';
+import { useServiceEconomics } from '@/lib/mitra';
 
 const CATS = ['Makanan', 'Minuman', 'Jajanan', 'Roti & Kue', 'Sehat'];
 const BANKS = ['BCA', 'BRI', 'Mandiri', 'BNI', 'BSI', 'Bank Nagari', 'Bank Riau Kepri', 'Lainnya'];
@@ -77,7 +79,7 @@ export default function BecomeMerchant() {
           <View style={{ alignItems: 'center', marginTop: 4 }}>
             <View style={s.artCircle}><ServiceIllustration kind="food" size={80} /></View>
             <Text style={[font.h1, { textAlign: 'center', marginTop: 14 }]}>Jualan lebih laris{'\n'}dengan AntarFood</Text>
-            <Text style={[font.small, { textAlign: 'center', marginTop: 6 }]}>Komisi 15% per pesanan, pencairan ke saldo AntarPay otomatis. Tanpa biaya pendaftaran. Pengajuan ditinjau admin maks. 1×24 jam kerja.</Text>
+            <MerchantFeeText />
           </View>
         </Entrance>
         <Entrance index={1}>
@@ -160,6 +162,21 @@ export default function BecomeMerchant() {
       </View>
     </Screen>
   );
+}
+
+/**
+ * Fee merchant dari server: `service_economics_public('food').merchant_fee_pct` bila dibuka (v3). Server v2 sengaja
+ * tidak membuka angka itu — maka teks merujuk ke rincian per pesanan, tanpa persen tebakan di aplikasi.
+ */
+function MerchantFeeText() {
+  const { data, loading } = useServiceEconomics(['food']);
+  const e = data.food;
+  const fee = e?.merchant_fee_pct;
+  const feeText = fee != null
+    ? `Fee layanan AntarKita ${pctLabel(fee)} dari nilai barang per pesanan.`
+    : loading ? 'Memuat aturan fee…' : 'Fee layanan AntarKita dihitung dari nilai barang dan selalu tercantum di rincian setiap pesanan.';
+  const ongkir = e && Number(e.driver_commission_pct) === 0 ? ' Ongkir 100 % hak driver, tidak memotong hak Anda.' : '';
+  return <Text style={[font.small, { textAlign: 'center', marginTop: 6 }]}>{feeText}{ongkir} Pendapatan masuk ke saldo AntarVoucher otomatis. Tanpa biaya pendaftaran. Pengajuan ditinjau admin maks. 1×24 jam kerja.</Text>;
 }
 
 const s = StyleSheet.create({

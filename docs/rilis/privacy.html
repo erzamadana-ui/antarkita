@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kebijakan Privasi — AntarKita</title>
-<meta name="description" content="Kebijakan Privasi aplikasi AntarKita dan AntarKita Mitra: data yang dikumpulkan, lokasi, dokumen KYC, pembayaran Midtrans, retensi, hak pengguna, dan penghapusan akun.">
+<meta name="description" content="Kebijakan Privasi aplikasi AntarKita dan AntarKita Mitra: data yang dikumpulkan, lokasi, dokumen KYC, pembayaran melalui mitra pembayaran berizin, data iklan Sponsored, retensi, hak pengguna, dan penghapusan akun.">
 <meta name="robots" content="index,follow">
 <link rel="icon" href="data:,">
 <!-- URL resmi domain kustom; alias lama erzamadana-ui.github.io/antarkita/privacy/ dialihkan GitHub ke sini. Tautan internal sengaja relatif (../) agar benar di kedua host. -->
@@ -31,6 +31,9 @@
   .toc a { color: var(--p); text-decoration: none; }
   .toc li { margin: 3px 0; }
   .note { background: var(--warn); border-left: 4px solid #D97706; padding: 12px 14px; border-radius: 8px; }
+  .tbl { overflow-x: auto; }
+  td { overflow-wrap: anywhere; }
+  .ph { background: #FFE9B8; color: #7A4100; padding: 0 5px; border-radius: 4px; font-weight: 600; }
   code { background: #EEF6F7; padding: 1px 6px; border-radius: 6px; font-size: 90%; }
   footer { max-width: 820px; margin: 0 auto; padding: 0 20px 40px; color: var(--m); font-size: 13px; }
   footer a { color: var(--p); }
@@ -42,7 +45,7 @@
   <div class="in">
     <span class="brand">AntarKita · Kebijakan Privasi</span>
     <h1>Kebijakan Privasi AntarKita</h1>
-    <p>Berlaku untuk aplikasi <strong>AntarKita</strong> (Pelanggan), <strong>AntarKita Mitra</strong>, dan panel web AntarKita Admin.<br>Versi 1.2 — berlaku sejak 18 September 2026 (versi 1.1: 9 September 2026; versi 1.0: 6 September 2026).<br><span class="muted">Terakhir diperbarui: 18 September 2026. Perubahan pada versi 1.2: penegasan bahwa saldo AntarPay Pelanggan tidak dapat dicairkan, penyebutan penyedia peta Stadia Maps, penambahan data daftar tunggu kota, dan penyelarasan tenggat tanggapan.</span></p>
+    <p>Berlaku untuk aplikasi <strong>AntarKita</strong> (Pelanggan), <strong>AntarKita Mitra</strong>, dan panel web AntarKita Admin.<br>Versi 1.3 — berlaku sejak 24 September 2026 (versi 1.2: 18 September 2026; versi 1.1: 9 September 2026; versi 1.0: 6 September 2026).<br><span class="muted">Terakhir diperbarui: 24 September 2026. Perubahan pada versi 1.3: pemrosesan pembayaran oleh mitra pembayaran berizin (nama disebut setelah kontrak berlaku), data iklan Sponsored (impresi/klik, batas tayang, laporan agregat), data sengketa dan pengembalian dana, retensi log transaksi pembayaran, serta pembaruan kontak dan informasi penyelenggara.</span></p>
   </div>
 </header>
 
@@ -54,7 +57,8 @@
       <li><a href="#data">Data yang kami kumpulkan</a></li>
       <li><a href="#lokasi">Data lokasi</a></li>
       <li><a href="#kyc">Dokumen identitas (KYC) mitra</a></li>
-      <li><a href="#pembayaran">Pembayaran, AntarPay, dan Midtrans</a></li>
+      <li><a href="#pembayaran">Pembayaran, AntarVoucher, dan mitra pembayaran</a></li>
+      <li><a href="#iklan">Data iklan Sponsored</a></li>
       <li><a href="#tujuan">Tujuan dan dasar pemrosesan</a></li>
       <li><a href="#berbagi">Dengan siapa data dibagikan</a></li>
       <li><a href="#keamanan">Keamanan data</a></li>
@@ -71,24 +75,28 @@
   <div class="card" id="pengendali">
     <h2>1. Siapa kami</h2>
     <p>AntarKita adalah layanan transportasi, pengantaran, belanja, dan travel antar kota yang dioperasikan oleh <strong>AntarKita</strong> (pemilik dan pengendali data: Erza Pradipta Madana), berkedudukan di Indonesia. Dalam kebijakan ini "kami" berarti AntarKita, dan "Anda" berarti pengguna aplikasi — baik <em>Pelanggan</em> maupun <em>Mitra</em> (driver, merchant, pedagang pasar, mitra travel, mitra mobil box).</p>
+    <p>Informasi penyelenggara: dioperasikan oleh AntarKita (Erza Pradipta Madana). Badan usaha: <span class="ph">[PERLU KONFIRMASI: nama badan usaha &amp; NIB]</span>. Alamat usaha: Kahuripan Terrace VII-21, <span class="ph">[KOTA — konfirmasi pemilik]</span>.</p>
     <p>Kami memproses data pribadi sesuai <strong>Undang-Undang No. 27 Tahun 2022 tentang Pelindungan Data Pribadi (UU PDP)</strong> dan peraturan pelaksananya.</p>
   </div>
 
   <div class="card" id="data">
     <h2>2. Data yang kami kumpulkan</h2>
-    <table>
+    <div class="tbl"><table>
       <tr><th style="width:28%">Kategori</th><th>Rincian</th><th style="width:22%">Sumber</th></tr>
       <tr><td>Identitas akun</td><td>Nama lengkap, alamat email, nomor HP, foto profil (opsional), bahasa pilihan.</td><td>Anda, saat mendaftar / mengedit profil</td></tr>
       <tr><td>Lokasi</td><td>Lokasi presisi (GPS) saat aplikasi dibuka, titik jemput/antar, alamat tersimpan (rumah, kantor), jejak perjalanan per pesanan.</td><td>Perangkat Anda (dengan izin) dan input Anda</td></tr>
       <tr><td>Daftar tunggu kota</td><td>Bila Anda menekan "Beri tahu saya" di kota yang belum dilayani: kota dan provinsi, koordinat lokasi Anda saat itu, layanan yang Anda inginkan, kontak dan catatan yang Anda isi (opsional), serta waktu pendaftaran. Dipakai hanya untuk memutuskan kota berikutnya yang dibuka dan mengabari Anda.</td><td>Anda, saat mendaftar minat</td></tr>
       <tr><td>Pesanan &amp; transaksi</td><td>Riwayat pesanan (AntarRide, AntarCar, AntarFood, AntarSend, AntarBox, AntarShop, AntarMarket, AntarTravel), item, tarif, metode pembayaran, status, penilaian &amp; ulasan, pesan chat dalam pesanan, log panggilan (durasi, bukan isi suara).</td><td>Aktivitas Anda di aplikasi</td></tr>
-      <tr><td>AntarPay (dompet)</td><td>Saldo, mutasi top-up/pembayaran/penarikan, bukti transfer yang Anda unggah, nomor rekening bank tujuan pencairan (mitra).</td><td>Anda dan sistem</td></tr>
+      <tr><td>AntarVoucher (dompet)</td><td>Saldo, mutasi top-up/pembayaran/penarikan, nomor referensi pembelian voucher, nama &amp; bank pengirim transfer serta referensi mutasi bank yang dicocokkan, nomor rekening bank tujuan pencairan (mitra).</td><td>Anda dan sistem</td></tr>
+      <tr><td>Data pembayaran</td><td>ID dan jumlah pembayaran, kanal (mis. virtual account, e-wallet, QRIS, kartu), status dan waktu pembayaran, referensi transaksi dari mitra pembayaran, notifikasi status yang dikirim mitra pembayaran, biaya metode pembayaran, <strong>kode bantuan</strong> (AK-xxxxxx), serta catatan pengembalian dana. <strong>Tidak termasuk</strong> nomor kartu, CVV, atau kredensial e-wallet.</td><td>Anda, sistem, dan mitra pembayaran</td></tr>
+      <tr><td>Sengketa &amp; pengembalian dana</td><td>Laporan selisih yang Anda buka (jenis masalah, jumlah yang dipersoalkan, keterangan, bukti), status penanganan, dan keputusan beserta alasannya.</td><td>Anda dan tim CS/keuangan kami</td></tr>
+      <tr><td>Interaksi iklan</td><td>Tampilan (impresi), klik, dan pesanan yang berasal dari iklan Sponsored, beserta waktu, penempatan iklan, dan ID akun Anda (lihat bagian 6). Untuk merchant pengiklan: materi iklan, anggaran, dan tagihan iklan.</td><td>Aktivitas Anda di aplikasi</td></tr>
       <tr><td>Dokumen KYC (hanya mitra)</td><td>Foto KTP &amp; NIK, SIM, STNK, foto kendaraan, foto diri (selfie verifikasi), NPWP/izin usaha/sertifikat halal (merchant), kartu pedagang pasar.</td><td>Anda, saat mendaftar sebagai mitra</td></tr>
       <tr><td>Keamanan</td><td>Kontak darurat (nama &amp; nomor HP) yang Anda isi, laporan SOS/insiden, PIN transaksi (disimpan dalam bentuk hash).</td><td>Anda</td></tr>
       <tr><td>Moderasi &amp; keamanan komunitas</td><td>Laporan yang Anda kirim tentang pengguna atau konten lain (kategori laporan, keterangan bebas yang Anda tulis, tautan ke pesanan/pesan/ulasan yang dilaporkan), daftar pengguna yang Anda blokir, serta hasil tinjauan admin atas laporan tersebut.</td><td>Anda, saat menekan “Laporkan”/“Blokir”; dan tim moderasi kami</td></tr>
       <tr><td>Data teknis</td><td>Jenis perangkat &amp; sistem operasi, token notifikasi, alamat IP, waktu akses, log kesalahan.</td><td>Otomatis dari perangkat</td></tr>
       <tr><td>Bantuan</td><td>Tiket aduan, pesan ke CS, penilaian layanan CS.</td><td>Anda</td></tr>
-    </table>
+    </table></div>
     <p class="muted">Kami <strong>tidak</strong> mengumpulkan data kontak/buku telepon, riwayat SMS, atau data biometrik. Nomor HP Anda tidak pernah ditampilkan ke pengguna lain — panggilan dan chat berjalan di dalam aplikasi.</p>
   </div>
 
@@ -98,7 +106,7 @@
       <li><strong>Pelanggan:</strong> lokasi dipakai untuk menentukan titik jemput/antar, memperkirakan tarif, menampilkan merchant &amp; driver terdekat, dan melacak pesanan. Lokasi hanya diakses <strong>saat aplikasi sedang dibuka</strong> (foreground). Aplikasi Pelanggan tidak mengakses lokasi di latar belakang.</li>
       <li><strong>Mitra driver / mobil box / travel:</strong> saat Anda menyalakan status <em>Online</em>, lokasi Anda dibagikan secara berkala ke sistem agar pesanan bisa dicocokkan dan pelanggan dapat melihat posisi Anda selama perjalanan. Pembaruan lokasi berhenti saat Anda <em>Offline</em> atau menutup aplikasi.</li>
       <li>Jejak perjalanan per pesanan disimpan bersama riwayat pesanan untuk keperluan bukti layanan, penyelesaian sengketa, keselamatan (SOS, bagikan perjalanan), dan pencegahan penipuan.</li>
-      <li>Untuk menampilkan peta, mencari alamat, dan menghitung rute, koordinat titik jemput/antar dan posisi Anda dikirim ke penyedia peta kami (lihat bagian 7). Alamat hasil penerjemahan koordinat disimpan dalam cache bersama tanpa dikaitkan dengan akun Anda agar permintaan yang sama tidak dikirim ulang ke penyedia peta.</li>
+      <li>Untuk menampilkan peta, mencari alamat, dan menghitung rute, koordinat titik jemput/antar dan posisi Anda dikirim ke penyedia peta kami (lihat bagian 8). Alamat hasil penerjemahan koordinat disimpan dalam cache bersama tanpa dikaitkan dengan akun Anda agar permintaan yang sama tidak dikirim ulang ke penyedia peta.</li>
       <li>Anda dapat mencabut izin lokasi lewat pengaturan perangkat; sebagian fitur (pemesanan, status online mitra) tidak akan berfungsi tanpa izin tersebut.</li>
     </ul>
   </div>
@@ -109,22 +117,39 @@
   </div>
 
   <div class="card" id="pembayaran">
-    <h2>5. Pembayaran, AntarPay, dan Midtrans</h2>
+    <h2>5. Pembayaran, AntarVoucher, dan mitra pembayaran</h2>
     <ul>
-      <li><strong>AntarPay</strong> adalah saldo tertutup (<em>closed-loop</em>) di dalam aplikasi yang hanya dapat dipakai untuk membayar layanan AntarKita dan menerima pendapatan mitra. AntarPay bukan uang elektronik berizin yang dapat ditransfer ke pihak lain. Saldo Pelanggan hanya dapat dipakai untuk membayar layanan dan <strong>tidak dapat dicairkan ke rekening bank</strong>; pencairan ke rekening bank atas nama sendiri hanya tersedia bagi Mitra atas pendapatannya.</li>
-      <li>Metode pembayaran nontunai, termasuk AntarPay, dapat kami nonaktifkan sementara (mis. gangguan penyedia atau pemeliharaan); pembayaran tunai kepada Mitra selalu tersedia dan saldo Anda tetap tersimpan.</li>
-      <li>Top-up dan pembayaran nontunai diproses oleh <strong>PT Midtrans (Midtrans, grup GoTo)</strong>, penyelenggara <em>payment gateway</em> berizin Bank Indonesia. Saat membayar, data yang diperlukan (jumlah, ID pesanan, nama, email, nomor HP) dikirim ke Midtrans; <strong>kami tidak pernah menerima atau menyimpan nomor kartu, CVV, atau kredensial e-wallet Anda</strong>. Kebijakan privasi Midtrans: <a href="https://midtrans.com/privacy-policy" rel="noopener">midtrans.com/privacy-policy</a>.</li>
+      <li><strong>AntarVoucher</strong> adalah saldo tertutup (<em>closed-loop</em>) di dalam aplikasi yang hanya dapat dipakai untuk membayar layanan AntarKita dan menampung pendapatan mitra. AntarVoucher bukan uang elektronik berizin yang dapat ditransfer ke pihak lain. Saldo Pelanggan hanya dapat dipakai untuk bertransaksi dan <strong>tidak dapat dicairkan ke rekening bank</strong>; pencairan ke rekening bank atas nama sendiri hanya tersedia bagi Mitra atas pendapatannya.</li>
+      <li>Metode pembayaran nontunai, termasuk AntarVoucher, dapat kami nonaktifkan sementara (mis. gangguan penyedia atau pemeliharaan); pembayaran tunai kepada Mitra selalu tersedia dan saldo Anda tetap tersimpan.</li>
+      <li>Pembayaran nontunai diproses oleh <strong>mitra pembayaran berizin</strong> (penyelenggara jasa pembayaran yang memiliki izin dari otoritas berwenang), yang bertindak sebagai pemroses dan penyelenggara sistem pembayaran bagi transaksi Anda. Nama mitra pembayaran ditampilkan di layar pembayaran dan akan dicantumkan di halaman ini, beserta tautan kebijakan privasinya, setelah perjanjian kerja sama berlaku <span class="ph">[PERLU KONFIRMASI: nama mitra pembayaran &amp; tautan kebijakan privasinya setelah kontrak]</span>.</li>
+      <li>Transaksi yang dibuat sebelum peralihan penyedia diproses oleh <strong>Midtrans</strong> (PT Midtrans, grup GoTo) dan tetap diselesaikan, termasuk pengembalian dananya, melalui Midtrans. Kebijakan privasi Midtrans: <a href="https://midtrans.com/privacy-policy" rel="noopener">midtrans.com/privacy-policy</a>.</li>
+      <li>Saat Anda membayar, data yang diperlukan (jumlah, ID pesanan, nama, email, nomor HP, kanal pembayaran) dikirim ke mitra pembayaran. Mitra pembayaran mengirim kembali status pembayaran dan referensi transaksi kepada kami. <strong>Kami tidak pernah menerima atau menyimpan nomor kartu, CVV, atau kredensial e-wallet Anda</strong>.</li>
+      <li>Untuk pencairan pendapatan Mitra, nama pemilik rekening, nama bank, dan nomor rekening tujuan dikirim ke bank atau mitra pembayaran yang memproses transfer.</li>
+      <li>Setiap pembayaran diberi <strong>kode bantuan</strong> berformat AK-xxxxxx agar CS dapat menelusuri transaksi Anda tanpa meminta data sensitif. Petugas kami tidak pernah meminta PIN, kata sandi, atau kode OTP.</li>
       <li>Pembayaran tunai diserahkan langsung ke mitra; kami hanya mencatat status pembayaran.</li>
       <li>Bukti transfer manual (jika dipakai) dan nomor rekening pencairan disimpan untuk rekonsiliasi dan audit keuangan.</li>
     </ul>
   </div>
 
+  <div class="card" id="iklan">
+    <h2>6. Data iklan Sponsored</h2>
+    <ul>
+      <li>Iklan di aplikasi AntarKita berasal dari <strong>merchant AntarKita</strong> dan selalu berlabel "Sponsored". Kami <strong>tidak</strong> memakai jaringan iklan atau SDK iklan pihak ketiga.</li>
+      <li>Iklan dipilih secara <strong>kontekstual</strong>: berdasarkan lokasi Anda saat aplikasi dibuka (merchant dalam radius tertentu), kategori yang Anda buka, atau kata kunci pencarian saat itu. Kami tidak membangun profil minat individu untuk menargetkan iklan dan tidak memakai data sensitif (kesehatan, agama, dan sejenisnya) untuk iklan.</li>
+      <li>Setiap tampilan (impresi) dan klik dicatat bersama ID akun Anda untuk: membatasi <strong>jumlah tampilan iklan yang sama</strong> kepada Anda per hari (<em>frequency cap</em>), tidak menagih klik berulang dalam rentang waktu tertentu, mencegah kecurangan, dan menghitung tagihan merchant.</li>
+      <li>Merchant pengiklan hanya menerima <strong>laporan agregat</strong> (jumlah impresi, klik, pesanan dari iklan, dan biaya). Merchant tidak menerima identitas, kontak, atau lokasi Anda dari iklan.</li>
+      <li>Data mentah interaksi iklan disimpan 12 bulan, setelah itu hanya disimpan sebagai angka agregat tanpa ID akun (lihat bagian 10).</li>
+    </ul>
+  </div>
+
   <div class="card" id="tujuan">
-    <h2>6. Tujuan dan dasar pemrosesan</h2>
+    <h2>7. Tujuan dan dasar pemrosesan</h2>
     <table>
       <tr><th style="width:52%">Tujuan</th><th>Dasar hukum (UU PDP Pasal 20)</th></tr>
       <tr><td>Membuat akun, mencocokkan pesanan dengan mitra, menjalankan &amp; melacak layanan, chat/panggilan dalam aplikasi</td><td>Pelaksanaan perjanjian (Syarat &amp; Ketentuan)</td></tr>
-      <tr><td>Memproses pembayaran, AntarPay, pencairan pendapatan mitra, penerbitan bukti transaksi</td><td>Pelaksanaan perjanjian; kewajiban hukum (pembukuan &amp; perpajakan)</td></tr>
+      <tr><td>Memproses pembayaran, AntarVoucher, pencairan pendapatan mitra, penerbitan bukti transaksi dan kode bantuan</td><td>Pelaksanaan perjanjian; kewajiban hukum (pembukuan &amp; perpajakan)</td></tr>
+      <tr><td>Rekonsiliasi dengan mitra pembayaran, pengembalian dana, dan penanganan sengketa/selisih pembayaran</td><td>Pelaksanaan perjanjian; kewajiban hukum; kepentingan sah (pencegahan kerugian dan penipuan)</td></tr>
+      <tr><td>Menayangkan iklan Sponsored secara kontekstual, membatasi frekuensi tayang, mencegah klik tidak sah, dan menyusun laporan agregat bagi merchant pengiklan</td><td>Kepentingan sah (menjalankan layanan iklan berlabel yang membiayai Platform), dengan hak Anda untuk mengajukan keberatan (bagian 11)</td></tr>
       <tr><td>Verifikasi mitra (KYC), pencegahan penipuan, keamanan (SOS, verifikasi wajah, kontak darurat)</td><td>Kepentingan sah; kewajiban hukum; perlindungan kepentingan vital</td></tr>
       <tr><td>Layanan pelanggan, penanganan aduan &amp; sengketa</td><td>Pelaksanaan perjanjian; kepentingan sah</td></tr>
       <tr><td>Moderasi konten &amp; perilaku pengguna: menindaklanjuti laporan, menegakkan blokir antar pengguna (tidak dipasangkan lagi pada pesanan, tidak bisa saling berkirim pesan atau menelepon), menangguhkan akun yang melanggar</td><td>Kepentingan sah (keselamatan pengguna &amp; penegakan Syarat &amp; Ketentuan); kewajiban hukum</td></tr>
@@ -132,14 +157,15 @@
       <tr><td>Notifikasi transaksi dan promo dalam aplikasi</td><td>Pelaksanaan perjanjian (transaksi); persetujuan (promo — dapat dimatikan di pengaturan notifikasi perangkat)</td></tr>
       <tr><td>Analitik agregat untuk memperbaiki layanan (tanpa profil individu untuk iklan)</td><td>Kepentingan sah</td></tr>
     </table>
-    <p class="muted">Kami tidak menjual data pribadi dan tidak memakai data Anda untuk iklan pihak ketiga. Tidak ada SDK iklan di dalam aplikasi.</p>
+    <p class="muted">Kami tidak menjual data pribadi dan tidak memakai data Anda untuk iklan pihak ketiga. Tidak ada SDK iklan pihak ketiga di dalam aplikasi; iklan yang tampil hanya iklan merchant AntarKita berlabel "Sponsored" (bagian 6).</p>
   </div>
 
   <div class="card" id="berbagi">
-    <h2>7. Dengan siapa data dibagikan</h2>
+    <h2>8. Dengan siapa data dibagikan</h2>
     <ul>
       <li><strong>Antar pengguna, seperlunya untuk layanan:</strong> mitra melihat nama depan, foto profil, titik jemput/antar, dan catatan pesanan Anda; pelanggan melihat nama, foto, kendaraan &amp; plat nomor, rating mitra. Nomor HP tidak dibagikan.</li>
-      <li><strong>Pemroses pembayaran:</strong> Midtrans (lihat bagian 5).</li>
+      <li><strong>Pemroses pembayaran:</strong> mitra pembayaran berizin untuk transaksi baru, dan Midtrans untuk transaksi yang dibuat sebelum peralihan penyedia (lihat bagian 5); bank atau mitra pembayaran yang memproses pencairan pendapatan Mitra.</li>
+      <li><strong>Merchant pengiklan:</strong> hanya laporan agregat kinerja iklan, tanpa identitas atau kontak Anda (lihat bagian 6).</li>
       <li><strong>Penyedia infrastruktur (pemroses data atas nama kami):</strong> Supabase (basis data, autentikasi, penyimpanan berkas — server di wilayah yang kami pilih dengan enkripsi saat transit dan saat disimpan), penyedia peta <strong>Stadia Maps</strong> (menerima koordinat titik jemput/antar dan posisi Anda serta teks alamat yang Anda ketik untuk menampilkan peta, mencari alamat, menerjemahkan koordinat menjadi alamat, dan menghitung rute; tidak menerima nama, nomor HP, atau identitas akun Anda — data peta bersumber dari OpenStreetMap; kami dapat mengganti penyedia peta dengan pemberitahuan di halaman ini), penyedia notifikasi perangkat (Google/Apple), GitHub Pages (hosting web).</li>
       <li><strong>Kontak darurat Anda:</strong> saat Anda menekan SOS atau "Bagikan perjalanan", kami mengirim posisi &amp; detail perjalanan ke kontak yang Anda pilih.</li>
       <li><strong>Tim moderasi kami:</strong> isi laporan yang Anda kirim (kategori dan keterangan) dibaca oleh admin yang menanganinya. Pengguna yang Anda laporkan atau blokir <strong>tidak diberi tahu</strong> siapa yang melaporkan atau memblokirnya; daftar blokir Anda bersifat pribadi dan tidak terlihat oleh pengguna lain.</li>
@@ -149,7 +175,7 @@
   </div>
 
   <div class="card" id="keamanan">
-    <h2>8. Keamanan data</h2>
+    <h2>9. Keamanan data</h2>
     <ul>
       <li>Seluruh lalu lintas data dienkripsi (HTTPS/TLS). Data di basis data dan penyimpanan berkas dienkripsi saat disimpan.</li>
       <li>Akses data dibatasi baris per baris (<em>row-level security</em>): setiap pengguna hanya bisa membaca datanya sendiri; dokumen KYC hanya dapat dibuka admin berwenang dan setiap pembukaan dicatat.</li>
@@ -161,18 +187,21 @@
   </div>
 
   <div class="card" id="retensi">
-    <h2>9. Berapa lama data disimpan</h2>
+    <h2>10. Berapa lama data disimpan</h2>
     <table>
       <tr><th style="width:40%">Data</th><th>Masa simpan</th></tr>
       <tr><td>Profil akun</td><td>Selama akun aktif. Setelah permintaan hapus akun: dianonimkan seketika, sisa PII dibersihkan maksimal 30 hari (masa tenggang pemulihan).</td></tr>
       <tr><td>Dokumen KYC mitra</td><td>Selama menjadi mitra + masa tenggang 30 hari setelah hapus akun; lebih lama hanya bila diwajibkan hukum (mis. sengketa/penyidikan yang sedang berjalan).</td></tr>
-      <tr><td>Riwayat pesanan &amp; transaksi keuangan (AntarPay, pembayaran, pencairan)</td><td>10 tahun sejak transaksi, dalam bentuk anonim setelah akun dihapus — kewajiban pembukuan &amp; perpajakan (UU Dokumen Perusahaan &amp; KUP).</td></tr>
+      <tr><td>Riwayat pesanan &amp; transaksi keuangan (AntarVoucher, pembayaran, pencairan)</td><td>10 tahun sejak transaksi, dalam bentuk anonim setelah akun dihapus — kewajiban pembukuan &amp; perpajakan (UU Dokumen Perusahaan &amp; KUP).</td></tr>
       <tr><td>Jejak lokasi perjalanan per pesanan</td><td>Mengikuti riwayat pesanan; koordinat rinci dihapus/diagregasi setelah 12 bulan kecuali sengketa berjalan.</td></tr>
       <tr><td>Chat &amp; log panggilan dalam pesanan</td><td>12 bulan setelah pesanan selesai.</td></tr>
       <tr><td>Tiket bantuan &amp; laporan keamanan (SOS, insiden)</td><td>24 bulan setelah ditutup.</td></tr>
       <tr><td>Laporan konten/pengguna &amp; keputusan moderasi</td><td>24 bulan setelah laporan diselesaikan — diperlukan untuk menunjukkan riwayat penanganan bila ada laporan berulang atau permintaan aparat. Jejak keputusan admin tersimpan permanen dalam log audit dalam bentuk anonim setelah akun dihapus.</td></tr>
       <tr><td>Daftar pengguna yang Anda blokir</td><td>Selama akun aktif atau sampai Anda membuka blokirnya sendiri.</td></tr>
       <tr><td>Daftar tunggu kota</td><td>Sampai layanan di kota tersebut dibuka dan Anda dikabari, atau sampai Anda membatalkannya sendiri; dihapus permanen dalam 30 hari setelah akun dihapus.</td></tr>
+      <tr><td>Log transaksi pembayaran (status dan notifikasi dari mitra pembayaran, referensi transaksi, kode bantuan, rekonsiliasi, pengembalian dana, pencairan)</td><td>10 tahun sejak transaksi, dalam bentuk anonim setelah akun dihapus — kewajiban pembukuan &amp; perpajakan. Isi mentah notifikasi dari mitra pembayaran disimpan selama diperlukan untuk rekonsiliasi dan audit, dalam jangka waktu yang sama.</td></tr>
+      <tr><td>Laporan sengketa/selisih pembayaran</td><td>Mengikuti masa simpan transaksi terkait (10 tahun, anonim setelah akun dihapus); keterangan bebas dan lampiran bukti 24 bulan setelah ditutup.</td></tr>
+      <tr><td>Interaksi iklan (impresi, klik, konversi per akun)</td><td>12 bulan, kemudian hanya disimpan sebagai angka agregat tanpa ID akun. Tagihan iklan merchant mengikuti masa simpan transaksi keuangan.</td></tr>
       <tr><td>Log teknis &amp; audit</td><td>12 bulan.</td></tr>
       <tr><td>Notifikasi &amp; promo</td><td>90 hari.</td></tr>
     </table>
@@ -180,67 +209,68 @@
   </div>
 
   <div class="card" id="hak">
-    <h2>10. Hak Anda</h2>
+    <h2>11. Hak Anda</h2>
     <p>Sesuai UU PDP, Anda berhak untuk:</p>
     <ul>
-      <li><strong>Mengakses</strong> dan memperoleh salinan data pribadi Anda (riwayat pesanan &amp; mutasi AntarPay tersedia di aplikasi; salinan lengkap dapat diminta lewat email).</li>
+      <li><strong>Mengakses</strong> dan memperoleh salinan data pribadi Anda (riwayat pesanan &amp; mutasi AntarVoucher tersedia di aplikasi; salinan lengkap dapat diminta lewat email).</li>
       <li><strong>Memperbaiki</strong> data yang tidak akurat (Akun → Ubah profil).</li>
-      <li><strong>Menghapus</strong> akun dan data pribadi (lihat bagian 11).</li>
+      <li><strong>Menghapus</strong> akun dan data pribadi (lihat bagian 12).</li>
       <li><strong>Menarik persetujuan</strong> (mis. notifikasi promo, izin lokasi/kamera lewat pengaturan perangkat).</li>
       <li><strong>Menunda/membatasi</strong> pemrosesan dan <strong>mengajukan keberatan</strong> atas pemrosesan berdasarkan kepentingan sah.</li>
       <li><strong>Mengajukan pengaduan</strong> kepada kami atau kepada lembaga pelindungan data pribadi yang berwenang.</li>
     </ul>
-    <p>Kami menanggapi permintaan paling lambat <strong>7 hari kerja</strong> dan menyelesaikannya dalam <strong>30 hari</strong>.</p>
+    <p>Kami menanggapi permintaan selambat-lambatnya <strong>7 hari kerja</strong> dan menyelesaikannya dalam <strong>30 hari</strong>.</p>
   </div>
 
   <div class="card" id="hapus">
-    <h2>11. Menghapus akun</h2>
+    <h2>12. Menghapus akun</h2>
     <p>Anda dapat menghapus akun kapan saja:</p>
     <ol>
       <li><strong>Di dalam aplikasi:</strong> buka <strong>Akun → Lainnya → Hapus akun</strong>, ketik <code>HAPUS</code>, lalu konfirmasi. Berlaku untuk aplikasi Pelanggan maupun Mitra.</li>
       <li><strong>Lewat email:</strong> kirim permintaan dari alamat email yang terdaftar ke <a href="mailto:erzamadana@gmail.com?subject=Permintaan%20hapus%20akun%20AntarKita">erzamadana@gmail.com</a> dengan subjek "Permintaan hapus akun AntarKita" dan nomor HP terdaftar untuk verifikasi.</li>
     </ol>
     <div class="note">
-      <strong>Syarat:</strong> saldo AntarPay harus Rp0 — Pelanggan: habiskan saldo untuk membayar layanan; Mitra: tarik pendapatan ke rekening bank atau habiskan — tidak ada pesanan/booking aktif, dan tidak ada penarikan/top-up yang masih diproses. Aplikasi akan memberi tahu bila ada yang perlu diselesaikan. Pelanggan yang tidak dapat menghabiskan sisa saldonya dapat meminta pengembalian ke rekening bank atas nama sendiri lewat email ke <a href="mailto:erzamadana@gmail.com">erzamadana@gmail.com</a>; pengembalian diproses secara manual paling lambat 14 hari kerja setelah verifikasi.
+      <strong>Syarat:</strong> saldo AntarVoucher harus Rp0 — Pelanggan: habiskan saldo untuk membayar layanan; Mitra: tarik pendapatan ke rekening bank atau habiskan — tidak ada pesanan/booking aktif, dan tidak ada penarikan/top-up yang masih diproses. Aplikasi akan memberi tahu bila ada yang perlu diselesaikan. Pelanggan yang tidak dapat menghabiskan sisa saldonya dapat meminta pengembalian ke rekening bank atas nama sendiri lewat email ke <a href="mailto:erzamadana@gmail.com">erzamadana@gmail.com</a>; pengembalian diproses secara manual selambat-lambatnya 14 hari kerja setelah verifikasi.
     </div>
-    <p>Yang terjadi setelah permintaan diterima: nama, nomor HP, email, foto, kontak darurat, dan token notifikasi <strong>dianonimkan seketika</strong>; akun dinonaktifkan dan tidak bisa dipakai masuk; status mitra dicabut. Dalam <strong>30 hari</strong> dokumen KYC dan identitas login dihapus permanen. Riwayat transaksi disimpan dalam bentuk anonim sesuai kewajiban pembukuan (bagian 9). Dalam masa tenggang 30 hari Anda dapat meminta pemulihan akun lewat email.</p>
+    <p>Yang terjadi setelah permintaan diterima: nama, nomor HP, email, foto, kontak darurat, dan token notifikasi <strong>dianonimkan seketika</strong>; akun dinonaktifkan dan tidak bisa dipakai masuk; status mitra dicabut. Dalam <strong>30 hari</strong> dokumen KYC dan identitas login dihapus permanen. Riwayat transaksi disimpan dalam bentuk anonim sesuai kewajiban pembukuan (bagian 10). Dalam masa tenggang 30 hari Anda dapat meminta pemulihan akun lewat email.</p>
   </div>
 
   <div class="card" id="anak">
-    <h2>12. Usia pengguna</h2>
+    <h2>13. Usia pengguna</h2>
     <p>Layanan AntarKita ditujukan bagi pengguna berusia <strong>18 tahun ke atas</strong>. Kami tidak dengan sengaja mengumpulkan data anak. Bila Anda mengetahui ada anak yang mendaftar, hubungi kami agar akun tersebut dihapus.</p>
   </div>
 
   <div class="card" id="perubahan">
-    <h2>13. Perubahan kebijakan</h2>
-    <p>Kami dapat memperbarui kebijakan ini. Perubahan penting akan diberitahukan lewat notifikasi dalam aplikasi dan/atau email paling lambat 7 hari sebelum berlaku. Versi terbaru selalu tersedia di halaman ini.</p>
+    <h2>14. Perubahan kebijakan</h2>
+    <p>Kami dapat memperbarui kebijakan ini. Perubahan penting akan diberitahukan lewat notifikasi dalam aplikasi dan/atau email selambat-lambatnya 7 hari sebelum berlaku. Versi terbaru selalu tersedia di halaman ini.</p>
   </div>
 
   <div class="card" id="kontak">
-    <h2>14. Kontak</h2>
+    <h2>15. Kontak</h2>
     <p><strong>AntarKita</strong> — Pengendali data: Erza Pradipta Madana<br>
-    Email: <a href="mailto:erzamadana@gmail.com">erzamadana@gmail.com</a><br>
-    WhatsApp/CS: <a href="https://wa.me/628117805600" rel="noopener">0811-7805-600</a><br>
-    Alamat usaha: Kahuripan Terrace VII-21<br>
+    Badan usaha: <span class="ph">[PERLU KONFIRMASI: nama badan usaha &amp; NIB]</span><br>
+    Email (termasuk permintaan terkait data pribadi): <a href="mailto:erzamadana@gmail.com">erzamadana@gmail.com</a><br>
+    WhatsApp/CS: <a href="https://wa.me/628117805600" rel="noopener">0811-7805-600</a> — sebutkan kode bantuan AK-xxxxxx bila pertanyaan menyangkut pembayaran<br>
+    Alamat usaha: Kahuripan Terrace VII-21, <span class="ph">[KOTA — konfirmasi pemilik]</span><br>
     Situs: <a href="https://antarkitaindonesia.com/">antarkitaindonesia.com</a><br>
     Pusat bantuan dalam aplikasi: Akun → Bantuan &amp; tiket aduan<br>
     Syarat &amp; Ketentuan: <a href="../terms/">lihat halaman Syarat &amp; Ketentuan</a></p>
   </div>
 
   <div class="card" id="english">
-    <h2>15. English summary</h2>
+    <h2>16. English summary</h2>
     <p class="muted">This summary is provided for convenience; the Indonesian text above is the binding version.</p>
     <ul>
-      <li><strong>Who:</strong> AntarKita (controller: Erza Pradipta Madana, Indonesia) operates the AntarKita customer app, the AntarKita Mitra partner app and the AntarKita Admin web panel.</li>
-      <li><strong>What we collect:</strong> account details (name, email, phone, optional photo); precise location while the app is open (partners share location periodically while <em>online</em>); order and transaction history; AntarPay closed-loop wallet balance and movements; partner KYC documents (ID card, driving licence, vehicle registration, selfie, business documents); emergency contacts; city waitlist sign-ups (city, province, coordinates, desired services, optional contact); support tickets; basic device/technical data. No contacts, SMS or biometric data. Phone numbers are never shown to other users.</li>
-      <li><strong>Why:</strong> to provide and track services, process payments and payouts, verify partners, prevent fraud, keep users safe, provide support, and send transactional (and optional promotional) notifications. No third-party advertising, no selling of data.</li>
-      <li><strong>Payments:</strong> non-cash payments are processed by Midtrans, a Bank Indonesia-licensed payment gateway. We never receive or store card numbers or e-wallet credentials. AntarPay is a closed-loop balance usable only inside AntarKita; customer balances cannot be withdrawn to a bank account (only partners may withdraw earnings), and non-cash methods may be temporarily disabled.</li>
-      <li><strong>Sharing:</strong> only what is necessary between customer and partner, with our processors (Supabase infrastructure, Midtrans, push-notification providers, Stadia Maps for map tiles, address search and routing using coordinates and typed address text, GitHub Pages hosting), with your chosen emergency contacts when you use SOS/share-trip, and with authorities when legally required.</li>
+      <li><strong>Who:</strong> AntarKita (controller: Erza Pradipta Madana, Indonesia; legal entity to be confirmed) operates the AntarKita customer app, the AntarKita Mitra partner app and the AntarKita Admin web panel.</li>
+      <li><strong>What we collect:</strong> account details (name, email, phone, optional photo); precise location while the app is open (partners share location periodically while <em>online</em>); order and transaction history; payment records (amount, channel, status, payment-partner reference, AK-xxxxxx support code, refunds and disputes — never card numbers or e-wallet credentials); Sponsored-ad impressions and clicks; AntarVoucher closed-loop wallet balance and movements; partner KYC documents (ID card, driving licence, vehicle registration, selfie, business documents); emergency contacts; city waitlist sign-ups (city, province, coordinates, desired services, optional contact); support tickets; basic device/technical data. No contacts, SMS or biometric data. Phone numbers are never shown to other users.</li>
+      <li><strong>Why:</strong> to provide and track services, process payments and payouts, verify partners, prevent fraud, keep users safe, provide support, and send transactional (and optional promotional) notifications. No third-party advertising, no selling of data. Ads shown are merchants' own "Sponsored" ads, selected contextually (location radius, category, search term) without individual interest profiles; impressions and clicks are logged per account to cap how often the same ad is shown per day and to stop invalid clicks, and merchants receive aggregate reports only.</li>
+      <li><strong>Payments:</strong> non-cash payments are processed by a licensed payment partner, named on the payment screen and on this page once the contract takes effect; transactions created before the switch remain with Midtrans. We never receive or store card numbers or e-wallet credentials. AntarVoucher is a closed-loop balance usable only inside AntarKita; customer balances cannot be withdrawn to a bank account (only partners may withdraw earnings), and non-cash methods may be temporarily disabled.</li>
+      <li><strong>Sharing:</strong> only what is necessary between customer and partner, with our processors (Supabase infrastructure, the licensed payment partner and, for legacy transactions, Midtrans, push-notification providers, Stadia Maps for map tiles, address search and routing using coordinates and typed address text, GitHub Pages hosting), with your chosen emergency contacts when you use SOS/share-trip, and with authorities when legally required.</li>
       <li><strong>Security:</strong> TLS in transit, encryption at rest, row-level access control, hashed PINs, audited admin access to sensitive documents.</li>
-      <li><strong>Retention:</strong> profile data for the life of the account; anonymised immediately on deletion with remaining personal data purged within 30 days; transaction records kept for 10 years in anonymised form for accounting/tax law; trip traces, chats and logs 12 months; safety and support records 24 months.</li>
+      <li><strong>Retention:</strong> profile data for the life of the account; anonymised immediately on deletion with remaining personal data purged within 30 days; transaction and payment logs (including refunds and disputes) kept for 10 years in anonymised form for accounting/tax law; raw ad-interaction data 12 months, then aggregate only; trip traces, chats and logs 12 months; safety and support records 24 months.</li>
       <li><strong>Your rights:</strong> access, correction, deletion, withdrawal of consent, restriction/objection and complaint. We acknowledge requests within 7 working days and resolve them within 30 days.</li>
       <li><strong>Delete your account:</strong> in-app via <em>Akun → Lainnya → Hapus akun</em> (type HAPUS), or email <a href="mailto:erzamadana@gmail.com">erzamadana@gmail.com</a> from your registered address. Wallet balance must be zero (customers spend it on services; a remaining customer balance can be refunded manually to your own bank account within 14 working days on request) and no orders may be active.</li>
-      <li><strong>Age:</strong> 18+. <strong>Contact:</strong> erzamadana@gmail.com.</li>
+      <li><strong>Age:</strong> 18+. <strong>Contact:</strong> erzamadana@gmail.com, WhatsApp 0811-7805-600.</li>
     </ul>
   </div>
 </main>

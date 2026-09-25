@@ -3,10 +3,12 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Switch, Modal, StyleSheet, Pressable } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { AdminPage, StatCard, Table, AdminSelect, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, AdminCard as Card } from '@/components/admin';
+import { RequirePerm, AdminPage, StatCard, Table, AdminSelect, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, AdminCard as Card } from '@/components/admin';
 import { Row, Button, Badge, Input, IconCircle, toast, type IconName } from '@/components/ui';
 import { Entrance, Skeleton } from '@/components/motion';
 import { rpc } from '@/lib/supabase';
+import { useAdminSecurity } from '@/store/adminSecurity';
+import { handleSettingsError } from '@/lib/admin';
 import { colors } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
 import type { AutomationRun, ScheduledReport } from '@/lib/types';
@@ -91,14 +93,16 @@ export default function AdminAutomation() {
       p[f.key] = v;
     }
     if (!Object.keys(p).length) return toast.show('Tidak ada perubahan');
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
     setSaving(sec.id);
     try { await rpc('admin_set_settings', { p }); toast.success(`${sec.title}: ${Object.keys(p).length} pengaturan disimpan`); load(); }
-    catch (e) { toast.error((e as Error).message); } finally { setSaving(null); }
+    catch (e) { handleSettingsError(e); } finally { setSaving(null); }
   };
   const setToggle = async (key: string, v: boolean) => {
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
     setToggles((t) => ({ ...t, [key]: v }));
     try { await rpc('admin_set_settings', { p: { [key]: v } }); toast.success(v ? 'Otomasi diaktifkan' : 'Otomasi dinonaktifkan'); load(); }
-    catch (e) { toast.error((e as Error).message); setToggles((t) => ({ ...t, [key]: !v })); }
+    catch (e) { handleSettingsError(e); setToggles((t) => ({ ...t, [key]: !v })); }
   };
   const run = async (kind: string, arg?: string) => {
     setRunning(arg ?? kind);
@@ -155,7 +159,7 @@ export default function AdminAutomation() {
                   </View>
                   <Row gap={8} style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     {sec.run ? <Button size="sm" title={sec.run.label} variant="outline" color={sec.color} icon="play-outline" loading={running === sec.run.kind} onPress={() => run(sec.run!.kind)} /> : null}
-                    <Button size="sm" title={dirty ? `Simpan (${dirty})` : 'Simpan'} color={sec.color} disabled={!dirty} loading={saving === sec.id} onPress={() => saveSection(sec)} />
+                    <RequirePerm perm="settings" fallback={<Text style={font.tiny}>Simpan: superadmin</Text>}><Button size="sm" title={dirty ? `Simpan (${dirty})` : 'Simpan'} color={sec.color} disabled={!dirty} loading={saving === sec.id} onPress={() => saveSection(sec)} /></RequirePerm>
                   </Row>
                   {sec.run ? <Row gap={6}><Ionicons name="time-outline" size={adminIcon.sm} color={adminTone.faint} /><Text style={font.tiny}>Terakhir: {fmtRun(last)}. {sec.run.hint}</Text></Row> : null}
                   {sec.id === 'fraud' ? <Pressable onPress={() => router.push('/(admin)/security' as never)}><Text style={s.link}>Tinjau flag di Pusat Keamanan</Text></Pressable> : null}

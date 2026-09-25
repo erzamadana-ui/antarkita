@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen, Card, Row, Button, Badge, Input, Chip, Empty, Stepper, toast } from '@/components/ui';
 import { Entrance, PressableScale, Skeleton } from '@/components/motion';
-import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
+import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, goAfterOrder, useCheckoutFees, checkoutRows, checkoutNote, type PayChoice } from '@/components/BookingSheet';
 import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { usePayPrefs } from '@/store/payprefs';
 import { useBooking } from '@/store/booking';
@@ -22,14 +22,14 @@ import { createOrder } from '@/lib/orders';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { ServiceIllustration } from '@/components/ServiceArt';
 import { rupiah, km, minutes, marketCategoryLabel } from '@/lib/format';
-import type { Market, MarketItem, MarketVendorItem, ShoppingEstimate, VendorCatalogEntry, VendorGrade } from '@/lib/types';
+import type { Market, MarketItem, MarketVendorItem, PromoFunder, ShoppingEstimate, VendorCatalogEntry, VendorGrade } from '@/lib/types';
 
 type Vehicle = 'motor' | 'car';
 type Line = { qty: number; note: string };
 type VendorLine = MarketVendorItem & { vendor_id: string; vendor_name: string; stall_no: string | null };
 
 const GRADE: Record<VendorGrade, { label: string; color: string; desc: string }> = {
-  A: { label: 'Grade A', color: colors.success, desc: 'kualitas terbaik' },
+  A: { label: 'Grade A', color: colors.success, desc: 'mutu pilihan' },
   B: { label: 'Grade B', color: colors.primary, desc: 'kualitas standar' },
   C: { label: 'Grade C', color: colors.textMuted, desc: 'ekonomis' },
 };
@@ -81,6 +81,7 @@ export default function MarketScreen() {
   const [fareTry, setFareTry] = useState(0);
   const [method, setMethod] = useState<PayChoice>('wallet');
   const [promo, setPromo] = useState(''); const [discount, setDiscount] = useState(0); const [notes, setNotes] = useState('');
+  const [promoFunder, setPromoFunder] = useState<PromoFunder | null>(null);
   const [ordering, setOrdering] = useState(false);
 
   useEffect(() => {
@@ -185,7 +186,11 @@ export default function MarketScreen() {
     return () => { cancelled = true; clearTimeout(t); };
   }, [market?.lat, market?.lng, dropoff?.lat, dropoff?.lng, subtotal, vehicle, route?.distance_km, fareTry]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const total = est ? Math.max(0, est.fare + est.platform_fee + est.service_fee - discount) + subtotal : 0;
+  // §9: biaya platform dari shopping_estimate (customer_platform_fee, 0099) — bukan konstanta klien
+  const platformFee = est ? est.customer_platform_fee ?? est.platform_fee : 0;
+  const baseTotal = est ? Math.max(0, est.fare + platformFee + est.service_fee - discount) + subtotal : 0;
+  const fees = useCheckoutFees({ service: 'market', method, ewallet: payPrefs?.ewallet, amount: baseTotal });
+  const total = est ? baseTotal + fees.payFee : 0;
   const blocked = limitBlocked(est?.limit);
   const serviceOff = est?.service_enabled === false || !isEnabled('market');
   // Gerbang wilayah — daftar pasar & harga acuan tetap bisa ditelusuri di kota mana pun.
@@ -215,7 +220,7 @@ export default function MarketScreen() {
         driver_code: driverCode,
       });
       await refreshWallet(); useBooking.getState().reset();
-      router.replace(`/order/${o.id}` as never);
+      goAfterOrder(router, o);
     } catch (e) { if (!handleShortfall(e, router, payPrefs?.ewallet)) toast.error((e as Error).message); }
     // `finally`: tombol "Pesan ke pasar" tidak boleh tersangkut memutar selamanya
     // bila ada kegagalan tak terduga di jalur error.
@@ -444,7 +449,11 @@ export default function MarketScreen() {
         {/* Rincian & pembayaran */}
         {market && dropoff && (
           <Card solid style={{ gap: 8 }}>
-            {est ? <PriceSummary rows={[{ label: 'Belanja (acuan)', value: subtotal }, { label: 'Jasa belanja driver', value: est.service_fee }, { label: `Ongkir ${vehicle === 'car' ? 'mobil' : 'motor'} (${km(est.distance_km)})`, value: est.fare }, { label: 'Biaya layanan', value: est.platform_fee }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />
+            {est ? <PriceSummary total={total} note={checkoutNote(fees.pay, fees.econError)} rows={checkoutRows({
+              service: 'market', econ: fees.econ, ongkir: est.fare, ongkirLabel: `Ongkir ${vehicle === 'car' ? 'mobil' : 'motor'} (${km(est.distance_km)})`,
+              items: subtotal, itemsLabel: 'Harga barang (harga acuan)', itemsHint: 'Dibayar driver ke pedagang sesuai nota; disesuaikan dengan harga riil',
+              platformFee, serviceFee: est.service_fee, pay: fees.pay, discount, promoCode: promo || null, promoFunder,
+            })} />
               : fareFailed ? (
                 <View style={s.fareErr}>
                   <Row gap={8}><Ionicons name="alert-circle" size={18} color={colors.warning} /><Text style={{ fontWeight: '700', color: colors.text }}>Estimasi biaya belum bisa ditampilkan</Text></Row>
@@ -454,12 +463,12 @@ export default function MarketScreen() {
               )
               : <View style={{ gap: 8 }}><Skeleton width="60%" height={14} /><Skeleton width="40%" height={14} /><Skeleton width="70%" height={14} /></View>}
             {est ? <LimitInfo limit={est.limit} service="market" /> : null}
-            <Text style={font.tiny}>Dana yang ditahan = acuan + cadangan 10%. Setelah driver mengirim nota, total disesuaikan dengan harga riil dan sisanya dikembalikan ke AntarPay.</Text>
+            <Text style={font.tiny}>Dana yang ditahan = acuan + cadangan 10%. Setelah driver mengirim nota, total disesuaikan dengan harga riil dan sisanya dikembalikan ke AntarVoucher.</Text>
           </Card>
         )}
         <Card solid>
           <AntarNowSection service="market" accent={colors.market} />
-          <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={est?.fare ?? 0} service="market" onDiscount={setDiscount} notesPlaceholder="Catatan untuk driver (mis. pilih yang segar, lapak langganan)" />
+          <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={est?.fare ?? 0} service="market" feeBase={baseTotal} onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} notesPlaceholder="Catatan untuk driver (mis. pilih yang segar, lapak langganan)" />
         </Card>
       </View>
       )}

@@ -12,7 +12,7 @@ import { PressableScale } from '@/components/motion';
 import { Dropdown, type DropdownOption } from '@/components/Dropdown';
 import { LocationFields } from '@/components/LocationField';
 import { DestinationSuggestions, SchedulePicker, RoutePreview } from '@/components/BookingExtras';
-import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, type PayChoice } from '@/components/BookingSheet';
+import { PaymentSection, PriceSummary, paidViaOf, handleShortfall, goAfterOrder, useCheckoutFees, checkoutRows, checkoutNote, type PayChoice } from '@/components/BookingSheet';
 import { AntarNowSection, useAntarNowCode } from '@/components/antarnow';
 import { ServiceArt } from '@/components/ServiceArt';
 import { LimitNotice, LimitInfo, ServiceDisabledEmpty, limitBlocked } from '@/components/ServiceLimit';
@@ -28,7 +28,7 @@ import { rpc, supabase } from '@/lib/supabase';
 import { createOrder } from '@/lib/orders';
 import { colors, font, radius, motion, glass } from '@/lib/theme';
 import { rupiah, km, minutes } from '@/lib/format';
-import type { FareEstimate, City, Warehouse, IntercityEstimate, SendVehicle } from '@/lib/types';
+import type { FareEstimate, City, Warehouse, IntercityEstimate, SendVehicle, PromoFunder } from '@/lib/types';
 
 const TYPES = ['Dokumen', 'Makanan', 'Pakaian', 'Elektronik', 'Lainnya'];
 const QUICK_KG = [1, 3, 5, 10, 20];
@@ -56,6 +56,7 @@ export default function SendScreen() {
   const payPrefs = usePayPrefs((st) => st.prefs);
   const [promo, setPromo] = useState('');
   const [discount, setDiscount] = useState(0);
+  const [promoFunder, setPromoFunder] = useState<PromoFunder | null>(null);
   const [notes, setNotes] = useState('');
   const [recipient, setRecipient] = useState({ name: '', phone: '' });
   const [type, setType] = useState('Dokumen');
@@ -146,7 +147,11 @@ export default function SendScreen() {
   }, [scope, originCity?.id, destCity?.id, wKg, fareTry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const icFare = ic?.fare ?? 0;
-  const total = fare ? Math.max(0, fare.fare + fare.platform_fee + icFare - discount) : 0;
+  // §9: biaya platform dari estimate_fare (customer_platform_fee, 0099) — bukan konstanta klien
+  const platformFee = fare ? fare.customer_platform_fee ?? fare.platform_fee : 0;
+  const baseTotal = fare ? Math.max(0, fare.fare + platformFee + icFare - discount) : 0;
+  const fees = useCheckoutFees({ service: 'send', method, ewallet: payPrefs?.ewallet, amount: baseTotal });
+  const total = fare ? baseTotal + fees.payFee : 0;
   const phoneOk = /^(\+62|0)8\d{7,12}$/.test(recipient.phone.replace(/\s|-/g, ''));
   // Batas jarak hanya berlaku untuk pengiriman dalam kota; antar kota lewat gudang tidak dibatasi
   const blocked = scope === 'in_city' && limitBlocked(fare?.limit);
@@ -199,7 +204,7 @@ export default function SendScreen() {
       });
       await refreshWallet();
       useBooking.getState().reset();
-      router.replace(`/order/${o.id}` as never);
+      goAfterOrder(router, o);
     } catch (e) { if (!handleShortfall(e, router, payPrefs?.ewallet)) toast.error((e as Error).message); }
     finally { setOrdering(false); }
   };
@@ -353,7 +358,7 @@ export default function SendScreen() {
           <Animated.View entering={FadeInDown.duration(motion.base)} layout={LinearTransition.springify().stiffness(300).damping(22)} style={{ gap: 14 }}>
             <Row gap={8} style={{ flexWrap: 'wrap' }}>
               <Badge text={!route ? 'Menghitung rute…' : `${km(route.distance_km)} · ${minutes(route.duration_min)}${scope === 'intercity' ? ' ke gudang' : ''}`} color={colors.info} />
-              {fare && <Badge text={`Ongkir ${rupiah(fare.fare + fare.platform_fee + icFare)}`} color={colors.send} />}
+              {fare && <Badge text={`Ongkir ${rupiah(fare.fare + icFare)}`} color={colors.send} />}
             </Row>
             <RoutePreview pickup={pickup} dropoff={legDrop} polyline={route?.coords} accent={colors.send} />
             {estFailed && (
@@ -369,9 +374,13 @@ export default function SendScreen() {
               <Input placeholder="Nomor HP penerima" icon="call-outline" keyboardType="phone-pad" value={recipient.phone} onChangeText={(v) => setRecipient({ ...recipient, phone: v })} />
             </View>
             <SchedulePicker value={when} onChange={setWhen} accent={colors.send} />
-            {fare && <View style={s.group}><PriceSummary rows={[{ label: travelPicked ? `Penjemputan paket (${km(fare.distance_km)})` : `Ongkos kurir (${km(fare.distance_km)})`, value: fare.fare }, ...(icFare ? [{ label: `Antar kota ${originCity?.name} → ${destCity?.name}`, value: icFare }] : []), { label: 'Biaya layanan', value: fare.platform_fee }, { label: 'Diskon promo', value: discount, minus: true }]} total={total} />{scope === 'in_city' && <LimitInfo limit={fare.limit} service="send" />}</View>}
+            {fare && <View style={s.group}><PriceSummary total={total} note={checkoutNote(fees.pay, fees.econError)} rows={checkoutRows({
+              service: 'send', econ: fees.econ, ongkir: fare.fare, ongkirLabel: travelPicked ? `Ongkir penjemputan paket (${km(fare.distance_km)})` : `Ongkir kurir (${km(fare.distance_km)})`,
+              ongkirExtra: icFare ? [{ label: `Ongkir antar kota ${originCity?.name} → ${destCity?.name}`, value: icFare, hint: travelPicked ? 'Dibawa mitra AntarTravel (porsi mitra sesuai kontrak)' : 'Lewat gudang AntarSend' }] : undefined,
+              platformFee, pay: fees.pay, discount, promoCode: promo || null, promoFunder,
+            })} />{scope === 'in_city' && <LimitInfo limit={fare.limit} service="send" />}</View>}
             <AntarNowSection service="send" accent={colors.send} />
-            <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={fare?.fare ?? 0} service="send" onDiscount={setDiscount} notesPlaceholder="Catatan (mis. titip di satpam)" />
+            <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={fare?.fare ?? 0} service="send" feeBase={baseTotal} onDiscount={(d, f) => { setDiscount(d); setPromoFunder(f ?? null); }} notesPlaceholder="Catatan (mis. titip di satpam)" />
             <Text style={font.tiny}>Barang terlarang: narkoba, senjata, hewan hidup, barang mudah terbakar. Maks. nilai barang Rp2.000.000.{scope === 'intercity' ? (travelPicked ? ' Titipan mitra travel: paket wajib bisa dibuka saat serah terima, tanpa barang bernilai tinggi.' : ' Paket antar kota diasuransikan s.d. Rp1.000.000.') : ''}</Text>
           </Animated.View>
         )}

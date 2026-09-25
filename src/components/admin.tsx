@@ -15,6 +15,7 @@ import { AnimatedNumber, Entrance } from '@/components/motion';
 import { rpc } from '@/lib/supabase';
 import { useCall, callSupported } from '@/lib/call';
 import { useAdminSecurity, handleAdminError } from '@/store/adminSecurity';
+import { useAdminRole, permsAllow, adminRoleLabel, sourceTone, type AdminPerm } from '@/lib/admin';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -961,6 +962,38 @@ const s = StyleSheet.create({
   callBar: { position: 'absolute', right: 20, bottom: 20, zIndex: 900 },
   callCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: adminTone.surface, borderRadius: adminRadius.card, borderWidth: 1, borderColor: adminTone.border, paddingHorizontal: adminSpace.md, paddingVertical: adminSpace.md, minWidth: 280, maxWidth: 360 },
 });
+
+/* ─────────────────── RBAC v3 · RequirePerm ─────────────────── */
+
+/**
+ * Tampilkan `children` hanya bila peran admin (`my_admin_role()`) punya izin `perm` (salah satu bila array).
+ * - `mode="hide"` (bawaan): tanpa izin → `fallback` (bawaan: tidak ada apa pun).
+ * - `mode="notice"`: tanpa izin → kartu "Tidak ada izin" (untuk satu halaman penuh).
+ * Selama peran belum termuat atau RPC gagal, konten tetap tampil — server (`admin_require`) penentu akhir.
+ */
+export function RequirePerm({ perm, children, fallback = null, mode = 'hide' }: {
+  perm: AdminPerm | AdminPerm[]; children: React.ReactNode; fallback?: React.ReactNode; mode?: 'hide' | 'notice';
+}) {
+  const info = useAdminRole((st) => st.info);
+  const load = useAdminRole((st) => st.load);
+  useEffect(() => { load(); }, [load]);
+  if (permsAllow(info, perm)) return <>{children}</>;
+  if (mode === 'notice') {
+    return (
+      <View style={s.panel}>
+        <EmptyState icon="lock-closed-outline" title="Tidak ada izin"
+          subtitle={`Peran admin Anda (${adminRoleLabel(info?.role)}) tidak mencakup izin ${Array.isArray(perm) ? perm.join(' / ') : perm}. Minta superadmin mengubah peran di menu Pengguna.`} />
+      </View>
+    );
+  }
+  return <>{fallback}</>;
+}
+
+/** Pill label sumber angka: [FAKTA-PUBLIK] hijau, [KONTRAK] biru, [ASUMSI] kuning, [PERLU-KONFIRMASI…] merah. */
+export function SourcePill({ label }: { label?: string | null }) {
+  if (!label) return <Pill text="tanpa label" tone="off" />;
+  return <Pill text={label} tone={sourceTone(label) as ToneKey} />;
+}
 
 /** Grid 12 kolom sederhana: `span` = jumlah kolom pada layar lebar. */
 export function Grid({ children, gap = adminSpace.lg, style }: { children: React.ReactNode; gap?: number; style?: StyleProp<ViewStyle> }) {

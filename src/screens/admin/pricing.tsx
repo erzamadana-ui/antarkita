@@ -1,3 +1,6 @@
+// Admin · Tarif & Promo. v3 (finpay-v3): grant tulis langsung ke `pricing`/`promos` dicabut — semua perubahan lewat RPC
+// ber-PIN + log: admin_set_pricing(p_id = service, p_patch), admin_upsert_promo(p jsonb), admin_set_promo(p_id = code, p_patch).
+// Baca tetap lewat select tabel (RLS).
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Switch } from 'react-native';
 import { AdminPage, adminFont as font, adminTone, adminSpace, AdminSelect, AdminCard as Card } from '@/components/admin';
@@ -8,11 +11,13 @@ import { pickAndUpload } from '@/lib/upload';
 import { useAuth } from '@/store/auth';
 import { ScrollView } from 'react-native';
 import { Entrance } from '@/components/motion';
-import { supabase } from '@/lib/supabase';
+import { rpc, supabase } from '@/lib/supabase';
+import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
+import { useAdminCan } from '@/lib/admin';
 import { colors } from '@/lib/theme';
 import { serviceLabel } from '@/lib/format';
-import type { Pricing, Promo, ServiceType } from '@/lib/types';
-import { WideTableHint } from './_shared';
+import type { Pricing, Promo, PromoFunder, ServiceType } from '@/lib/types';
+import { WideTableHint, FUNDER_LABEL } from './_shared';
 
 const numFields: (keyof Pricing)[] = ['base_fare', 'per_km', 'min_fare', 'platform_fee', 'commission_pct', 'merchant_commission_pct', 'surge_multiplier'];
 const labels: Record<string, string> = { base_fare: 'Tarif dasar', per_km: 'Per km', min_fare: 'Tarif minimal', platform_fee: 'Biaya layanan', commission_pct: 'Komisi driver %', merchant_commission_pct: 'Komisi merchant %', surge_multiplier: 'Pengali surge' };
@@ -24,18 +29,29 @@ const labels: Record<string, string> = { base_fare: 'Tarif dasar', per_km: 'Per 
 const TWO_WHEEL_SERVICES = ['ride_motor'];
 const COMMISSION_CAP_TWO_WHEEL = 8;
 
-const emptyPromo = { code: '', title: '', description: '', discount_type: 'fixed', value: '', max_discount: '', min_total: '0', service: '', quota: '', image_url: '' };
+const emptyPromo = { code: '', title: '', description: '', discount_type: 'fixed', value: '', max_discount: '', min_total: '0', service: '', quota: '', image_url: '', funded_by: 'platform' as PromoFunder };
+/** 0099 promos.funded_by — pemilik biaya promo (promo bukan pendapatan; dicatat di buku besar promo_platform/merchant/sponsor). */
+const FUNDER_OPTIONS: { value: PromoFunder; label: string; sublabel: string }[] = [
+  { value: 'platform', label: 'Platform', sublabel: 'AntarKita menanggung diskon' },
+  { value: 'merchant', label: 'Merchant', sublabel: 'dipotong dari hak merchant' },
+  { value: 'sponsor', label: 'Sponsor', sublabel: 'ditagih ke sponsor' },
+];
+const FUNDER_COLOR: Record<string, string> = { platform: adminTone.teal, merchant: adminTone.orange, sponsor: adminTone.violet };
 
 export default function AdminPricing() {
   const [pricing, setPricing] = useState<Record<string, Record<string, string>>>({});
   const [promos, setPromos] = useState<Promo[]>([]);
+  const [saved, setSaved] = useState<Record<string, Record<string, string>>>({});
   const [np, setNp] = useState({ ...emptyPromo });
+  const [busy, setBusy] = useState<string | null>(null);
   const session = useAuth((s) => s.session);
+  const can = useAdminCan();
+  const canEdit = can('pricing');
   const load = useCallback(async () => {
     const [{ data: p }, { data: pr }] = await Promise.all([supabase.from('pricing').select('*'), supabase.from('promos').select('*').order('code')]);
     const map: Record<string, Record<string, string>> = {};
     ((p as Pricing[]) ?? []).forEach((row) => { map[row.service] = Object.fromEntries(numFields.map((k) => [k, String(row[k])])); });
-    setPricing(map); setPromos((pr as Promo[]) ?? []);
+    setPricing(map); setSaved(map); setPromos((pr as Promo[]) ?? []);
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -49,20 +65,44 @@ export default function AdminPricing() {
     }
     if (numFields.some((k) => Number(String(v[k]).replace(',', '.')) < 0)) return toast.error('Nilai tarif tidak boleh negatif');
     const payload = Object.fromEntries(numFields.map((k) => [k, Number(String(v[k]).replace(',', '.'))]));
-    const { error } = await supabase.from('pricing').update({ ...payload, updated_at: new Date().toISOString() }).eq('service', service);
-    if (error) return toast.error(error.message);
-    toast.success(`Tarif ${serviceLabel[service as ServiceType]} disimpan`);
+    // Hanya kolom yang berubah terhadap nilai tersimpan yang dikirim.
+    const orig = saved[service] ?? {};
+    const patch = Object.fromEntries(Object.entries(payload).filter(([k, n]) => Number(String(orig[k] ?? '').replace(',', '.')) !== n));
+    if (!Object.keys(patch).length) return toast.show('Tidak ada perubahan untuk disimpan');
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    setBusy(`p:${service}`);
+    try {
+      await rpc('admin_set_pricing', { p_id: service, p_patch: patch });
+      toast.success(`Tarif ${serviceLabel[service as ServiceType] ?? service} disimpan (${Object.keys(patch).length} kolom) & tercatat di log`);
+      await load();
+    } catch (e) { handleAdminError(e); } finally { setBusy(null); }
   };
   const savePromo = async () => {
     if (!np.code || !np.value) return toast.error('Kode dan nilai wajib diisi');
-    const { error } = await supabase.from('promos').upsert({ code: np.code.toUpperCase(), title: np.title || null, image_url: np.image_url || null, description: np.description || null, discount_type: np.discount_type, value: Number(np.value), max_discount: np.max_discount ? Number(np.max_discount) : null, min_total: Number(np.min_total) || 0, service: np.service || null, quota: np.quota ? Number(np.quota) : null, is_active: true });
-    if (error) return toast.error(error.message);
-    setNp({ ...emptyPromo }); toast.success('Promo disimpan'); load();
+    const value = Number(np.value);
+    if (!Number.isFinite(value) || value <= 0) return toast.error('Nilai promo harus angka lebih dari 0');
+    if (np.discount_type === 'percent' && value > 100) return toast.error('Promo persen maksimal 100%');
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    const existing = promos.find((p) => p.code === np.code.toUpperCase());
+    setBusy('promo');
+    try {
+      await rpc('admin_upsert_promo', { p: {
+        code: np.code.toUpperCase(), title: np.title || null, image_url: np.image_url || null, description: np.description || null, discount_type: np.discount_type,
+        value, max_discount: np.max_discount ? Number(np.max_discount) : null, min_total: Number(np.min_total) || 0, service: np.service || null,
+        quota: np.quota ? Number(np.quota) : null, funded_by: np.funded_by || 'platform', is_active: existing ? existing.is_active : true,
+      } });
+      setNp({ ...emptyPromo }); toast.success(existing ? 'Promo diperbarui' : 'Promo dibuat'); await load();
+    } catch (e) { handleAdminError(e); } finally { setBusy(null); }
   };
-  const togglePromo = async (p: Promo) => { await supabase.from('promos').update({ is_active: !p.is_active }).eq('code', p.code); load(); };
+  const togglePromo = async (p: Promo) => {
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    setBusy(`t:${p.code}`);
+    try { await rpc('admin_set_promo', { p_id: p.code, p_patch: { is_active: !p.is_active } }); toast.success(`Promo ${p.code} ${p.is_active ? 'dinonaktifkan' : 'diaktifkan'}`); await load(); }
+    catch (e) { handleAdminError(e); } finally { setBusy(null); }
+  };
 
   return (
-    <AdminPage title="Tarif & Promo" subtitle="Perubahan langsung berlaku untuk pesanan baru" onRefresh={load}>
+    <AdminPage title="Tarif & Promo" subtitle="Perubahan berlaku untuk pesanan baru · menyimpan butuh PIN panel dan tercatat di Log Audit" onRefresh={load}>
       <Card padded={false}>
         <View style={{ padding: 14 }}><Text style={font.label}>Tarif per layanan (baris) · kelas kendaraan memakai pengali: Hemat ×0,9 · Standar ×1 · Premium ×1,35 · Listrik ×1,1 · Listrik Premium ×1,45 · Pick Up ×1 · Box ×1,4</Text></View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -82,7 +122,7 @@ export default function AdminPricing() {
                   const over = k === 'commission_pct' && TWO_WHEEL_SERVICES.includes(service) && Number(String(v[k] ?? '').replace(',', '.')) > COMMISSION_CAP_TWO_WHEEL;
                   return <Input key={k} value={v[k]} keyboardType="decimal-pad" error={over ? ' ' : undefined} onChangeText={(t) => setPricing((p) => ({ ...p, [service]: { ...p[service], [k]: t } }))} containerStyle={{ width: 92 }} style={{ textAlign: 'right', paddingVertical: 6, color: over ? colors.danger : undefined }} />;
                 })}
-                <Button title="Simpan" size="sm" onPress={() => savePricing(service)} style={{ width: 84 }} />
+                <Button title="Simpan" size="sm" disabled={!canEdit} loading={busy === `p:${service}`} onPress={() => savePricing(service)} style={{ width: 84 }} />
               </Row>
             ))}
           </View>
@@ -93,12 +133,12 @@ export default function AdminPricing() {
           <Row between><Text style={font.label}>Promo ({promos.filter((p) => p.is_active).length} aktif · thumbnail tampil di beranda pelanggan, maks. 20)</Text><Text style={font.tiny}>ketuk baris untuk mengubah</Text></Row>
           {promos.map((p) => (
             <Row key={p.code} between style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }}>
-              <PressableThumb promo={p} onPress={() => setNp({ code: p.code, title: p.title ?? '', description: p.description ?? '', discount_type: p.discount_type, value: String(p.value), max_discount: p.max_discount ? String(p.max_discount) : '', min_total: String(p.min_total), service: p.service ?? '', quota: p.quota ? String(p.quota) : '', image_url: p.image_url ?? '' })} />
+              <PressableThumb promo={p} onPress={() => setNp({ code: p.code, title: p.title ?? '', description: p.description ?? '', discount_type: p.discount_type, value: String(p.value), max_discount: p.max_discount ? String(p.max_discount) : '', min_total: String(p.min_total), service: p.service ?? '', quota: p.quota ? String(p.quota) : '', image_url: p.image_url ?? '', funded_by: p.funded_by ?? 'platform' })} />
               <View style={{ flex: 1 }}>
-                <Row gap={8}><Text style={font.h3}>{p.code}</Text><Badge text={p.discount_type === 'percent' ? `${p.value}%${p.max_discount ? ` maks ${p.max_discount}` : ''}` : `Rp${p.value}`} />{!!p.service && <Badge text={serviceLabel[p.service]} color={colors.info} />}</Row>
+                <Row gap={8} style={{ flexWrap: 'wrap', alignItems: 'center' }}><Text style={font.h3}>{p.code}</Text><Badge text={p.discount_type === 'percent' ? `${p.value}%${p.max_discount ? ` maks ${p.max_discount}` : ''}` : `Rp${p.value}`} />{!!p.service && <Badge text={serviceLabel[p.service]} color={colors.info} />}<Badge text={`Ditanggung ${FUNDER_LABEL[p.funded_by ?? 'platform'] ?? p.funded_by}`} color={FUNDER_COLOR[p.funded_by ?? 'platform'] ?? colors.textMuted} /></Row>
                 <Text style={font.tiny}>{p.description} · min Rp{p.min_total} · dipakai {p.used_count}{p.quota ? `/${p.quota}` : ''}</Text>
               </View>
-              <Switch value={p.is_active} onValueChange={() => togglePromo(p)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />
+              <Switch value={p.is_active} disabled={!canEdit || busy === `t:${p.code}`} onValueChange={() => togglePromo(p)} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />
             </Row>
           ))}
           <Text style={[font.h3, { marginTop: 8 }]}>Tambah / ubah promo</Text>
@@ -121,7 +161,16 @@ export default function AdminPricing() {
           <AdminSelect label="Berlaku untuk layanan" icon="layers-outline" width={240} value={np.service} clearable clearLabel="Semua layanan"
             options={[['ride_motor', 'AntarRide'], ['ride_car', 'AntarCar'], ['food', 'AntarFood'], ['send', 'AntarSend'], ['shop', 'AntarShop']].map(([k, l]) => ({ value: k, label: l }))}
             onChange={(v) => setNp({ ...np, service: v })} />
-          <Button title="Simpan promo" onPress={savePromo} />
+          <AdminSelect label="Ditanggung oleh" icon="wallet-outline" width={240} value={np.funded_by} options={FUNDER_OPTIONS}
+            onChange={(v) => setNp({ ...np, funded_by: (v || 'platform') as PromoFunder })} />
+          {np.funded_by !== 'platform' ? (
+            <Text style={font.tiny}>
+              {np.funded_by === 'merchant'
+                ? 'Promo merchant: diskon dipotong dari hak merchant — pastikan ada persetujuan tertulis merchant. Pada layanan tanpa merchant, promo otomatis dianggap promo platform.'
+                : 'Promo sponsor: diskon ditagih ke sponsor — pastikan ada perjanjian sponsor.'}
+            </Text>
+          ) : null}
+          <Button title="Simpan promo" disabled={!canEdit} loading={busy === 'promo'} onPress={savePromo} />
         </Card>
       </Entrance>
       <WideTableHint />

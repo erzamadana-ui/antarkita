@@ -77,7 +77,7 @@ export function AdminUnlockGate({ children }: { children: React.ReactNode }) {
         <View style={{ paddingHorizontal: 20, paddingTop: 12 }}>
           <View style={s.banner}>
             <Ionicons name="shield-outline" size={20} color={colors.warning} />
-            <Text style={[font.small, { flex: 1, color: colors.text }]}>Amankan panel: atur PIN 6 digit. Tindakan sensitif (saldo, pencairan, gateway, peran admin) butuh PIN.</Text>
+            <Text style={[font.small, { flex: 1, color: colors.text }]}>Amankan panel: atur PIN 6 digit. Tindakan sensitif (saldo, pencairan, refund, dispute, persetujuan maker-checker, fee & kredensial gateway, tarif, peran admin) butuh PIN.</Text>
             <Button size="sm" title="Atur PIN" color={colors.warning} onPress={() => router.push('/(admin)/security' as never)} />
           </View>
         </View>

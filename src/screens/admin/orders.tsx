@@ -38,7 +38,7 @@ export default function AdminOrders() {
 
   const cancel = (o: Order) => {
     const run = async () => { try { await rpc('cancel_order', { p_order_id: o.id, p_reason: 'Dibatalkan admin' }); toast.success('Order dibatalkan'); load(); } catch (e) { toast.error((e as Error).message); } };
-    if (Platform.OS === 'web') { if (confirm(`Batalkan order ${o.code}? Pembayaran AntarPay akan direfund.`)) run(); return; }
+    if (Platform.OS === 'web') { if (confirm(`Batalkan order ${o.code}? Pembayaran AntarVoucher akan direfund.`)) run(); return; }
     Alert.alert('Batalkan order?', o.code, [{ text: 'Tidak' }, { text: 'Batalkan', style: 'destructive', onPress: run }]);
   };
   const shown = rows.filter((r) => !q || r.code.toLowerCase().includes(q.toLowerCase()) || (r.customer_name ?? '').toLowerCase().includes(q.toLowerCase()));
@@ -75,7 +75,7 @@ export default function AdminOrders() {
             <Col span={3} min={200} style={{ gap: 6 }}>
               <Text style={font.label}>Pembayaran</Text>
               <Text style={[font.num, { fontSize: 22, lineHeight: 28 }]} numberOfLines={1}>{rupiah(open.total)}</Text>
-              <Text style={font.small}>{open.payment_method === 'wallet' ? 'AntarPay' : 'Tunai'} · {open.payment_status}</Text>
+              <Text style={font.small}>{open.payment_method === 'wallet' ? 'AntarVoucher' : 'Tunai'} · {open.payment_status}</Text>
               {!['completed', 'cancelled'].includes(open.status)
                 ? <Button size="sm" variant="outline" color={colors.danger} title="Batalkan pesanan" icon="close-circle-outline" onPress={() => cancel(open)} style={{ marginTop: 8 }} />
                 : null}
@@ -114,7 +114,7 @@ export default function AdminOrders() {
           {
             key: 'total', label: 'Total', width: 100, align: 'right', render: (r) => {
               const o = r as unknown as Row_;
-              return <View style={{ alignItems: 'flex-end' }}><Text style={font.mono}>{rupiah(o.total)}</Text><Text style={font.tiny}>{o.payment_method === 'wallet' ? 'AntarPay' : 'Tunai'}</Text></View>;
+              return <View style={{ alignItems: 'flex-end' }}><Text style={font.mono}>{rupiah(o.total)}</Text><Text style={font.tiny}>{o.payment_method === 'wallet' ? 'AntarVoucher' : 'Tunai'}</Text></View>;
             },
           },
           { key: 'status', label: 'Status', width: 120, render: (r) => { const o = r as unknown as Row_; return <Pill text={statusLabel(o.status, o.service, o.merchant_status)} color={statusColor(o.status)} />; } },

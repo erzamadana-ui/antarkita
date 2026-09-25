@@ -1,4 +1,5 @@
-// Pusat metode pembayaran: tunai, AntarPay, e-wallet pilihan (via Midtrans), e-money NFC (cek perangkat)
+// Pusat metode pembayaran: tunai, AntarVoucher, kanal payment gateway (provider aktif dari server), e-money NFC (cek perangkat)
+// v3 §1: kanal gateway & biayanya dari payment_provider_public() (hanya `enabled`); nama provider dari server.
 // 0089: setiap saluran hanya tampil bila diaktifkan admin (Panel Admin → Gateway → Saluran Pembayaran).
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
@@ -9,10 +10,11 @@ import { Entrance, PressableScale, AnimatedNumber } from '@/components/motion';
 import { BrandGradient } from '@/components/glass';
 import { useAuth } from '@/store/auth';
 import { usePayPrefs, EWALLETS } from '@/store/payprefs';
-import { useAntarPay, usePaymentChannels, CHANNELS_OFF_TEXT } from '@/hooks/useAppSettings';
-import { AntarPayOffBanner } from '@/components/AntarPayNotice';
+import { useAntarVoucher, usePaymentChannels, CHANNELS_OFF_TEXT } from '@/hooks/useAppSettings';
+import { AntarVoucherOffBanner } from '@/components/AntarVoucherNotice';
 import { colors, font, radius, glass, shadow } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
+import { useProviderPublic, channelFeeText } from '@/lib/payments';
 
 /** Deteksi dukungan NFC (untuk e-money BCA Flazz / Mandiri e-money / BRIZZI). Web: Web NFC hanya Chrome Android. */
 export function useNfcSupport() {
@@ -31,14 +33,18 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
   const uid = session?.user.id;
   const { prefs, loaded, load, save } = usePayPrefs();
   const nfc = useNfcSupport();
-  const { enabled: antarpayOn } = useAntarPay();
+  const { enabled: antarpayOn } = useAntarVoucher();
   const { isChannelOn, nonCashOn } = usePaymentChannels();
+  const { provider, channels: provChannels, providerName } = useProviderPublic();
   useEffect(() => { if (uid && !loaded) load(uid); }, [uid, loaded, load]);
   if (!uid) return null;
   // 0089: saluran yang dimatikan admin tidak ditampilkan (server juga menolaknya).
   const walletOn = isChannelOn('antarpay');
   const emoneyOn = isChannelOn('emoney_nfc');
-  const wallets = EWALLETS.filter((x) => isChannelOn(x.key));
+  const wallets: { key: string; label: string; color: string; icon: string; fee: string | null }[] = provider
+    ? provChannels.map((c) => { const old = EWALLETS.find((x) => x.key === c.key); return { key: c.key, label: c.label, color: old?.color ?? colors.info, icon: old?.icon ?? (c.key === 'card' ? 'card' : c.key.startsWith('retail_') ? 'storefront' : 'wallet'), fee: channelFeeText(c, 0) }; })
+    : EWALLETS.filter((x) => isChannelOn(x.key)).map((x) => ({ key: x.key as string, label: x.label as string, color: x.color as string, icon: x.icon as string, fee: null }));
+  const pgName = providerName ?? 'payment gateway';
   const ewalletOn = wallets.length > 0;
   // 0088/0089: metode utama efektif = tunai bila saluran pilihan lama sedang dimatikan (preferensi tidak dihapus).
   const saved = prefs?.default_method ?? 'cash';
@@ -63,30 +69,31 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
         </BrandGradient>
       </Entrance>
 
-      {!antarpayOn && <Entrance index={1}><AntarPayOffBanner /></Entrance>}
+      {!antarpayOn && <Entrance index={1}><AntarVoucherOffBanner /></Entrance>}
 
       <Entrance index={1}><Card style={{ gap: 10 }}>
         <Text style={font.label}>Metode utama saat memesan</Text>
         {isChannelOn('cash') && <MethodRow active={method === 'cash'} onPress={() => pick('cash')} icon="cash-outline" color={colors.success} title="Tunai" subtitle="Bayar langsung ke driver" />}
-        {walletOn && <MethodRow active={method === 'wallet'} onPress={() => pick('wallet')} icon="wallet-outline" color={colors.primary} title="Saldo AntarPay" subtitle={`Saldo ${rupiah(wallet?.balance ?? 0)} · dipotong otomatis`} />}
-        {ewalletOn && <MethodRow active={method === 'ewallet'} onPress={() => pick('ewallet', wallets.some((w) => w.key === ew) ? (ew as string) : wallets[0].key)} icon="phone-portrait-outline" color={colors.info} title={`E-wallet${ew && wallets.some((w) => w.key === ew) ? ` · ${wallets.find((e) => e.key === ew)?.label}` : ''}`} subtitle={`${wallets.map((w) => w.label).join(' · ')} — via Midtrans, dana masuk AntarPay lalu dipotong`} />}
+        {walletOn && <MethodRow active={method === 'wallet'} onPress={() => pick('wallet')} icon="wallet-outline" color={colors.primary} title="Saldo AntarVoucher" subtitle={`Saldo ${rupiah(wallet?.balance ?? 0)} · dipotong otomatis`} />}
+        {ewalletOn && <MethodRow active={method === 'ewallet'} onPress={() => pick('ewallet', wallets.some((w) => w.key === ew) ? (ew as string) : wallets[0].key)} icon="phone-portrait-outline" color={colors.info} title={`E-wallet${ew && wallets.some((w) => w.key === ew) ? ` · ${wallets.find((e) => e.key === ew)?.label}` : ''}`} subtitle={`${wallets.map((w) => w.label).join(' · ')} — via ${pgName}, dibayar langsung per pesanan`} />}
         {antarpayOn && !nonCashOn && <Text style={font.tiny}>{CHANNELS_OFF_TEXT}</Text>}
       </Card></Entrance>
 
       {ewalletOn && <Entrance index={2}><Card style={{ gap: 10 }}>
-        <Row between><Text style={font.label}>E-wallet pilihan Anda</Text><Badge text="Midtrans · PCI-DSS" color={colors.info} /></Row>
+        <Row between><Text style={font.label}>Kanal pembayaran pilihan Anda</Text><Badge text={`Diproses ${pgName}`} color={colors.info} /></Row>
         <View style={s.grid}>
           {wallets.map((x) => (
             <View key={x.key} style={{ width: '31%', flexGrow: 1 }}>
               <PressableScale onPress={() => pick('ewallet', x.key)} scaleTo={0.95} style={[s.method, ew === x.key && method === 'ewallet' && { borderColor: x.color, backgroundColor: x.color + '14', ...shadow.glow(x.color) }]}>
                 <View style={[s.mIcon, { backgroundColor: x.color }]}><Ionicons name={x.icon as never} size={20} color="#fff" /></View>
-                <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }} numberOfLines={1}>{x.label}</Text>
+                <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14, textAlign: 'center' }} numberOfLines={2}>{x.label}</Text>
+                {x.fee ? <Text style={[font.tiny, { color: x.fee === 'gratis' ? colors.success : colors.textSecondary, fontWeight: '700' }]} numberOfLines={1}>{x.fee}</Text> : null}
                 {ew === x.key && method === 'ewallet' && <Ionicons name="checkmark-circle" size={16} color={x.color} style={{ position: 'absolute', top: 6, right: 6 }} />}
               </PressableScale>
             </View>
           ))}
         </View>
-        <Text style={font.tiny}>Saat memesan, bila saldo kurang, halaman bayar {ew ? wallets.find((e) => e.key === ew)?.label ?? 'e-wallet' : 'e-wallet'} dibuka otomatis untuk kekurangannya. AntarKita tidak menyimpan data akun e-wallet Anda.</Text>
+        <Text style={font.tiny}>Saat memesan, pesanan dibayar langsung lewat {ew ? wallets.find((e) => e.key === ew)?.label ?? 'e-wallet' : 'e-wallet'} ({pgName}) — tidak melalui saldo. Biaya pembayaran, bila dibebankan, tampil di rincian sebelum Anda membayar. AntarKita tidak menyimpan data akun e-wallet Anda.</Text>
       </Card></Entrance>}
 
       {!compact && emoneyOn && (

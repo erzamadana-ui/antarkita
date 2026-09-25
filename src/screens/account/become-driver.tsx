@@ -11,6 +11,7 @@ import { useMode } from '@/store/mode';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { brandsFor, modelsFor, fuelsFor, validateVehicle, isElectricFuel, FUEL_LABEL, type FuelType, type VehicleKind } from '@/lib/vehicles';
+import { useServiceEconomics, driverCommissionText, DRIVER_SERVICES } from '@/lib/mitra';
 import type { DriverDocuments, VehicleType } from '@/lib/types';
 
 const VEHICLES: { key: VehicleType; label: string; sub: string; art: ArtKind; color: string }[] = [
@@ -120,7 +121,7 @@ export default function BecomeDriver() {
           <View style={{ alignItems: 'center', marginTop: 4 }}>
             <View style={s.artCircle}><ServiceIllustration kind={current.art} size={80} /></View>
             <Text style={[font.h1, { textAlign: 'center', marginTop: 14 }]}>Penghasilan fleksibel,{'\n'}jam kerja bebas</Text>
-            <Text style={[font.small, { textAlign: 'center', marginTop: 6 }]}>Terima 80% tarif perjalanan + tip. Potongan platform 20%. Bonus untuk mitra rajin.</Text>
+            <CommissionText />
             {statusInfo && <Badge text={statusInfo[0]} color={statusInfo[1]} style={{ marginTop: 10 }} />}
             {driver?.status_reason && (driver.status === 'suspended' || driver.status === 'rejected') && <Text style={[font.small, { color: colors.danger, textAlign: 'center', marginTop: 6 }]}>Alasan admin: {driver.status_reason}</Text>}
           </View>
@@ -236,6 +237,18 @@ export default function BecomeDriver() {
         </Entrance>
       </View>
     </Screen>
+  );
+}
+
+/** Aturan komisi dari server (service_economics_public) — tidak ada persen yang ditulis tetap di aplikasi. */
+function CommissionText() {
+  const { data, loading } = useServiceEconomics(DRIVER_SERVICES);
+  const text = driverCommissionText(data);
+  return (
+    <Text style={[font.small, { textAlign: 'center', marginTop: 6 }]}>
+      {text ?? (loading ? 'Memuat aturan komisi…' : 'Persentase komisi yang berlaku tercantum di rincian setiap order.')}
+      {' '}Tip pelanggan 100 % milik Anda.
+    </Text>
   );
 }
 

@@ -1,11 +1,14 @@
 // Admin · Kota, Gudang Mitra (AntarSend antar kota), Rute & Permintaan AntarTravel (mitra travel: halaman Mitra Travel)
+// finpay-v3 (0111): tulis langsung intercity_rates & travel_routes dicabut → rpc('admin_set_intercity_rate' | 'admin_set_travel_route',
+// { p_id, p_patch }) (izin pricing + PIN + log). admin_set_travel_route tanpa id memperbarui rute from_city→to_city yang sama (setara upsert lama).
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Switch, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { AdminPage, Table, FilterBar, AdminSelect, adminFont as font, adminTone, adminSpace, adminIcon, AdminCard as Card } from '@/components/admin';
+import { AdminPage, Table, FilterBar, AdminSelect, IconAction, adminFont as font, adminTone, adminSpace, adminIcon, AdminCard as Card } from '@/components/admin';
 import { Row, Input, Button, Badge, toast } from '@/components/ui';
 import { rpc, supabase } from '@/lib/supabase';
+import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import { colors } from '@/lib/theme';
 import { rupiah, formatSchedule, cityName, travelRequestStatusLabel, travelKindLabel } from '@/lib/format';
 import type { City, Warehouse, IntercityRate, TravelRoute, AdminTravelRequestRow, TravelRequestStatus } from '@/lib/types';
@@ -57,15 +60,21 @@ export default function AdminLogistics() {
     if (error) return toast.error(error.message);
     toast.success('Kota ditambahkan'); setNewCity({ name: '', province: '', lat: '', lng: '' }); load();
   };
-  const saveRate = async (r: IntercityRate, patch: Partial<IntercityRate>) => { const { error } = await supabase.from('intercity_rates').update(patch).eq('id', r.id); if (error) toast.error(error.message); else load(); };
+  /** Tulis tarif/rute lewat RPC (PIN + izin pricing). */
+  const adminWrite = async (fn: 'admin_set_intercity_rate' | 'admin_set_travel_route', id: string | null, patch: Record<string, unknown>) => {
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return false;
+    try { await rpc(fn, { p_id: id, p_patch: patch }); return true; }
+    catch (e) { handleAdminError(e); return false; }
+  };
+  const saveRate = async (r: IntercityRate, patch: Partial<IntercityRate>) => { if (await adminWrite('admin_set_intercity_rate', r.id, patch as Record<string, unknown>)) load(); };
   const saveRoute = async () => {
     if (!rt.from_city || !rt.to_city || rt.from_city === rt.to_city) return toast.error('Pilih kota asal & tujuan berbeda');
     if (!Number(rt.seat_price) || !Number(rt.private_price)) return toast.error('Isi harga kursi & private');
-    const { error } = await supabase.from('travel_routes').upsert({ from_city: rt.from_city, to_city: rt.to_city, distance_km: Number(rt.distance_km) || 0, duration_h: Number(rt.duration_h) || 0, seat_price: Number(rt.seat_price), private_price: Number(rt.private_price), private_price_large: Number(rt.private_price_large) || null, min_pax: Number(rt.min_pax) || 4, active: true }, { onConflict: 'from_city,to_city' });
-    if (error) return toast.error(error.message);
-    toast.success('Rute travel disimpan'); setRt({ ...emptyRoute }); load();
+    const ok = await adminWrite('admin_set_travel_route', null, { from_city: rt.from_city, to_city: rt.to_city, distance_km: Number(rt.distance_km) || 0, duration_h: Number(rt.duration_h) || 0, seat_price: Number(rt.seat_price), private_price: Number(rt.private_price), private_price_large: Number(rt.private_price_large) || null, min_pax: Number(rt.min_pax) || 4, active: true });
+    if (!ok) return;
+    toast.success('Rute travel disimpan & tercatat di log'); setRt({ ...emptyRoute }); load();
   };
-  const toggleRoute = async (r: TravelRoute) => { await supabase.from('travel_routes').update({ active: !r.active }).eq('id', r.id); load(); };
+  const toggleRoute = async (r: TravelRoute) => { if (await adminWrite('admin_set_travel_route', r.id, { active: !r.active })) load(); };
 
   return (
     <AdminPage title="Logistik & Travel" subtitle="Kota layanan, gudang mitra AntarSend antar kota, tarif antar kota, rute & permintaan AntarTravel" onRefresh={load}>
@@ -111,9 +120,9 @@ export default function AdminLogistics() {
           <View style={{ padding: 14 }}><Text style={font.label}>Tarif antar kota (base + per kg, ETA hari)</Text><Text style={font.tiny}>Ketuk angka untuk mengubah, tersimpan otomatis.</Text></View>
           <Table rows={rates as unknown as Record<string, unknown>[]} columns={[
             { key: 'route', label: 'Rute', width: 220, render: (r) => <Text style={font.bodyStrong} numberOfLines={1}>{cityName(cities, String(r.from_city))} → {cityName(cities, String(r.to_city))}</Text> },
-            { key: 'base_fare', label: 'Tarif dasar', width: 130, render: (r) => <Input value={String(r.base_fare)} keyboardType="number-pad" onChangeText={(v) => saveRate(r as unknown as IntercityRate, { base_fare: Number(v) || 0 })} containerStyle={{ width: 110 }} /> },
-            { key: 'per_kg', label: 'Per kg', width: 120, render: (r) => <Input value={String(r.per_kg)} keyboardType="number-pad" onChangeText={(v) => saveRate(r as unknown as IntercityRate, { per_kg: Number(v) || 0 })} containerStyle={{ width: 100 }} /> },
-            { key: 'eta_days', label: 'ETA (hari)', width: 100, render: (r) => <Input value={String(r.eta_days)} keyboardType="number-pad" onChangeText={(v) => saveRate(r as unknown as IntercityRate, { eta_days: Number(v) || 1 })} containerStyle={{ width: 70 }} /> },
+            { key: 'base_fare', label: 'Tarif dasar', width: 160, render: (r) => <RateInput r={r as unknown as IntercityRate} field="base_fare" width={110} onSave={saveRate} /> },
+            { key: 'per_kg', label: 'Per kg', width: 150, render: (r) => <RateInput r={r as unknown as IntercityRate} field="per_kg" width={100} onSave={saveRate} /> },
+            { key: 'eta_days', label: 'ETA (hari)', width: 120, render: (r) => <RateInput r={r as unknown as IntercityRate} field="eta_days" width={70} onSave={saveRate} /> },
             { key: 'active', label: 'Aktif', width: 80, render: (r) => <Switch value={!!r.active} onValueChange={(v) => saveRate(r as unknown as IntercityRate, { active: v })} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" /> },
           ]} />
         </Card>
@@ -181,3 +190,20 @@ export default function AdminLogistics() {
   );
 }
 
+/** Isian tarif antar kota: disimpan lewat tombol ✓ / Enter (bukan tiap ketukan — setiap simpan = RPC ber-PIN + baris log). */
+function RateInput({ r, field, width, onSave }: { r: IntercityRate; field: 'base_fare' | 'per_kg' | 'eta_days'; width: number; onSave: (r: IntercityRate, patch: Partial<IntercityRate>) => Promise<void> }) {
+  const [v, setV] = useState(String(r[field] ?? ''));
+  useEffect(() => { setV(String(r[field] ?? '')); }, [r, field]);
+  const commit = () => {
+    const n = Number(v.replace(/\D/g, '')) || (field === 'eta_days' ? 1 : 0);
+    if (n === Number(r[field])) return;
+    onSave(r, { [field]: n } as Partial<IntercityRate>);
+  };
+  const dirty = (Number(v.replace(/\D/g, '')) || (field === 'eta_days' ? 1 : 0)) !== Number(r[field]);
+  return (
+    <Row gap={4} style={{ alignItems: 'center' }}>
+      <Input value={v} keyboardType="number-pad" onChangeText={setV} onSubmitEditing={commit} containerStyle={{ width }} />
+      {dirty ? <IconAction compact icon="checkmark" color={colors.success} title="Simpan (PIN)" onPress={commit} /> : null}
+    </Row>
+  );
+}

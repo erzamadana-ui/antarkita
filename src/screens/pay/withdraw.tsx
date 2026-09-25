@@ -1,24 +1,26 @@
 import React, { useState } from 'react';
 import { View, Text } from 'react-native';
+import { WALLET_UI } from '@/lib/features';
+import { FeatureUnavailable } from '@/components/FeatureUnavailable';
 import { useRouter } from 'expo-router';
 import { Screen, Card, Input, Button, toast } from '@/components/ui';
 import { Entrance } from '@/components/motion';
 import { useAuth } from '@/store/auth';
-import { useAntarPay, ANTARPAY_OFF_TEXT } from '@/hooks/useAppSettings';
-import { AntarPayOffBanner } from '@/components/AntarPayNotice';
+import { useAntarVoucher, ANTARVOUCHER_OFF_TEXT } from '@/hooks/useAppSettings';
+import { AntarVoucherOffBanner } from '@/components/AntarVoucherNotice';
 import { rpc } from '@/lib/supabase';
 import { font } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
 
-export default function Withdraw() {
+function WithdrawScreen() {
   const router = useRouter();
   const { wallet, refreshWallet } = useAuth();
   const [f, setF] = useState({ amount: '', bank: '', account: '', name: '' });
   const set = (k: keyof typeof f) => (v: string) => setF((p) => ({ ...p, [k]: v }));
-  const { enabled: antarpayOn } = useAntarPay();   // 0088: pencairan ditolak server saat nonaktif
+  const { enabled: antarpayOn } = useAntarVoucher();   // 0088: pencairan ditolak server saat nonaktif
 
   const submit = async () => {
-    if (!antarpayOn) return toast.error(ANTARPAY_OFF_TEXT);
+    if (!antarpayOn) return toast.error(ANTARVOUCHER_OFF_TEXT);
     const n = Number(f.amount.replace(/\D/g, ''));
     if (n < 20000) return toast.error('Minimal penarikan Rp20.000');
     if (n > (wallet?.balance ?? 0)) return toast.error('Saldo tidak cukup');
@@ -34,7 +36,7 @@ export default function Withdraw() {
   return (
     <Screen title="Tarik Saldo" back footer={<Button title={antarpayOn ? 'Ajukan Penarikan' : 'Pencairan sementara nonaktif'} size="lg" disabled={!antarpayOn} onPress={submit} />}>
       <View style={{ gap: 16 }}>
-        {!antarpayOn && <Entrance index={0}><AntarPayOffBanner text="Pencairan saldo belum tersedia sampai AntarPay diaktifkan admin. Saldo Anda tetap tersimpan dan pendapatan order tetap masuk." /></Entrance>}
+        {!antarpayOn && <Entrance index={0}><AntarVoucherOffBanner text="Pencairan saldo belum tersedia sampai AntarVoucher diaktifkan admin. Saldo Anda tetap tersimpan dan pendapatan order tetap masuk." /></Entrance>}
         <Entrance index={0}>
           <Card>
             <Text style={font.tiny}>Saldo tersedia</Text>
@@ -53,4 +55,10 @@ export default function Withdraw() {
       </View>
     </Screen>
   );
+}
+
+/** Build Google Play tanpa dompet (EXPO_PUBLIC_WALLET_UI=off) → rute ini diganti layar informasi. */
+export default function Withdraw() {
+  if (!WALLET_UI) return <FeatureUnavailable title="Tarik Saldo" text="Fitur saldo belum tersedia di aplikasi versi Play Store. Pembayaran tunai dan pembayaran langsung per pesanan tetap bisa dipakai." />;
+  return <WithdrawScreen />;
 }

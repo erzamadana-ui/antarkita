@@ -144,7 +144,7 @@ export default function AdminTravelPartners() {
                   {([['Trip', p.trips], ['Booking', p.bookings], ['Permintaan selesai', p.requests_done], ['Tawaran', p.offers], ['Total perjalanan', p.total_trips]] as const).map(([l, v]) => (
                     <View key={l} style={st.stat}><Text style={[font.mono, { fontSize: 14, color: adminTone.teal }]}>{Number(v) || 0}</Text><Text style={font.tiny}>{l}</Text></View>
                   ))}
-                  <View style={st.stat}><Text style={[font.mono, { fontSize: 14, color: (p.wallet ?? 0) < 0 ? adminTone.red : adminTone.ink }]}>{rupiah(Number(p.wallet) || 0)}</Text><Text style={font.tiny}>Saldo AntarPay</Text></View>
+                  <View style={st.stat}><Text style={[font.mono, { fontSize: 14, color: (p.wallet ?? 0) < 0 ? adminTone.red : adminTone.ink }]}>{rupiah(Number(p.wallet) || 0)}</Text><Text style={font.tiny}>Saldo AntarVoucher</Text></View>
                 </Row>
 
                 {p.status_reason && p.status !== 'approved' ? (

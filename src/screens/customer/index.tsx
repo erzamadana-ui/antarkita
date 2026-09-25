@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView, Image, RefreshControl } from 'react-native';
+import { WALLET_UI } from '@/lib/features';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -25,6 +26,8 @@ import { ActiveOrderBubbles } from '@/components/ActiveOrderBubbles';
 import { useT } from '@/lib/i18n';
 import { useNotifications } from '@/hooks/useNotifications';
 import { TAB_BAR_SPACE } from '@/components/GlassTabBar';
+import { SponsoredRow } from '@/components/SponsoredRow';
+import { isSponsoredMerchant } from '@/lib/ads';
 
 export default function CustomerHome() {
   const router = useRouter();
@@ -32,6 +35,7 @@ export default function CustomerHome() {
   const { orders: active, reload } = useMyOrders('customer', session?.user.id, true);
   const { location, hasFix } = useCurrentLocation();
   const [merchants, setMerchants] = useState<Merchant[] | null>(null);
+  const [sponsored, setSponsored] = useState<Merchant[]>([]);
   const [promos, setPromos] = useState<Promo[]>([]);
   const [freq, setFreq] = useState<FrequentData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,11 +52,14 @@ export default function CustomerHome() {
 
   const loadExtras = async () => {
     const [{ data: m }, { data: p }, { data: f }] = await Promise.all([
-      supabase.rpc('nearby_merchants', { p_lat: location.lat, p_lng: location.lng, p_radius_km: 25 }),
+      supabase.rpc('nearby_merchants_v2', { p_lat: location.lat, p_lng: location.lng, p_radius_km: 25 }),   // organik + ad_label/campaign_id (§7)
       supabase.from('promos').select('*').eq('is_active', true).order('sort_order').limit(20),
       supabase.rpc('customer_frequent', { p_limit: 6 }),
     ]);
-    setMerchants(((m as Merchant[]) ?? []).slice(0, 8));
+    // Ranking organik (jarak) — merchant berbayar tidak "menyusup" ke daftar ini; mereka tampil di blok Sponsored.
+    const all = (m as Merchant[]) ?? [];
+    setSponsored(all.filter(isSponsoredMerchant));
+    setMerchants([...all].sort((a, b) => (a.distance_km ?? 0) - (b.distance_km ?? 0)).slice(0, 8));
     setPromos((p as Promo[]) ?? []);
     setFreq((f as FrequentData) ?? null);
   };
@@ -91,7 +98,7 @@ export default function CustomerHome() {
                 </PressableScale>
                 <Row gap={8}>
                   <CircleButton icon={unread > 0 ? 'notifications' : 'notifications-outline'} badge={unread} onPress={() => router.push('/inbox' as never)} />
-                  <CircleButton icon="wallet-outline" onPress={() => router.push('/(customer)/pay')} />
+                  {WALLET_UI && <CircleButton icon="wallet-outline" onPress={() => router.push('/(customer)/pay')} />}
                 </Row>
               </Row>
             </Entrance>
@@ -184,6 +191,13 @@ export default function CustomerHome() {
               </Entrance>
             )}
 
+            {/* Iklan v3 (§7): banner_home — blok Sponsored terpisah, bukan bagian konten organik */}
+            <Entrance index={12}>
+              <View style={{ marginTop: 22 }}>
+                <SponsoredRow placement="banner_home" near={location} limit={1} variant="banner" title="Rekomendasi bersponsor" />
+              </View>
+            </Entrance>
+
             {/* Promo — kartu destinasi tinggi */}
             {promos.length > 0 && (
               <Entrance index={13}>
@@ -232,7 +246,14 @@ export default function CustomerHome() {
               </Entrance>
             )}
 
-            {/* Merchant laris — kartu destinasi dengan rating */}
+            {/* featured_home: merchant bersponsor (termasuk hasil nearby_merchants_v2 berlabel) di blok terpisah */}
+            <Entrance index={15}>
+              <View style={{ marginTop: 24 }}>
+                <SponsoredRow placement="featured_home" near={location} organic={sponsored} title="Merchant bersponsor" />
+              </View>
+            </Entrance>
+
+            {/* Merchant laris — kartu destinasi dengan rating (organik, tanpa label iklan) */}
             <Entrance index={15}>
               <Row between style={{ marginTop: 24, marginBottom: 12 }}>
                 <Text style={font.h3}>{t('trending_food')}</Text>

@@ -24,7 +24,7 @@ export function TipCard({ order, onDone }: { order: Order; onDone: () => void })
   const val = amount || Number(custom.replace(/\D/g, '')) || 0;
   const give = async () => {
     if (val < 1000) { shake(); return; }
-    if ((wallet?.balance ?? 0) < val) { shake(); toast.error('Saldo AntarPay tidak cukup untuk tip'); return; }
+    if ((wallet?.balance ?? 0) < val) { shake(); toast.error('Saldo AntarVoucher tidak cukup untuk tip'); return; }
     setBusy(true);
     try { await rpc('add_tip', { p_order_id: order.id, p_amount: val }); await refreshWallet(); toast.success(`Tip ${rupiah(val)} dikirim ke driver 🙏`); setAmount(0); setCustom(''); onDone(); }
     catch (e) { toast.error((e as Error).message); }
@@ -33,7 +33,7 @@ export function TipCard({ order, onDone }: { order: Order; onDone: () => void })
   return (
     <Animated.View style={[s.card, style]} layout={LinearTransition.springify().stiffness(280).damping(20)}>
       <Row gap={8}><Ionicons name="heart" size={20} color={colors.food} /><Text style={font.h3}>Beri tip driver</Text>{(order.tip ?? 0) > 0 && <Badge text={`Sudah ${rupiah(order.tip ?? 0)}`} color={colors.success} />}</Row>
-      <Text style={font.tiny}>100% tip diterima driver. Dipotong dari saldo AntarPay ({rupiah(wallet?.balance ?? 0)}).</Text>
+      <Text style={font.tiny}>100% tip diterima driver. Dipotong dari saldo AntarVoucher ({rupiah(wallet?.balance ?? 0)}).</Text>
       <Row gap={8} style={{ flexWrap: 'wrap' }}>{TIPS.map((v) => <Chip key={v} label={rupiah(v)} active={amount === v} onPress={() => { setAmount(v); setCustom(''); }} color={colors.food} />)}</Row>
       <Row gap={8}>
         <TextInput placeholder="Nominal lain" placeholderTextColor={colors.textMuted} keyboardType="number-pad" value={custom} onChangeText={(v) => { setCustom(v.replace(/\D/g, '')); setAmount(0); }} style={s.input} />
@@ -61,7 +61,7 @@ export function ExtrasApproval({ order, onDone }: { order: Order; onDone: () => 
       {pending.map((e) => (
         <View key={e.id} style={{ gap: 8 }}>
           <Row between>
-            <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text }}>{extraKindLabel[e.kind]}{e.note ? ` · ${e.note}` : ''}</Text><Text style={font.tiny}>{order.payment_method === 'wallet' ? 'Dipotong dari saldo AntarPay' : 'Dibayar tunai ke driver'}</Text></View>
+            <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text }}>{extraKindLabel[e.kind]}{e.note ? ` · ${e.note}` : ''}</Text><Text style={font.tiny}>{order.payment_method === 'wallet' ? 'Dipotong dari saldo AntarVoucher' : 'Dibayar tunai ke driver'}</Text></View>
             <Text style={{ fontWeight: '700', fontSize: 18, color: colors.text }}>{rupiah(e.amount)}</Text>
           </Row>
           <Row gap={8}>

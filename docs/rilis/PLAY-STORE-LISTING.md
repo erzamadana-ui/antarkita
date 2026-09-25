@@ -39,7 +39,7 @@ Alternatif: `AntarKita - Ojek & Antar Semua` (30) atau cukup `AntarKita` (9).
 **Deskripsi lengkap (≤4000):**
 
 ```
-AntarKita adalah aplikasi super lokal untuk kebutuhan harian Anda: pesan ojek dan mobil, antar makanan, kirim barang, belanja di toko dan pasar tradisional, sewa mobil box, sampai perjalanan antar kota — semuanya dalam satu aplikasi dengan satu dompet AntarPay.
+AntarKita adalah aplikasi super lokal untuk kebutuhan harian Anda: pesan ojek dan mobil, antar makanan, kirim barang, belanja di toko dan pasar tradisional, sewa mobil box, sampai perjalanan antar kota — semuanya dalam satu aplikasi dengan satu dompet AntarVoucher.
 
 LAYANAN DI DALAM ANTARKITA
 • AntarRide — ojek motor cepat dan hemat untuk perjalanan dalam kota. Tarif jelas sebelum pesan.
@@ -50,14 +50,14 @@ LAYANAN DI DALAM ANTARKITA
 • AntarShop — titip beli di toko: tulis daftar belanja, mitra membelikan dan mengantar.
 • AntarMarket — belanja sayur, buah, daging, ikan, dan sembako langsung dari pedagang pasar tradisional dengan harga pasar hari itu.
 • AntarTravel — perjalanan antar kota dengan mitra travel terverifikasi: pilih jadwal, kursi, atau sewa privat satu mobil.
-• AntarPay — dompet dalam aplikasi untuk membayar semua layanan tanpa uang tunai. Top-up mudah lewat transfer bank, e-wallet, dan QRIS (diproses Midtrans).
+• AntarVoucher — dompet dalam aplikasi untuk membayar semua layanan tanpa uang tunai. Top-up mudah lewat transfer bank, e-wallet, dan QRIS (diproses Midtrans).
 
 KENAPA ANTARKITA
 • Tarif transparan: lihat estimasi total sebelum memesan, termasuk biaya layanan.
 • Lacak langsung: posisi mitra dan status pesanan tampil di peta secara real-time.
 • Chat dan panggilan di dalam aplikasi — nomor HP Anda tidak dibagikan ke siapa pun.
 • Pusat Keamanan: tombol SOS, bagikan perjalanan ke keluarga, kontak darurat, mitra terverifikasi dengan foto dan plat nomor.
-• Bayar tunai atau AntarPay — Anda yang pilih.
+• Bayar tunai atau AntarVoucher — Anda yang pilih.
 • Alamat tersimpan (rumah, kantor) dan riwayat pesanan untuk pesan ulang cepat.
 • Bantuan cepat lewat tiket aduan dengan CS yang responsif.
 • Promo dan voucher untuk pengguna setia.
@@ -124,7 +124,7 @@ UNTUK MITRA TRAVEL (AntarTravel)
 UNTUK MOBIL BOX (AntarBox)
 • Terima pesanan angkut barang besar dan pindahan dengan tarif berdasarkan jarak dan kelas kendaraan.
 
-DOMPET MITRA (AntarPay)
+DOMPET MITRA (AntarVoucher)
 • Pendapatan masuk otomatis ke saldo setelah pesanan selesai. Cairkan ke rekening bank kapan saja sesuai batas minimum.
 • Top-up saldo deposit untuk menerima pesanan tunai (diproses Midtrans).
 
@@ -157,7 +157,7 @@ Bantuan: erzamadana@gmail.com
 |---|---|---|
 | Ikon aplikasi | 512×512 px, PNG 32-bit, tanpa transparansi, ≤1 MB | Ekspor dari `apps/<app>/assets/icon.png` (pastikan tanpa sudut membulat — Play yang memotong) |
 | Feature graphic | 1024×500 px, PNG/JPG, ≤15 MB | Wajib. Logo + tagline: Pelanggan "Antar apa saja, ke mana saja"; Mitra "Penghasilan tambahan, satu aplikasi". Hindari teks kecil di tepi. |
-| Screenshot ponsel | Min **2**, maks 8 per aplikasi. Rasio 16:9 atau 9:16, sisi terpendek ≥320 px, terpanjang ≤3840 px, PNG/JPG ≤8 MB | Ambil dari emulator Pixel (1080×2400 → potret 9:16). Saran urutan Pelanggan: Beranda layanan → Pesan AntarRide (peta + estimasi) → Lacak pesanan → AntarFood → AntarMarket → AntarPay. Mitra: Beranda Online + pesanan masuk → Rincian pendapatan → Menu merchant → Lapak pasar → Jadwal travel. |
+| Screenshot ponsel | Min **2**, maks 8 per aplikasi. Rasio 16:9 atau 9:16, sisi terpendek ≥320 px, terpanjang ≤3840 px, PNG/JPG ≤8 MB | Ambil dari emulator Pixel (1080×2400 → potret 9:16). Saran urutan Pelanggan: Beranda layanan → Pesan AntarRide (peta + estimasi) → Lacak pesanan → AntarFood → AntarMarket → AntarVoucher. Mitra: Beranda Online + pesanan masuk → Rincian pendapatan → Menu merchant → Lapak pasar → Jadwal travel. |
 | Screenshot tablet 7"/10" | Opsional | Tidak wajib bila tidak mendeklarasikan dukungan tablet. |
 | Video promo | Opsional (link YouTube) | |
 
@@ -175,7 +175,7 @@ Desain harus bebas dari klaim "terbaik/#1", tidak menampilkan merek pesaing, tid
 
 ### 4.3 App access
 - Pilih **"All or some functionality is restricted"** dan berikan akun uji (email + kata sandi) untuk reviewer, untuk masing-masing aplikasi:
-  - Pelanggan: akun pelanggan dengan saldo AntarPay uji.
+  - Pelanggan: akun pelanggan dengan saldo AntarVoucher uji.
   - Mitra: akun driver **yang sudah disetujui** (status approved) + akun merchant. Tulis instruksi singkat: "Masuk → tab Beranda → geser Online → pesanan uji muncul dalam 1–2 menit (buat dari akun pelanggan)".
 - Buat akun ini di Supabase produksi khusus reviewer, jangan pakai akun nyata.
 
@@ -221,8 +221,8 @@ Hasil yang diharapkan: **Rated for 3+ / Everyone** (Play) — tetap set target u
 | **Personal info → Address** | Ya | Tidak | Opsional | App functionality | Alamat tersimpan (rumah/kantor), alamat jemput/antar |
 | **Personal info → Other info** (Mitra: NIK, no. SIM, plat, data kendaraan, kontak darurat) | Ya (Mitra) / kontak darurat (keduanya) | Tidak | Wajib untuk mitra; kontak darurat opsional | App functionality, Fraud prevention & security, Compliance | KYC mitra |
 | **Financial info → User payment info** | Tidak | — | — | — | Kartu/e-wallet ditangani penuh oleh Midtrans (SDK/webview mereka); aplikasi tidak melihat nomor kartu |
-| **Financial info → Purchase history** | Ya | Tidak | Wajib | App functionality, Account management, Analytics | Riwayat pesanan & mutasi AntarPay |
-| **Financial info → Other financial info** (saldo AntarPay, rekening pencairan mitra) | Ya | Tidak | Wajib untuk pencairan | App functionality, Fraud prevention | Nomor rekening bank mitra |
+| **Financial info → Purchase history** | Ya | Tidak | Wajib | App functionality, Account management, Analytics | Riwayat pesanan & mutasi AntarVoucher |
+| **Financial info → Other financial info** (saldo AntarVoucher, rekening pencairan mitra) | Ya | Tidak | Wajib untuk pencairan | App functionality, Fraud prevention | Nomor rekening bank mitra |
 | **Location → Approximate location** | Ya | Tidak | Wajib | App functionality, Fraud prevention | |
 | **Location → Precise location** | Ya | Tidak | Wajib | App functionality, Fraud prevention & security | Dibagikan ke lawan transaksi selama pesanan (bukan ke pihak ketiga) |
 | **Messages → In-app messages** | Ya | Tidak | Opsional | App functionality | Chat dalam pesanan; log panggilan (durasi) |
@@ -247,7 +247,7 @@ Bagian **Financial features**:
 - Pilih **"My app provides financial features"** → jenis: **Digital wallet / stored value** (dan **Payment facilitation** bila tersedia). Jangan pilih *Personal loans*, *Crypto*, *Banking*, *Securities*.
 - Penjelasan (teks bebas, ≤ 500 karakter):
 
-  > AntarPay adalah saldo tertutup (closed-loop stored value) yang hanya dapat digunakan untuk membayar layanan di dalam platform AntarKita dan menampung pendapatan mitra; tidak dapat ditransfer antar pengguna dan bukan uang elektronik berizin. Seluruh top-up/pembayaran nontunai diproses oleh PT Midtrans, penyelenggara payment gateway berizin Bank Indonesia. AntarKita tidak memberikan pinjaman, tidak menyimpan data kartu, dan tidak menawarkan produk investasi.
+  > AntarVoucher adalah saldo tertutup (closed-loop stored value) yang hanya dapat digunakan untuk membayar layanan di dalam platform AntarKita dan menampung pendapatan mitra; tidak dapat ditransfer antar pengguna dan bukan uang elektronik berizin. Seluruh top-up/pembayaran nontunai diproses oleh PT Midtrans, penyelenggara payment gateway berizin Bank Indonesia. AntarKita tidak memberikan pinjaman, tidak menyimpan data kartu, dan tidak menawarkan produk investasi.
 
 - Bila Play meminta dokumen lisensi: lampirkan bukti kemitraan/akun Midtrans (screenshot dashboard merchant produksi) dan tautan ke Kebijakan Privasi bagian 5. Untuk saldo closed-loop yang hanya berlaku di satu penyelenggara, BI tidak mewajibkan izin uang elektronik (PBI 23/6/2021 — pengecualian *closed loop* dengan floating fund < Rp1 miliar); jika saldo mengambang melampaui batas itu, konsultasikan perizinan.
 
@@ -359,7 +359,7 @@ Play Store mengindeks **nama aplikasi**, **deskripsi singkat**, dan **deskripsi 
 | 2 | belanja pasar, sayur, sembako | deskripsi lengkap (AntarMarket) |
 | 2 | travel antar kota | deskripsi singkat + lengkap |
 | 2 | mobil box, pindahan, angkut barang | deskripsi lengkap (AntarBox) |
-| 3 | dompet digital, top up, QRIS | deskripsi lengkap (AntarPay) |
+| 3 | dompet digital, top up, QRIS | deskripsi lengkap (AntarVoucher) |
 | 3 | driver, mitra, penghasilan tambahan | aplikasi Mitra |
 
 Aturan yang **tidak boleh** dilanggar (Metadata policy): tanpa "terbaik/#1/nomor satu", tanpa emoji atau simbol dekoratif di judul, tanpa menyebut merek pesaing (Gojek/Grab/Maxim), tanpa "gratis" berulang, tanpa harga, tanpa klaim peringkat, tanpa kata "unduh sekarang" di judul.
@@ -415,7 +415,7 @@ python3 docs/rilis/aset/bingkai-screenshot.py                                   
 | `pelanggan-2-ride.png` | AntarRide — titik jemput & tujuan terisi, estimasi jarak, kelas kendaraan (Hemat/Standar/Listrik) dengan harga, jadwalkan, tombol pesan | AntarKita |
 | `pelanggan-3-ride-peta.png` | Pilih titik jemput di peta (pin tengah, alamat terpilih, tombol "Pilih lokasi ini") | AntarKita |
 | `pelanggan-4-lacak.png` | Pelacakan driver — peta rute, posisi driver, kode order, status + stepper (Mencari→Menuju→Tiba→Jalan→Selesai), sheet bawah kondisi awal (kartu mitra/PIN/plat ada di bawah sheet, terlihat saat ditarik) | AntarKita |
-| `pelanggan-5-pay.png` | AntarPay — saldo, tunai/saldo/e-wallet lewat Midtrans | AntarKita |
+| `pelanggan-5-pay.png` | AntarVoucher — saldo, tunai/saldo/e-wallet lewat Midtrans | AntarKita |
 | `mitra-1-beranda.png` | Beranda mitra — sakelar Online, peta dengan 2 order tersedia, kartu order aktif | AntarKita Mitra |
 | `mitra-2-order.png` | Rincian order — pendapatan bersih per trip, status pembayaran, pusat keamanan, kartu pelanggan (nomor disamarkan), rute | AntarKita Mitra |
 | `mitra-3-account.png` | Akun mitra — rating/ulasan/trip, layanan yang bisa diambil, kode AntarNow, data kendaraan | AntarKita Mitra |

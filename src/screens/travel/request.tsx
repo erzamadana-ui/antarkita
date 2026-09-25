@@ -60,12 +60,12 @@ export default function TravelRequestDetail() {
       try {
         await rpc('travel_offer_accept', { p_offer: o.id });
         await refreshWallet();
-        toast.success(r.payment_method === 'cash' ? 'Penawaran diterima — bayar tunai ke sopir' : `Penawaran diterima, ${rupiah(o.price)} dipotong dari AntarPay`);
+        toast.success(r.payment_method === 'cash' ? 'Penawaran diterima — bayar tunai ke sopir' : `Penawaran diterima, ${rupiah(o.price)} dipotong dari AntarVoucher`);
         reload();
       } catch (e) { if (!handleShortfall(e, router, payPrefs?.ewallet)) toast.error((e as Error).message); }
       finally { setBusyOffer(null); }
     };
-    confirmAsk('Terima penawaran?', `${rupiah(o.price)} dari ${o.partner?.company_name ?? o.partner?.name ?? 'mitra'}. ${r.payment_method === 'cash' ? 'Anda membayar tunai ke sopir saat berangkat.' : 'Saldo AntarPay dipotong sekarang dan diteruskan ke mitra setelah perjalanan selesai.'}`, doIt, 'Terima');
+    confirmAsk('Terima penawaran?', `${rupiah(o.price)} dari ${o.partner?.company_name ?? o.partner?.name ?? 'mitra'}. ${r.payment_method === 'cash' ? 'Anda membayar tunai ke sopir saat berangkat.' : 'Saldo AntarVoucher dipotong sekarang dan diteruskan ke mitra setelah perjalanan selesai.'}`, doIt, 'Terima');
   };
   const cancel = async () => {
     try {
@@ -210,7 +210,7 @@ export default function TravelRequestDetail() {
               <>
                 <Entrance index={0}><View style={s.card}>
                   {infoRow('time-outline', 'Pembatalan', 'Refund penuh bila dibatalkan 12 jam atau lebih sebelum berangkat; 70% jika kurang dari itu (setelah pembayaran).')}
-                  {infoRow('wallet-outline', 'Dana AntarPay', 'Ditahan platform dan diteruskan ke mitra setelah perjalanan selesai.')}
+                  {infoRow('wallet-outline', 'Dana AntarVoucher', 'Ditahan platform dan diteruskan ke mitra setelah perjalanan selesai.')}
                   {infoRow('timer-outline', 'Overtime', 'Di luar 12 jam/hari dibayar langsung ke sopir sesuai tarif penawaran.')}
                   {infoRow('hourglass-outline', 'Masa berlaku', 'Permintaan berlaku hingga jadwal berangkat, maksimal 3 permintaan aktif.')}
                   <Button title="Ada kendala? Hubungi CS" variant="ghost" color={colors.textSecondary} icon="help-circle-outline" onPress={contactCs} style={{ marginTop: 6 }} />
@@ -222,7 +222,7 @@ export default function TravelRequestDetail() {
                     ) : (
                       <>
                         <Text style={font.label}>Batalkan permintaan?</Text>
-                        <Text style={font.small}>{r.payment_status === 'paid' ? (fullRefund ? `Dana ${rupiah(r.price)} dikembalikan penuh ke AntarPay karena masih ≥12 jam sebelum berangkat.` : `Kurang dari 12 jam sebelum berangkat: dikembalikan 70% (${rupiah(Math.round(r.price * 0.7))}), sisanya kompensasi mitra.`) : 'Belum ada dana ditahan. Refund penuh bila dibatalkan ≥12 jam sebelum berangkat, 70% jika kurang dari itu (setelah pembayaran).'}</Text>
+                        <Text style={font.small}>{r.payment_status === 'paid' ? (fullRefund ? `Dana ${rupiah(r.price)} dikembalikan penuh ke AntarVoucher karena masih ≥12 jam sebelum berangkat.` : `Kurang dari 12 jam sebelum berangkat: dikembalikan 70% (${rupiah(Math.round(r.price * 0.7))}), sisanya kompensasi mitra.`) : 'Belum ada dana ditahan. Refund penuh bila dibatalkan ≥12 jam sebelum berangkat, 70% jika kurang dari itu (setelah pembayaran).'}</Text>
                         <Input placeholder="Alasan pembatalan (opsional)" value={cancelNote} onChangeText={setCancelNote} />
                         <Row gap={8}><Button title="Kembali" variant="secondary" style={{ flex: 1 }} onPress={() => setShowCancel(false)} /><Button title="Ya, batalkan" variant="danger" style={{ flex: 1 }} onPress={() => confirmAsk('Konfirmasi', 'Permintaan akan dibatalkan.', cancel, 'Batalkan')} /></Row>
                       </>

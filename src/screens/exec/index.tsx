@@ -2,7 +2,7 @@
 // Tata letak mengikuti sistem desain panel admin (kartu putih, tipografi berjenjang, angka tabular-nums)
 // agar terbaca profesional di layar 1024 ke atas. Bagian `pnl` (laba rugi) bersifat opsional —
 // halaman tetap berfungsi penuh bila server belum mengirimkannya.
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -20,7 +20,10 @@ import { useAuth } from '@/store/auth';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors, font, shadow, glass, motion } from '@/lib/theme';
 import { rupiah, serviceLabel, shortMonth, execLevelLabel, formatDate } from '@/lib/format';
-import type { ExecAccess, ExecReport, ReportRun, Recommendation, ServiceType } from '@/lib/types';
+import type { ExecAccess, ExecReport, ReportRun, Recommendation, ServiceType, SkemaReport } from '@/lib/types';
+import { SkemaReportView } from '@/screens/admin/_skema-report';
+import { ContributionView } from '@/screens/admin/_contribution-view';
+import type { ContributionGroup } from '@/lib/admin';
 
 /* ───────────────────── Bagian `pnl` (opsional, migrasi 0026) ───────────────────── */
 
@@ -67,14 +70,35 @@ export default function ExecPortal() {
   const [months, setMonths] = useState(6);
   const [report, setReport] = useState<ExecReport | null>(null);
   const [runs, setRuns] = useState<ReportRun[] | null>(null);
+  const [runsErr, setRunsErr] = useState<string | null>(null);
+  // Tab "Skema Bisnis" (0103): unit economics dari buku besar order lewat exec_report_v2 (token sesi eksekutif).
+  const [tab, setTab] = useState<'ringkasan' | 'skema' | 'kontribusi'>('ringkasan');
+  // Tab "Contribution margin" (finpay-v3 §6): RPC yang sama dengan Panel Admin (admin_contribution_margin).
+  const fetchContribution = useCallback(async (from: string, to: string, group: ContributionGroup) => {
+    if (!sess) throw new Error('Sesi eksekutif berakhir, masuk lagi');
+    try { return await rpc('admin_contribution_margin', { p_from: from, p_to: to, p_group: group }); }
+    catch (e) {
+      const m = String((e as Error).message);
+      if (/Hanya admin|tidak punya akses|not authorized|permission/i.test(m)) throw new Error('Laporan contribution margin memakai RPC panel admin (admin_contribution_margin) — akun eksekutif ini belum punya peran admin/viewer. Minta superadmin memberi peran "Pemantau".');
+      throw e;
+    }
+  }, [sess]);
   const { style: shake, shake: doShake } = useShake();
+  const fetchSkema = useCallback(async (from: string, to: string, filters: Record<string, unknown>) => {
+    if (!sess) throw new Error('Sesi eksekutif berakhir, masuk lagi');
+    try { return await rpc<SkemaReport>('exec_report_v2', { p_token: sess.token, p_from: from, p_to: to, p_filters: filters }); }
+    catch (e) {
+      if (String((e as Error).message).includes('EXEC_SESSION')) { SESSION = null; setSess(null); toast.error('Sesi eksekutif berakhir, masuk lagi'); }
+      throw e;
+    }
+  }, [sess]);
 
   useEffect(() => { if (session) supabase.from('exec_access').select('user_id, level, active, last_login_at').eq('user_id', session.user.id).maybeSingle().then(({ data }) => setAccess((data as ExecAccess) ?? null)); }, [session]);
   useEffect(() => {
     if (!sess) return;
     rpc<ExecReport>('exec_report', { p_token: sess.token, p_months: months }).then(setReport).catch((e) => { if (String((e as Error).message).includes('EXEC_SESSION')) { SESSION = null; setSess(null); toast.error('Sesi eksekutif berakhir, masuk lagi'); } else toast.error((e as Error).message); });
   }, [sess, months]);
-  useEffect(() => { if (sess) rpc<ReportRun[]>('report_runs_list', { p_limit: 10 }).then((r) => setRuns(r ?? [])).catch(() => setRuns([])); }, [sess]);
+  useEffect(() => { if (sess) rpc<ReportRun[]>('report_runs_list', { p_limit: 10 }).then((r) => { setRuns(r ?? []); setRunsErr(null); }, (e: Error) => { setRuns([]); setRunsErr(e.message); }); }, [sess]);
 
   const login = async () => {
     if (pin.length < 6) return doShake();
@@ -125,17 +149,33 @@ export default function ExecPortal() {
           <Row between style={{ flexWrap: 'wrap', gap: 12 }}>
             <View style={{ flexShrink: 1, minWidth: 260, gap: 3 }}>
               <Text style={s.heroKicker} numberOfLines={2}>LAPORAN MANAJEMEN & PEMEGANG SAHAM · {execLevelLabel[sess.level].toUpperCase()}</Text>
-              <Text style={s.heroTitle} numberOfLines={2}>AntarKita — {months} bulan terakhir</Text>
+              <Text style={s.heroTitle} numberOfLines={2}>{tab === 'skema' ? 'AntarKita — Skema Bisnis (unit economics)' : tab === 'kontribusi' ? 'AntarKita — Contribution Margin' : `AntarKita — ${months} bulan terakhir`}</Text>
               <Text style={s.heroSub} numberOfLines={2}>Dibuat {r ? fmtDate(r.generated_at) : '…'} · sesi berlaku s.d. {new Date(sess.expires_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</Text>
             </View>
-            <Row gap={6} style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {tab === 'ringkasan' && <Row gap={6} style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               {[3, 6, 12].map((m) => <Chip key={m} label={`${m} bln`} active={months === m} onPress={() => setMonths(m)} color={colors.accent} />)}
               {Platform.OS === 'web' && <Button size="sm" title="CSV" icon="download-outline" color="#fff" variant="glass" onPress={exportCsv} />}
-            </Row>
+            </Row>}
           </Row>
         </BrandGradient>
 
-        {!r ? <Text style={af.small}>Menyusun laporan…</Text> : (
+        <Row gap={8} style={{ flexWrap: 'wrap' }}>
+          <Chip label="Ringkasan manajemen" active={tab === 'ringkasan'} onPress={() => setTab('ringkasan')} color="#0B1F2A" />
+          <Chip label="Skema Bisnis" active={tab === 'skema'} onPress={() => setTab('skema')} color="#0B1F2A" />
+          <Chip label="Contribution margin" active={tab === 'kontribusi'} onPress={() => setTab('kontribusi')} color="#0B1F2A" />
+        </Row>
+
+        {tab === 'kontribusi' ? (
+          <Animated.View entering={FadeInDown.duration(motion.base)} style={{ gap: adminSpace.lg }}>
+            <SectionHead title="Contribution margin" hint="Per layanan / kota / merchant / bulan dari buku besar order. Target 25 % = take rate bersih tahap matang, bukan laba." />
+            <ContributionView fetch={fetchContribution} />
+          </Animated.View>
+        ) : tab === 'skema' ? (
+          <Animated.View entering={FadeInDown.duration(motion.base)} style={{ gap: adminSpace.lg }}>
+            <SectionHead title="Skema Bisnis" hint="GMV bersih, pendapatan platform per sumber, take rate bersih vs target, contribution per order, EBITDA kota, dan gerbang scale-up — dari buku besar order (exec_report_v2)" />
+            <SkemaReportView fetchReport={fetchSkema} />
+          </Animated.View>
+        ) : !r ? <Text style={af.small}>Menyusun laporan…</Text> : (
           <Animated.View entering={FadeInDown.duration(motion.base)} style={{ gap: adminSpace.lg }}>
 
             {/* ── Ringkasan kinerja ── */}
@@ -225,20 +265,20 @@ export default function ExecPortal() {
 
             {/* ── Keuangan (arus kas dompet & promo) ── */}
             {r.finance ? (<>
-              <SectionHead title="Keuangan & likuiditas" hint="Take rate, promo, serta arus kas dompet AntarPay" />
+              <SectionHead title="Keuangan & likuiditas" hint="Take rate, promo, serta arus kas dompet AntarVoucher" />
               <Row gap={adminSpace.md} style={{ flexWrap: 'wrap' }}>
                 <StatCard index={0} icon="trending-up-outline" label="Take rate" value={pctId(r.finance.take_rate_pct)} hint="pendapatan platform ÷ GMV" color={adminTone.teal} />
                 <StatCard index={1} icon="cash-outline" label="Pendapatan bersih" value={rupiah(r.finance.net_revenue)} hint="setelah promo & biaya gateway" color={r.finance.net_revenue >= 0 ? adminTone.green : adminTone.red} />
                 <StatCard index={2} icon="stats-chart-outline" label="Margin kontribusi" value={pctId(r.finance.contribution_margin_pct)} hint="pendapatan bersih ÷ GMV" color={r.finance.contribution_margin_pct >= 10 ? adminTone.green : adminTone.amber} />
                 <StatCard index={3} icon="pricetags-outline" label="Promo" value={pctId(r.finance.promo_pct_gmv)} hint={`${rupiah(r.finance.promo_discount)} dari GMV`} color={r.finance.promo_pct_gmv > 5 ? adminTone.red : adminTone.blue} />
                 <StatCard index={4} icon="cash-outline" label="Pesanan tunai" value={pctId(r.finance.cash_orders_pct)} hint="dari pesanan selesai" color={adminTone.slate} />
-                <StatCard index={5} icon="wallet-outline" label="Liabilitas saldo" value={rupiah(r.finance.wallet_liability)} hint="saldo AntarPay pengguna (utang ke pengguna)" color={adminTone.violet} />
+                <StatCard index={5} icon="wallet-outline" label="Liabilitas saldo" value={rupiah(r.finance.wallet_liability)} hint="saldo AntarVoucher pengguna (utang ke pengguna)" color={adminTone.violet} />
                 <StatCard index={6} icon="alert-circle-outline" label="Piutang saldo minus" value={rupiah(r.finance.receivable_negative)} hint="saldo minus mitra (order tunai)" color={r.finance.receivable_negative > 1000000 ? adminTone.red : adminTone.amber} />
                 <StatCard index={7} icon="card-outline" label="Top up via gateway" value={rupiah(r.finance.topups_gateway)} hint={`estimasi biaya gateway ${rupiah(r.finance.gateway_fee_est)} (${pctId(r.finance.gateway_fee_pct)})`} color={adminTone.orange} />
                 <StatCard index={8} icon="time-outline" label="Penarikan tertunda" value={rupiah(r.finance.withdrawals_pending)} hint={`top up tertunda ${rupiah(r.finance.topups_pending)}`} color={adminTone.blue} />
               </Row>
 
-              <Panel title="Arus kas dompet & promo per bulan" subtitle="Pendapatan = biaya layanan + komisi · top up & penarikan = arus kas dompet AntarPay" icon="swap-vertical-outline" iconColor={adminTone.blue} padded={false}>
+              <Panel title="Arus kas dompet & promo per bulan" subtitle="Pendapatan = biaya layanan + komisi · top up & penarikan = arus kas dompet AntarVoucher" icon="swap-vertical-outline" iconColor={adminTone.blue} padded={false}>
                 <DataTable keyField="month" rows={r.monthly as unknown as Record<string, unknown>[]} emptyText="Belum ada data bulanan"
                   columns={[
                     { key: 'month', label: 'Bulan', width: 96, render: (x) => <Text style={af.bodyStrong}>{fmtMonth(String(x.month))}</Text> },
@@ -334,7 +374,7 @@ export default function ExecPortal() {
                     <LineItem label="Pengguna aktif" value={String(r.supply.users_total)} />
                     {r.supply.vendors_total != null ? <LineItem label="Pedagang pasar aktif / menunggu" value={`${r.supply.vendors_total} / ${r.supply.vendors_pending ?? 0}`} /> : null}
                     {r.supply.travel_partners != null ? <LineItem label="Mitra travel aktif" value={String(r.supply.travel_partners)} /> : null}
-                    <LineItem top label="Saldo AntarPay pengguna (float)" value={rupiah(r.supply.wallet_float)} />
+                    <LineItem top label="Saldo AntarVoucher pengguna (float)" value={rupiah(r.supply.wallet_float)} />
                     <LineItem label="Saldo minus driver (piutang)" value={rupiah(r.supply.wallet_negative)} color={r.supply.wallet_negative < 0 ? adminTone.red : undefined} />
                   </View>
                 </Panel>
@@ -386,8 +426,9 @@ export default function ExecPortal() {
 
             {/* ── Arsip laporan otomatis ── */}
             <SectionHead title="Laporan otomatis" hint="Arsip laporan terjadwal yang dibuat sistem" />
+            {runsErr ? <Text style={[af.small, { color: adminTone.red }]}>Arsip laporan belum bisa dimuat: {runsErr}</Text> : null}
             {runs === null ? <Text style={af.small}>Memuat arsip laporan…</Text> : runs.length === 0 ? (
-              <AdminCard><Empty icon="document-text-outline" title="Belum ada laporan terjadwal" subtitle="Admin dapat menambah jadwal laporan di Panel Admin → Otomasi." /></AdminCard>
+              runsErr ? null : <AdminCard><Empty icon="document-text-outline" title="Belum ada laporan terjadwal" subtitle="Admin dapat menambah jadwal laporan di Panel Admin → Otomasi." /></AdminCard>
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: adminSpace.md, paddingBottom: 4 }}>
                 {runs.map((x) => {
@@ -436,7 +477,7 @@ export default function ExecPortal() {
               pnl
                 ? 'Laba rugi (P&L) memakai pendapatan yang ditagih ke pelanggan dikurangi biaya langsung (payout mitra, promo, biaya gateway). Belum termasuk biaya operasional perusahaan: gaji, server, pemasaran, dan pajak.'
                 : 'Bagian Laba Rugi (P&L) belum tersedia dari server pada versi ini; angka keuangan di atas tetap valid.',
-              'Biaya gateway bernilai nol untuk pesanan tanpa transaksi payment gateway (tunai atau saldo AntarPay).',
+              'Biaya gateway bernilai nol untuk pesanan tanpa transaksi payment gateway (tunai atau saldo AntarVoucher).',
               'Data AntarTravel dan tiket CS dihitung terpisah dari pesanan reguler.',
             ]} />
           </Animated.View>

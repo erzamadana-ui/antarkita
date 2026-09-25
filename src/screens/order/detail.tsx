@@ -10,7 +10,9 @@ import { Button, Row, Badge, Loading, Divider, Stars, toast, Empty } from '@/com
 import { MapScreen } from '@/components/MapScreen';
 import { Radar, ProgressBar, LiveDot, PressableScale } from '@/components/motion';
 import { AmbientBackground } from '@/components/glass';
-import { PersonCard, RouteBlock, OrderExtras, PriceBlock, Timeline, driverSubtitle } from '@/components/OrderDetails';
+import { PersonCard, RouteBlock, OrderExtras, PriceBlock, PaymentPanel, Timeline, driverSubtitle } from '@/components/OrderDetails';
+import { SponsoredRow } from '@/components/SponsoredRow';
+import { IS_CUSTOMER_APP } from '@/lib/app';
 import { ModerationMenu } from '@/components/moderation';
 import { TipCard, ExtrasApproval } from '@/components/TipExtras';
 import { PinCard, SafetyRow, DriverVerifyCard } from '@/components/Safety';
@@ -89,7 +91,7 @@ export default function OrderTracking() {
   const cancel = () => {
     const doIt = async (reason: string) => { try { await rpc('cancel_order', { p_order_id: id, p_reason: reason }); toast.show('Pesanan dibatalkan'); reload(); } catch (e) { toast.error((e as Error).message); } };
     if (Platform.OS === 'web') { const r = prompt('Alasan pembatalan (opsional):'); if (r !== null) doIt(r || 'Dibatalkan pelanggan'); return; }
-    Alert.alert('Batalkan pesanan?', 'Pesanan yang sudah dibayar AntarPay akan dikembalikan ke saldo.', [{ text: 'Tidak' }, { text: 'Ya, batalkan', style: 'destructive', onPress: () => doIt('Dibatalkan pelanggan') }]);
+    Alert.alert('Batalkan pesanan?', 'Pesanan yang sudah dibayar AntarVoucher akan dikembalikan ke saldo.', [{ text: 'Tidak' }, { text: 'Ya, batalkan', style: 'destructive', onPress: () => doIt('Dibatalkan pelanggan') }]);
   };
   const rate = async (kind: 'driver' | 'merchant', stars: number) => {
     try { await rpc('rate_order', { p_order_id: id, p_kind: kind, p_stars: stars, p_comment: comment || null }); setRated((r) => ({ ...r, [kind]: stars })); toast.success('Terima kasih atas penilaian Anda'); }
@@ -100,8 +102,10 @@ export default function OrderTracking() {
   if (!order) return <View style={{ flex: 1 }}><AmbientBackground /><SafeAreaView style={{ flex: 1 }}><Empty icon="alert-circle-outline" title="Pesanan tidak ditemukan" subtitle="Pesanan tidak ada atau Anda tidak memiliki akses." action={<Button title="Kembali" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />} /></SafeAreaView></View>;
   const def = serviceDef(order.service);
   const active = !['completed', 'cancelled'].includes(order.status);
-  const canCancel = ['scheduled', 'searching', 'accepted', 'arrived'].includes(order.status);
+  const canCancel = ['awaiting_payment', 'scheduled', 'searching', 'accepted', 'arrived'].includes(order.status);
   const scheduled = order.status === 'scheduled';
+  // 0100/v3: pesanan lewat saluran gateway menunggu dibayar (tagihan per pesanan, provider aktif) sebelum driver dicarikan
+  const awaitingPay = order.status === 'awaiting_payment';
   const sc = statusColor(order.status);
   const searching = order.status === 'searching';
   // AntarNow: order masih ditahan khusus untuk driver berkode (masa tahan belum habis)
@@ -135,6 +139,8 @@ export default function OrderTracking() {
       initiallyExpanded={!active}
     >
       <Animated.View layout={LinearTransition.springify().stiffness(280).damping(18)} style={{ gap: 14 }}>
+        {/* v3: status pembayaran real-time + "Lanjutkan pembayaran" (mis. pelanggan menutup aplikasi saat membayar) */}
+        {awaitingPay && <PaymentPanel order={order} onChanged={reload} />}
         {scheduled && (
           <Animated.View entering={FadeIn.duration(motion.slow)} exiting={FadeOut.duration(motion.fast)} style={s.radarBox}>
             <View style={s.iconTint}><Ionicons name="calendar-outline" size={32} color={colors.primary} /></View>
@@ -189,9 +195,12 @@ export default function OrderTracking() {
         </View>
         <View style={s.block}>
           <PriceBlock order={order} />
-          {order.payment_status === 'refunded' && <Badge text="Dana dikembalikan ke AntarPay" color={colors.info} style={{ marginTop: 8 }} />}
+          {order.payment_status === 'refunded' && <Badge text="Dana dikembalikan ke AntarVoucher" color={colors.info} style={{ marginTop: 8 }} />}
         </View>
-        {['ride_motor', 'ride_car', 'send', 'box'].includes(order.service) && <MerchantAds near={{ lat: order.dropoff_lat, lng: order.dropoff_lng }} title={active ? 'Lapar sesampainya? Merchant dekat tujuan' : 'Merchant dekat tujuan'} max={5} />}
+        {!awaitingPay && <PaymentPanel order={order} onChanged={reload} />}
+        {/* Iklan v3 (§7): post_checkout_cross — blok Sponsored terpisah setelah pesanan dibuat (hanya aplikasi Pelanggan) */}
+        {IS_CUSTOMER_APP && active && !awaitingPay && <SponsoredRow placement="post_checkout_cross" near={{ lat: order.dropoff_lat, lng: order.dropoff_lng }} category={order.service === 'food' ? null : order.service} title="Mungkin Anda juga suka" />}
+        {IS_CUSTOMER_APP && ['ride_motor', 'ride_car', 'send', 'box'].includes(order.service) && <MerchantAds near={{ lat: order.dropoff_lat, lng: order.dropoff_lng }} title={active ? 'Lapar sesampainya? Merchant dekat tujuan' : 'Merchant dekat tujuan'} max={5} sponsored={false} />}
         <View style={s.block}><Timeline events={events} /></View>
         {/* Moderasi UGC (wajib Google Play): laporkan / blokir mitra tetap tersedia setelah pesanan selesai. */}
         {driver && (
@@ -222,6 +231,7 @@ export default function OrderTracking() {
 
 function subtitle(order: Order) {
   switch (order.status) {
+    case 'awaiting_payment': return 'Selesaikan pembayaran agar driver dicarikan';
     case 'scheduled': return order.scheduled_at ? `Jemput ${new Date(order.scheduled_at).toLocaleString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} WIB` : 'Booking terjadwal';
     case 'searching': return 'Kami sedang mencarikan driver terdekat';
     case 'accepted': return 'Driver sedang menuju lokasi';

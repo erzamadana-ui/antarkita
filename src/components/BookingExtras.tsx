@@ -2,7 +2,7 @@
 //  - DestinationSuggestions: tujuan terakhir / sering dikunjungi / alamat tersimpan (sekali ketuk)
 //  - VehicleClassPicker: kelas kendaraan (hemat/standar/premium/listrik) dengan harga per kelas
 //  - SchedulePicker: pesan sekarang vs booking terjadwal (tanggal + jam)
-//  - MerchantAds: iklan merchant terdekat dari titik jemput/antar
+//  - MerchantAds: merchant terdekat (organik) + blok Sponsored terpisah (§7 v3)
 //  - RoutePreview: peta rute yang disembunyikan (tampil hanya bila diminta)
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, Pressable } from 'react-native';
@@ -18,6 +18,8 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/store/auth';
 import { colors, font, radius, glass, motion, shadow } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
+import { isSponsoredMerchant } from '@/lib/ads';
+import { SponsoredRow } from '@/components/SponsoredRow';
 import type { FareOption, FrequentData, Merchant, Place, SavedPlace, ServiceType } from '@/lib/types';
 
 // ---------- Tujuan terakhir & sering dikunjungi ----------
@@ -136,30 +138,50 @@ export function SchedulePicker({ value, onChange, accent }: { value: Date | null
   );
 }
 
-// ---------- Iklan merchant terdekat ----------
-export function MerchantAds({ near, title, max = 6 }: { near: { lat: number; lng: number } | null; title?: string; max?: number }) {
+// ---------- Merchant terdekat (organik) + blok Sponsored terpisah ----------
+/**
+ * Rekomendasi merchant dekat titik jemput/antar. Hasil organik diurutkan jarak TANPA label iklan;
+ * merchant berbayar (server: `ad_label` + `campaign_id`) hanya tampil di blok `SponsoredRow` terpisah (§7).
+ * `sponsored=false` menyembunyikan blok Sponsored (mis. layar yang sudah punya placement iklan sendiri).
+ */
+export function MerchantAds({ near, title, max = 6, sponsored = true }: { near: { lat: number; lng: number } | null; title?: string; max?: number; sponsored?: boolean }) {
   const router = useRouter();
   const [list, setList] = useState<Merchant[] | null>(null);
   useEffect(() => {
     if (!near) { setList(null); return; }
-    supabase.rpc('nearby_merchants', { p_lat: near.lat, p_lng: near.lng, p_radius_km: 4 }).then(({ data }) => setList(((data as Merchant[]) ?? []).filter((m) => m.is_open && m.image_url).slice(0, max)));
+    let live = true;
+    // Bagian ini opsional (bukan alur utama): bila gagal dimuat, bagian disembunyikan dan galat dicatat di konsol.
+    supabase.rpc('nearby_merchants_v2', { p_lat: near.lat, p_lng: near.lng, p_radius_km: 4 }).then(({ data, error }) => {
+      if (!live) return;
+      if (error) { console.warn('nearby_merchants_v2:', error.message); setList([]); return; }
+      setList(((data as Merchant[]) ?? []).filter((m) => m.is_open));
+    });
+    return () => { live = false; };
   }, [near?.lat, near?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!near || !list || list.length === 0) return null;
+  if (!near || !list) return null;
+  const paid = list.filter(isSponsoredMerchant);
+  const organic = list.filter((m) => m.image_url).sort((a, b) => (a.distance_km ?? 0) - (b.distance_km ?? 0)).slice(0, max);
+  if (organic.length === 0 && (!sponsored || paid.length === 0)) return sponsored ? <SponsoredRow placement="boost_nearby" near={near} organic={paid} /> : null;
   return (
-    <Animated.View entering={FadeInDown.duration(motion.base)} style={{ gap: 6 }}>
-      <Row between><Text style={font.label}>{title ?? 'Merchant dekat tujuan Anda'}</Text><Badge text="Iklan" color={colors.textMuted} /></Row>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 2 }}>
-        {list.map((m) => (
-          <PressableScale key={m.id} onPress={() => router.push(`/food/${m.id}` as never)} scaleTo={0.97} style={s.ad}>
-            <Image source={{ uri: m.image_url ?? undefined }} style={s.adImg} />
-            <View style={{ padding: 8, gap: 2 }}>
-              <Row between><Text style={{ fontWeight: '700', color: colors.text, fontSize: 14, flex: 1 }} numberOfLines={1}>{m.name}</Text><HalalBadge merchant={m} /></Row>
-              <Text style={font.tiny} numberOfLines={1}>⭐ {Number(m.rating_avg).toFixed(1)} · {m.distance_km} km · ongkir {rupiah(m.delivery_fee ?? 0)}</Text>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: colors.food }}>Pesan makanan →</Text>
-            </View>
-          </PressableScale>
-        ))}
-      </ScrollView>
+    <Animated.View entering={FadeInDown.duration(motion.base)} style={{ gap: 10 }}>
+      {sponsored && <SponsoredRow placement="boost_nearby" near={near} organic={paid} title="Merchant bersponsor di sekitar" />}
+      {organic.length > 0 && (
+        <View style={{ gap: 6 }}>
+          <Text style={font.label}>{title ?? 'Merchant dekat tujuan Anda'}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingVertical: 2 }}>
+            {organic.map((m) => (
+              <PressableScale key={m.id} onPress={() => router.push(`/food/${m.id}` as never)} scaleTo={0.97} style={s.ad}>
+                <Image source={{ uri: m.image_url ?? undefined }} style={s.adImg} />
+                <View style={{ padding: 8, gap: 2 }}>
+                  <Row between><Text style={{ fontWeight: '700', color: colors.text, fontSize: 14, flex: 1 }} numberOfLines={1}>{m.name}</Text><HalalBadge merchant={m} /></Row>
+                  <Text style={font.tiny} numberOfLines={1}>⭐ {Number(m.rating_avg).toFixed(1)} · {m.distance_km} km · ongkir {rupiah(m.delivery_fee ?? 0)}</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: colors.food }}>Pesan makanan →</Text>
+                </View>
+              </PressableScale>
+            ))}
+          </ScrollView>
+        </View>
+      )}
     </Animated.View>
   );
 }
