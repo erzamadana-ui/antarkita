@@ -131,7 +131,7 @@ jobs:
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=${{ steps.opsi.outputs.abi }}
-          SUF=${{ github.ref == 'refs/heads/main' && '' || '-INTERNAL' }}
+          SUF=${{ github.ref != 'refs/heads/main' && '-INTERNAL' || '' }}
           cp app/build/outputs/apk/release/app-release.apk ../antarkita-${{ matrix.app }}-${{ github.run_number }}${SUF}.apk
 
       # Ukuran APK dicetak ke ringkasan job supaya perubahan ukuran terlihat
