@@ -6,6 +6,8 @@
 //  • "Saya sudah transfer" (`voucher_purchase_mark_sent`) hanya info bantu pencocokan — saldo bertambah setelah Finance
 //    mencocokkan mutasi bank. Screenshot tidak diminta dan tidak menambah saldo.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { WALLET_UI } from '@/lib/features';
+import { FeatureUnavailable } from '@/components/FeatureUnavailable';
 import { View, Text, StyleSheet } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
@@ -36,7 +38,7 @@ function useNow(active: boolean, every = 1000) {
   return now;
 }
 
-export default function BuyVoucher() {
+function BuyVoucherScreen() {
   const router = useRouter();
   const refreshWallet = useAuth((st) => st.refreshWallet);
   const [status, setStatus] = useState<VoucherStatusPublic | null>(null);
@@ -526,3 +528,9 @@ const s = StyleSheet.create({
   codeDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.danger, marginTop: 3 },
   step: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
 });
+
+/** Build Google Play tanpa dompet (EXPO_PUBLIC_WALLET_UI=off) → rute ini diganti layar informasi. */
+export default function BuyVoucher() {
+  if (!WALLET_UI) return <FeatureUnavailable title="Beli AntarVoucher" text="Fitur saldo belum tersedia di aplikasi versi Play Store. Pembayaran tunai dan pembayaran langsung per pesanan tetap bisa dipakai." />;
+  return <BuyVoucherScreen />;
+}

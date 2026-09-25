@@ -5,6 +5,8 @@
 // Alur lama "transfer manual + unggah screenshot" (app_settings.bank_account + request_topup) DIHAPUS:
 // rekening non-resmi & saldo berbasis screenshot adalah risiko P0.
 import React from 'react';
+import { WALLET_UI } from '@/lib/features';
+import { FeatureUnavailable } from '@/components/FeatureUnavailable';
 import { View, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -14,7 +16,7 @@ import { useAntarVoucher } from '@/hooks/useAppSettings';
 import { AntarVoucherOffBanner } from '@/components/AntarVoucherNotice';
 import { colors, font, radius } from '@/lib/theme';
 
-export default function TopUp() {
+function TopUpScreen() {
   const router = useRouter();
   const { enabled: antarVoucherOn } = useAntarVoucher();   // 0088: gateway top up ditolak server saat nonaktif
 
@@ -71,3 +73,9 @@ const s = StyleSheet.create({
   optIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   warn: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: colors.dangerLight },
 });
+
+/** Build Google Play tanpa dompet (EXPO_PUBLIC_WALLET_UI=off) → rute ini diganti layar informasi. */
+export default function TopUp() {
+  if (!WALLET_UI) return <FeatureUnavailable title="Isi AntarVoucher" text="Fitur saldo belum tersedia di aplikasi versi Play Store. Pembayaran tunai dan pembayaran langsung per pesanan tetap bisa dipakai." />;
+  return <TopUpScreen />;
+}

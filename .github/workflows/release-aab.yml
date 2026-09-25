@@ -30,6 +30,11 @@ on:
         description: Catatan rilis / track (hanya untuk catatan di GitHub Release, mis. "internal testing batch 3")
         type: string
         default: ''
+      dompet:
+        description: 'Fitur saldo/AntarVoucher di AAB. "off" WAJIB selama akun Play masih perorangan (penolakan Financial features 19 Sep 2026).'
+        type: choice
+        options: ['off', 'on']
+        default: 'off'
   push:
     tags: ['v*']
 
@@ -73,6 +78,10 @@ jobs:
       EXPO_PUBLIC_APK_URL: https://github.com/${{ github.repository }}/releases/latest
       # Tautan "Bagikan perjalanan" & halaman hukum: tanpa ini Safety.tsx memakai fallback dan bisa menunjuk path lama.
       EXPO_PUBLIC_SITE_URL: https://apps.antarkitaindonesia.com
+      # Build Play tanpa dompet (src/lib/features.ts). Tag v* juga default off.
+      EXPO_PUBLIC_WALLET_UI: ${{ github.event.inputs.dompet || 'off' }}
+      EXPO_PUBLIC_BUILD_CHANNEL: production
+      EXPO_PUBLIC_BUILD_COMMIT: ${{ github.sha }}
       # Server TURN untuk panggilan suara di jaringan seluler (CGNAT). Kosong = panggilan hanya berhasil di Wi-Fi.
       # Isi dari GitHub Secrets; pakai kredensial berumur pendek/berkuota (Cloudflare Realtime TURN), bukan statis.
       EXPO_NO_TELEMETRY: 1

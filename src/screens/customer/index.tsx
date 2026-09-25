@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView, Image, RefreshControl } from 'react-native';
+import { WALLET_UI } from '@/lib/features';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -97,7 +98,7 @@ export default function CustomerHome() {
                 </PressableScale>
                 <Row gap={8}>
                   <CircleButton icon={unread > 0 ? 'notifications' : 'notifications-outline'} badge={unread} onPress={() => router.push('/inbox' as never)} />
-                  <CircleButton icon="wallet-outline" onPress={() => router.push('/(customer)/pay')} />
+                  {WALLET_UI && <CircleButton icon="wallet-outline" onPress={() => router.push('/(customer)/pay')} />}
                 </Row>
               </Row>
             </Entrance>

@@ -1,3 +1,4 @@
+import { WALLET_UI } from '@/lib/features';
 // Pengaturan publik aplikasi (layanan aktif, batas jarak, impor peta, batas AntarSend, ambang permohonan maaf)
 //
 // Segarnya data penting: sakelar on/off layanan di panel admin harus terasa langsung di aplikasi
@@ -150,7 +151,7 @@ export const ANTARVOUCHER_OFF_TEXT = 'AntarVoucher sementara nonaktif — top up
  */
 export function useAntarVoucher() {
   const { settings, loading, reload } = useAppSettings();
-  const enabled = settings?.antarpay_enabled === true;
+  const enabled = WALLET_UI && settings?.antarpay_enabled === true;   // build Play tanpa dompet → selalu false
   return { enabled, loaded: settings !== null, loading, reload };
 }
 
@@ -166,7 +167,7 @@ export const CHANNELS_OFF_TEXT = 'Saat ini hanya pembayaran tunai yang dibuka ad
  */
 export function usePaymentChannels() {
   const { settings, loading, reload } = useAppSettings();
-  const antarpayOn = settings?.antarpay_enabled === true;
+  const antarpayOn = WALLET_UI && settings?.antarpay_enabled === true;
   const channels = settings?.payment_channels ?? DEFAULT_PAYMENT_CHANNELS;
   // Rail saldo: di server SETIAP paid_via selain 'cash' diselesaikan dari saldo AntarVoucher
   // (create_order menyetel v_pay = 'wallet'), jadi saluran 'antarpay' adalah induk teknis

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text } from 'react-native';
+import { WALLET_UI } from '@/lib/features';
+import { FeatureUnavailable } from '@/components/FeatureUnavailable';
 import { useRouter } from 'expo-router';
 import { Screen, Card, Input, Button, toast } from '@/components/ui';
 import { Entrance } from '@/components/motion';
@@ -10,7 +12,7 @@ import { rpc } from '@/lib/supabase';
 import { font } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
 
-export default function Withdraw() {
+function WithdrawScreen() {
   const router = useRouter();
   const { wallet, refreshWallet } = useAuth();
   const [f, setF] = useState({ amount: '', bank: '', account: '', name: '' });
@@ -53,4 +55,10 @@ export default function Withdraw() {
       </View>
     </Screen>
   );
+}
+
+/** Build Google Play tanpa dompet (EXPO_PUBLIC_WALLET_UI=off) → rute ini diganti layar informasi. */
+export default function Withdraw() {
+  if (!WALLET_UI) return <FeatureUnavailable title="Tarik Saldo" text="Fitur saldo belum tersedia di aplikasi versi Play Store. Pembayaran tunai dan pembayaran langsung per pesanan tetap bisa dipakai." />;
+  return <WithdrawScreen />;
 }

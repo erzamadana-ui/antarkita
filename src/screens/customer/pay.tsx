@@ -11,6 +11,7 @@ import { useT } from '@/lib/i18n';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { font } from '@/lib/theme';
+import { WALLET_UI } from '@/lib/features';
 
 type Tab = 'methods' | 'wallet';
 
@@ -18,7 +19,7 @@ export default function CustomerPay() {
   const [tab, setTab] = useState<Tab>('methods');
   const t = useT();
   const router = useRouter();
-  const tabs: { key: Tab; label: string }[] = [{ key: 'methods', label: 'Metode' }, { key: 'wallet', label: 'Saldo' }];
+  const tabs: { key: Tab; label: string }[] = WALLET_UI ? [{ key: 'methods', label: 'Metode' }, { key: 'wallet', label: 'Saldo' }] : [{ key: 'methods', label: 'Metode' }];
   const pills = (
     <View style={s.inner}>
       <Row gap={8} style={{ paddingBottom: 12 }}>
