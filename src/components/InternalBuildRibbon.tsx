@@ -11,13 +11,19 @@ export function InternalBuildRibbon() {
   const insets = useSafeAreaInsets();
   if (BUILD_CHANNEL !== 'internal') return null;
   return (
-    <View pointerEvents="none" style={[s.wrap, { top: Math.max(insets.top - 14, 0) }]}>
-      <Text style={s.text} numberOfLines={1}>INTERNAL TESTING — BUKAN VERSI PRODUKSI{BUILD_COMMIT ? ` · ${BUILD_COMMIT.slice(0, 7)}` : ''}</Text>
+    // Bingkai selebar layar (left/right 8) + pita di tengahnya: pita tidak pernah melebar melewati tepi layar.
+    // Dulu pita absolut tanpa left/right melebar sesuai teks — di 320 px dengan skala font besar kedua ujungnya
+    // terpotong ("TERNAL TESTING … 473589") sehingga hash commit hilang. Kini teks boleh 2 baris.
+    <View pointerEvents="none" style={[s.frame, { top: Math.max(insets.top - 14, 0) }]}>
+      <View style={s.wrap}>
+        <Text style={s.text} numberOfLines={2}>INTERNAL TESTING — BUKAN VERSI PRODUKSI{BUILD_COMMIT ? ` · ${BUILD_COMMIT.slice(0, 7)}` : ''}</Text>
+      </View>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  wrap: { position: 'absolute', alignSelf: 'center', backgroundColor: 'rgba(185,28,28,0.88)', paddingHorizontal: 8, paddingVertical: 1, borderRadius: 6, zIndex: 9999 },
-  text: { color: '#fff', fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
+  frame: { position: 'absolute', left: 8, right: 8, alignItems: 'center', zIndex: 9999 },
+  wrap: { maxWidth: '100%', backgroundColor: 'rgba(185,28,28,0.88)', paddingHorizontal: 8, paddingVertical: 1, borderRadius: 6 },
+  text: { color: '#fff', fontSize: 10, fontWeight: '700', letterSpacing: 0.3, textAlign: 'center' },
 });

@@ -121,13 +121,17 @@ export function WalletView({ allowWithdraw, bottomSpace = 40, header }: { allowW
               <Animated.View key={t.id} layout={LinearTransition}>
                 <Row gap={12} style={{ padding: 14, borderTopWidth: i ? 1 : 0, borderTopColor: 'rgba(11,31,42,0.07)' }}>
                   <IconCircle name={m.icon as never} color={m.color} size={38} />
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={{ fontWeight: '600', color: colors.text }} numberOfLines={1}>{t.note ?? m.label}</Text>
-                    <Text style={font.tiny}>{formatDate(t.created_at)}</Text>
-                  </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={{ fontWeight: '700', color: t.amount >= 0 ? colors.success : colors.text }}>{t.amount >= 0 ? '+' : '-'}{rupiah(Math.abs(t.amount))}</Text>
-                    <Text style={font.tiny}>Saldo {rupiah(t.balance_after)}</Text>
+                  {/* Dua baris lebar penuh (keterangan ↔ nominal, tanggal ↔ saldo). Dulu kolom kanan "Saldo Rp…" memakan
+                      lebar sehingga di 320 px keterangan terpotong jadi "AntarVouche…" dan tanggal patah 2 baris. */}
+                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                    <Row between style={{ gap: 8, alignItems: 'flex-start' }}>
+                      <Text style={{ fontWeight: '600', color: colors.text, flexShrink: 1 }} numberOfLines={2}>{t.note ?? m.label}</Text>
+                      <Text style={{ fontWeight: '700', color: t.amount >= 0 ? colors.success : colors.text, flexShrink: 0 }}>{t.amount >= 0 ? '+' : '-'}{rupiah(Math.abs(t.amount))}</Text>
+                    </Row>
+                    <Row between style={{ columnGap: 8, rowGap: 0, flexWrap: 'wrap' }}>
+                      <Text style={font.tiny}>{formatDate(t.created_at)}</Text>
+                      <Text style={font.tiny}>Saldo {rupiah(t.balance_after)}</Text>
+                    </Row>
                   </View>
                 </Row>
               </Animated.View>

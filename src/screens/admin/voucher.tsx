@@ -251,22 +251,25 @@ function QueueTab({ q, loading, reload }: { q: Queue | null; loading: boolean; r
 
   return (
     <>
-      <Toolbar right={<Text style={font.tiny}>{rows.length} dari {purchases.length} pembelian · maks 200 terbaru</Text>}>
+      {/* Hitungan dipindah ke judul panel: sebagai `right` Toolbar ia menjepit FilterBar di layar ponsel (390 px → hanya "Menunggu d…" terlihat). */}
+      <Toolbar>
         <FilterBar options={P_FILTERS.map(({ key, label }) => ({ key, label }))} value={filter} onChange={setFilter} />
       </Toolbar>
 
-      <Panel title={`Pembelian voucher (${rows.length})`} subtitle="Klik baris untuk detail. Terbitkan hanya setelah mutasi bank tercocok; nominal yang terbit = dana yang benar-benar diterima (termasuk kode unik)." icon="ticket-outline" padded={false}>
+      <Panel title={`Pembelian voucher (${rows.length} dari ${purchases.length})`} subtitle="Maks 200 terbaru. Klik baris untuk detail. Terbitkan hanya setelah mutasi bank tercocok; nominal yang terbit = dana yang benar-benar diterima (termasuk kode unik)." icon="ticket-outline" padded={false}>
         <DataTable rows={pg.rows as unknown as Record<string, unknown>[]} emptyText={loading ? 'Memuat…' : 'Tidak ada pembelian pada filter ini'} emptyIcon="ticket-outline"
           onRowPress={(r) => setDetail(r as unknown as Purchase)}
           columns={[
-            // Lebar total ±1.070 px → muat di layar 1366 tanpa kolom Aksi terpotong.
-            { key: 'reference', label: 'Referensi', width: 132, render: (r) => { const x = r as unknown as Purchase; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.bodyStrong} title={x.reference}>{x.reference}</Trunc><Text style={font.tiny}>{fmtAgo(x.created_at)}</Text></View>; } },
-            { key: 'user_name', label: 'Pelanggan · bank', width: 150, flex: 1, render: (r) => { const x = r as unknown as Purchase; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.body} title={x.user_name ?? ''}>{x.user_name ?? shortId(x.user_id)}</Trunc><Trunc style={font.tiny} title={x.bank_name ?? ''}>{x.bank_name ?? '—'}{x.sender_name ? ` · pengirim ${x.sender_name}` : ''}</Trunc></View>; } },
-            { key: 'nominal', label: 'Nominal · kode', width: 116, align: 'right', mono: true, render: (r) => { const x = r as unknown as Purchase; return <View style={{ alignItems: 'flex-end' }}><Text style={font.mono}>{rupiah(x.nominal)}</Text><Text style={font.tiny}>kode unik {String(x.unique_code).padStart(3, '0')}</Text></View>; } },
-            moneyCol('transfer_amount', 'Transfer', 110),
-            { key: 'received_amount', label: 'Diterima', width: 110, align: 'right', mono: true, render: (r) => { const x = r as unknown as Purchase; const bad = x.received_amount != null && Number(x.received_amount) !== Number(x.transfer_amount); return x.received_amount == null ? <Text style={font.tiny}>belum ada mutasi</Text> : <Text style={[font.mono, bad && { color: adminTone.red }]}>{rupiah(Number(x.received_amount))}</Text>; } },
-            { key: 'status', label: 'Status', width: 140, render: (r) => { const x = r as unknown as Purchase; const st = P_STATUS[x.status] ?? { label: x.status, tone: 'neutral' as ToneKey }; return <View style={{ gap: 3, minWidth: 0, alignSelf: 'stretch' }}><Pill text={st.label} tone={st.tone} />{x.reason ? <Trunc style={font.tiny} title={x.reason}>{x.reason}</Trunc> : null}</View>; } },
-            { key: 'expires_at', label: 'Kedaluwarsa', width: 110, render: (r) => { const x = r as unknown as Purchase; return <View><Text style={[font.small, expiredSoon(x) && { color: adminTone.red }]}>{fmtDate(x.expires_at)}</Text></View>; } },
+            // Lebar total ±880 px. Diukur (audit UI 25/09): area konten di 1366 px (sidebar terbuka) hanya ±1.070 px, dan
+            // susunan lama 8 kolom (±1.170 px) membuat kolom Kedaluwarsa terpotong & kolom Aksi ("Terbitkan") di luar layar
+            // tanpa petunjuk geser. Transfer + Diterima digabung; Kedaluwarsa pindah ke bawah status.
+            // Kolom pelanggan SENGAJA lebar tetap (bukan flex): di ScrollView horizontal, kolom flex melebar selebar nama
+            // terpanjang (max-content) sehingga tabel kembali melampaui layar.
+            { key: 'reference', label: 'Referensi', width: 144, render: (r) => { const x = r as unknown as Purchase; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.bodyStrong} title={x.reference}>{x.reference}</Trunc><Text style={font.tiny}>{fmtAgo(x.created_at)}</Text></View>; } },
+            { key: 'user_name', label: 'Pelanggan · bank', width: 220, render: (r) => { const x = r as unknown as Purchase; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.body} title={x.user_name ?? ''}>{x.user_name ?? shortId(x.user_id)}</Trunc><Trunc style={font.tiny} title={x.bank_name ?? ''}>{x.bank_name ?? '—'}{x.sender_name ? ` · pengirim ${x.sender_name}` : ''}</Trunc></View>; } },
+            { key: 'nominal', label: 'Nominal', width: 116, align: 'right', mono: true, render: (r) => { const x = r as unknown as Purchase; return <View style={{ alignItems: 'flex-end' }}><Text style={font.mono}>{rupiah(x.nominal)}</Text><Text style={font.tiny}>kode unik {String(x.unique_code).padStart(3, '0')}</Text></View>; } },
+            { key: 'transfer_amount', label: 'Transfer', width: 132, align: 'right', mono: true, render: (r) => { const x = r as unknown as Purchase; const bad = x.received_amount != null && Number(x.received_amount) !== Number(x.transfer_amount); return <View style={{ alignItems: 'flex-end' }}><Text style={font.mono}>{rupiah(Number(x.transfer_amount))}</Text>{x.received_amount == null ? <Text style={font.tiny}>belum ada mutasi</Text> : <Text style={[font.tiny, { color: bad ? adminTone.red : adminTone.ink2 }]}>diterima {rupiah(Number(x.received_amount))}</Text>}</View>; } },
+            { key: 'status', label: 'Status · batas', width: 160, render: (r) => { const x = r as unknown as Purchase; const st = P_STATUS[x.status] ?? { label: x.status, tone: 'neutral' as ToneKey }; return <View style={{ gap: 3, minWidth: 0, alignSelf: 'stretch' }}><Pill text={st.label} tone={st.tone} />{x.reason ? <Trunc style={font.tiny} title={x.reason}>{x.reason}</Trunc> : null}<Text style={[font.tiny, expiredSoon(x) && { color: adminTone.red }]}>s.d. {fmtDate(x.expires_at)}</Text></View>; } },
             { key: 'actions', label: 'Aksi', width: adminTable.actionsWideW, align: 'right', render: (r) => {
               const x = r as unknown as Purchase;
               const isMatcher = !!me && x.matched_by === me;
@@ -543,15 +546,15 @@ function MutationsTab({ q, banks, loading, reload }: { q: Queue | null; banks: B
         </Panel>
       </RequirePerm>
 
-      <Toolbar right={<Text style={font.tiny}>{rows.length} dari {mutations.length} mutasi · maks 200 terbaru</Text>}>
+      <Toolbar>
         <FilterBar options={M_FILTERS} value={filter} onChange={setFilter} />
       </Toolbar>
 
-      <Panel title={`Mutasi bank (${rows.length})`} subtitle="Mutasi tanpa pembelian yang cocok (transfer ganda / salah nominal / tidak dikenal) wajib dikembalikan ke pengirim — bukan dijadikan saldo." icon="swap-vertical-outline" iconColor={adminTone.blue} padded={false}>
+      <Panel title={`Mutasi bank (${rows.length} dari ${mutations.length})`} subtitle="Maks 200 terbaru. Mutasi tanpa pembelian yang cocok (transfer ganda / salah nominal / tidak dikenal) wajib dikembalikan ke pengirim — bukan dijadikan saldo." icon="swap-vertical-outline" iconColor={adminTone.blue} padded={false}>
         <DataTable rows={pg.rows as unknown as Record<string, unknown>[]} emptyText={loading ? 'Memuat…' : 'Tidak ada mutasi pada filter ini'} emptyIcon="swap-vertical-outline"
           columns={[
             { key: 'trx_at', label: 'Waktu transaksi', width: 130, render: (r) => { const x = r as unknown as Mutation; return <View><Text style={font.small}>{fmtDate(x.trx_at)}</Text><Text style={font.tiny}>dicatat {fmtAgo(x.created_at)}</Text></View>; } },
-            { key: 'bank_ref', label: 'Rekening · referensi', width: 190, flex: 1, render: (r) => { const x = r as unknown as Mutation; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.bodyStrong} title={x.bank_ref}>{x.bank_ref}</Trunc><Trunc style={font.tiny} title={x.bank_name ?? ''}>{x.bank_name ?? '—'}</Trunc></View>; } },
+            { key: 'bank_ref', label: 'Rekening · referensi', width: 200, render: (r) => { const x = r as unknown as Mutation; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.bodyStrong} title={x.bank_ref}>{x.bank_ref}</Trunc><Trunc style={font.tiny} title={x.bank_name ?? ''}>{x.bank_name ?? '—'}</Trunc></View>; } },
             moneyCol('amount', 'Nominal', 116),
             { key: 'sender_name', label: 'Pengirim · catatan', width: 170, render: (r) => { const x = r as unknown as Mutation; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.body} title={x.sender_name ?? ''}>{x.sender_name ?? '—'}</Trunc>{x.raw_note ? <Trunc style={font.tiny} title={x.raw_note}>{x.raw_note}</Trunc> : null}</View>; } },
             { key: 'status', label: 'Status · pembelian', width: 190, render: (r) => {

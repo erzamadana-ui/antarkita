@@ -7,7 +7,7 @@ import { colors } from '@/lib/theme';
 const TabBar = makeGlassTabBar({
   index: { label: 'Beranda', tk: 'home', icon: 'home-outline', iconActive: 'home' },
   orders: { label: 'Pesanan', tk: 'orders', icon: 'receipt-outline', iconActive: 'receipt' },
-  pay: { label: 'AntarVoucher', icon: 'card-outline', iconActive: 'card' },
+  pay: { label: 'Voucher', icon: 'card-outline', iconActive: 'card' },
   account: { label: 'Akun', tk: 'account', icon: 'person-outline', iconActive: 'person' },
 }, colors.primary, { icon: 'paper-plane', href: '/ride?service=ride_motor', accessibilityLabel: 'Pesan AntarRide' });
 

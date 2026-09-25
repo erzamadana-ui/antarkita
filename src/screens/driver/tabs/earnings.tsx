@@ -51,7 +51,7 @@ export default function DriverEarnings() {
       ) : null}
       {/* Statistik 2 kolom */}
       <Entrance index={1}>
-        <Row gap={12}>
+        <Row gap={12} style={{ flexWrap: 'wrap' }}>
           <View style={s.stat}>
             <View style={s.statIcon}><Ionicons name="calendar-outline" size={20} color={colors.primary} /></View>
             <AnimatedNumber value={sum?.week ?? 0} format={rupiah} style={[font.h3, { marginTop: 10, color: colors.primary }]} />
@@ -135,7 +135,7 @@ const s = StyleSheet.create({
   hero: { borderRadius: radius.lg, padding: 18, backgroundColor: colors.primary, ...shadow.glow(colors.primary) },
   heroIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
   lbl: { color: 'rgba(255,255,255,0.88)', fontSize: 12, fontWeight: '600' },
-  stat: { flex: 1, padding: 14, borderRadius: radius.lg, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
+  stat: { flexGrow: 1, flexBasis: 150, minWidth: 150, flexShrink: 1, padding: 14, borderRadius: radius.lg, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   statIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.tint, alignItems: 'center', justifyContent: 'center' },
   note: { padding: 12, borderRadius: radius.md, backgroundColor: colors.tint, alignItems: 'flex-start' },
   err: { padding: 10, borderRadius: radius.md, backgroundColor: colors.warning + '14', alignItems: 'center' },

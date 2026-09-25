@@ -153,7 +153,7 @@ function NotOpenCard({ antarVoucherOn, onGateway }: { antarVoucherOn: boolean; o
           <Text style={[font.tiny, { flex: 1, color: colors.textSecondary }]}>Jangan transfer ke rekening mana pun yang dikirim lewat chat, telepon, atau media sosial. Rekening resmi hanya akan tampil di aplikasi ini.</Text>
         </Row>
         {antarVoucherOn ? (
-          <Button title="Top up instan sekarang" icon="flash" onPress={onGateway} />
+          <Button title="Top up instan" icon="flash" onPress={onGateway} />
         ) : (
           <Text style={[font.tiny, { color: colors.textSecondary }]}>AntarVoucher sedang nonaktif. Saldo yang sudah ada tetap aman dan tersimpan.</Text>
         )}
@@ -262,7 +262,7 @@ function PurchaseForm({ status, banks, banksErr, onRetryBanks, onCreated }: {
                     style={[s.bank, on && { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}>
                     <View style={[s.bankLogo, on && { backgroundColor: colors.primary }]}><Ionicons name="business" size={18} color={on ? '#fff' : colors.primary} /></View>
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={{ fontWeight: '700', color: colors.text, fontSize: 16 }} numberOfLines={1}>{b.bank_name}</Text>
+                      <Text style={{ fontWeight: '700', color: colors.text, fontSize: 16 }} numberOfLines={2}>{b.bank_name}</Text>
                       <Text style={font.tiny} numberOfLines={2}>a.n. {b.account_name}</Text>
                     </View>
                     <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={20} color={on ? colors.primary : colors.textMuted} />
@@ -310,11 +310,10 @@ function PurchaseRow({ p, onPress }: { p: VoucherPurchase; onPress: () => void }
       <Row gap={12} style={{ alignItems: 'flex-start' }}>
         <View style={[s.rowIcon, { backgroundColor: color + '1A' }]}><Ionicons name={(meta?.icon ?? 'receipt-outline') as never} size={20} color={color} /></View>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Row between style={{ gap: 8, alignItems: 'flex-start' }}>
-            <Text style={{ fontWeight: '700', color: colors.text, fontSize: 16, flexShrink: 1 }} numberOfLines={1}>Voucher {rupiah(p.nominal)}</Text>
-            <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>{rupiah(p.transfer_amount)}</Text>
-          </Row>
-          <Text style={font.tiny} numberOfLines={1}>{p.reference}{p.bank_name ? ` · ${p.bank_name}` : ''}</Text>
+          {/* Nominal & jumlah transfer bertumpuk (bukan satu baris): di 320 px / skala font 130 % judul dulu terpotong jadi "Voucher …". */}
+          <Text style={{ fontWeight: '700', color: colors.text, fontSize: 16 }} numberOfLines={2}>Voucher {rupiah(p.nominal)}</Text>
+          <Text style={[font.small, { color: colors.text }]}>Transfer <Text style={{ fontWeight: '700' }}>{rupiah(p.transfer_amount)}</Text></Text>
+          <Text style={font.tiny} numberOfLines={2}>{p.reference}{p.bank_name ? ` · ${p.bank_name}` : ''}</Text>
           {p.created_at ? <Text style={font.tiny} numberOfLines={1}>{formatDate(p.created_at)}</Text> : null}
           <View style={{ flexDirection: 'row', marginTop: 4 }}><Badge text={voucherStatusLabel(p.status)} color={color} /></View>
         </View>
@@ -374,11 +373,12 @@ function PurchaseDetail({ p, onChange, onClose, onReload }: { p: VoucherPurchase
             {live && !expiredLocally ? (
               <View style={s.countdown}>
                 <Ionicons name="time-outline" size={20} color={left < 3600000 ? colors.danger : colors.warning} />
+                {/* Satu kolom (label → sisa waktu → batas): tiga kolom sejajar dulu menjepit sisa waktu jadi per kata di 320 px. */}
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={font.tiny}>Sisa waktu transfer</Text>
                   <Text style={{ fontSize: 18, fontWeight: '700', color: left < 3600000 ? colors.danger : colors.text }} accessibilityLiveRegion="polite">{formatCountdown(left)}</Text>
+                  <Text style={font.tiny}>s.d. {formatDate(p.expires_at)}</Text>
                 </View>
-                <Text style={[font.tiny, { flexShrink: 1, textAlign: 'right' }]}>s.d. {formatDate(p.expires_at)}</Text>
               </View>
             ) : null}
             {p.status === 'issued' && p.issued_amount ? <Text style={[font.small, { color: colors.success, fontWeight: '700' }]}>+{rupiah(p.issued_amount)} masuk ke saldo AntarVoucher</Text> : null}
@@ -499,8 +499,10 @@ function CopyField({ label, value, what, big }: { label: string; value: string; 
     <View style={{ gap: 6 }}>
       <Text style={font.label}>{label}</Text>
       <PressableScale onPress={() => copy(value, what)} scaleTo={0.98} haptic={false} accessibilityRole="button" accessibilityLabel={`Salin ${what.toLowerCase()} ${value}`} style={s.copyBox}>
-        <Text style={[{ flex: 1, minWidth: 0, color: colors.text, fontWeight: '700', letterSpacing: 0.5 }, { fontSize: big ? 20 : 16 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} selectable>{value}</Text>
-        <Row gap={4}><Ionicons name="copy-outline" size={20} color={colors.primary} /><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>Salin</Text></Row>
+        {/* Tanpa numberOfLines: nomor rekening/kode referensi TIDAK boleh terpotong "…". Bila tidak muat (rekening 15 digit,
+            skala font besar), tombol "Salin" turun ke baris berikutnya (copyBox flexWrap). */}
+        <Text style={[{ flexGrow: 1, flexShrink: 0, maxWidth: '100%', color: colors.text, fontWeight: '700', letterSpacing: 0.5 }, { fontSize: big ? 20 : 16 }]} selectable>{value}</Text>
+        <Row gap={4} style={{ marginLeft: 'auto' }}><Ionicons name="copy-outline" size={20} color={colors.primary} /><Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>Salin</Text></Row>
       </PressableScale>
     </View>
   );
@@ -516,8 +518,8 @@ const s = StyleSheet.create({
   notice: { gap: 10, padding: 12, borderRadius: radius.md, backgroundColor: colors.infoLight, borderWidth: 1, borderColor: colors.info + '33' },
   item: { padding: 12, borderRadius: radius.lg, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border },
   rowIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  countdown: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, padding: 12, borderRadius: radius.md, backgroundColor: colors.accentLight },
-  copyBox: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.sm, backgroundColor: colors.primaryLight },
+  countdown: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: radius.md, backgroundColor: colors.accentLight },
+  copyBox: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, minHeight: 52, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.sm, backgroundColor: colors.primaryLight },
   amountBox: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 60, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.sm, backgroundColor: colors.primaryLight, borderWidth: 1.5, borderColor: colors.primary + '44' },
   amount: { flex: 1, minWidth: 0, fontSize: 28, fontWeight: '700', color: colors.text, letterSpacing: 0.3 },
   amountTail: { color: colors.danger, backgroundColor: colors.accentLight, textDecorationLine: 'underline' },
