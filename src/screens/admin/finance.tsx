@@ -53,7 +53,16 @@ export default function AdminFinance() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const reviewTopup = async (id: string, ok: boolean) => { try { await rpc('admin_review_topup', { p_id: id, p_approve: ok, p_note: ok ? 'Transfer diverifikasi' : 'Bukti tidak valid' }); toast.success(ok ? 'Top up disetujui, saldo ditambahkan' : 'Top up ditolak'); load(); } catch (e) { toast.error((e as Error).message); } };
+  // 0112 AntarVoucher: persetujuan top up lama berbasis bukti/screenshot DIBLOKIR server (TOPUP_REQUIRE_BANK_MATCH).
+  // Top up lama dipindahkan ke antrean AntarVoucher → saldo terbit hanya setelah mutasi bank tercocok + disetujui admin lain.
+  const convertTopup = async (id: string) => {
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    try { const v = await rpc<{ reference?: string }>('admin_topup_convert_to_voucher', { p_topup: id }); toast.success(`Dipindahkan ke AntarVoucher${v?.reference ? ` (${v.reference})` : ''} — saldo terbit setelah mutasi bank cocok`); load(); } catch (e) { handleAdminError(e); }
+  };
+  const rejectTopup = async (id: string) => {
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    try { await rpc('admin_review_topup', { p_id: id, p_approve: false, p_note: 'Bukti tidak valid' }); toast.success('Top up ditolak'); load(); } catch (e) { handleAdminError(e); }
+  };
   const reviewWd = async (id: string, ok: boolean) => {
     if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
     try { await rpc('admin_review_withdrawal', { p_id: id, p_approve: ok, p_note: ok ? 'Dana sudah ditransfer' : 'Data rekening tidak valid' }); toast.success(ok ? 'Penarikan disetujui (pastikan dana sudah ditransfer) · rekening ditandai terverifikasi' : 'Penarikan ditolak, saldo dikembalikan'); load(); } catch (e) { handleAdminError(e); }
@@ -115,14 +124,14 @@ export default function AdminFinance() {
   const status = (s: string) => <Pill text={sl[s] ?? s} tone={statusTone(s)} />;
 
   return (
-    <AdminPage title="Keuangan" subtitle="Verifikasi top up & penarikan saldo · persetujuan penarikan butuh PIN panel" onRefresh={load}
+    <AdminPage title="Keuangan" subtitle="Top up lama (AntarVoucher) & penarikan saldo · semua persetujuan butuh PIN panel" onRefresh={load}
       right={<Row gap={8}>
         <Button size="sm" variant="outline" title="Lihat laporan lengkap" icon="document-text-outline" onPress={() => router.push('/(admin)/finance-report' as never)} />
         {Platform.OS === 'web' ? <Button size="sm" title="Ekspor CSV" icon="download-outline" variant="secondary" onPress={exportCsv} /> : null}
       </Row>}>
 
       <Row gap={adminSpace.md} style={{ flexWrap: 'wrap' }}>
-        <StatCard index={0} icon="arrow-down-circle-outline" color={adminTone.blue} label="Top up menunggu" value={rupiah(kpi.topupPending)} hint={`${kpi.topupPendingN} permintaan perlu diverifikasi`} />
+        <StatCard index={0} icon="arrow-down-circle-outline" color={adminTone.blue} label="Top up lama (AntarVoucher) menunggu" value={rupiah(kpi.topupPending)} hint={`${kpi.topupPendingN} permintaan · pindahkan ke AntarVoucher`} />
         <StatCard index={1} icon="arrow-up-circle-outline" color={adminTone.amber} label="Penarikan menunggu" value={rupiah(kpi.wdPending)} hint={`${kpi.wdPendingN} permintaan · butuh PIN panel`} />
         <StatCard index={2} icon="shield-checkmark-outline" color={kpi.unverified > 0 ? adminTone.red : adminTone.green} label="Rekening belum terverifikasi" value={kpi.unverified} hint="pada permintaan penarikan yang menunggu" />
         <StatCard index={3} icon="swap-vertical-outline" color={adminTone.teal} label="Arus kas dompet (disetujui)" value={rupiah(kpi.approvedNet)} hint="top up disetujui − penarikan disetujui" />
@@ -132,7 +141,7 @@ export default function AdminFinance() {
         <FilterBar value={filter} onChange={setFilter} options={[{ key: 'pending', label: 'Menunggu' }, { key: 'payout', label: 'Disetujui · dana belum sampai' }, { key: 'approved', label: 'Disetujui' }, { key: 'rejected', label: 'Ditolak' }, { key: 'all', label: 'Semua' }]} />
       </Toolbar>
 
-      <Panel title={`Top up (${shownTopups.length})`} subtitle="Saldo ditambahkan setelah bukti transfer diverifikasi" icon="arrow-down-circle-outline" iconColor={adminTone.blue} padded={false}>
+      <Panel title={`Top up lama (AntarVoucher) (${shownTopups.length})`} subtitle="Bukti/screenshot tidak menambah saldo — pindahkan ke AntarVoucher; saldo terbit setelah mutasi bank tercocok & disetujui admin lain" icon="arrow-down-circle-outline" iconColor={adminTone.blue} padded={false}>
         <DataTable rows={pgT.rows as unknown as Record<string, unknown>[]} emptyText="Tidak ada permintaan top up pada filter ini" emptyIcon="arrow-down-circle-outline"
           columns={[
             { key: 'user', label: 'Pengguna', width: 196, render: (r) => user(r as unknown as T) },
@@ -153,21 +162,21 @@ export default function AdminFinance() {
             { key: 'created_at', label: 'Waktu', width: 134, render: (r) => when(String(r.created_at)) },
             { key: 'status', label: 'Status', width: 102, render: (r) => status(String(r.status)) },
             {
-              // Aksi utama = Setujui; penolakan (berbahaya) ada di menu kebab.
-              key: 'actions', label: 'Aksi', width: adminTable.actionsWideW, align: 'right', render: (r) => r.status === 'pending'
+              // Aksi utama = pindahkan ke AntarVoucher (0112); penolakan (berbahaya) ada di menu kebab.
+              key: 'actions', label: 'Aksi', width: 244, align: 'right', render: (r) => r.status === 'pending'
                 ? (
                   <RowActions
-                    primary={[{ key: 'ok', label: 'Setujui', icon: 'checkmark', variant: 'solid' as const, color: colors.success, onPress: () => reviewTopup(String(r.id), true) }]}
+                    primary={[{ key: 'cv', label: 'Pindahkan ke AntarVoucher', icon: 'ticket-outline', variant: 'solid' as const, color: adminTone.teal, onPress: () => convertTopup(String(r.id)) }]}
                     menu={[
                       { key: 'proof', label: 'Lihat bukti transfer', icon: 'image-outline', disabled: !r.proof_url, onPress: () => openProof(String(r.proof_url ?? '')) },
-                      { key: 'no', label: 'Tolak top up…', icon: 'close-circle-outline', danger: true, onPress: () => reviewTopup(String(r.id), false) },
+                      { key: 'no', label: 'Tolak top up…', icon: 'close-circle-outline', danger: true, onPress: () => rejectTopup(String(r.id)) },
                     ]}
                   />
                 )
                 : <Trunc style={font.tiny} title={String(r.review_note ?? '')}>{String(r.review_note ?? '—')}</Trunc>,
             },
           ]} />
-        <View style={{ padding: adminSpace.md, gap: 6 }}><WideTableHint /><Pager p={pgT} noun="permintaan top up" /></View>
+        <View style={{ padding: adminSpace.md, gap: 6 }}><WideTableHint /><Pager p={pgT} noun="top up lama" /></View>
       </Panel>
 
       <Panel title={`Penarikan saldo (${shownWds.length})`} subtitle={`Setujui dulu (PIN), lalu cairkan: ${disbProvider === 'finpay' ? 'Finpay disbursement aktif (pay-disburse)' : 'mode manual — transfer bank lalu isi nomor referensi'}. Disetujui ≠ dana sampai.`} icon="arrow-up-circle-outline" iconColor={adminTone.amber} padded={false}>
@@ -264,7 +273,7 @@ export default function AdminFinance() {
         </Row>
       </AdminDialog>
 
-      <Text style={font.tiny}>Halaman ini hanya menangani arus kas dompet (top up & penarikan). Untuk GMV, pendapatan, bagi hasil mitra, dan marjin per layanan/kota, buka <Text style={[font.tiny, { color: adminTone.teal, fontWeight: '700' }]} onPress={() => router.push('/(admin)/finance-report' as never)}>Laporan Keuangan</Text>.</Text>
+      <Text style={font.tiny}>Halaman ini hanya menangani arus kas dompet (top up lama (AntarVoucher) & penarikan). Pembelian voucher baru & pencocokan mutasi bank ada di <Text style={[font.tiny, { color: adminTone.teal, fontWeight: '700' }]} onPress={() => router.push('/(admin)/voucher' as never)}>AntarVoucher</Text>. Untuk GMV, pendapatan, bagi hasil mitra, dan marjin per layanan/kota, buka <Text style={[font.tiny, { color: adminTone.teal, fontWeight: '700' }]} onPress={() => router.push('/(admin)/finance-report' as never)}>Laporan Keuangan</Text>.</Text>
     </AdminPage>
   );
 }

@@ -12,7 +12,7 @@
 
 **Pilihan: Midtrans Snap** — biaya setara pesaing, GoPay native (pasar Gojek), dokumentasi Indonesia, akun perorangan bisa aktif cepat, dan integrasinya sudah selesai di AntarKita (Edge Function + webhook + panel admin). Xendit disiapkan sebagai alternatif kedua bila suatu hari perlu (struktur `payments`/`payment_settle` tidak bergantung provider).
 
-Model pembayaran AntarKita: semua pesanan dibayar dari **saldo AntarPay** (wallet). Gateway dipakai untuk **top up** (atau "bayar kekurangan saldo" otomatis saat memesan). Ini menyederhanakan refund/selisih belanja (AntarMarket/AntarShop), tip, dan pembatalan — semuanya mutasi wallet di dalam sistem.
+Model pembayaran AntarKita: semua pesanan dibayar dari **saldo AntarVoucher** (wallet). Gateway dipakai untuk **top up** (atau "bayar kekurangan saldo" otomatis saat memesan). Ini menyederhanakan refund/selisih belanja (AntarMarket/AntarShop), tip, dan pembatalan — semuanya mutasi wallet di dalam sistem.
 
 ## Plug-and-play: 6 langkah agar transaksi asli aktif
 1. **Daftar Midtrans** di dashboard.midtrans.com (email bisnis, nomor HP aktif).
@@ -35,6 +35,6 @@ Model pembayaran AntarKita: semua pesanan dibayar dari **saldo AntarPay** (walle
 - Pengaturan publik (`gateway_public_config`): metode aktif, batas top up, client key, mode. Admin (`admin_gateway_status`/`admin_set_gateway`): status tersamar, statistik, 30 transaksi terakhir, uji koneksi.
 
 ## Yang belum otomatis
-- Refund ke rekening/e-wallet asal (saat ini refund = kembali ke saldo AntarPay). Refund keluar via dashboard Midtrans manual.
+- Refund ke rekening/e-wallet asal (saat ini refund = kembali ke saldo AntarVoucher). Refund keluar via dashboard Midtrans manual.
 - Pencairan (payout) ke driver/merchant masih lewat menu Tarik Saldo yang disetujui admin (transfer manual). Midtrans Payout/Iris bisa ditambahkan setelah volume cukup.
 - Kartu kredit memerlukan aktivasi terpisah (3DS) oleh Midtrans; e-money NFC (Flazz/e-Money) tidak didukung gateway online.

@@ -93,7 +93,7 @@ Ulangi C1–C3 untuk **AntarKita** (Pelanggan) dan **AntarKita Mitra**.
 ### C2. Internal testing (unggah AAB pertama)
 - [ ] **Testing → Internal testing → Create new release**.
 - [ ] Saat diminta: **Play App Signing → "Use Google-generated key"** (default) → lanjut. (Play membuat kunci produksi; AAB kita ditandatangani upload key.)
-- [ ] Unggah AAB, *Release name* otomatis, *Release notes* (id-ID): `Rilis awal AntarKita: AntarRide, AntarCar, AntarFood, AntarSend, AntarBox, AntarShop, AntarMarket, AntarTravel, AntarPay.`
+- [ ] Unggah AAB, *Release name* otomatis, *Release notes* (id-ID): `Rilis awal AntarKita: AntarRide, AntarCar, AntarFood, AntarSend, AntarBox, AntarShop, AntarMarket, AntarTravel, AntarVoucher.`
 - [ ] **Testers** → buat daftar email penguji (≥12 untuk akun baru) → simpan → **Review release → Start rollout to Internal testing**.
 - [ ] Bagikan tautan *"Copy link"* ke penguji; instal dan uji alur inti (daftar → pesan → bayar → selesai; mitra: online → terima → selesai; hapus akun dengan akun uji).
 - [ ] **Target API level — sudah diverifikasi, tidak perlu khawatir.** `targetSdkVersion = 36` (Android 16), dibaca dari katalog versi React Native 0.86 yang dipakai Expo SDK 57 (`node_modules/react-native/gradle/libs.versions.toml`), diverifikasi 9 Sep 2026 dari hasil `expo prebuild` yang sebenarnya. Sejak **31 Agustus 2026** Google mewajibkan **API 36** untuk aplikasi baru — syarat ini **terpenuhi**. Workflow AAB sekarang menggagalkan build bila nilainya turun di bawah 36.
@@ -194,7 +194,7 @@ supabase db push            # atau: supabase migration up
 # atau tempel isi supabase/migrations/0023_hapus_akun.sql di SQL Editor dashboard
 ```
 Setelah diterapkan, uji dengan akun dummy:
-1. Akun dengan saldo AntarPay > 0 → harus ditolak dengan pesan "Saldo AntarPay Anda masih Rp…".
+1. Akun dengan saldo AntarVoucher > 0 → harus ditolak dengan pesan "Saldo AntarVoucher Anda masih Rp…".
 2. Akun dengan pesanan aktif → ditolak "Masih ada N pesanan aktif".
 3. Akun bersih → sukses, otomatis keluar, login ulang gagal (banned), baris `profiles` berubah jadi "Pengguna Terhapus", muncul di `audit_logs` (`profile.deletion_requested`) dan `security_events` (`account.delete_request`).
 4. Admin: `select * from admin_list_deletion_requests();` → setelah 30 hari jalankan `select admin_finalize_account_deletion('<uuid>');` (bisa dijadwalkan lewat `pg_cron` bila ingin otomatis).

@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { rupiah, formatDate } from '@/lib/format';
 import { loadMyWithdrawals, payoutOf, payoutMeta, type MyWithdrawal } from '@/lib/mitra';
+import { fetchWalletStatement, type WalletStatement } from '@/lib/voucher';
 import type { WalletTx, TopupRequest } from '@/lib/types';
 
 const txMeta: Record<WalletTx['type'], { label: string; icon: string; color: string }> = {
@@ -84,15 +85,18 @@ export function WalletView({ allowWithdraw, bottomSpace = 40, header }: { allowW
 
       {pending.length > 0 && (
         <Entrance index={1}><Card style={{ marginTop: 16, backgroundColor: 'rgba(245,158,11,0.12)', borderColor: 'rgba(245,158,11,0.3)' }}>
-          <Row gap={8}><Ionicons name="time" size={16} color={colors.warning} /><Text style={{ fontWeight: '700', color: colors.warning }}>Menunggu verifikasi admin</Text></Row>
+          <Row gap={8}><Ionicons name="time" size={16} color={colors.warning} /><Text style={{ fontWeight: '700', color: colors.warning, flexShrink: 1 }}>Top up lama · menunggu verifikasi admin</Text></Row>
+          <Text style={[font.tiny, { marginTop: 4 }]}>Permintaan dari alur transfer manual sebelumnya. Untuk isi saldo baru, gunakan top up instan atau transfer ke rekening resmi.</Text>
           {pending.map((p) => (
             <Row key={p.id} between style={{ marginTop: 6 }}>
-              <Text style={font.small}>{'bank_name' in p ? 'Penarikan' : 'Top up'} · {formatDate(p.created_at)}</Text>
+              <Text style={[font.small, { flexShrink: 1 }]}>{'bank_name' in p ? 'Penarikan' : 'Top up lama'} · {formatDate(p.created_at)}</Text>
               <Text style={{ fontWeight: '700' }}>{rupiah(p.amount)}</Text>
             </Row>
           ))}
         </Card></Entrance>
       )}
+
+      {uid ? <ReconcileCard uid={uid} reloadKey={txs.length ? txs[0].id : ''} /> : null}
 
       {allowWithdraw && withdrawals.length > 0 && (
         <Entrance index={2}>
@@ -132,9 +136,83 @@ export function WalletView({ allowWithdraw, bottomSpace = 40, header }: { allowW
         </Card></Entrance>
       )}
       <View style={{ marginTop: 16 }}>
-        <Badge text="Top up manual via transfer bank, diverifikasi admin ≤ 1×24 jam" color={colors.textSecondary} />
+        <Badge text="Isi saldo lewat top up instan atau transfer ke rekening resmi PT Antar Kita Indonesia" color={colors.textSecondary} />
       </View>
     </ScrollView>
+  );
+}
+
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const signed = (n: number, sign: '+' | '−' | '±') => `${sign === '±' ? (n < 0 ? '−' : '+') : sign}${rupiah(Math.abs(n))}`;
+
+/**
+ * Rekonsiliasi saldo bulan berjalan (0112 `wallet_statement`): saldo awal + pembelian + pendapatan + refund masuk
+ * − penggunaan − refund keluar − payout ± koreksi = saldo akhir. Disembunyikan bila RPC belum ada (backend lama) / gagal.
+ */
+function ReconcileCard({ uid, reloadKey }: { uid: string; reloadKey: string }) {
+  const [st, setSt] = useState<WalletStatement | null>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const now = new Date();
+    fetchWalletStatement(uid, ymd(new Date(now.getFullYear(), now.getMonth(), 1)), ymd(now))
+      .then((r) => { if (alive) setSt(r && typeof r === 'object' && 'selisih' in r ? r : null); }, () => { if (alive) setSt(null); });
+    return () => { alive = false; };
+  }, [uid, reloadKey]);
+  if (!st) return null;
+  const n = (v: unknown) => Number(v ?? 0) || 0;
+  const diff = n(st.selisih);
+  const ok = diff === 0;
+  const lines: [string, string][] = [
+    ['Saldo awal bulan', rupiah(n(st.saldo_awal))],
+    ['Pembelian / top up', signed(n(st.pembelian), '+')],
+    ['Pendapatan', signed(n(st.pendapatan), '+')],
+    ['Refund masuk', signed(n(st.refund_masuk), '+')],
+    ['Penggunaan', signed(n(st.penggunaan), '−')],
+    ['Refund keluar', signed(n(st.refund_keluar), '−')],
+    ['Pencairan (payout)', signed(n(st.payout), '−')],
+    ['Koreksi & potongan', signed(n(st.koreksi), '±')],
+    ...(n(st.lain) ? [['Lainnya', signed(n(st.lain), '±')] as [string, string]] : []),
+  ];
+  return (
+    <Entrance index={1}>
+      <Card style={{ marginTop: 16 }} padded={false}>
+        <PressableScale onPress={() => setOpen((v) => !v)} haptic={false} scaleTo={0.99} accessibilityRole="button" accessibilityState={{ expanded: open }} accessibilityLabel="Rekonsiliasi saldo bulan ini"
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 52, paddingHorizontal: 14, paddingVertical: 10 }}>
+          <Ionicons name={ok ? 'shield-checkmark' : 'warning'} size={20} color={ok ? colors.success : colors.warning} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>Rekonsiliasi saldo bulan ini</Text>
+            <Text style={[font.tiny, { color: ok ? colors.success : colors.warning }]}>{ok ? 'Selisih Rp0 ✓ — saldo sesuai catatan' : `Selisih ${rupiah(diff)} — perlu dicek`}</Text>
+          </View>
+          <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textMuted} />
+        </PressableScale>
+        {open ? (
+          <View style={{ paddingHorizontal: 14, paddingBottom: 14, gap: 6, borderTopWidth: 1, borderTopColor: 'rgba(11,31,42,0.07)', paddingTop: 10 }}>
+            {lines.map(([k, v]) => (
+              <Row key={k} between style={{ gap: 8 }}>
+                <Text style={[font.small, { flexShrink: 1 }]}>{k}</Text>
+                <Text style={{ fontWeight: '600', color: colors.text, fontSize: 14 }}>{v}</Text>
+              </Row>
+            ))}
+            <View style={{ height: 1, backgroundColor: 'rgba(11,31,42,0.1)', marginVertical: 4 }} />
+            <Row between style={{ gap: 8 }}>
+              <Text style={[font.small, { flexShrink: 1, color: colors.text, fontWeight: '600' }]}>Saldo akhir (hitungan)</Text>
+              <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>{rupiah(n(st.saldo_akhir_hitung))}</Text>
+            </Row>
+            <Row between style={{ gap: 8 }}>
+              <Text style={[font.small, { flexShrink: 1 }]}>Saldo akhir (catatan)</Text>
+              <Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>{rupiah(n(st.saldo_akhir_ledger))}</Text>
+            </Row>
+            <Row between style={{ gap: 8 }}>
+              <Text style={[font.small, { flexShrink: 1 }]}>Selisih</Text>
+              <Text style={{ fontWeight: '700', color: ok ? colors.success : colors.danger, fontSize: 14 }}>{ok ? 'Rp0 ✓' : rupiah(diff)}</Text>
+            </Row>
+            {st.rumus ? <Text style={[font.tiny, { marginTop: 4 }]}>Rumus: {st.rumus}</Text> : null}
+            {!ok ? <Text style={[font.tiny, { color: colors.danger, marginTop: 2 }]}>Ada selisih antara catatan saldo dan hitungan. Hubungi CS AntarKita (menu Bantuan) agar tim Finance memeriksanya — saldo Anda tetap aman.</Text> : null}
+          </View>
+        ) : null}
+      </Card>
+    </Entrance>
   );
 }
 

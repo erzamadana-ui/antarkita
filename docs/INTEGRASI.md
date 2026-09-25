@@ -2,7 +2,7 @@
 
 ## 1. Pembayaran otomatis (Midtrans / Xendit)
 
-Saat ini top up AntarPay dilakukan manual (transfer → bukti → admin verifikasi → `admin_review_topup`). Untuk otomatis:
+Saat ini top up AntarVoucher dilakukan manual (transfer → bukti → admin verifikasi → `admin_review_topup`). Untuk otomatis:
 
 1. Daftar merchant Midtrans (Snap) atau Xendit (Invoice). Simpan **Server Key** sebagai secret Supabase: `supabase secrets set MIDTRANS_SERVER_KEY=...`.
 2. Buat Edge Function `create-topup` (Deno): menerima `{ amount }` dari klien (JWT diverifikasi), memanggil API Snap/Invoice, menyimpan `topup_requests` dengan `method='midtrans'` dan `ref=<order_id gateway>`, mengembalikan URL pembayaran. Klien membukanya dengan `expo-web-browser`.
@@ -41,14 +41,14 @@ Saat ini driver memilih order dari daftar terdekat (first-come). Untuk penugasan
 * GitHub Pages gratis; custom domain (mis. `app.antaraja.id`) bisa dipasang di Settings → Pages.
 
 ## Payment gateway — Midtrans Snap (tahap 3)
-Alur: aplikasi → Edge Function `midtrans-create` → Snap (redirect_url) → Midtrans mengirim notifikasi ke `midtrans-webhook` → `payment_settle()` → saldo AntarPay bertambah.
+Alur: aplikasi → Edge Function `midtrans-create` → Snap (redirect_url) → Midtrans mengirim notifikasi ke `midtrans-webhook` → `payment_settle()` → saldo AntarVoucher bertambah.
 Tanpa key, aplikasi berjalan dalam **mode simulasi** (tombol "Bayar (simulasi berhasil)").
 
 Langkah aktivasi (sandbox dulu):
 1. Daftar https://dashboard.midtrans.com → Settings → Access Keys → salin Server Key & Client Key (sandbox: `SB-Mid-server-…`).
 2. Supabase → Edge Functions → Secrets: `MIDTRANS_SERVER_KEY`, `MIDTRANS_CLIENT_KEY`, `MIDTRANS_IS_PRODUCTION=false`.
 3. Midtrans → Settings → Configuration → **Payment Notification URL**: `https://qwltshvzrsykxdvhbxcv.supabase.co/functions/v1/midtrans-webhook`.
-4. Uji top up dari aplikasi (Akun/AntarPay → Top Up → Top up instan). Untuk produksi: ganti key produksi & `MIDTRANS_IS_PRODUCTION=true`.
+4. Uji top up dari aplikasi (Akun/AntarVoucher → Top Up → Top up instan). Untuk produksi: ganti key produksi & `MIDTRANS_IS_PRODUCTION=true`.
 Metode yang dipetakan: GoPay, ShopeePay, QRIS (OVO/DANA lewat QRIS), VA bank (bank_transfer).
 
 ## Telepon dalam aplikasi (WebRTC)

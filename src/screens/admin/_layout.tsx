@@ -59,6 +59,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'Keuangan',
     items: [
       { href: '/(admin)/finance', label: 'Top up & Payout', icon: 'cash-outline', iconActive: 'cash', perm: ['payout', 'payments_view'] },
+      { href: '/(admin)/voucher', label: 'AntarVoucher', icon: 'ticket-outline', iconActive: 'ticket', perm: ['reconcile', 'wallet_adjust', 'payments_view'] },
       { href: '/(admin)/refunds', label: 'Refund', icon: 'return-down-back-outline', iconActive: 'return-down-back', perm: ['refund_approve', 'refund_execute', 'payments_view'] },
       { href: '/(admin)/disputes', label: 'Sengketa (Dispute)', icon: 'alert-circle-outline', iconActive: 'alert-circle', perm: ['dispute', 'dispute_resolve'] },
       { href: '/(admin)/approvals', label: 'Persetujuan (Maker-Checker)', icon: 'git-pull-request-outline', iconActive: 'git-pull-request', perm: ['approvals'] },
