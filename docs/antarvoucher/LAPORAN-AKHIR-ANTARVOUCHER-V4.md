@@ -3,9 +3,16 @@
 Tanggal: 25 September 2026 · Branch `antarvoucher-v4` (di atas `finpay-v3`, basis `main` 81e040c) · Landing `landing-v4`
 Label: **[FAKTA]** terbukti oleh uji/perintah · **[BELUM-DIBUKTIKAN]** belum dijalankan di lingkungan nyata · **[ASUMSI]** · **[KEPUTUSAN PEMILIK]**
 
-## STATUS AKHIR: **SELESAI BERSYARAT** untuk kode, uji, dan migrasi · **NO-GO PRODUKSI** untuk AntarVoucher uang nyata
+## STATUS AKHIR (26 Sep 2026 00:30 WIB): **SELESAI BERSYARAT — LIVE** (web + DB produksi v4, pembelian AntarVoucher & Finpay OFF) · **NO-GO PRODUKSI** untuk transaksi AntarVoucher uang nyata · **Google Play: siap unggah (AAB 113), menunggu unggah & review**
 
-<!--STATUS-GITHUB-->
+| Bukti | Nilai |
+|---|---|
+| PR | #9 `antarvoucher-v4` → `main`, merge commit **12385ce** (25 Sep 2026 23:3x WIB); perbaikan CI **43c2099** |
+| Web produksi | workflow *Web (3 aplikasi)* run 36161552180 ✅ dari 12385ce → apps.antarkitaindonesia.com (+/mitra, /admin, /terms v1.4 draf). Smoke test Chrome: beranda, Panel Admin (menu AntarVoucher), /pay/voucher "Segera hadir", 0 error konsol |
+| DB produksi | 0098–0112 + 0113 diterapkan 25 Sep 2026 (skema_migrations 20260925009800…011300); snapshot `backup_20260925`; pasca-cek dompet≠Σmutasi 0, ledger order tak seimbang 0, flag pembelian OFF, provider midtrans, rekening publik 0 |
+| APK | *Android APK* run #78 (36161552220) dari 12385ce ✅ → Release build-78 |
+| AAB Play | *Play Store AAB* run #13 (36162134095) dari 12385ce, `dompet=off` ✅ → Release aab-13, versionCode 113 |
+
 
 ---
 
@@ -27,12 +34,15 @@ Label: **[FAKTA]** terbukti oleh uji/perintah · **[BELUM-DIBUKTIKAN]** belum di
 | # | Prio | Temuan | Status |
 |---|---|---|---|
 | F-01 | **P0** | Produksi: AntarPay aktif, instruksi transfer ke **rekening pribadi** (BCA a.n. perorangan), saldo ditambah berdasar **screenshot** | **Ditutup** di produksi (sakelar OFF, 25 Sep 2026). Kode: rekening lama dinetralkan oleh 0112, `admin_review_topup` memblokir persetujuan tanpa mutasi bank, layar top up screenshot dihapus |
-| F-02 | **P0** | Push GitHub gagal: branch `finpay-v3` (+`skema-bisnis-v2`) belum pernah sampai ke GitHub → tidak ada CI/APK/review | **Root cause terbukti**; menunggu 1 perintah pemilik (§3) |
+| F-02 | **P0** | Push GitHub gagal: branch `finpay-v3` (+`skema-bisnis-v2`) belum pernah sampai ke GitHub → tidak ada CI/APK/review | **Selesai**: Erza menjalankan `push-antarkita.sh` (b92a376); commit lanjutan lewat editor/upload web GitHub (terverifikasi md5); PR #9 di-merge |
 | F-03 | P1 | `web.yml` bisa di-*dispatch* dari branch mana pun → menimpa situs produksi | **Diperbaiki**: deploy hanya dari `main` |
 | F-04 | P1 | `android.yml` dari branch mana pun membuat **GitHub Release publik** (`releases/latest` dipakai tautan unduh di web) → build uji bisa jadi "rilis publik" | **Diperbaiki**: Release hanya dari `main`; branch lain = artifact berlabel `-INTERNAL` + pita "INTERNAL TESTING" di aplikasi + SHA-256 di ringkasan |
 | F-05 | P1 | Ledger dompet tanpa saldo awal, pembuat/approver, idempotensi; bisa di-UPDATE/DELETE | **Diperbaiki** (0112) |
 | F-06 | P1 | Saldo pelanggan bisa minus lewat penyesuaian admin | **Diperbaiki** (trigger `SALDO_TIDAK_CUKUP`; mitra tetap boleh minus untuk potongan komisi tunai — aturan lama) |
-| F-07 | P1 | Produksi baru sampai migrasi 0097; 0098–0111 (skema bisnis v2, Finpay v3) + 0112 belum diterapkan | **Terbuka** — butuh keputusan & jendela rilis (§8) |
+| F-07 | P1 | Produksi baru sampai migrasi 0097; 0098–0111 (skema bisnis v2, Finpay v3) + 0112 belum diterapkan | **Selesai** 25 Sep 2026: uji kering pada replika fungsi produksi → snapshot → 0098–0113 diterapkan per berkas |
+| F-13 | P1 | APK di luar Play ditandatangani kunci yang tidak terdaftar di Android developer verification (wajib 30 Sep 2026 untuk perangkat bersertifikat di Indonesia) | **Diperbaiki sebagian**: CI memakai upload key + kunci didaftarkan (In review) — tunggu status Verified |
+| F-14 | P2 | Integrasi Cloudflare *Workers Builds* "antarkita" pada repo gagal di branch (main sebelumnya sukses); Claude tidak punya akses dasbor Cloudflare | Terbuka — pemilik cek log build di dash.cloudflare.com |
+| F-15 | P2 | S&K live menampilkan "Versi 1.4 [DRAF]" | Terbuka — butuh persetujuan Legal untuk mengesahkan v1.4 |
 | F-08 | P1 | Kartu pendapatan mitra patah per digit di 320 px ("Rp1.250.00 / 0") — juga di main | **Diperbaiki** |
 | F-09 | P2 | Label tab "AntarVoucher" terpotong di semua lebar HP | **Diperbaiki** (label tab "Voucher"); di 320 px label tab lain juga terpotong — sama dengan main |
 | F-10 | P2 | `npm audit`: 15 moderate (0 high/critical) pada dependensi produksi | Terbuka — dicatat, tidak diperbarui paksa (risiko regresi Expo) |
@@ -48,7 +58,7 @@ Label: **[FAKTA]** terbukti oleh uji/perintah · **[BELUM-DIBUKTIKAN]** belum di
 | Clone `~/Downloads/antarkita` | remote HTTPS tanpa token; helper = macOS Keychain; Terminal bagi AI hanya "click" | Push hanya bisa dari Terminal pemilik |
 | Riwayat | `finpay-v3` = fast-forward dari `origin/main` 81e040c (18 commit), tidak ada konflik, tidak ada berkas > 50 MB, `.env` hanya kunci anon (role=anon) | Tidak perlu force push |
 
-**Penyelesaian:** branch sudah dimasukkan ke clone Mac. Skrip `Claude outputs/AntarVoucher-v4/push-antarkita.sh` hanya menjalankan `git push -u` ke `finpay-v3`, `antarvoucher-v4`, dan `landing-v4`. **Solusi permanen** ada dua pilihan: tambahkan repo sebagai *source* sesi Cowork, atau isi fine-grained PAT (izin contents: write pada 2 repo) di secret manager sesi. Jangan tempel token di chat atau repo.
+**Penyelesaian (terbukti):** Erza menjalankan `push-antarkita.sh` → `finpay-v3` 9273e65, `antarvoucher-v4` b92a376, `landing-v4` 096eb08 tiba di GitHub (25 Sep 2026). Commit lanjutan (0113, runbook, perbaikan CI) dikirim lewat **editor/upload web GitHub** di Chrome Erza, isi diverifikasi md5 dengan salinan lokal. Solusi permanen tetap: tambahkan repo sebagai *source* sesi Cowork, atau PAT di secret manager.
 
 ## 4. Branch, commit, workflow, deployment
 
@@ -157,7 +167,17 @@ Rumus asli dari brief tidak memisahkan *refund masuk* (refund pesanan yang dikre
 
 ## 11. APK
 
-<!--STATUS-APK-->
+| Berkas | Paket | versionName / Code | min/target SDK | SHA-256 |
+|---|---|---|---|---|
+| antarkita-pelanggan-78-INTERNAL.apk (83 MB) | id.antarkita.app | 3.1.0 / 178 | 24 / 36 | `99742d1ee388424fad9641ec0988a7ca79820ed2c9f7f660de154223090d41e0` |
+| antarkita-mitra-78-INTERNAL.apk (83 MB) | id.antarkita.mitra | 3.1.0 / 178 | 24 / 36 | `827238fdfb9aa8f3705bd995b20a4c33283881438f36ce87e011201f3af5ffeb` |
+| antarkita-pelanggan-v3.1.0-113.aab (97 MB, tanpa dompet) | id.antarkita.app | 3.1.0 / 113 | — | `c2b3d453d783f6a07e5580b847d054167cbea6157317494b41018d3802ccbf21` |
+| antarkita-mitra-v3.1.0-113.aab (97 MB, tanpa dompet) | id.antarkita.mitra | 3.1.0 / 113 | — | `7af01fc272f5f26b7b77a69e95bf737c519947e1e192531f0c34fe818dd71a4d` |
+
+- APK build-78 ditandatangani **upload key** (sertifikat SHA-256 `DE:62:04:47:…:E9:F9`, APK Signature Scheme v2; diverifikasi dengan androguard). Kunci ini **ditambahkan ke Android developer verification** untuk kedua paket (status *In review*, 26 Sep 2026) — sebelumnya tidak terdaftar.
+- Nama berkas build-78 berakhiran `-INTERNAL` karena bug ekspresi di workflow (string kosong = falsy); diperbaiki di 43c2099. Label itu sesuai kenyataan: **INTERNAL TESTING — BUKAN VERSI PRODUKSI** (belum diuji di HP fisik).
+- Izin di manifest APK memuat izin turunan pustaka (badge launcher, READ/WRITE_EXTERNAL_STORAGE, USE_BIOMETRIC/FINGERPRINT, BLUETOOTH, WRITE_SETTINGS) di luar daftar minimal `app.config.ts` — **perlu ditinjau sebelum review Play** (Data safety & kebijakan izin). [TEMUAN P2 BARU]
+
 
 ## 12. Changelog 3.1.0 (internal)
 
@@ -203,7 +223,9 @@ Keunggulan yang **boleh** diklaim (berbasis desain, bukan perbandingan pasar): t
 | V5 | SDM Finance **minimal 2 orang** berbeda (maker ≠ checker), plus 1 verifikator Legal untuk rekening | Founder | Voucher tidak pernah bisa diterbitkan |
 | V6 | Jendela migrasi produksi 0098→0112 dan merge `finpay-v3` + `antarvoucher-v4` ke `main` (= rilis web publik) | Founder | Kode v2/v3/v4 tetap tidak live |
 | V7 | Isi placeholder hukum: nama badan usaha, kota, biaya refund, mitra pembayaran | Founder + Legal | S&K v1.4 tidak bisa terbit |
-| V8 | Jalur Play Store: akun organisasi (D-U-N-S), karena fitur keuangan ditolak di akun perorangan (19 Sep) | Founder | Listing Play tertahan |
+| V8 | Jalur Play Store: sementara **build tanpa dompet** (AAB 113, sudah dibangun); jangka menengah akun organisasi (D-U-N-S) | Founder | Listing Play tertahan |
+| V10 | Unggah AAB 113 (97 MB, di atas batas unggah otomasi 10 MB) ke Closed testing Pelanggan & Mitra, lalu ubah *Financial features* → tidak ada, tinjau Data safety & izin, *Send for review* — atau isi secret `PLAY_SERVICE_ACCOUNT_JSON` agar CI mengunggah sendiri | Erza (unggah) → Claude (deklarasi & kirim) | Tidak ada rilis Play |
+| V11 | Merge `landing-v4` (placeholder hukum masih tampil) | Founder + Legal | Landing tetap versi lama |
 | V9 | Integrasi mutasi otomatis (API bank / VA korporat) untuk mengganti input manual Finance | Finance + IT | Beban manual & keterlambatan saat volume naik |
 
 **Yang akan rusak duluan setelah fitur dibuka:** antrean pencocokan manual di luar jam kerja. Pelanggan akan menunggu jam-jaman dan tiket CS naik pada minggu pertama. Mitigasinya: SLA tertulis, jam layanan di layar, dan V9.
