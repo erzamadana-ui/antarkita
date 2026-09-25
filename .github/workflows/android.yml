@@ -92,7 +92,29 @@ jobs:
           } >> android/gradle.properties
           tail -5 android/gradle.properties
 
-      - name: Build APK release (ditandatangani keystore debug — cukup untuk distribusi langsung/uji)
+      # Android developer verification (Play Console): APK di luar Play pada perangkat bersertifikat di negara
+      # tertentu (termasuk Indonesia) wajib bertanda tangan kunci TERDAFTAR mulai 30 Sep 2026. Kunci debug Expo
+      # tidak terdaftar → pakai upload keystore (secret yang sama dengan release-aab.yml) bila tersedia.
+      - name: Tanda tangan APK dengan upload keystore (bila secret tersedia)
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANTARKITA_UPLOAD_STORE_FILE: release.keystore
+          ANTARKITA_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANTARKITA_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANTARKITA_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::warning::Secret keystore tidak ada — APK memakai kunci DEBUG (tidak terdaftar di Android developer verification)."
+            exit 0
+          fi
+          CLEAN="$(printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\n\r\t ')"
+          printf '%s' "$CLEAN" | base64 -d > android/app/release.keystore 2>/dev/null || printf '%s' "$CLEAN" | base64 -di > android/app/release.keystore
+          keytool -list -keystore android/app/release.keystore -storepass "$ANTARKITA_UPLOAD_STORE_PASSWORD" -alias "$ANTARKITA_UPLOAD_KEY_ALIAS" >/dev/null \
+            || { echo "::error::Kata sandi/alias keystore tidak cocok"; exit 1; }
+          node scripts/android-signing.mjs --dir android
+          keytool -list -v -keystore android/app/release.keystore -storepass "$ANTARKITA_UPLOAD_STORE_PASSWORD" -alias "$ANTARKITA_UPLOAD_KEY_ALIAS" | grep -E "SHA256:" | sed 's/^/Sidik jari kunci: /'
+
+      - name: Build APK release (upload keystore bila ada; cadangan keystore debug — cukup untuk distribusi langsung/uji)
         env:
           APP: ${{ matrix.app }}
           EXPO_PUBLIC_APP: ${{ matrix.app }}
