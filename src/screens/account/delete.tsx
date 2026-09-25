@@ -76,7 +76,7 @@ export default function DeleteAccount() {
       <Entrance index={2}>
         <View style={[s.card, { marginTop: 14, gap: 8 }]}>
           <Text style={font.label}>Sebelum menghapus, pastikan:</Text>
-          <Check ok={balance === 0} text={balance === 0 ? 'Saldo AntarPay sudah Rp0' : balance > 0 ? `Saldo AntarPay ${rupiah(balance)} — tarik atau habiskan dulu` : `Saldo AntarPay minus ${rupiah(Math.abs(balance))} — lunasi dulu`} />
+          <Check ok={balance === 0} text={balance === 0 ? 'Saldo AntarVoucher sudah Rp0' : balance > 0 ? `Saldo AntarVoucher ${rupiah(balance)} — tarik atau habiskan dulu` : `Saldo AntarVoucher minus ${rupiah(Math.abs(balance))} — lunasi dulu`} />
           <Check ok text="Tidak ada pesanan, booking travel, atau penarikan yang masih berjalan (dicek otomatis saat menghapus)" />
           <Text style={[font.tiny, { marginTop: 4 }]}>Butuh bantuan atau ingin membatalkan permintaan dalam masa tenggang? Hubungi {SUPPORT_EMAIL}.</Text>
         </View>

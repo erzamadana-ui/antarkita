@@ -26,7 +26,7 @@ const FILTERS = [
   { key: 'requested', label: 'Diajukan' }, { key: 'approved', label: 'Siap dieksekusi' }, { key: 'executing', label: 'Dieksekusi' },
   { key: 'done', label: 'Selesai' }, { key: 'failed', label: 'Gagal' }, { key: 'rejected', label: 'Ditolak' }, { key: 'all', label: 'Semua' },
 ];
-const DEST_LABEL: Record<string, string> = { gateway: 'Ke metode bayar asal', wallet: 'Ke saldo AntarPay' };
+const DEST_LABEL: Record<string, string> = { gateway: 'Ke metode bayar asal', wallet: 'Ke saldo AntarVoucher' };
 
 export default function AdminRefunds() {
   const me = useAuth((s) => s.session?.user.id ?? null);
@@ -168,7 +168,7 @@ export default function AdminRefunds() {
 
         <FootNote lines={[
           `Refund ≥ ${rupiah(dualMin)} (app_settings.refund_dual_approval_min) butuh dua admin berbeda: maker menyetujui, checker mengonfirmasi. Tombol Konfirmasi nonaktif bagi maker.`,
-          'Eksekusi memanggil edge function pay-refund ke provider asal; status menjadi Selesai setelah webhook provider masuk (payment_event_ingest). Bila provider tidak mendukung refund, server memakai tujuan saldo AntarPay (wallet_apply refund).',
+          'Eksekusi memanggil edge function pay-refund ke provider asal; status menjadi Selesai setelah webhook provider masuk (payment_event_ingest). Bila provider tidak mendukung refund, server memakai tujuan saldo AntarVoucher (wallet_apply refund).',
           'Komponen yang tidak dikembalikan mengikuti refund_policy_calc: sebelum merchant menerima = 100 %; setelah diproses = barang tidak kembali, ongkir dikembalikan bila driver belum mengambil, biaya platform dikembalikan, biaya PG yang dibebankan ke pelanggan tidak dikembalikan bila provider tidak mengembalikannya.',
           'Setiap aksi tercatat di Log Audit (append-only).',
         ]} />

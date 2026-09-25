@@ -161,7 +161,7 @@ export function PriceBlock({ order, forDriver, providerName }: { order: Order; f
   const funder = order.discount > 0 ? order.promo_funded_by ?? null : null;
   const comm = order.driver_commission_pct_snap;
   const ride = order.service === 'ride_motor' || order.service === 'ride_car';
-  const payLabel = order.pg_channel ? (providerName ?? channelLabel(order.pg_channel)) : order.payment_method === 'cash' ? 'Tunai' : 'AntarPay';
+  const payLabel = order.pg_channel ? (providerName ?? channelLabel(order.pg_channel)) : order.payment_method === 'cash' ? 'Tunai' : 'AntarVoucher';
   return (
     <PriceSummary rows={[
       { label: order.service === 'food' ? 'Harga makanan' : 'Harga barang', value: order.items_subtotal },

@@ -1,9 +1,9 @@
-// Admin · Payment Gateway (Midtrans): sakelar AntarPay global (0088), sakelar per SALURAN pembayaran (0089),
+// Admin · Payment Gateway (Midtrans): sakelar AntarVoucher global (0088), sakelar per SALURAN pembayaran (0089),
 // status, konfigurasi kunci, webhook & checklist pengajuan.
 // Daftar saluran (0089) menggantikan Chip "Metode aktif" lama supaya tidak ada dua kontrol yang bertabrakan:
 // admin_set_payment_channel ikut menulis pg_methods, dan Simpan konfigurasi mengirim metode hasil daftar ini.
 // 0104: sakelar terpisah "Bayar per pesanan lewat gateway" (admin_set_gateway_order_payment) — saluran gateway boleh
-// dipakai membayar SATU pesanan walau AntarPay/top up mati (PKS Midtrans Pasal 7.4b: stored value tetap mati).
+// dipakai membayar SATU pesanan walau AntarVoucher/top up mati (PKS Midtrans Pasal 7.4b: stored value tetap mati).
 // v3 (finpay-v3, kontrak §1/§9): kartu "Provider aktif" (midtrans/finpay × sandbox/production, simulasi) lewat
 // admin_set_settings; kredensial per (provider, env) lewat admin_gateway_secrets()/admin_set_gateway_secret (tersamar,
 // PIN); URL webhook pay-webhook/{provider}; "Uji koneksi" = payment_provider_public() (tanpa kontrak baru).
@@ -47,7 +47,7 @@ export default function AdminGateway() {
   const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
-  // 0088: sakelar AntarPay. null = belum termuat.
+  // 0088: sakelar AntarVoucher. null = belum termuat.
   const [payOn, setPayOn] = useState<boolean | null>(null);
   const [payBusy, setPayBusy] = useState(false);
   // 0089: sakelar per saluran pembayaran (nilai MENTAH yang disetel admin, bukan status efektif).
@@ -72,8 +72,8 @@ export default function AdminGateway() {
   }, [apply]);
   useEffect(() => { load(); }, [load]);
 
-  /** Sakelar AntarPay: butuh panel terbuka kunci PIN (admin_require_unlock) — ADMIN_LOCKED ditangani handleAdminError. */
-  const toggleAntarPay = async (on: boolean) => {
+  /** Sakelar AntarVoucher: butuh panel terbuka kunci PIN (admin_require_unlock) — ADMIN_LOCKED ditangani handleAdminError. */
+  const toggleAntarVoucher = async (on: boolean) => {
     if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
     const prev = payOn;
     setPayBusy(true); setPayOn(on);
@@ -81,7 +81,7 @@ export default function AdminGateway() {
       const r = await rpc<{ antarpay_enabled: boolean }>('admin_set_antarpay_enabled', { p_enabled: on });
       const v = r?.antarpay_enabled === true;
       setPayOn(v);
-      toast.success(v ? 'AntarPay DIAKTIFKAN — top up, pencairan, dan bayar dompet/e-wallet dibuka' : 'AntarPay DINONAKTIFKAN — pelanggan hanya bisa bayar tunai');
+      toast.success(v ? 'AntarVoucher DIAKTIFKAN — top up, pencairan, dan bayar dompet/e-wallet dibuka' : 'AntarVoucher DINONAKTIFKAN — pelanggan hanya bisa bayar tunai');
       useAppSettingsStore.getState().load(true);
     } catch (e) { setPayOn(prev); handleAdminError(e); }
     finally { setPayBusy(false); }
@@ -113,7 +113,7 @@ export default function AdminGateway() {
       const v = r?.gateway_order_payment_enabled === true;
       setGwOrderOn(v);
       if (typeof r?.antarpay_enabled === 'boolean') setPayOn(r.antarpay_enabled);
-      toast.success(v ? 'Bayar per pesanan lewat gateway DIAKTIFKAN — top up AntarPay tidak ikut menyala' : 'Bayar per pesanan lewat gateway DINONAKTIFKAN');
+      toast.success(v ? 'Bayar per pesanan lewat gateway DIAKTIFKAN — top up AntarVoucher tidak ikut menyala' : 'Bayar per pesanan lewat gateway DINONAKTIFKAN');
       useAppSettingsStore.getState().load(true);
     } catch (e) { setGwOrderOn(prev); handleAdminError(e); }
     finally { setGwOrderBusy(false); }
@@ -159,28 +159,28 @@ export default function AdminGateway() {
         <Row between style={{ flexWrap: 'wrap', gap: 10 }}>
           <View style={{ flex: 1, minWidth: 220 }}>
             <Row gap={8} style={{ alignItems: 'center' }}>
-              <Text style={font.h3}>AntarPay & Payment Gateway</Text>
+              <Text style={font.h3}>AntarVoucher & Payment Gateway</Text>
               {payOn === null ? <Badge text="Memuat…" color={colors.textMuted} /> : <Badge text={payOn ? 'AKTIF' : 'NONAKTIF'} color={payOn ? colors.success : colors.warning} />}
             </Row>
             <Text style={[font.small, { marginTop: 4 }]}>
-              {payOn ? 'AntarPay aktif: pelanggan bisa top up, membayar dengan saldo/e-wallet, dan mitra bisa mencairkan saldo.'
-                : 'AntarPay nonaktif (bawaan sampai pemilik menyalakannya): pelanggan hanya bisa membayar tunai.'}
+              {payOn ? 'AntarVoucher aktif: pelanggan bisa top up, membayar dengan saldo/e-wallet, dan mitra bisa mencairkan saldo.'
+                : 'AntarVoucher nonaktif (bawaan sampai pemilik menyalakannya): pelanggan hanya bisa membayar tunai.'}
             </Text>
           </View>
           <Row gap={8} style={{ alignItems: 'center' }}>
             <Text style={[font.small, { color: adminTone.ink, fontWeight: '700' }]}>{payOn ? 'Aktif' : 'Nonaktif'}</Text>
-            <Switch value={!!payOn} disabled={payBusy || payOn === null} onValueChange={toggleAntarPay} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />
+            <Switch value={!!payOn} disabled={payBusy || payOn === null} onValueChange={toggleAntarVoucher} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />
           </Row>
         </Row>
         <View style={[s.note, { backgroundColor: colors.warning + '14', borderColor: colors.warning + '50' }]}>
           <Text style={font.small}>
-            Saat nonaktif: top-up, pencairan, dan bayar dengan AntarPay/e-wallet ditolak server; pelanggan hanya bisa bayar tunai. Refund otomatis tetap berjalan.
+            Saat nonaktif: top-up, pencairan, dan bayar dengan AntarVoucher/e-wallet ditolak server; pelanggan hanya bisa bayar tunai. Refund otomatis tetap berjalan.
           </Text>
           <Text style={[font.tiny, { marginTop: 4 }]}>Mengubah sakelar memerlukan PIN panel admin dan dicatat di log aktivitas. Perubahan terasa di aplikasi pelanggan & mitra dalam hitungan detik (realtime app_settings).</Text>
         </View>
       </Card>
 
-      {/* 0104: bayar per pesanan lewat gateway — terpisah dari AntarPay (top up / saldo). */}
+      {/* 0104: bayar per pesanan lewat gateway — terpisah dari AntarVoucher (top up / saldo). */}
       <Card style={{ gap: 10, borderColor: gwOrderOn ? colors.success + '55' : adminTone.border, borderWidth: 1 }}>
         <Row between style={{ flexWrap: 'wrap', gap: 10 }}>
           <View style={{ flex: 1, minWidth: 220 }}>
@@ -190,8 +190,8 @@ export default function AdminGateway() {
             </Row>
             <Text style={[font.small, { marginTop: 4 }]}>
               {gwOrderOn
-                ? `Pelanggan bisa membayar satu pesanan langsung lewat saluran gateway yang menyala (GoPay/ShopeePay/QRIS/VA/kartu)${payOn === false ? ' walau AntarPay nonaktif' : ''}. Pesanan baru dicarikan driver setelah pembayaran masuk.`
-                : 'Nonaktif: saluran gateway hanya bisa dipakai bila AntarPay aktif (perilaku lama).'}
+                ? `Pelanggan bisa membayar satu pesanan langsung lewat saluran gateway yang menyala (GoPay/ShopeePay/QRIS/VA/kartu)${payOn === false ? ' walau AntarVoucher nonaktif' : ''}. Pesanan baru dicarikan driver setelah pembayaran masuk.`
+                : 'Nonaktif: saluran gateway hanya bisa dipakai bila AntarVoucher aktif (perilaku lama).'}
             </Text>
           </View>
           <Row gap={8} style={{ alignItems: 'center' }}>
@@ -201,10 +201,10 @@ export default function AdminGateway() {
         </Row>
         <View style={[s.note, { backgroundColor: adminTone.blue + '12', borderColor: adminTone.blue + '40' }]}>
           <Text style={font.small}>
-            Bayar per pesanan lewat gateway tetap berfungsi walau <Text style={{ fontWeight: '700' }}>AntarPay/top up NONAKTIF</Text>: dana langsung untuk transaksi itu (purpose=order) dan tidak disimpan sebagai saldo. Sakelar ini tidak menyalakan AntarPay, top up, maupun pencairan.
+            Bayar per pesanan lewat gateway tetap berfungsi walau <Text style={{ fontWeight: '700' }}>AntarVoucher/top up NONAKTIF</Text>: dana langsung untuk transaksi itu (purpose=order) dan tidak disimpan sebagai saldo. Sakelar ini tidak menyalakan AntarVoucher, top up, maupun pencairan.
           </Text>
           <Text style={[font.tiny, { marginTop: 4 }]}>
-            Sesuai PKS Midtrans Pasal 7 ayat 4(b), fitur uang elektronik/dompet (stored value, isi saldo) tanpa izin Bank Indonesia dapat membuat layanan dihentikan — top up AntarPay tetap mati sampai ada izin BI/review legal. Mengubah sakelar memerlukan PIN panel admin dan dicatat di log aktivitas (gateway_order_payment.toggle).
+            Sesuai PKS Midtrans Pasal 7 ayat 4(b), fitur uang elektronik/dompet (stored value, isi saldo) tanpa izin Bank Indonesia dapat membuat layanan dihentikan — top up AntarVoucher tetap mati sampai ada izin BI/review legal. Mengubah sakelar memerlukan PIN panel admin dan dicatat di log aktivitas (gateway_order_payment.toggle).
           </Text>
         </View>
       </Card>
@@ -222,8 +222,8 @@ export default function AdminGateway() {
           <View style={[s.note, { backgroundColor: colors.warning + '14', borderColor: colors.warning + '50', marginVertical: 6 }]}>
             <Text style={font.small}>
               {gwOrderOn
-                ? 'Sakelar AntarPay global sedang nonaktif — saldo AntarPay & e-money nonaktif; saluran gateway tetap bisa dipakai untuk bayar per pesanan.'
-                : 'Sakelar AntarPay global sedang nonaktif — semua saluran non-tunai ikut nonaktif.'}
+                ? 'Sakelar AntarVoucher global sedang nonaktif — saldo AntarVoucher & e-money nonaktif; saluran gateway tetap bisa dipakai untuk bayar per pesanan.'
+                : 'Sakelar AntarVoucher global sedang nonaktif — semua saluran non-tunai ikut nonaktif.'}
             </Text>
           </View>
         ) : null}
@@ -231,10 +231,10 @@ export default function AdminGateway() {
           {PAYMENT_CHANNELS.map((c) => {
             const isCash = c.key === 'cash';
             const stored = chan === null ? false : isCash ? chan[c.key] !== false : chan[c.key] === true;
-            // Dua induk: (1) sakelar global AntarPay 0088, (2) saluran 'antarpay' itu sendiri —
-            // di server SETIAP pembayaran non-tunai diselesaikan lewat saldo AntarPay.
+            // Dua induk: (1) sakelar global AntarVoucher 0088, (2) saluran 'antarpay' itu sendiri —
+            // di server SETIAP pembayaran non-tunai diselesaikan lewat saldo AntarVoucher.
             const railOn = chan !== null && chan.antarpay === true && payOn === true;
-            // 0104: saluran gateway + sakelar bayar per pesanan → tidak bergantung pada AntarPay (per pesanan saja).
+            // 0104: saluran gateway + sakelar bayar per pesanan → tidak bergantung pada AntarVoucher (per pesanan saja).
             const perOrder = gwOrderOn === true && GATEWAY_CHANNELS.includes(c.key);
             const dimGlobal = !isCash && !perOrder && payOn === false;
             const dimRail = !isCash && !perOrder && c.key !== 'antarpay' && payOn === true && chan !== null && chan.antarpay !== true;
@@ -248,7 +248,7 @@ export default function AdminGateway() {
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[font.body, { color: adminTone.ink, fontWeight: '700' }]} numberOfLines={1}>{c.label}</Text>
-                    <Text style={font.tiny} numberOfLines={2}>{dimGlobal ? 'Nonaktif karena sakelar AntarPay global mati' : dimRail ? 'Nonaktif karena saluran AntarPay (saldo) dimatikan' : perOrder && payOn === false ? `${c.hint} · bayar per pesanan` : c.hint}</Text>
+                    <Text style={font.tiny} numberOfLines={2}>{dimGlobal ? 'Nonaktif karena sakelar AntarVoucher global mati' : dimRail ? 'Nonaktif karena saluran AntarVoucher (saldo) dimatikan' : perOrder && payOn === false ? `${c.hint} · bayar per pesanan` : c.hint}</Text>
                   </View>
                 </Row>
                 <Switch
@@ -266,7 +266,7 @@ export default function AdminGateway() {
         <View style={[s.note, { backgroundColor: adminTone.blue + '12', borderColor: adminTone.blue + '40', marginTop: 8 }]}>
           <Text style={font.tiny}>
             <Text style={{ fontWeight: '700' }}>Catatan teknis: </Text>
-            semua pembayaran non-tunai saat ini diselesaikan lewat saldo AntarPay (GoPay/QRIS/VA/e-money sekalipun). Karena itu mematikan saluran <Text style={{ fontWeight: '700' }}>AntarPay (saldo)</Text> otomatis menutup seluruh saluran non-tunai dan menutup top up. Untuk mematikan satu metode saja, matikan barisnya sendiri — jangan baris AntarPay.
+            semua pembayaran non-tunai saat ini diselesaikan lewat saldo AntarVoucher (GoPay/QRIS/VA/e-money sekalipun). Karena itu mematikan saluran <Text style={{ fontWeight: '700' }}>AntarVoucher (saldo)</Text> otomatis menutup seluruh saluran non-tunai dan menutup top up. Untuk mematikan satu metode saja, matikan barisnya sendiri — jangan baris AntarVoucher.
           </Text>
         </View>
       </Card>

@@ -1,4 +1,4 @@
-// Preferensi metode pembayaran pelanggan (tunai / AntarPay / e-wallet pilihan) — tersimpan di tabel payment_prefs
+// Preferensi metode pembayaran pelanggan (tunai / AntarVoucher / e-wallet pilihan) — tersimpan di tabel payment_prefs
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 import type { PaymentPrefs } from '@/lib/types';
@@ -34,7 +34,7 @@ export type EwalletKey = typeof EWALLETS[number]['key'];
  */
 export const PAYMENT_CHANNELS = [
   { key: 'cash', label: 'Tunai / COD', hint: 'Bayar langsung ke driver / kurir', icon: 'cash-outline', color: '#16A34A' },
-  { key: 'antarpay', label: 'AntarPay (saldo)', hint: 'Saldo dompet dipotong otomatis', icon: 'wallet-outline', color: '#0E7C7B' },
+  { key: 'antarpay', label: 'AntarVoucher (saldo)', hint: 'Saldo dompet dipotong otomatis', icon: 'wallet-outline', color: '#0E7C7B' },
   { key: 'emoney_nfc', label: 'E-money (kartu NFC)', hint: 'Flazz · e-money Mandiri · BRIZZI · TapCash', icon: 'radio-outline', color: '#7C3AED' },
   { key: 'gopay', label: 'GoPay', hint: 'Midtrans Snap', icon: 'phone-portrait-outline', color: '#00AA13' },
   { key: 'shopeepay', label: 'ShopeePay', hint: 'Midtrans Snap', icon: 'phone-portrait-outline', color: '#EE4D2D' },

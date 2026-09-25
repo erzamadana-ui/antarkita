@@ -89,7 +89,7 @@ async function handle(deps: Deps, req: Request): Promise<Response> {
     }
   } else {
     amount = await validateTopup(deps, body, channel);
-    description = "Top up AntarPay";
+    description = "Top up AntarVoucher";
     expiryMin = settings.topupTimeoutMin;
   }
 
@@ -212,8 +212,8 @@ async function closeFailed(deps: Deps, provider: PaymentProvider, externalId: st
 
 async function validateTopup(deps: Deps, body: Body, channel: string | null): Promise<number> {
   const { data: on, error: onErr } = await deps.db.rpc("antarpay_enabled");
-  if (onErr) throw new HttpError(503, "Status AntarPay tidak dapat diperiksa — coba lagi");
-  if (on !== true) throw new HttpError(403, "AntarPay sedang dinonaktifkan sementara.", { antarpay_enabled: false });
+  if (onErr) throw new HttpError(503, "Status AntarVoucher tidak dapat diperiksa — coba lagi");
+  if (on !== true) throw new HttpError(403, "AntarVoucher sedang dinonaktifkan sementara.", { antarpay_enabled: false });
   const amt = Math.round(Number(body.amount));
   const { data: cfg } = await deps.db.rpc("gateway_public_config");
   const min = Number(cfg?.topup_min ?? 10000), max = Number(cfg?.topup_max ?? 10000000);

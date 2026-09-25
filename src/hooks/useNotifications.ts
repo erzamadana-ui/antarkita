@@ -72,9 +72,9 @@ export function notifTargetFor(d: NotificationData, promoCode?: string | null): 
     ? { route: `/travel/request/${d.travel_request_id}`, label: 'permintaan travel' }
     : { route: '/driver/travel', label: 'permintaan travel' };
   if (d.booking_id && customer) return { route: `/travel/${d.booking_id}`, label: 'booking travel' };
-  // 4. AntarPay (top up, pembayaran gateway, penarikan saldo)
+  // 4. AntarVoucher (top up, pembayaran gateway, penarikan saldo)
   if (d.payment_id || d.withdrawal_id) return customer
-    ? { route: '/(customer)/pay', label: 'AntarPay' }
+    ? { route: '/(customer)/pay', label: 'AntarVoucher' }
     : { route: '/(driver)/earnings', label: 'saldo & penghasilan' };
   // 5. Merchant / promo (hanya ada di aplikasi pelanggan)
   if (d.merchant_id && customer) return { route: `/food/${d.merchant_id}`, label: 'merchant' };

@@ -7,8 +7,8 @@ import { Card, Empty, Row, IconCircle, Badge } from '@/components/ui';
 import { BrandGradient } from '@/components/glass';
 import { AnimatedNumber, Entrance, PressableScale, Skeleton } from '@/components/motion';
 import { useAuth } from '@/store/auth';
-import { useAntarPay } from '@/hooks/useAppSettings';
-import { AntarPayOffBanner } from '@/components/AntarPayNotice';
+import { useAntarVoucher } from '@/hooks/useAppSettings';
+import { AntarVoucherOffBanner } from '@/components/AntarVoucherNotice';
 import { supabase } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { rupiah, formatDate } from '@/lib/format';
@@ -37,8 +37,8 @@ export function WalletView({ allowWithdraw, bottomSpace = 40, header }: { allowW
   const [loaded, setLoaded] = useState(false);
   const [showAllWd, setShowAllWd] = useState(false);
   const uid = session?.user.id;
-  // 0088: saat AntarPay nonaktif, saldo & riwayat tetap terlihat; tombol Top Up / Tarik Saldo disembunyikan (server pun menolak).
-  const { enabled: antarpayOn } = useAntarPay();
+  // 0088: saat AntarVoucher nonaktif, saldo & riwayat tetap terlihat; tombol Top Up / Tarik Saldo disembunyikan (server pun menolak).
+  const { enabled: antarpayOn } = useAntarVoucher();
 
   const load = useCallback(async () => {
     if (!uid) return;
@@ -63,7 +63,7 @@ export function WalletView({ allowWithdraw, bottomSpace = 40, header }: { allowW
         <BrandGradient colors={[colors.primary, colors.primaryDark]} style={[s.balance, shadow.glow(colors.primary)]}>
           <View style={s.orb} /><View style={[s.orb, { right: -60, top: 30, width: 160, height: 160, opacity: 0.12 }]} />
           <Row between>
-            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '600' }}>Saldo AntarPay</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '600' }}>Saldo AntarVoucher</Text>
             <Ionicons name="wallet" size={20} color="rgba(255,255,255,0.8)" />
           </Row>
           <AnimatedNumber value={wallet?.balance ?? 0} format={rupiah} style={{ color: '#fff', fontSize: 30, fontWeight: '700', marginVertical: 8, letterSpacing: -0.5 }} />
@@ -77,9 +77,9 @@ export function WalletView({ allowWithdraw, bottomSpace = 40, header }: { allowW
       </Entrance>
 
       {!antarpayOn && (
-        <Entrance index={1}><AntarPayOffBanner style={{ marginTop: 16 }} text={allowWithdraw
-          ? 'Top up dan pencairan saldo belum tersedia. Pendapatan dari order tetap masuk ke saldo Anda dan bisa dicairkan setelah AntarPay diaktifkan kembali.'
-          : 'Top up dan bayar dengan AntarPay/e-wallet belum tersedia — silakan bayar tunai. Saldo yang sudah ada tetap tersimpan; refund otomatis tetap berjalan.'} /></Entrance>
+        <Entrance index={1}><AntarVoucherOffBanner style={{ marginTop: 16 }} text={allowWithdraw
+          ? 'Top up dan pencairan saldo belum tersedia. Pendapatan dari order tetap masuk ke saldo Anda dan bisa dicairkan setelah AntarVoucher diaktifkan kembali.'
+          : 'Top up dan bayar dengan AntarVoucher/e-wallet belum tersedia — silakan bayar tunai. Saldo yang sudah ada tetap tersimpan; refund otomatis tetap berjalan.'} /></Entrance>
       )}
 
       {pending.length > 0 && (
@@ -111,7 +111,7 @@ export function WalletView({ allowWithdraw, bottomSpace = 40, header }: { allowW
         <Entrance index={3}><Card padded={false}>
           {txs.map((t, i) => {
             // Cadangan wajib: satu nilai enum baru di database (mis. 'tip') tanpa ini akan melempar
-            // TypeError dan membuat SELURUH layar AntarPay gagal dirender.
+            // TypeError dan membuat SELURUH layar AntarVoucher gagal dirender.
             const m = txMeta[t.type] ?? txMeta.adjustment;
             return (
               <Animated.View key={t.id} layout={LinearTransition}>
@@ -157,7 +157,7 @@ function WithdrawalRow({ w, first }: { w: MyWithdrawal; first: boolean }) {
       <Text style={font.tiny}>Diajukan {formatDate(w.created_at)}{w.settled_at ? ` · cair ${formatDate(w.settled_at)}` : ''}{w.provider ? ` · via ${w.provider === 'finpay' ? 'Finpay' : w.provider === 'manual' ? 'transfer manual' : w.provider}` : ''}</Text>
       {w.provider_ref ? <Text style={font.tiny} selectable>Ref. transfer: {w.provider_ref}</Text> : null}
       {failed && (w.failed_reason || w.review_note) ? <Text style={[font.tiny, { color: colors.danger }]}>Alasan: {w.failed_reason ?? w.review_note}</Text> : null}
-      {failed ? <Text style={font.tiny}>Nominal penarikan sudah dikembalikan ke saldo AntarPay Anda.</Text> : null}
+      {failed ? <Text style={font.tiny}>Nominal penarikan sudah dikembalikan ke saldo AntarVoucher Anda.</Text> : null}
     </View>
   );
 }

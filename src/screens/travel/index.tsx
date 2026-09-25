@@ -16,8 +16,8 @@ import { useBooking } from '@/store/booking';
 import { useAuth } from '@/store/auth';
 import { useCurrentLocation } from '@/hooks/useLocation';
 import { useCityStatus } from '@/hooks/useCityStatus';
-import { usePaymentChannels, ANTARPAY_OFF_TEXT } from '@/hooks/useAppSettings';
-import { AntarPayOffNote } from '@/components/AntarPayNotice';
+import { usePaymentChannels, ANTARVOUCHER_OFF_TEXT } from '@/hooks/useAppSettings';
+import { AntarVoucherOffNote } from '@/components/AntarVoucherNotice';
 import { CityNotice, cityBlockedLabel } from '@/components/city';
 import { reverseGeocode } from '@/lib/geo';
 import { rpc, supabase } from '@/lib/supabase';
@@ -215,12 +215,12 @@ export default function TravelScreen() {
             <LocationFields pickup={pickup} dropoff={null} pickupLabel="Jemput di (rumah/kantor)" dropoffLabel="—" lockDropoff accent={colors.travel} />
             <Input placeholder={`Alamat tujuan di ${toCity?.name ?? 'kota tujuan'} (diantar sampai alamat)`} icon="flag-outline" value={dropAddr} onChangeText={setDropAddr} />
             <View style={s.group}><PriceSummary total={total}
-              note={econErr ? `Biaya platform belum termuat (${econErr}). Total final dihitung server saat memesan.` : method === 'ewallet' ? 'AntarTravel dibayar dari saldo AntarPay; bila kurang, halaman bayar dibuka untuk kekurangannya.' : null}
+              note={econErr ? `Biaya platform belum termuat (${econErr}). Total final dihitung server saat memesan.` : method === 'ewallet' ? 'AntarTravel dibayar dari saldo AntarVoucher; bila kurang, halaman bayar dibuka untuk kekurangannya.' : null}
               rows={checkoutRows({
                 service: 'travel', ongkir: price, ongkirLabel: priv ? `Tarif carter private (${trip.partner.model})` : `Tarif ${pax} kursi × ${rupiah(trip.seat_price)}`,
                 ongkirHint: 'Tarif mitra AntarTravel (fee mitra sesuai kontrak)', econ: travelEcon, platformFee: fee, discount: 0,
-                // travel_book menyelesaikan non-tunai dari saldo AntarPay (bukan tagihan gateway per pesanan) → tanpa biaya metode pembayaran.
-                pay: { kind: method === 'cash' ? 'cash' : 'wallet', channel: null, label: method === 'cash' ? 'Tunai' : 'AntarPay', provider: null, providerName: null, policy: 'platform', fee: 0, error: null },
+                // travel_book menyelesaikan non-tunai dari saldo AntarVoucher (bukan tagihan gateway per pesanan) → tanpa biaya metode pembayaran.
+                pay: { kind: method === 'cash' ? 'cash' : 'wallet', channel: null, label: method === 'cash' ? 'Tunai' : 'AntarVoucher', provider: null, providerName: null, policy: 'platform', fee: 0, error: null },
               })} /></View>
             <PaymentSection method={method} onMethod={setMethod} promo={promo} onPromo={setPromo} notes={notes} onNotes={setNotes} subtotal={price} service="ride_car" onDiscount={setDiscount} hidePromo notesPlaceholder="Catatan untuk mitra travel (bawaan, jam jemput)" />
             <Text style={font.tiny}>Mobil berangkat bila minimal {trip.min_pax} penumpang terkumpul (kecuali private). Pembatalan gratis s.d. 3 jam sebelum berangkat. Penumpang dijemput di alamat masing-masing ±1 jam sebelum jadwal.</Text>
@@ -442,10 +442,10 @@ function RequestMode({ kind, uid }: { kind: TravelRequestKind; uid?: string }) {
         <Input label="Anggaran (opsional)" placeholder="Contoh 1500000" keyboardType="number-pad" icon="cash-outline" value={budget} onChangeText={(v) => setBudget(v.replace(/\D/g, ''))} right={budget ? <Text style={font.tiny}>{rupiah(Number(budget))}</Text> : undefined} />
         <Text style={font.label}>Pembayaran</Text>
         <Row gap={8}>
-          {walletPayOn && <Chip label={`AntarPay · ${rupiah(wallet?.balance ?? 0)}`} active={method === 'wallet'} onPress={() => setMethod('wallet')} />}
+          {walletPayOn && <Chip label={`AntarVoucher · ${rupiah(wallet?.balance ?? 0)}`} active={method === 'wallet'} onPress={() => setMethod('wallet')} />}
           {cashPayOn && <Chip label="Tunai ke sopir" active={method === 'cash'} onPress={() => setMethod('cash')} />}
         </Row>
-        {!walletPayOn && <AntarPayOffNote text={cashPayOn ? ANTARPAY_OFF_TEXT : 'Semua metode pembayaran sedang dinonaktifkan admin — coba lagi nanti.'} />}
+        {!walletPayOn && <AntarVoucherOffNote text={cashPayOn ? ANTARVOUCHER_OFF_TEXT : 'Semua metode pembayaran sedang dinonaktifkan admin — coba lagi nanti.'} />}
         <Text style={font.tiny}>{method === 'wallet' ? 'Saldo dipotong saat Anda menerima penawaran; dana diteruskan ke mitra setelah perjalanan selesai.' : 'Bayar langsung ke sopir saat berangkat. Mitra dapat menolak permintaan tunai untuk perjalanan panjang.'}</Text>
         <Button title={cityBlocked ? cityBlockedLabel(city, 'travel') : 'Kirim permintaan'} size="lg" icon="paper-plane-outline" loading={busy} disabled={cityBlocked} onPress={submit} />
         <Text style={font.tiny}>Permintaan berlaku hingga jadwal berangkat, maksimal 3 permintaan aktif. Anda bebas memilih penawaran atau membatalkan sebelum menerima.</Text>

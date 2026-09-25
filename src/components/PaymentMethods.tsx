@@ -1,4 +1,4 @@
-// Pusat metode pembayaran: tunai, AntarPay, kanal payment gateway (provider aktif dari server), e-money NFC (cek perangkat)
+// Pusat metode pembayaran: tunai, AntarVoucher, kanal payment gateway (provider aktif dari server), e-money NFC (cek perangkat)
 // v3 §1: kanal gateway & biayanya dari payment_provider_public() (hanya `enabled`); nama provider dari server.
 // 0089: setiap saluran hanya tampil bila diaktifkan admin (Panel Admin → Gateway → Saluran Pembayaran).
 import React, { useEffect, useState } from 'react';
@@ -10,8 +10,8 @@ import { Entrance, PressableScale, AnimatedNumber } from '@/components/motion';
 import { BrandGradient } from '@/components/glass';
 import { useAuth } from '@/store/auth';
 import { usePayPrefs, EWALLETS } from '@/store/payprefs';
-import { useAntarPay, usePaymentChannels, CHANNELS_OFF_TEXT } from '@/hooks/useAppSettings';
-import { AntarPayOffBanner } from '@/components/AntarPayNotice';
+import { useAntarVoucher, usePaymentChannels, CHANNELS_OFF_TEXT } from '@/hooks/useAppSettings';
+import { AntarVoucherOffBanner } from '@/components/AntarVoucherNotice';
 import { colors, font, radius, glass, shadow } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
 import { useProviderPublic, channelFeeText } from '@/lib/payments';
@@ -33,7 +33,7 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
   const uid = session?.user.id;
   const { prefs, loaded, load, save } = usePayPrefs();
   const nfc = useNfcSupport();
-  const { enabled: antarpayOn } = useAntarPay();
+  const { enabled: antarpayOn } = useAntarVoucher();
   const { isChannelOn, nonCashOn } = usePaymentChannels();
   const { provider, channels: provChannels, providerName } = useProviderPublic();
   useEffect(() => { if (uid && !loaded) load(uid); }, [uid, loaded, load]);
@@ -69,12 +69,12 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
         </BrandGradient>
       </Entrance>
 
-      {!antarpayOn && <Entrance index={1}><AntarPayOffBanner /></Entrance>}
+      {!antarpayOn && <Entrance index={1}><AntarVoucherOffBanner /></Entrance>}
 
       <Entrance index={1}><Card style={{ gap: 10 }}>
         <Text style={font.label}>Metode utama saat memesan</Text>
         {isChannelOn('cash') && <MethodRow active={method === 'cash'} onPress={() => pick('cash')} icon="cash-outline" color={colors.success} title="Tunai" subtitle="Bayar langsung ke driver" />}
-        {walletOn && <MethodRow active={method === 'wallet'} onPress={() => pick('wallet')} icon="wallet-outline" color={colors.primary} title="Saldo AntarPay" subtitle={`Saldo ${rupiah(wallet?.balance ?? 0)} · dipotong otomatis`} />}
+        {walletOn && <MethodRow active={method === 'wallet'} onPress={() => pick('wallet')} icon="wallet-outline" color={colors.primary} title="Saldo AntarVoucher" subtitle={`Saldo ${rupiah(wallet?.balance ?? 0)} · dipotong otomatis`} />}
         {ewalletOn && <MethodRow active={method === 'ewallet'} onPress={() => pick('ewallet', wallets.some((w) => w.key === ew) ? (ew as string) : wallets[0].key)} icon="phone-portrait-outline" color={colors.info} title={`E-wallet${ew && wallets.some((w) => w.key === ew) ? ` · ${wallets.find((e) => e.key === ew)?.label}` : ''}`} subtitle={`${wallets.map((w) => w.label).join(' · ')} — via ${pgName}, dibayar langsung per pesanan`} />}
         {antarpayOn && !nonCashOn && <Text style={font.tiny}>{CHANNELS_OFF_TEXT}</Text>}
       </Card></Entrance>

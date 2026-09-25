@@ -1,4 +1,4 @@
-// Edge Function: buat transaksi Midtrans Snap — top up AntarPay ATAU bayar satu pesanan (purpose='order').
+// Edge Function: buat transaksi Midtrans Snap — top up AntarVoucher ATAU bayar satu pesanan (purpose='order').
 // Kunci dibaca dari (1) secret MIDTRANS_SERVER_KEY / MIDTRANS_CLIENT_KEY / MIDTRANS_IS_PRODUCTION, atau
 // (2) tabel gateway_secrets yang diisi admin dari Panel Admin → Payment Gateway (tanpa CLI).
 // Tanpa keduanya → mode simulasi agar alur tetap bisa diuji.
@@ -126,11 +126,11 @@ Deno.serve(async (req) => {
       return json({ payment: updated, simulated: false, snap_token: snap.token, redirect_url: snap.redirect_url, client_key: keys.client || null, is_production: keys.prod, order: q });
     }
 
-    // =================== Top up AntarPay (alur lama) ===================
-    // ---- Sakelar AntarPay (migrasi 0088): saat nonaktif, tidak ada transaksi Snap baru yang dibuat ----
+    // =================== Top up AntarVoucher (alur lama) ===================
+    // ---- Sakelar AntarVoucher (migrasi 0088): saat nonaktif, tidak ada transaksi Snap baru yang dibuat ----
     const { data: antarpayOn, error: toggleErr } = await admin.rpc("antarpay_enabled");
-    if (toggleErr) return json({ error: "Status AntarPay tidak dapat diperiksa — coba lagi" }, 503);
-    if (antarpayOn !== true) return json({ error: "AntarPay sedang dinonaktifkan sementara. Gunakan pembayaran tunai.", antarpay_enabled: false }, 403);
+    if (toggleErr) return json({ error: "Status AntarVoucher tidak dapat diperiksa — coba lagi" }, 503);
+    if (antarpayOn !== true) return json({ error: "AntarVoucher sedang dinonaktifkan sementara. Gunakan pembayaran tunai.", antarpay_enabled: false }, 403);
 
     const { amount, method = "any" } = body;
     const amt = Math.round(Number(amount));
@@ -140,12 +140,12 @@ Deno.serve(async (req) => {
     const allowed: string[] = Array.isArray(cfg?.methods) ? cfg.methods : [];
     if (method !== "any" && allowed.length && !allowed.includes(method)) return json({ error: "Metode pembayaran tidak diaktifkan admin" }, 400);
     // ---- Saluran pembayaran per metode (migrasi 0089): sumber kebenaran, tidak bergantung pada pg_methods yang bisa kosong ----
-    // Saldo AntarPay adalah rail top up: kalau saluran 'antarpay' mati, top up ditutup supaya pelanggan
+    // Saldo AntarVoucher adalah rail top up: kalau saluran 'antarpay' mati, top up ditutup supaya pelanggan
     // tidak menyetor dana ke dompet yang tak bisa dipakai.
     {
       const { data: apOn, error: apErr } = await admin.rpc("payment_channel_enabled", { p_key: "antarpay" });
       if (apErr) return json({ error: "Status saluran pembayaran tidak dapat diperiksa — coba lagi" }, 503);
-      if (apOn !== true) return json({ error: "Saluran AntarPay (saldo) sedang dinonaktifkan. Top up ditutup sementara.", channel: "antarpay" }, 403);
+      if (apOn !== true) return json({ error: "Saluran AntarVoucher (saldo) sedang dinonaktifkan. Top up ditutup sementara.", channel: "antarpay" }, 403);
     }
     if (method !== "any") {
       const { data: chOn, error: chErr } = await admin.rpc("payment_channel_enabled", { p_key: method });
@@ -160,7 +160,7 @@ Deno.serve(async (req) => {
 
     const snapBody = {
       transaction_details: { order_id: externalId, gross_amount: amt },
-      item_details: [{ id: "topup", price: amt, quantity: 1, name: "Top up AntarPay" }],
+      item_details: [{ id: "topup", price: amt, quantity: 1, name: "Top up AntarVoucher" }],
       customer_details: customer,
       enabled_payments: METHODS[method]?.length ? METHODS[method] : undefined,
       expiry: { unit: "minutes", duration: 30 },

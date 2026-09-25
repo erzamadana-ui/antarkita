@@ -19,7 +19,7 @@ const SLIDES: Record<typeof APP, Slide[]> = {
   pelanggan: [
     { art: 'rider', title: 'Antar apa saja,\nbersama kita', sub: 'Ojek, mobil, makanan, kirim barang, dan belanja. Satu aplikasi untuk semua kebutuhan harian.', chips: ['AntarRide', 'AntarCar', 'AntarFood', 'AntarSend'] },
     { art: 'travel', title: 'Jalan-jalan antar kota,\njemput di rumah', sub: 'Kursi bersama, carter privat, atau sopir harian dari mitra travel resmi.', chips: ['Kursi bersama', 'Carter privat', 'Sopir harian'] },
-    { art: 'market', title: 'Belanja dibelikan,\nbayar harga riil', sub: 'Minimarket, apotek, sampai pasar tradisional. Driver kirim foto nota, Anda bayar sesuai nota.', chips: ['AntarShop', 'AntarMarket', 'AntarPay'] },
+    { art: 'market', title: 'Belanja dibelikan,\nbayar harga riil', sub: 'Minimarket, apotek, sampai pasar tradisional. Driver kirim foto nota, Anda bayar sesuai nota.', chips: ['AntarShop', 'AntarMarket', 'AntarVoucher'] },
   ],
   mitra: [
     { art: 'rider', title: 'Penghasilan tambahan,\njadwal Anda sendiri', sub: 'Jadi mitra driver motor, mobil, atau box. Terima pesanan kapan pun Anda siap.', chips: ['Driver motor', 'Driver mobil', 'Mobil box'] },

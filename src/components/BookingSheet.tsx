@@ -12,8 +12,8 @@ import type { Order, PaymentMethod, PromoFunder, ProviderChannel, ServiceEconomi
 import { usePayPrefs, EWALLETS, GATEWAY_CHANNELS, PAYMENT_CHANNELS, channelLabel } from '@/store/payprefs';
 import { buildCheckoutRows, checkoutNoteText, channelFeeText, estimatePgFee, useProviderPublic, type PriceRow, type PayFeeEstimate } from '@/lib/payments';
 import { useAdAttribution } from '@/lib/ads';
-import { useAntarPay, usePaymentChannels, CHANNELS_OFF_TEXT } from '@/hooks/useAppSettings';
-import { AntarPayOffNote } from '@/components/AntarPayNotice';
+import { useAntarVoucher, usePaymentChannels, CHANNELS_OFF_TEXT } from '@/hooks/useAppSettings';
+import { AntarVoucherOffNote } from '@/components/AntarVoucherNotice';
 import { useEffect } from 'react';
 
 
@@ -80,7 +80,7 @@ export const checkoutNote = checkoutNoteText;
  * Rincian biaya checkout dari server: aturan layanan (`service_economics_public`), provider aktif
  * (`payment_provider_public`) dan estimasi biaya metode pembayaran (`pg_fee_estimate`) untuk kanal terpilih.
  * `amount` = total sebelum biaya pembayaran (dasar yang sama dengan create_order).
- * `pay` selalu terisi: tunai/AntarPay → Rp0; kanal gateway → biaya pelanggan (0 bila ditanggung AntarKita).
+ * `pay` selalu terisi: tunai/AntarVoucher → Rp0; kanal gateway → biaya pelanggan (0 bila ditanggung AntarKita).
  */
 export function useCheckoutFees({ service, method, ewallet, amount }: { service: ServiceType; method: PayChoice; ewallet?: string | null; amount: number }) {
   const { econ, error: econError } = useServiceEconomics(service);
@@ -110,7 +110,7 @@ export function useCheckoutFees({ service, method, ewallet, amount }: { service:
   }, [gateway, channel, base, service, provCh?.pass_to_customer]); // eslint-disable-line react-hooks/exhaustive-deps
   const pay: PayFeeEstimate = gateway && channel
     ? { kind: 'gateway', channel, label: provCh?.label ?? channelLabel(channel), provider: provider?.provider ?? null, providerName, policy: est.policy, fee: est.policy === 'customer' ? est.fee : 0, error: est.error }
-    : { kind: method === 'wallet' ? 'wallet' : 'cash', channel: null, label: method === 'wallet' ? 'AntarPay' : 'Tunai', provider: null, providerName: null, policy: 'platform', fee: 0, error: null };
+    : { kind: method === 'wallet' ? 'wallet' : 'cash', channel: null, label: method === 'wallet' ? 'AntarVoucher' : 'Tunai', provider: null, providerName: null, policy: 'platform', fee: 0, error: null };
   /** Biaya pembayaran yang menambah total (0 bila ditanggung AntarKita / belum diketahui). */
   const payFee = pay.policy === 'customer' ? pay.fee : 0;
   return { econ, econError, pay, payFee };
@@ -128,7 +128,7 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
   const { wallet, session } = useAuth();
   const router = useRouter();
   const { prefs, loaded, load, save } = usePayPrefs();
-  const { enabled: antarpayOn } = useAntarPay();
+  const { enabled: antarpayOn } = useAntarVoucher();
   const { isChannelOn, nonCashOn } = usePaymentChannels();
   // v3 §1: kanal gateway + biayanya dari payment_provider_public() (hanya `enabled`). Bila RPC gagal → daftar lama (0089).
   const { provider, channels: provChannels, providerName } = useProviderPublic();
@@ -179,7 +179,7 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
       <Text style={font.label}>Pembayaran</Text>
       <Row gap={8}>
         {cashOn && <PayOption active={method === 'cash'} onPress={() => onMethod('cash')} icon="cash-outline" title="Tunai" subtitle="Ke driver" />}
-        {walletOn && <PayOption active={method === 'wallet'} onPress={() => onMethod('wallet')} icon="wallet-outline" title="AntarPay" subtitle={rupiah(wallet?.balance ?? 0)} />}
+        {walletOn && <PayOption active={method === 'wallet'} onPress={() => onMethod('wallet')} icon="wallet-outline" title="AntarVoucher" subtitle={rupiah(wallet?.balance ?? 0)} />}
         {ewalletOn && ew && <PayOption active={method === 'ewallet'} onPress={() => onMethod('ewallet')} icon={ew.icon as never} title={ew.label} subtitle={feeText(ew)} color={ew.color} />}
       </Row>
       {method === 'ewallet' && ewalletOn && wallets.length > 1 ? (
@@ -201,10 +201,10 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
       ) : (antarpayOn && nonCashOn) || ewalletOn ? (
         <PressableScale onPress={() => router.push('/(customer)/pay' as never)} scaleTo={0.98} haptic={false} style={s.gwRow}>
           <View style={s.gwIcons}>{wallets.slice(0, 4).map((w) => <View key={w.key} style={[s.gwDot, { backgroundColor: w.color }]} />)}</View>
-          <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>Ganti metode utama</Text><Text style={font.tiny} numberOfLines={2}>{[walletOn ? 'Saldo AntarPay' : null, ...wallets.map((w) => w.label)].filter(Boolean).join(' · ')}</Text></View>
+          <View style={{ flex: 1 }}><Text style={{ fontWeight: '700', color: colors.text, fontSize: 14 }}>Ganti metode utama</Text><Text style={font.tiny} numberOfLines={2}>{[walletOn ? 'Saldo AntarVoucher' : null, ...wallets.map((w) => w.label)].filter(Boolean).join(' · ')}</Text></View>
           <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
         </PressableScale>
-      ) : <AntarPayOffNote text={!cashOn && !walletOn && !ewalletOn ? 'Semua metode pembayaran sedang dinonaktifkan admin — coba lagi nanti.' : antarpayOn ? CHANNELS_OFF_TEXT : undefined} />}
+      ) : <AntarVoucherOffNote text={!cashOn && !walletOn && !ewalletOn ? 'Semua metode pembayaran sedang dinonaktifkan admin — coba lagi nanti.' : antarpayOn ? CHANNELS_OFF_TEXT : undefined} />}
       {!hidePromo && (
         <Row gap={8}>
           <View style={{ flex: 1 }}>
@@ -237,7 +237,7 @@ function PayOption({ active, onPress, icon, title, subtitle, color = colors.prim
     <PressableScale onPress={onPress} scaleTo={0.97} style={[s.pay, active && { borderColor: color, backgroundColor: color + '14', ...shadow.glow(color) }]}>
       <View style={[s.payIcon, active && { backgroundColor: color }]}><Ionicons name={icon} size={20} color={active ? '#fff' : colors.textSecondary} /></View>
       {/* Tata letak menurun (ikon di atas teks): pada layar 390px, tata letak mendatar hanya menyisakan ~45px
-          untuk teks sehingga "AntarPay" terpotong jadi "Anta…" dan nominal saldo tidak terbaca. */}
+          untuk teks sehingga "AntarVoucher" terpotong jadi "Anta…" dan nominal saldo tidak terbaca. */}
       <Text style={s.payTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{title}</Text>
       <Text style={s.paySub} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{subtitle}</Text>
     </PressableScale>

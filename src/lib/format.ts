@@ -80,7 +80,7 @@ export const vehicleTypeLabel: Record<string, string> = { motor: 'Motor', car: '
 export const vehicleConditionLabel: Record<string, string> = { standar: 'Standar', baik: 'Baik', sangat_baik: 'Sangat baik' };
 export const classShort = (code?: string | null) => code ? ({ motor_economy: 'Hemat', motor_standard: 'Standar', motor_ev: 'Listrik', car_economy: 'Hemat', car_standard: 'Standar', car_premium: 'Premium', car_ev: 'Listrik', car_ev_premium: 'Listrik Premium', box_pickup: 'Pick Up', box_van: 'Mobil Box' } as Record<string, string>)[code] ?? code : '';
 export const ewalletLabel: Record<string, string> = { gopay: 'GoPay', ovo: 'OVO', dana: 'DANA', shopeepay: 'ShopeePay', qris: 'QRIS', bank_transfer: 'VA Bank' };
-export const paidViaLabel = (v?: string | null) => v === 'cash' || !v ? 'Tunai' : v === 'wallet' || v === 'antarpay' ? 'AntarPay' : ewalletLabel[v] ?? v;
+export const paidViaLabel = (v?: string | null) => v === 'cash' || !v ? 'Tunai' : v === 'wallet' || v === 'antarpay' ? 'AntarVoucher' : ewalletLabel[v] ?? v;
 
 // ---- Skema Bisnis v2 (0099–0101) ----
 /** Siapa yang menanggung promo — ditampilkan di rincian harga ("ditanggung platform/merchant/sponsor"). */

@@ -249,9 +249,9 @@ export interface AppPublicSettings {
   services_enabled: Record<string, boolean>; max_km: Record<string, number>; osm_import_enabled: boolean; osm_import_radius_km: number;
   /** Tahap 9 */
   pickup_radius_km: Record<string, number>; send_limits: SendLimits; priority_tiers: PriorityTier[]; wait_apology_minutes: number;
-  /** 0088: sakelar AntarPay dari Panel Admin. false/tidak ada = nonaktif (top up, pencairan, bayar dompet/e-wallet ditolak server). */
+  /** 0088: sakelar AntarVoucher dari Panel Admin. false/tidak ada = nonaktif (top up, pencairan, bayar dompet/e-wallet ditolak server). */
   antarpay_enabled: boolean;
-  /** 0089: status EFEKTIF tiap saluran pembayaran (sudah memperhitungkan sakelar global AntarPay). */
+  /** 0089: status EFEKTIF tiap saluran pembayaran (sudah memperhitungkan sakelar global AntarVoucher). */
   payment_channels: PaymentChannels;
 }
 
@@ -259,7 +259,7 @@ export interface AppPublicSettings {
 export type PaymentChannels = Record<string, boolean>;
 /** 0089: balasan `admin_set_payment_channel()` / `admin_payment_channels()`. */
 export interface AdminPaymentChannels { payment_channels: PaymentChannels; effective: PaymentChannels; antarpay_enabled: boolean; pg_methods: string[];
-  /** 0104: sakelar bayar PER PESANAN lewat gateway (terpisah dari AntarPay/top up) */ gateway_order_payment_enabled?: boolean;
+  /** 0104: sakelar bayar PER PESANAN lewat gateway (terpisah dari AntarVoucher/top up) */ gateway_order_payment_enabled?: boolean;
   /** 0104: saluran yang boleh dipakai membayar satu pesanan */ order_payment_channels?: PaymentChannels }
 /** Satu baris `admin_business_settings().settings` (0104) — ambang bisnis yang bisa diubah lewat admin_set_settings (PIN). */
 export interface BusinessSetting {

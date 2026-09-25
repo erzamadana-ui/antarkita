@@ -47,7 +47,7 @@ export default function PaymentHistory() {
                   <View style={[s.icon, { backgroundColor: color + '1A' }]}><Ionicons name={p.purpose === 'topup' ? 'add-circle-outline' : 'receipt-outline'} size={20} color={color} /></View>
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                     <Row between style={{ gap: 8 }}>
-                      <Text style={{ fontWeight: '700', color: colors.text, flex: 1 }} numberOfLines={1}>{p.purpose === 'topup' ? 'Top up AntarPay' : `Pesanan ${p.order_code ?? ''}`}</Text>
+                      <Text style={{ fontWeight: '700', color: colors.text, flex: 1 }} numberOfLines={1}>{p.purpose === 'topup' ? 'Top up AntarVoucher' : `Pesanan ${p.order_code ?? ''}`}</Text>
                       <Text style={{ fontWeight: '700', color: colors.text }}>{rupiah(p.amount)}</Text>
                     </Row>
                     <Text style={font.tiny} numberOfLines={1}>{ch} · {p.provider_label ?? providerLabel(p.provider)} · {formatDate(p.paid_at ?? p.created_at)}</Text>

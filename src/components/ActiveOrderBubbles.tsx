@@ -56,7 +56,7 @@ export function ActiveOrderBubbles({ orders, hrefFor = (o) => `/order/${o.id}`, 
               </View>
               <Row gap={8}>
                 {!!sel.driver?.profile?.full_name && <Badge text={`${role === 'customer' ? t('driver') : t('customer')}: ${sel.driver.profile.full_name}`} color={colors.info} />}
-                <Badge text={sel.payment_method === 'wallet' ? 'AntarPay' : t('cash')} color={colors.textSecondary} />
+                <Badge text={sel.payment_method === 'wallet' ? 'AntarVoucher' : t('cash')} color={colors.textSecondary} />
               </Row>
               <Row gap={8}>
                 <Button title={t('track')} icon="navigate" size="sm" style={{ flex: 1 }} onPress={() => router.push(hrefFor(sel) as never)} />

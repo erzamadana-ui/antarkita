@@ -211,7 +211,7 @@ export function DriverEarningBreakdown({ orderId, status, title = 'Rincian penda
                 Anda memegang tunai {rupiah(b.memegang_tunai)}{b.receivable != null ? ` · ${recv >= 0 ? `Setoran ke platform ${rupiah(recv)}` : `Platform mengembalikan ${rupiah(-recv)} ke saldo Anda`}` : ''}
               </Text>
               {(b.setor_merchant_tunai ?? 0) > 0 && <Text style={font.tiny}>Termasuk pembayaran ke merchant {rupiah(b.setor_merchant_tunai)} saat mengambil pesanan.</Text>}
-              <Text style={font.tiny}>{b.receivable != null ? 'Setoran dipotong otomatis dari saldo AntarPay Anda saat order selesai.' : 'Setoran order lama dipotong dari saldo sesuai aturan saat itu.'}</Text>
+              <Text style={font.tiny}>{b.receivable != null ? 'Setoran dipotong otomatis dari saldo AntarVoucher Anda saat order selesai.' : 'Setoran order lama dipotong dari saldo sesuai aturan saat itu.'}</Text>
             </View>
           </Row>
         </View>

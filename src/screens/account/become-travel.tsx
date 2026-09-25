@@ -173,7 +173,7 @@ export default function BecomeTravel() {
 function TravelFeeText() {
   const { data } = useServiceEconomics(['travel']);
   const fee = data.travel?.merchant_fee_pct;
-  return <>{fee != null ? `Fee layanan AntarKita ${pctLabel(fee)} per perjalanan` : 'Fee layanan AntarKita tercantum di rincian tiap perjalanan'}; pencairan ke AntarPay setelah perjalanan selesai.</>;
+  return <>{fee != null ? `Fee layanan AntarKita ${pctLabel(fee)} per perjalanan` : 'Fee layanan AntarKita tercantum di rincian tiap perjalanan'}; pencairan ke AntarVoucher setelah perjalanan selesai.</>;
 }
 
 const s = StyleSheet.create({

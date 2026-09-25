@@ -202,7 +202,7 @@ export default function AdminFinanceReport() {
         `Periode ${rangeLabel(range)} (waktu Jakarta). Nilai uang hanya menghitung pesanan berstatus selesai; kolom "Order" menghitung seluruh pesanan pada rentang, termasuk yang batal.`,
         'GMV = total nilai pesanan selesai. Pendapatan platform = biaya platform + komisi + jasa perusahaan + marjin merchant/antar kota.',
         'COGS = payout driver + payout merchant + promo/diskon + biaya gateway. Marjin bersih = pendapatan − promo − biaya gateway.',
-        'Biaya gateway bernilai 0 bila pesanan belum melewati transaksi payment gateway (mis. pembayaran tunai atau saldo AntarPay).',
+        'Biaya gateway bernilai 0 bila pesanan belum melewati transaksi payment gateway (mis. pembayaran tunai atau saldo AntarVoucher).',
         'Daftar rincian per pesanan dibatasi 200 baris terbaru per kelompok; gunakan Ekspor CSV untuk arsip lengkap tiap kelompok.',
       ]} />
 

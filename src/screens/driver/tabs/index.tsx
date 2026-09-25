@@ -173,7 +173,7 @@ export default function DriverHome() {
                 <View style={[s.thumb, { backgroundColor: serviceDef(selected.service).color + '14' }]}><ServiceIllustration kind={serviceDef(selected.service).art} size={40} /></View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[font.h3, { fontSize: 16 }]} numberOfLines={1}>{serviceLabel[selected.service]}</Text>
-                  <Text style={font.tiny}>{selected.code} · {selected.payment_method === 'cash' ? `Tunai, tagih ${rupiah(selected.total)}` : 'Dibayar AntarPay'}</Text>
+                  <Text style={font.tiny}>{selected.code} · {selected.payment_method === 'cash' ? `Tunai, tagih ${rupiah(selected.total)}` : 'Dibayar AntarVoucher'}</Text>
                 </View>
               </Row>
               <PressableScale onPress={() => setSelected(null)} scaleTo={0.9} style={s.closeBtn}><Ionicons name="close" size={20} color={colors.textSecondary} /></PressableScale>
@@ -193,7 +193,7 @@ export default function DriverHome() {
               <Row gap={10}><View style={s.dotIcon}><Ionicons name="navigate-outline" size={16} color={colors.primary} /></View><Text style={[font.small, { flex: 1 }]}>{km(selected.distance_to_pickup_km)} ke titik jemput · {selected.merchant_name ?? selected.pickup_address}</Text></Row>
               <Row gap={10}><View style={s.dotIcon}><Ionicons name="location-outline" size={16} color={colors.primary} /></View><Text style={[font.small, { flex: 1 }]}>{km(selected.distance_km)} perjalanan · {selected.dropoff_address}</Text></Row>
               {selected.service === 'shop' && <Row gap={10}><View style={s.dotIcon}><Ionicons name="basket-outline" size={16} color={colors.primary} /></View><Text style={[font.small, { flex: 1 }]}>Belanjakan ±{rupiah(selected.items_subtotal)}{selected.payment_method === 'cash' ? ' (talangi tunai, tagih ke pelanggan)' : ' (diganti ke saldo Anda saat selesai)'}</Text></Row>}
-              {selected.service === 'food' && <Row gap={10}><View style={s.dotIcon}><Ionicons name="restaurant-outline" size={16} color={colors.primary} /></View><Text style={[font.small, { flex: 1 }]}>Beli makanan {rupiah(selected.items_subtotal)}{selected.payment_method === 'cash' ? ' (talangi tunai)' : ' (dibayar AntarPay)'}</Text></Row>}
+              {selected.service === 'food' && <Row gap={10}><View style={s.dotIcon}><Ionicons name="restaurant-outline" size={16} color={colors.primary} /></View><Text style={[font.small, { flex: 1 }]}>Beli makanan {rupiah(selected.items_subtotal)}{selected.payment_method === 'cash' ? ' (talangi tunai)' : ' (dibayar AntarVoucher)'}</Text></Row>}
             </View>
             <OrderLoadInfo order={selected} style={{ marginTop: 10 }} />
             {!!selected.priority_note && <Row gap={6} style={{ marginTop: 8 }}><Ionicons name="information-circle-outline" size={12} color={colors.textMuted} /><Text style={[font.tiny, { flex: 1 }]}>{selected.priority_note}</Text></Row>}
@@ -227,7 +227,7 @@ export default function DriverHome() {
                           Jarak & waktu/jadwal juga dipisah 2 baris: pada 360px satu baris masih terpotong. */}
                       <Text style={font.tiny} numberOfLines={1}>Jemput {km(o.distance_to_pickup_km)} · Antar {km(o.distance_km)}</Text>
                       <Text style={font.tiny} numberOfLines={1}>{o.scheduled_at ? `Jadwal ${formatSchedule(o.scheduled_at)}` : timeAgo(o.created_at)}</Text>
-                      <Row gap={4}><Ionicons name={o.payment_method === 'cash' ? 'cash-outline' : 'wallet-outline'} size={12} color={o.payment_method === 'cash' ? colors.warning : colors.primary} /><Text style={[font.tiny, { fontWeight: '700', color: o.payment_method === 'cash' ? colors.warning : colors.primary }]} numberOfLines={1}>{o.payment_method === 'cash' ? 'Tunai' : 'AntarPay'}</Text></Row>
+                      <Row gap={4}><Ionicons name={o.payment_method === 'cash' ? 'cash-outline' : 'wallet-outline'} size={12} color={o.payment_method === 'cash' ? colors.warning : colors.primary} /><Text style={[font.tiny, { fontWeight: '700', color: o.payment_method === 'cash' ? colors.warning : colors.primary }]} numberOfLines={1}>{o.payment_method === 'cash' ? 'Tunai' : 'AntarVoucher'}</Text></Row>
                       <Text style={{ fontWeight: '700', color: colors.primary, fontSize: 16 }}>{rupiah(o.driver_earning)}</Text>
                     </View>
                     <View style={s.rowArrow}><Ionicons name="arrow-forward" size={16} color={colors.primary} /></View>

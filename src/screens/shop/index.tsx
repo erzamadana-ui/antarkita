@@ -365,7 +365,7 @@ export default function ShopScreen() {
               </Card>
               <Card solid style={{ gap: 10 }}>
                 <Text style={font.label}>Perkiraan anggaran belanja</Text>
-                <Text style={font.tiny}>Ditahan dari AntarPay saat pesan; selisih dikembalikan atau ditagih sesuai nota. Maks. Rp5.000.000.</Text>
+                <Text style={font.tiny}>Ditahan dari AntarVoucher saat pesan; selisih dikembalikan atau ditagih sesuai nota. Maks. Rp5.000.000.</Text>
                 <Row gap={8} style={{ flexWrap: 'wrap' }}>{BUDGETS.map((b) => <Chip key={b} label={rupiah(b)} active={budget === b} onPress={() => setBudget(b)} />)}</Row>
                 <Input placeholder="Nominal lain" keyboardType="number-pad" icon="cash-outline" value={BUDGETS.includes(budget) ? '' : String(budget)} onChangeText={(v) => setBudget(Math.min(5000000, Number(v.replace(/\D/g, '')) || 0))} />
                 {freeSubtotal > budget && <Text style={[font.tiny, { color: colors.warning }]}>Perkiraan harga barang ({rupiah(freeSubtotal)}) lebih besar dari anggaran; anggaran yang ditahan mengikuti perkiraan barang.</Text>}

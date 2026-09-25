@@ -91,7 +91,7 @@ export default function OrderTracking() {
   const cancel = () => {
     const doIt = async (reason: string) => { try { await rpc('cancel_order', { p_order_id: id, p_reason: reason }); toast.show('Pesanan dibatalkan'); reload(); } catch (e) { toast.error((e as Error).message); } };
     if (Platform.OS === 'web') { const r = prompt('Alasan pembatalan (opsional):'); if (r !== null) doIt(r || 'Dibatalkan pelanggan'); return; }
-    Alert.alert('Batalkan pesanan?', 'Pesanan yang sudah dibayar AntarPay akan dikembalikan ke saldo.', [{ text: 'Tidak' }, { text: 'Ya, batalkan', style: 'destructive', onPress: () => doIt('Dibatalkan pelanggan') }]);
+    Alert.alert('Batalkan pesanan?', 'Pesanan yang sudah dibayar AntarVoucher akan dikembalikan ke saldo.', [{ text: 'Tidak' }, { text: 'Ya, batalkan', style: 'destructive', onPress: () => doIt('Dibatalkan pelanggan') }]);
   };
   const rate = async (kind: 'driver' | 'merchant', stars: number) => {
     try { await rpc('rate_order', { p_order_id: id, p_kind: kind, p_stars: stars, p_comment: comment || null }); setRated((r) => ({ ...r, [kind]: stars })); toast.success('Terima kasih atas penilaian Anda'); }
@@ -195,7 +195,7 @@ export default function OrderTracking() {
         </View>
         <View style={s.block}>
           <PriceBlock order={order} />
-          {order.payment_status === 'refunded' && <Badge text="Dana dikembalikan ke AntarPay" color={colors.info} style={{ marginTop: 8 }} />}
+          {order.payment_status === 'refunded' && <Badge text="Dana dikembalikan ke AntarVoucher" color={colors.info} style={{ marginTop: 8 }} />}
         </View>
         {!awaitingPay && <PaymentPanel order={order} onChanged={reload} />}
         {/* Iklan v3 (§7): post_checkout_cross — blok Sponsored terpisah setelah pesanan dibuat (hanya aplikasi Pelanggan) */}

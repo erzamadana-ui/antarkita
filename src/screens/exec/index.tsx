@@ -265,20 +265,20 @@ export default function ExecPortal() {
 
             {/* ── Keuangan (arus kas dompet & promo) ── */}
             {r.finance ? (<>
-              <SectionHead title="Keuangan & likuiditas" hint="Take rate, promo, serta arus kas dompet AntarPay" />
+              <SectionHead title="Keuangan & likuiditas" hint="Take rate, promo, serta arus kas dompet AntarVoucher" />
               <Row gap={adminSpace.md} style={{ flexWrap: 'wrap' }}>
                 <StatCard index={0} icon="trending-up-outline" label="Take rate" value={pctId(r.finance.take_rate_pct)} hint="pendapatan platform ÷ GMV" color={adminTone.teal} />
                 <StatCard index={1} icon="cash-outline" label="Pendapatan bersih" value={rupiah(r.finance.net_revenue)} hint="setelah promo & biaya gateway" color={r.finance.net_revenue >= 0 ? adminTone.green : adminTone.red} />
                 <StatCard index={2} icon="stats-chart-outline" label="Margin kontribusi" value={pctId(r.finance.contribution_margin_pct)} hint="pendapatan bersih ÷ GMV" color={r.finance.contribution_margin_pct >= 10 ? adminTone.green : adminTone.amber} />
                 <StatCard index={3} icon="pricetags-outline" label="Promo" value={pctId(r.finance.promo_pct_gmv)} hint={`${rupiah(r.finance.promo_discount)} dari GMV`} color={r.finance.promo_pct_gmv > 5 ? adminTone.red : adminTone.blue} />
                 <StatCard index={4} icon="cash-outline" label="Pesanan tunai" value={pctId(r.finance.cash_orders_pct)} hint="dari pesanan selesai" color={adminTone.slate} />
-                <StatCard index={5} icon="wallet-outline" label="Liabilitas saldo" value={rupiah(r.finance.wallet_liability)} hint="saldo AntarPay pengguna (utang ke pengguna)" color={adminTone.violet} />
+                <StatCard index={5} icon="wallet-outline" label="Liabilitas saldo" value={rupiah(r.finance.wallet_liability)} hint="saldo AntarVoucher pengguna (utang ke pengguna)" color={adminTone.violet} />
                 <StatCard index={6} icon="alert-circle-outline" label="Piutang saldo minus" value={rupiah(r.finance.receivable_negative)} hint="saldo minus mitra (order tunai)" color={r.finance.receivable_negative > 1000000 ? adminTone.red : adminTone.amber} />
                 <StatCard index={7} icon="card-outline" label="Top up via gateway" value={rupiah(r.finance.topups_gateway)} hint={`estimasi biaya gateway ${rupiah(r.finance.gateway_fee_est)} (${pctId(r.finance.gateway_fee_pct)})`} color={adminTone.orange} />
                 <StatCard index={8} icon="time-outline" label="Penarikan tertunda" value={rupiah(r.finance.withdrawals_pending)} hint={`top up tertunda ${rupiah(r.finance.topups_pending)}`} color={adminTone.blue} />
               </Row>
 
-              <Panel title="Arus kas dompet & promo per bulan" subtitle="Pendapatan = biaya layanan + komisi · top up & penarikan = arus kas dompet AntarPay" icon="swap-vertical-outline" iconColor={adminTone.blue} padded={false}>
+              <Panel title="Arus kas dompet & promo per bulan" subtitle="Pendapatan = biaya layanan + komisi · top up & penarikan = arus kas dompet AntarVoucher" icon="swap-vertical-outline" iconColor={adminTone.blue} padded={false}>
                 <DataTable keyField="month" rows={r.monthly as unknown as Record<string, unknown>[]} emptyText="Belum ada data bulanan"
                   columns={[
                     { key: 'month', label: 'Bulan', width: 96, render: (x) => <Text style={af.bodyStrong}>{fmtMonth(String(x.month))}</Text> },
@@ -374,7 +374,7 @@ export default function ExecPortal() {
                     <LineItem label="Pengguna aktif" value={String(r.supply.users_total)} />
                     {r.supply.vendors_total != null ? <LineItem label="Pedagang pasar aktif / menunggu" value={`${r.supply.vendors_total} / ${r.supply.vendors_pending ?? 0}`} /> : null}
                     {r.supply.travel_partners != null ? <LineItem label="Mitra travel aktif" value={String(r.supply.travel_partners)} /> : null}
-                    <LineItem top label="Saldo AntarPay pengguna (float)" value={rupiah(r.supply.wallet_float)} />
+                    <LineItem top label="Saldo AntarVoucher pengguna (float)" value={rupiah(r.supply.wallet_float)} />
                     <LineItem label="Saldo minus driver (piutang)" value={rupiah(r.supply.wallet_negative)} color={r.supply.wallet_negative < 0 ? adminTone.red : undefined} />
                   </View>
                 </Panel>
@@ -477,7 +477,7 @@ export default function ExecPortal() {
               pnl
                 ? 'Laba rugi (P&L) memakai pendapatan yang ditagih ke pelanggan dikurangi biaya langsung (payout mitra, promo, biaya gateway). Belum termasuk biaya operasional perusahaan: gaji, server, pemasaran, dan pajak.'
                 : 'Bagian Laba Rugi (P&L) belum tersedia dari server pada versi ini; angka keuangan di atas tetap valid.',
-              'Biaya gateway bernilai nol untuk pesanan tanpa transaksi payment gateway (tunai atau saldo AntarPay).',
+              'Biaya gateway bernilai nol untuk pesanan tanpa transaksi payment gateway (tunai atau saldo AntarVoucher).',
               'Data AntarTravel dan tiket CS dihitung terpisah dari pesanan reguler.',
             ]} />
           </Animated.View>

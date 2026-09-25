@@ -176,7 +176,7 @@ function MerchantFeeText() {
     ? `Fee layanan AntarKita ${pctLabel(fee)} dari nilai barang per pesanan.`
     : loading ? 'Memuat aturan fee…' : 'Fee layanan AntarKita dihitung dari nilai barang dan selalu tercantum di rincian setiap pesanan.';
   const ongkir = e && Number(e.driver_commission_pct) === 0 ? ' Ongkir 100 % hak driver, tidak memotong hak Anda.' : '';
-  return <Text style={[font.small, { textAlign: 'center', marginTop: 6 }]}>{feeText}{ongkir} Pendapatan masuk ke saldo AntarPay otomatis. Tanpa biaya pendaftaran. Pengajuan ditinjau admin maks. 1×24 jam kerja.</Text>;
+  return <Text style={[font.small, { textAlign: 'center', marginTop: 6 }]}>{feeText}{ongkir} Pendapatan masuk ke saldo AntarVoucher otomatis. Tanpa biaya pendaftaran. Pengajuan ditinjau admin maks. 1×24 jam kerja.</Text>;
 }
 
 const s = StyleSheet.create({

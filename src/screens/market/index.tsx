@@ -463,7 +463,7 @@ export default function MarketScreen() {
               )
               : <View style={{ gap: 8 }}><Skeleton width="60%" height={14} /><Skeleton width="40%" height={14} /><Skeleton width="70%" height={14} /></View>}
             {est ? <LimitInfo limit={est.limit} service="market" /> : null}
-            <Text style={font.tiny}>Dana yang ditahan = acuan + cadangan 10%. Setelah driver mengirim nota, total disesuaikan dengan harga riil dan sisanya dikembalikan ke AntarPay.</Text>
+            <Text style={font.tiny}>Dana yang ditahan = acuan + cadangan 10%. Setelah driver mengirim nota, total disesuaikan dengan harga riil dan sisanya dikembalikan ke AntarVoucher.</Text>
           </Card>
         )}
         <Card solid>

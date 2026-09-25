@@ -39,7 +39,7 @@ export default function TravelBookingDetail() {
   const cancel = () => {
     const doIt = async () => { try { await rpc('travel_booking_cancel', { p_id: b.id, p_reason: 'Dibatalkan pelanggan' }); toast.show('Booking dibatalkan'); load(); } catch (e) { toast.error((e as Error).message); } };
     if (Platform.OS === 'web') { if (confirm('Batalkan booking travel ini?')) doIt(); return; }
-    Alert.alert('Batalkan booking?', 'Dana dikembalikan ke AntarPay bila sudah dibayar.', [{ text: 'Tidak' }, { text: 'Ya, batalkan', style: 'destructive', onPress: doIt }]);
+    Alert.alert('Batalkan booking?', 'Dana dikembalikan ke AntarVoucher bila sudah dibayar.', [{ text: 'Tidak' }, { text: 'Ya, batalkan', style: 'destructive', onPress: doIt }]);
   };
   const rate = async (v: number) => { try { await rpc('travel_rate', { p_booking: b.id, p_stars: v }); toast.success('Terima kasih atas penilaian Anda'); load(); } catch (e) { toast.error((e as Error).message); } };
   const contactCs = () => router.push({ pathname: '/support/new', params: { category: 'order', subject: `Travel ${b.code}` } } as never);
@@ -137,7 +137,7 @@ export default function TravelBookingDetail() {
 
             {tab === 'kebijakan' && (
               <Entrance index={0}><View style={s.card}>
-                {infoRow('time-outline', 'Pembatalan', 'Gratis hingga 3 jam sebelum berangkat. Dana dikembalikan ke AntarPay bila sudah dibayar.')}
+                {infoRow('time-outline', 'Pembatalan', 'Gratis hingga 3 jam sebelum berangkat. Dana dikembalikan ke AntarVoucher bila sudah dibayar.')}
                 {infoRow('people-outline', 'Keberangkatan', `Mobil berangkat bila minimal ${t.min_pax} penumpang terkumpul (kecuali private).`)}
                 {infoRow('car-outline', 'Penjemputan', 'Penumpang dijemput di alamat masing-masing sekitar 1 jam sebelum jadwal.')}
                 {infoRow('shield-checkmark-outline', 'Keamanan', 'Nomor tersamar dan tombol SOS aktif selama perjalanan.')}

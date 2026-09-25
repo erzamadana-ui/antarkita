@@ -71,7 +71,7 @@ export function ShopTotalCard({ order, onDone }: { order: Order; onDone: () => v
       <Text style={font.tiny}>
         {isMarket ? 'Isi harga riil per bahan sesuai nota; harga ini jadi acuan pelanggan berikutnya. ' : 'Sesuai nota. '}
         Batas maksimal {rupiah(limit)}. Jika lebih, konfirmasi ke pelanggan lewat chat/telepon.
-        {order.payment_method === 'wallet' ? ' Selisih otomatis disesuaikan dari AntarPay pelanggan; penggantian belanja + jasa belanja masuk ke saldo Anda saat order selesai.' : ' Pesanan tunai: tagih total ke pelanggan saat serah terima.'}
+        {order.payment_method === 'wallet' ? ' Selisih otomatis disesuaikan dari AntarVoucher pelanggan; penggantian belanja + jasa belanja masuk ke saldo Anda saat order selesai.' : ' Pesanan tunai: tagih total ke pelanggan saat serah terima.'}
       </Text>
 
       {isMarket && (

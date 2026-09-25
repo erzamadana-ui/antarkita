@@ -26,7 +26,7 @@ export default function VendorEarnings() {
         <Row gap={8} style={s.note}>
           <Ionicons name="information-circle-outline" size={16} color={colors.market} />
           <Text style={[font.tiny, { flex: 1 }]}>
-            Belanja AntarMarket dibayar driver langsung di lapak Anda saat mengambil barang — nilainya tidak masuk saldo AntarPay dan tidak dipotong fee.
+            Belanja AntarMarket dibayar driver langsung di lapak Anda saat mengambil barang — nilainya tidak masuk saldo AntarVoucher dan tidak dipotong fee.
             {' '}Saldo di bawah memuat transaksi lain dengan AntarKita (mis. penyesuaian, refund, pendapatan non-tunai) dan bisa dicairkan ke rekening lapak.
           </Text>
         </Row>

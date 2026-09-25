@@ -1,4 +1,4 @@
-// Tab Pembayaran: metode bayar (tunai / AntarPay / e-wallet / e-money) + riwayat saldo AntarPay
+// Tab Pembayaran: metode bayar (tunai / AntarVoucher / e-wallet / e-money) + riwayat saldo AntarVoucher
 import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Screen, Row } from '@/components/ui';

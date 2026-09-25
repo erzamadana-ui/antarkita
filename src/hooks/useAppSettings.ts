@@ -139,16 +139,16 @@ export function useAppSettings() {
   return { settings, loading, isEnabled, maxKm, sendLimits, waitApologyMinutes, reload: () => load(true) };
 }
 
-/** Teks tunggal untuk banner/info saat AntarPay dinonaktifkan admin (0088). */
-export const ANTARPAY_OFF_TEXT = 'AntarPay sementara nonaktif — top up, pencairan, dan bayar dengan AntarPay/e-wallet belum tersedia. Silakan bayar tunai.';
+/** Teks tunggal untuk banner/info saat AntarVoucher dinonaktifkan admin (0088). */
+export const ANTARVOUCHER_OFF_TEXT = 'AntarVoucher sementara nonaktif — top up, pencairan, dan bayar dengan AntarVoucher/e-wallet belum tersedia. Silakan bayar tunai.';
 
 /**
- * Sakelar AntarPay (migrasi 0088, Panel Admin → Gateway/AntarPay).
+ * Sakelar AntarVoucher (migrasi 0088, Panel Admin → Gateway/AntarVoucher).
  * Berbeda dari sakelar layanan, arah gagal-amannya TERTUTUP: sebelum pengaturan termuat atau bila server
- * tidak mengirim kunci, AntarPay dianggap NONAKTIF — sesuai default server. Server tetap menolak
+ * tidak mengirim kunci, AntarVoucher dianggap NONAKTIF — sesuai default server. Server tetap menolak
  * top up / pencairan / bayar dompet saat nonaktif, jadi UI hanya mencegah pengguna menabrak tembok itu.
  */
-export function useAntarPay() {
+export function useAntarVoucher() {
   const { settings, loading, reload } = useAppSettings();
   const enabled = settings?.antarpay_enabled === true;
   return { enabled, loaded: settings !== null, loading, reload };
@@ -159,8 +159,8 @@ export const CHANNELS_OFF_TEXT = 'Saat ini hanya pembayaran tunai yang dibuka ad
 
 /**
  * Saluran pembayaran per metode (migrasi 0089, Panel Admin → Gateway → Saluran Pembayaran).
- * Hierarki sakelar: sakelar global AntarPay (0088) adalah INDUK — bila mati, semua saluran
- * selain tunai ikut mati apa pun setelan per-saluran. Arah gagal-amannya TERTUTUP seperti `useAntarPay`.
+ * Hierarki sakelar: sakelar global AntarVoucher (0088) adalah INDUK — bila mati, semua saluran
+ * selain tunai ikut mati apa pun setelan per-saluran. Arah gagal-amannya TERTUTUP seperti `useAntarVoucher`.
  * Server tetap sumber kebenaran (`payment_channel_require` di create_order/travel_book/travel_request_create/request_topup);
  * UI hanya mencegah pengguna menabrak tembok itu.
  */
@@ -168,7 +168,7 @@ export function usePaymentChannels() {
   const { settings, loading, reload } = useAppSettings();
   const antarpayOn = settings?.antarpay_enabled === true;
   const channels = settings?.payment_channels ?? DEFAULT_PAYMENT_CHANNELS;
-  // Rail saldo: di server SETIAP paid_via selain 'cash' diselesaikan dari saldo AntarPay
+  // Rail saldo: di server SETIAP paid_via selain 'cash' diselesaikan dari saldo AntarVoucher
   // (create_order menyetel v_pay = 'wallet'), jadi saluran 'antarpay' adalah induk teknis
   // semua saluran non-tunai — sama persis dengan payment_channel_require() di 0089.
   const railOn = antarpayOn && channels.antarpay === true;

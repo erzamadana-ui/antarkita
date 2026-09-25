@@ -3,7 +3,7 @@
 //    layar ini menghitung rincian final (`order_payment_prepare`), membuat/mengambil ulang tagihan lewat edge
 //    `pay-create` (idempoten per pesanan di server), lalu memantau `my_payment_status` (polling 5 dtk + realtime
 //    `payments` + saat aplikasi kembali aktif) sampai PAID/FAILED/EXPIRED.
-//  • top up AntarPay (alur lama, purpose='topup') lewat edge yang sama.
+//  • top up AntarVoucher (alur lama, purpose='topup') lewat edge yang sama.
 // Tampilan per kanal: QRIS → gambar QR bila provider memberi URL gambar, selain itu tombol ke halaman pembayaran
 // (tidak ada pustaka QR di package.json); VA/gerai → kode bayar + salin; kartu/e-wallet → halaman pembayaran provider.
 import React, { useEffect, useRef, useState } from 'react';
@@ -18,8 +18,8 @@ import { BrandGradient } from '@/components/glass';
 import { SupportRef } from '@/components/OrderDetails';
 import { supabase, rpc } from '@/lib/supabase';
 import { useAuth } from '@/store/auth';
-import { useAntarPay, ANTARPAY_OFF_TEXT } from '@/hooks/useAppSettings';
-import { AntarPayOffBanner } from '@/components/AntarPayNotice';
+import { useAntarVoucher, ANTARVOUCHER_OFF_TEXT } from '@/hooks/useAppSettings';
+import { AntarVoucherOffBanner } from '@/components/AntarVoucherNotice';
 import { useT } from '@/lib/i18n';
 import { IS_CUSTOMER_APP } from '@/lib/app';
 import { colors, font, radius, glass, shadow, motion } from '@/lib/theme';
@@ -130,7 +130,7 @@ function ChannelGrid({ channels, value, onPick, base, disabled }: { channels: Pr
   );
 }
 
-/* ─────────────── Top up AntarPay (purpose='topup') ─────────────── */
+/* ─────────────── Top up AntarVoucher (purpose='topup') ─────────────── */
 
 function TopupGateway({ params }: { params: Params }) {
   const router = useRouter();
@@ -149,7 +149,7 @@ function TopupGateway({ params }: { params: Params }) {
   useEffect(() => { rpc<GatewayPublicConfig>('gateway_public_config').then(setCfg, (e: Error) => { console.warn('gateway_public_config:', e.message); setCfg(null); }); }, []);
   useEffect(() => { if (channels.length && !channels.some((x) => x.key === method)) setMethod(channels[0].key); }, [provider]); // eslint-disable-line react-hooks/exhaustive-deps
   const minTopup = cfg?.topup_min ?? 10000;
-  const { enabled: settingsOn } = useAntarPay();
+  const { enabled: settingsOn } = useAntarVoucher();
   const antarpayOn = settingsOn && cfg?.antarpay_enabled !== false;
 
   useEffect(() => () => { if (poll.current) clearInterval(poll.current); }, []);
@@ -165,7 +165,7 @@ function TopupGateway({ params }: { params: Params }) {
   const watch = (paymentId: string) => { if (poll.current) clearInterval(poll.current); poll.current = setInterval(() => check(paymentId), 5000); };
 
   const create = async () => {
-    if (!antarpayOn) return toast.error(ANTARPAY_OFF_TEXT);
+    if (!antarpayOn) return toast.error(ANTARVOUCHER_OFF_TEXT);
     if (n < minTopup) return toast.error(`Minimal ${rupiah(minTopup)}`);
     if (!method) return toast.error('Pilih metode pembayaran');
     setBusy(true);
@@ -184,7 +184,7 @@ function TopupGateway({ params }: { params: Params }) {
     <Screen title={t('ewallet')} back maxWidth={560}>
       {!resp ? (
         <View style={{ gap: 16 }}>
-          {!antarpayOn && <Entrance index={0}><AntarPayOffBanner /></Entrance>}
+          {!antarpayOn && <Entrance index={0}><AntarVoucherOffBanner /></Entrance>}
           <Entrance index={0}>
             <BrandGradient colors={[colors.primary, colors.primaryDark]} style={[s.hero, shadow.glow(colors.primary)]}>
               <Text style={{ color: 'rgba(255,255,255,0.85)', fontWeight: '600', fontSize: 12 }}>{t('balance')}</Text>
@@ -206,7 +206,7 @@ function TopupGateway({ params }: { params: Params }) {
             ) : <ChannelGrid channels={channels} value={method} onPick={setMethod} base={n} />}
             <Text style={[font.tiny, { marginTop: 8 }]}>Diproses oleh {providerName ?? 'payment gateway'}. AntarKita tidak menyimpan data kartu/akun e-wallet Anda.{chosen?.pass_to_customer ? ` Biaya metode ${chosen.label} dibebankan ke Anda (${chosen.fee_label ?? (chosen.fee_pct ? pctLabel(chosen.fee_pct) : rupiah(chosen.fee_fixed))}).` : ''}</Text>
           </Card></Entrance>
-          <Entrance index={3}><Button title={antarpayOn ? `${t('pay_now')} · ${rupiah(n)}${chosen ? ` via ${chosen.label}` : ''}` : 'AntarPay sementara nonaktif'} size="lg" loading={busy} disabled={!antarpayOn || n < minTopup || !method} onPress={create} /></Entrance>
+          <Entrance index={3}><Button title={antarpayOn ? `${t('pay_now')} · ${rupiah(n)}${chosen ? ` via ${chosen.label}` : ''}` : 'AntarVoucher sementara nonaktif'} size="lg" loading={busy} disabled={!antarpayOn || n < minTopup || !method} onPress={create} /></Entrance>
         </View>
       ) : (
         <Animated.View entering={ZoomIn.duration(motion.base)} layout={LinearTransition.springify().stiffness(280).damping(20)} style={{ gap: 16 }}>

@@ -242,7 +242,7 @@ export function usePaymentStatus(orderId: string | null | undefined, opts: { ena
   useEffect(() => {
     if (!orderId || !enabled) return;
     refresh();
-    // stopOnFinal: berhenti bila status final, atau bila memang tidak ada tagihan (tunai/AntarPay) — realtime & AppState tetap jalan.
+    // stopOnFinal: berhenti bila status final, atau bila memang tidak ada tagihan (tunai/AntarVoucher) — realtime & AppState tetap jalan.
     const t = setInterval(() => { if (stopOnFinal && once.current && (!cur.current || FINAL_PAY.includes(cur.current.pay_status))) return; refresh(); }, intervalMs);
     const ch = realtimeChannel(`pay-${orderId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payments', filter: `order_id=eq.${orderId}` }, () => { refresh(); })

@@ -17,9 +17,9 @@ import { useT } from '@/lib/i18n';
 import type { DisputeRow } from '@/lib/types';
 
 const FAQ = [
-  ['Bagaimana cara top up AntarPay?', 'AntarPay > Top Up: instan lewat GoPay/OVO/DANA/QRIS/VA, atau transfer manual + bukti (verifikasi admin maks. 1×24 jam).'],
+  ['Bagaimana cara top up AntarVoucher?', 'AntarVoucher > Top Up: instan lewat GoPay/OVO/DANA/QRIS/VA, atau transfer manual + bukti (verifikasi admin maks. 1×24 jam).'],
   ['Bagaimana tarif dihitung?', 'Tarif = tarif per km × jarak rute (minimal tarif berlaku) + biaya layanan, dikali pengali sesi (jam sibuk/sepi). Rincian tampil sebelum memesan.'],
-  ['Bisakah membatalkan pesanan?', 'Bisa selama driver belum memulai perjalanan. Pembayaran AntarPay dikembalikan otomatis ke saldo. Pesanan yang dibayar lewat e-wallet/QRIS/VA dan dibatalkan/ditolak: buka detail pesanan → "Ajukan pengembalian dana".'],
+  ['Bisakah membatalkan pesanan?', 'Bisa selama driver belum memulai perjalanan. Pembayaran AntarVoucher dikembalikan otomatis ke saldo. Pesanan yang dibayar lewat e-wallet/QRIS/VA dan dibatalkan/ditolak: buka detail pesanan → "Ajukan pengembalian dana".'],
   ['Apa itu kode bantuan CS (AK-xxxxxx)?', 'Kode unik setiap pembayaran. Sebutkan kode ini saat menghubungi CS agar transaksi Anda cepat ditemukan. Ada di detail pesanan, bukti transaksi, dan riwayat pembayaran.'],
   ['Apa itu PIN penjemputan?', 'Kode 4 digit di layar lacak pesanan. Sebutkan ke driver sebelum berangkat agar Anda naik kendaraan yang benar.'],
   ['Bagaimana menjadi mitra driver/merchant?', 'Menu Akun > Daftar jadi Mitra. Lengkapi dokumen (KTP, SIM/NPWP, foto), tunggu verifikasi admin.'],

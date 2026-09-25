@@ -37,7 +37,7 @@ export default function Account() {
       { icon: 'person-outline', title: t('edit_profile'), subtitle: 'Nama, nomor HP, foto', onPress: () => router.push('/account/edit') },
       { icon: 'bookmark-outline', title: t('saved_places'), subtitle: 'Rumah, kantor, dan lainnya', onPress: () => router.push('/account/places') },
       { icon: 'language-outline', title: t('language'), subtitle: LOCALES.find((l) => l.code === locale)?.native, onPress: () => router.push('/account/language') },
-      { icon: 'wallet-outline', title: 'AntarPay', subtitle: `Saldo ${rupiah(wallet?.balance ?? 0)}`, onPress: () => router.push('/(customer)/pay') },
+      { icon: 'wallet-outline', title: 'AntarVoucher', subtitle: `Saldo ${rupiah(wallet?.balance ?? 0)}`, onPress: () => router.push('/(customer)/pay') },
     ] },
     { title: t('others'), items: [
       ...(hasExec ? [{ icon: 'shield-half-outline' as IconName, color: colors.primaryDeep, title: 'Portal Eksekutif', subtitle: 'Laporan manajemen & pemegang saham (di aplikasi Admin)', onPress: () => openApp('admin') }] : []),
@@ -72,7 +72,7 @@ export default function Account() {
           <View style={s.vDivider} />
           <PressableScale onPress={() => router.push('/(customer)/pay')} scaleTo={0.97} haptic={false} style={s.stat}>
             <Text style={[font.h2, { color: colors.primary }]} numberOfLines={1}>{rupiah(wallet?.balance ?? 0)}</Text>
-            <Text style={font.tiny}>Saldo AntarPay</Text>
+            <Text style={font.tiny}>Saldo AntarVoucher</Text>
           </PressableScale>
         </View>
       </Entrance>
