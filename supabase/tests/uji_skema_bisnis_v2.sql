@@ -1179,7 +1179,7 @@ begin
       -- (a) sakelar baru mati (default): perilaku 0088 apa adanya
       perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
       begin o := pg_temp.v2_jalankan('ride_motor', 'gopay', null, '{"hanya_buat": true, "tanpa_bayar": true}'); ok := false; alasan := 'order gopay diterima ' || o.code;
-      exception when others then alasan := left(sqlerrm, 50); ok := sqlerrm like 'AntarPay sedang dinonaktifkan sementara%'; end;
+      exception when others then alasan := left(sqlerrm, 50); ok := (sqlerrm like 'AntarPay sedang dinonaktifkan sementara%' or sqlerrm like 'AntarVoucher sedang dinonaktifkan sementara%'); end;
       log := log || format('S82a %s AntarPay mati + sakelar per order mati (default %s): order gopay ditolak (%s)',
         case when ok and not gateway_order_payment_enabled() then 'OK' else 'BUG' end, gateway_order_payment_enabled(), alasan) || E'\n';
       -- (b) sakelar: PIN wajib, non-admin ditolak, audit
@@ -1217,9 +1217,9 @@ begin
       perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
       alasan := '';
       begin o2 := pg_temp.v2_jalankan('ride_motor', 'wallet', null, '{"hanya_buat": true}'); ok := false; alasan := 'order saldo diterima';
-      exception when others then alasan := left(sqlerrm, 40); ok := sqlerrm like 'AntarPay sedang dinonaktifkan sementara%'; end;
+      exception when others then alasan := left(sqlerrm, 40); ok := (sqlerrm like 'AntarPay sedang dinonaktifkan sementara%' or sqlerrm like 'AntarVoucher sedang dinonaktifkan sementara%'); end;
       begin tp := request_topup(50000, 'qris', null, 'uji S82'); ok := false; alasan := alasan || ' | top up diterima';
-      exception when others then alasan := alasan || ' | top up: ' || left(sqlerrm, 40); if sqlerrm not like 'AntarPay sedang dinonaktifkan sementara%' then ok := false; end if; end;
+      exception when others then alasan := alasan || ' | top up: ' || left(sqlerrm, 40); if sqlerrm not like 'AntarPay sedang dinonaktifkan sementara%' and sqlerrm not like 'AntarVoucher sedang dinonaktifkan sementara%' then ok := false; end if; end;
       log := log || format('S82d %s saldo AntarPay tetap tertutup: %s', case when ok then 'OK' else 'BUG' end, alasan) || E'\n';
       -- (e) saluran gateway itu sendiri dimatikan → ditolak dengan nama salurannya
       perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);

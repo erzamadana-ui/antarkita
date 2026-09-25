@@ -71,7 +71,8 @@ begin
       ('payments_simulation_enabled', 'true'::jsonb), ('payment_provider_env', '"sandbox"'::jsonb),
       ('wallet_adjust_dual_approval_min', '1000000000000'::jsonb), ('refund_dual_approval_min', '1000000000000'::jsonb),
       ('rate_limit_create_order_per_hour', '100000'::jsonb), ('rate_limit_payment_prepare_per_hour', '100000'::jsonb),
-      ('rate_limit_withdrawal_per_hour', '100000'::jsonb)
+      ('rate_limit_withdrawal_per_hour', '100000'::jsonb),
+      ('legacy_topup_manual_approval', 'true'::jsonb)   -- 0112: skenario lama mendanai saldo uji via top up manual; jalur AntarVoucher diuji di uji_antarvoucher.sql
     on conflict (key) do update set value = excluded.value, updated_at = now();
   exception when others then log := log || 'S0 BUG fixture v3: ' || sqlerrm || E'\n'; end;
 
@@ -2324,18 +2325,18 @@ begin
     -- (b) pelanggan: top up ditolak dengan pesan Indonesia yang jelas
     perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
     begin tp := request_topup(50000, 'bank_transfer', null, 'uji S54'); log := log || 'S54d BUG: request_topup diterima saat AntarPay nonaktif' || E'\n';
-    exception when others then log := log || format('S54d %s top up ditolak: %s', case when sqlerrm like 'AntarPay sedang dinonaktifkan sementara%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
+    exception when others then log := log || format('S54d %s top up ditolak: %s', case when sqlerrm similar to '(AntarPay|AntarVoucher) sedang dinonaktifkan sementara%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
 
     -- (c) order dengan dompet / e-wallet ditolak; saldo pelanggan tidak berubah
     select balance into b0 from wallets where user_id = cust;
     begin
       o := create_order(jsonb_build_object('service', 'ride_motor', 'vehicle_class', 'motor_economy', 'pickup', jsonb_build_object('lat', 0.4810, 'lng', 101.4349, 'address', 'S54 wallet'), 'dropoff', jsonb_build_object('lat', 0.50, 'lng', 101.44, 'address', 'Plaza Andalas'), 'paid_via', 'wallet'));
       log := log || format('S54e BUG: order dompet diterima saat AntarPay nonaktif %s', o.code) || E'\n'; perform cancel_order(o.id, 'uji');
-    exception when others then log := log || format('S54e %s order dompet ditolak: %s', case when sqlerrm like 'AntarPay sedang dinonaktifkan sementara%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
+    exception when others then log := log || format('S54e %s order dompet ditolak: %s', case when sqlerrm similar to '(AntarPay|AntarVoucher) sedang dinonaktifkan sementara%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
     begin
       o := create_order(jsonb_build_object('service', 'ride_motor', 'vehicle_class', 'motor_economy', 'pickup', jsonb_build_object('lat', 0.4810, 'lng', 101.4349, 'address', 'S54 gopay'), 'dropoff', jsonb_build_object('lat', 0.50, 'lng', 101.44, 'address', 'Plaza Andalas'), 'paid_via', 'gopay'));
       log := log || format('S54f BUG: order e-wallet (gopay) diterima saat AntarPay nonaktif %s', o.code) || E'\n'; perform cancel_order(o.id, 'uji');
-    exception when others then log := log || format('S54f %s order e-wallet ditolak: %s', case when sqlerrm like 'AntarPay sedang dinonaktifkan sementara%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
+    exception when others then log := log || format('S54f %s order e-wallet ditolak: %s', case when sqlerrm similar to '(AntarPay|AntarVoucher) sedang dinonaktifkan sementara%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
     select balance into b1 from wallets where user_id = cust;
     log := log || format('S54g %s saldo pelanggan tidak tersentuh oleh order yang ditolak: %s → %s', case when b0 = b1 then 'OK' else 'BUG' end, b0, b1) || E'\n';
 
@@ -2349,7 +2350,7 @@ begin
     perform set_config('request.jwt.claims', json_build_object('sub', drv, 'role', 'authenticated')::text, true);
     select balance into d0 from wallets where user_id = drv;
     begin w := request_withdrawal(20000, 'BCA', '111', 'Driver'); log := log || 'S54j BUG: request_withdrawal diterima saat AntarPay nonaktif' || E'\n';
-    exception when others then log := log || format('S54j %s pencairan ditolak: %s', case when sqlerrm like 'AntarPay sedang dinonaktifkan sementara%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
+    exception when others then log := log || format('S54j %s pencairan ditolak: %s', case when sqlerrm similar to '(AntarPay|AntarVoucher) sedang dinonaktifkan sementara%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
     select balance into d1 from wallets where user_id = drv;
     log := log || format('S54k %s saldo driver tidak tersentuh: %s → %s', case when d0 = d1 then 'OK' else 'BUG' end, d0, d1) || E'\n';
 
@@ -2358,7 +2359,7 @@ begin
     begin
       tr := travel_request_create(jsonb_build_object('kind', 'charter', 'depart_at', now() + interval '3 days', 'pickup_address', 'S54', 'dropoff_address', 'Padang', 'pickup_lat', 0.4810, 'pickup_lng', 101.4349));
       log := log || format('S54l BUG: permintaan travel tanpa payment_method (default wallet) diterima %s', tr.code) || E'\n';
-    exception when others then log := log || format('S54l %s permintaan travel dompet ditolak: %s', case when sqlerrm like 'AntarPay sedang dinonaktifkan sementara%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
+    exception when others then log := log || format('S54l %s permintaan travel dompet ditolak: %s', case when sqlerrm similar to '(AntarPay|AntarVoucher) sedang dinonaktifkan sementara%' then 'OK' else 'BUG' end, left(sqlerrm, 80)) || E'\n'; end;
 
     -- (g) pelanggan biasa tidak boleh menyalakan sakelar
     begin r := admin_set_antarpay_enabled(true); log := log || 'S54m BUG: pelanggan bisa menyalakan AntarPay' || E'\n';

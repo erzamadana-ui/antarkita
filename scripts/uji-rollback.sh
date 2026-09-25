@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-# scripts/uji-rollback.sh — uji rollback migrasi Finpay v3 (0105–0111) di harness LOKAL
+# scripts/uji-rollback.sh — uji rollback migrasi Finpay v3 + AntarVoucher (0105–0112) di harness LOKAL
 #
 # Memakai database TERPISAH (default antarkita_rb) — database utama `antarkita` tidak disentuh.
 #   1. database segar dimigrasi s.d. 0104                     → skema C (baseline v2)
@@ -65,12 +65,12 @@ DB_NAME="$DB" DB_LOKAL_MIG_UNTIL=0104 "${LOKAL[@]}" migrate > "$OUT/migrate-base
 grep -E 'diterapkan' "$OUT/migrate-baseline.log" | sed 's/^/     /'
 dump "$OUT/C-baseline.sql"
 
-info "2. migrasi 0105–0111"
+info "2. migrasi 0105–0112"
 migrate up1
 dump "$OUT/A1-up.sql"
 
-info "3. rollback penuh 0111 → 0105"
-down 0111 0110 0109 0108 0107 0106 0105
+info "3. rollback penuh 0112 → 0105"
+down 0112 0111 0110 0109 0108 0107 0106 0105
 dump "$OUT/B-down.sql"
 bandingkan "down-vs-baseline" "$OUT/C-baseline.sql" "$OUT/B-down.sql"
 n="$(psql -X -q -At -d "$DB" -c "select count(*) from _lokal.migrasi where nama >= '0105'")"
@@ -81,8 +81,8 @@ migrate up2
 dump "$OUT/A2-reup.sql"
 bandingkan "reup-vs-up" "$OUT/A1-up.sql" "$OUT/A2-reup.sql"
 
-info "5. rollback sebagian (0111, 0110, 0109) + migrasi ulang"
-down 0111 0110 0109
+info "5. rollback sebagian (0112, 0111, 0110, 0109) + migrasi ulang"
+down 0112 0111 0110 0109
 migrate up3
 dump "$OUT/A3-partial.sql"
 bandingkan "partial-reup-vs-up" "$OUT/A1-up.sql" "$OUT/A3-partial.sql"
@@ -90,7 +90,7 @@ bandingkan "partial-reup-vs-up" "$OUT/A1-up.sql" "$OUT/A3-partial.sql"
 if [[ "${UJI_ROLLBACK_TANPA_TES:-0}" != "1" ]]; then
   info "6. seed + uji pada database hasil up→down→up"
   DB_NAME="$DB" "${LOKAL[@]}" seed > "$OUT/seed.log" 2>&1 || { tail -20 "$OUT/seed.log"; exit 1; }
-  for t in simulasi_e2e.sql uji_skema_bisnis_v2.sql uji_finpay_v3.sql; do
+  for t in simulasi_e2e.sql uji_skema_bisnis_v2.sql uji_finpay_v3.sql uji_antarvoucher.sql; do
     if DB_NAME="$DB" "${LOKAL[@]}" test "$ROOT_DIR/supabase/tests/$t" > "$OUT/test-$t.log" 2>&1; then
       lulus "$(grep -E "^$t:" "$OUT/test-$t.log")"
     else
