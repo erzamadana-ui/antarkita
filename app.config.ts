@@ -191,6 +191,12 @@ const config: ExpoConfig = {
       'android.permission.SYSTEM_ALERT_WINDOW',
       'android.permission.READ_MEDIA_IMAGES', 'android.permission.READ_MEDIA_VIDEO',
       'com.google.android.gms.permission.AD_ID',
+      // 27 Sep 2026 (audit manifest APK build-78): izin turunan pustaka yang tidak dipakai fitur mana pun.
+      // USE_BIOMETRIC/USE_FINGERPRINT ← expo-secure-store (kita tidak memakai requireAuthentication);
+      // WRITE_SETTINGS ← pustaka badge launcher (izin khusus, memicu pertanyaan review Play).
+      // READ/WRITE_EXTERNAL_STORAGE SENGAJA dipertahankan: requestMediaLibraryPermissionsAsync di src/lib/upload.ts
+      // membutuhkannya untuk unggah foto dari galeri di Android ≤ 12. BLUETOOTH dipertahankan untuk audio panggilan WebRTC.
+      'android.permission.USE_BIOMETRIC', 'android.permission.USE_FINGERPRINT', 'android.permission.WRITE_SETTINGS',
     ],
   },
   web: {
