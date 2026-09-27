@@ -47,7 +47,7 @@ Hasil: snapshot `backup_20260925` (wallets 21, wallet_transactions 87, orders 32
 
 ## 3. Kirim ke Google Play (akun perorangan)
 
-1. **Unggah AAB `aab-N`:**
+1. **Unggah AAB `aab-14` (versionCode 114, sudah memuat perapian izin 0736cf0; `aab-13` jangan dipakai):**
    - Pelanggan: Closed testing – Alpha.
    - Mitra: track yang sama.
    - Batas unggah lewat otomasi Chrome 10 MB, jadi unggahan dilakukan **Erza**, atau otomatis bila secret `PLAY_SERVICE_ACCOUNT_JSON` diisi.
@@ -55,8 +55,10 @@ Hasil: snapshot `backup_20260925` (wallets 21, wallet_transactions 87, orders 32
    - Pembayaran per pesanan lewat payment gateway adalah checkout jasa, bukan dompet.
    - Pencairan pendapatan mitra tersembunyi di build ini.
 3. **Data safety:** hapus jenis data "Financial info → Purchase history/other" yang terkait saldo bila tidak lagi dikumpulkan app. Pertahankan data pembayaran per pesanan.
-4. Balas penolakan 19 Sep di Policy status bahwa fitur dompet dihapus dari build, lalu **Send for review**.
-5. Dompet atau AntarVoucher baru boleh kembali ke Play setelah **akun organisasi** (badan usaha + D-U-N-S) dan kajian legal V2.
+4. **App content → Ads:** ubah menjadi *"Yes, my app contains ads"*. Sejak v3 aplikasi menampilkan kartu merchant berbayar berlabel **Sponsored** (`ads_serve`, migrasi 0109) — deklarasi lama "tidak ada iklan" (16 Sep) tidak lagi akurat walau kampanye aktif saat ini 0.
+5. **Hapus rilis draf lama 112** (masih berisi dompet) dari track sebelum membuat rilis baru, agar deklarasi "tanpa fitur keuangan" tidak menempel pada build yang masih punya dompet.
+6. Balas penolakan 19 Sep di Policy status bahwa fitur dompet dihapus dari build, lalu **Send for review**.
+7. Dompet atau AntarVoucher baru boleh kembali ke Play setelah **akun organisasi** (badan usaha + D-U-N-S) dan kajian legal V2.
 
 ## 4. Rollback
 
