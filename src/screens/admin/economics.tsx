@@ -18,6 +18,8 @@ import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import { channelLabel } from '@/store/payprefs';
 import type { AdminBusinessSettings, BusinessSetting, LedgerSimulation, PgFeePolicy, PromoFunder, ServiceEconomics, ServiceType } from '@/lib/types';
 import { ErrorNote, LabelPill, SERVICE_KEYS, entryLabel, fmtDate, labelTags, parseNum, partyLabel, FUNDER_LABEL, WideTableHint } from './_shared';
+import { useVoucherConfig } from '@/hooks/useVoucherV5';
+import { cityTargetsProgress, monthKey, type CityTargetProgress } from '@/lib/voucherV5';
 
 type NumKey = 'driver_commission_pct' | 'merchant_fee_pct' | 'customer_platform_fee' | 'service_fee_pct' | 'service_fee_min' | 'service_fee_driver_share_pct';
 type Draft = Record<NumKey, string> & { pg_fee_policy: PgFeePolicy; promo_default_funded_by: PromoFunder; notes: string };
@@ -59,6 +61,8 @@ export default function AdminEconomics() {
   const [errs, setErrs] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  // v5: di mode voucher_only tidak ada biaya payment gateway → kolom "Biaya PG ditanggung" disembunyikan (nilai lama tetap tersimpan).
+  const { voucherOnly } = useVoucherConfig();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -162,13 +166,15 @@ export default function AdminEconomics() {
         </Row>
       </View>
 
+      <FeeRecommendationNote voucherOnly={voucherOnly} />
+
       <Panel title="Aturan per layanan" subtitle="Ubah angka lalu tekan Simpan pada barisnya. Hanya kolom yang berubah yang dikirim." icon="options-outline" padded={false}>
         <ScrollView horizontal showsHorizontalScrollIndicator>
           <View style={{ minWidth: 1320 }}>
             <Row gap={8} style={st.th}>
               <Text style={[font.label, { width: 150 }]}>Layanan</Text>
               {NUM_FIELDS.map((f) => <Text key={f.key} style={[font.label, { width: f.width, textAlign: 'right' }]} numberOfLines={2}>{f.label}</Text>)}
-              <Text style={[font.label, { width: 124 }]}>Biaya PG ditanggung</Text>
+              {!voucherOnly ? <Text style={[font.label, { width: 124 }]}>Biaya PG ditanggung</Text> : null}
               <Text style={[font.label, { width: 124 }]}>Promo default</Text>
               <Text style={[font.label, { width: 260 }]}>Catatan (label FAKTA/ASUMSI)</Text>
               <Text style={[font.label, { width: 84 }]} />
@@ -203,7 +209,7 @@ export default function AdminEconomics() {
                         style={{ textAlign: 'right', paddingVertical: 6, color: over ? adminTone.red : undefined }} />
                     );
                   })}
-                  <AdminSelect size="sm" width={124} value={d.pg_fee_policy} options={PG_POLICY} onChange={(v) => setField(row.service, 'pg_fee_policy', v)} />
+                  {!voucherOnly ? <AdminSelect size="sm" width={124} value={d.pg_fee_policy} options={PG_POLICY} onChange={(v) => setField(row.service, 'pg_fee_policy', v)} /> : null}
                   <AdminSelect size="sm" width={124} value={d.promo_default_funded_by} options={FUNDERS} onChange={(v) => setField(row.service, 'promo_default_funded_by', v)} />
                   <Input value={d.notes} multiline onChangeText={(t) => setField(row.service, 'notes', t)} containerStyle={{ width: 260 }} style={{ paddingVertical: 6, fontSize: 12, minHeight: 56 }} />
                   <View style={{ width: 84, gap: 4 }}>
@@ -455,3 +461,31 @@ const st = StyleSheet.create({
   tr: { paddingHorizontal: adminSpace.lg, paddingVertical: 8, borderTopWidth: 1, borderTopColor: adminTone.border, alignItems: 'center', minHeight: 72 },
   trAlt: { backgroundColor: adminTone.zebra },
 });
+
+/* ───────────────── v5 · Rekomendasi biaya layanan dari progres target kota (city_targets_progress) ───────────────── */
+function FeeRecommendationNote({ voucherOnly }: { voucherOnly: boolean }) {
+  const [rows, setRows] = useState<CityTargetProgress[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    cityTargetsProgress(monthKey()).then((r) => { setRows((Array.isArray(r) ? r : []).filter((x) => Number(x.platform_fee_recommended) > 0)); setErr(null); })
+      .catch((e: Error) => setErr(e.message));
+  }, []);
+  const vals = rows.map((r) => Number(r.platform_fee_recommended)).sort((a, b) => a - b);
+  const med = vals.length ? vals[Math.floor(vals.length / 2)] : 0;
+  return (
+    <View style={[st.note, { backgroundColor: TONE.brand.bg, borderColor: TONE.brand.border }]}>
+      <Row gap={8} style={{ alignItems: 'flex-start' }}>
+        <Ionicons name="calculator-outline" size={adminIcon.md} color={TONE.brand.fg} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[font.bodyStrong, { color: TONE.brand.fg }]}>
+            {voucherOnly ? 'Mode AntarVoucher: biaya pembayaran = 0 — potongan per transaksi hanya PPN + fee AntarKita. ' : ''}Rekomendasi biaya layanan dari COGS kota (bulan ini)
+          </Text>
+          <Text style={font.tiny}>
+            {err ? `Progres target kota tidak terbaca: ${err}` : !rows.length ? 'Belum ada target/biaya tetap kota bulan ini (menu Biaya Tetap Kota → Target & COGS per kota) — rekomendasi belum bisa dihitung.'
+              : `${rows.map((r) => `${r.city_name}: ${rupiah(Number(r.platform_fee_recommended))} (COGS/order ${rupiah(Number(r.cogs_per_order))})`).join(' · ')}. Median ${rupiah(med)} — bandingkan dengan kolom "Biaya platform pelanggan" di bawah. Rumus: ceil(COGS/order × (1 + cogs_margin_target_pct) / 500) × 500 [usulan sistem, keputusan GM/Direksi].`}
+          </Text>
+        </View>
+      </Row>
+    </View>
+  );
+}

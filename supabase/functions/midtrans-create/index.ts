@@ -65,6 +65,14 @@ Deno.serve(async (req) => {
 
     const purpose: string = body.purpose === "order" ? "order" : "topup";
 
+    // ---- 0114 AntarVoucher v5: mode voucher_only → tidak ada transaksi gateway (hanya Tunai & AntarVoucher). Setting belum ada (pra-v5) → perilaku lama.
+    {
+      const { data: pm } = await admin.from("app_settings").select("value").eq("key", "payment_mode").maybeSingle();
+      if (pm && pm.value !== "gateway") {
+        return json({ error: "Pembayaran lewat payment gateway tidak tersedia — gunakan Tunai atau AntarVoucher.", code: "PAYMENT_MODE_VOUCHER_ONLY", payment_mode: String(pm.value) }, 409);
+      }
+    }
+
     // ---- Guard provider v3 (KONTRAK-API-V3 §9): transaksi pesanan baru lewat pay-create bila provider aktif bukan Midtrans ----
     {
       const { data: act } = await admin.from("app_settings").select("value").eq("key", "payment_provider_active").maybeSingle();

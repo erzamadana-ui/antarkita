@@ -18,7 +18,7 @@ import { BrandGradient } from '@/components/glass';
 import { SupportRef } from '@/components/OrderDetails';
 import { supabase, rpc } from '@/lib/supabase';
 import { useAuth } from '@/store/auth';
-import { useAntarVoucher, ANTARVOUCHER_OFF_TEXT } from '@/hooks/useAppSettings';
+import { useAntarVoucher, useVoucherOnly, ANTARVOUCHER_OFF_TEXT } from '@/hooks/useAppSettings';
 import { AntarVoucherOffBanner } from '@/components/AntarVoucherNotice';
 import { useT } from '@/lib/i18n';
 import { IS_CUSTOMER_APP } from '@/lib/app';
@@ -44,8 +44,28 @@ const mmss = (ms: number) => { const t = Math.max(0, Math.floor(ms / 1000)); ret
 
 export default function Gateway() {
   const params = useLocalSearchParams<Params>();
+  // v5 voucher_only (KONTRAK-V5 §4): edge pay-*/midtrans-create menolak 409 PAYMENT_MODE_VOUCHER_ONLY → layar ini tidak dipakai.
+  const { voucherOnly } = useVoucherOnly();
+  if (voucherOnly) return <GatewayUnavailable />;
   if (params.purpose === 'order' && params.order_id) return <OrderPayment orderId={params.order_id} initialMethod={params.method} />;
   return <TopupGateway params={params} />;
+}
+
+/** v5 voucher_only: pengganti layar gateway — arahkan ke pembelian AntarVoucher. */
+function GatewayUnavailable() {
+  const router = useRouter();
+  const t = useT();
+  return (
+    <Screen title={t('v5_gateway_unavailable_title')} back maxWidth={560}>
+      <View style={{ alignItems: 'center', gap: 12, paddingTop: 40, paddingHorizontal: 8 }}>
+        <Ionicons name="ticket-outline" size={48} color={colors.primary} />
+        <Text style={[font.h3, { textAlign: 'center' }]}>{t('v5_gateway_unavailable_title')}</Text>
+        <Text style={[font.body, { textAlign: 'center', color: colors.textSecondary }]}>{t('v5_gateway_unavailable_text')}</Text>
+        <Button title={t('v5_buy_voucher')} icon="ticket-outline" onPress={() => router.replace('/pay/voucher' as never)} />
+        <Button title={t('back')} variant="ghost" onPress={() => (router.canGoBack() ? router.back() : router.replace('/' as never))} />
+      </View>
+    </Screen>
+  );
 }
 
 /* ─────────────── Instruksi bayar per kanal ─────────────── */

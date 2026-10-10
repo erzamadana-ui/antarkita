@@ -51,6 +51,13 @@ async function handle(deps: Deps, req: Request): Promise<Response> {
   const purpose = body.purpose === "topup" ? "topup" : body.purpose === "order" ? "order" : null;
   if (!purpose) throw new HttpError(400, "purpose harus 'order' atau 'topup'");
   const settings = await loadPaySettings(deps.db);
+  // ---- 0114 AntarVoucher v5: mode voucher_only → tidak ada transaksi gateway (hanya Tunai & AntarVoucher). Setting belum ada (pra-v5) → perilaku lama.
+  {
+    const { data: pm } = await deps.db.from("app_settings").select("value").eq("key", "payment_mode").maybeSingle();
+    if (pm && pm.value !== "gateway") {
+      throw new HttpError(409, "Pembayaran lewat payment gateway tidak tersedia — gunakan Tunai atau AntarVoucher.", { code: "PAYMENT_MODE_VOUCHER_ONLY", payment_mode: String(pm.value) });
+    }
+  }
 
   // ---- Pilih provider ----
   let providerName: ProviderName = settings.providerActive;

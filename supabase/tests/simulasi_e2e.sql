@@ -72,6 +72,7 @@ begin
       ('wallet_adjust_dual_approval_min', '1000000000000'::jsonb), ('refund_dual_approval_min', '1000000000000'::jsonb),
       ('rate_limit_create_order_per_hour', '100000'::jsonb), ('rate_limit_payment_prepare_per_hour', '100000'::jsonb),
       ('rate_limit_withdrawal_per_hour', '100000'::jsonb),
+      ('payment_mode', '"gateway"'::jsonb), ('driver_deposit_required', 'false'::jsonb), ('driver_debt_limit', '-500000'::jsonb),   -- 0114 v5: berkas ini menguji mode gateway & batas minus lama (v5 diuji di uji_antarvoucher_v5.sql)
       ('legacy_topup_manual_approval', 'true'::jsonb)   -- 0112: skenario lama mendanai saldo uji via top up manual; jalur AntarVoucher diuji di uji_antarvoucher.sql
     on conflict (key) do update set value = excluded.value, updated_at = now();
   exception when others then log := log || 'S0 BUG fixture v3: ' || sqlerrm || E'\n'; end;

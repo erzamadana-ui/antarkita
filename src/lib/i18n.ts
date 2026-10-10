@@ -43,6 +43,18 @@ const id = {
   request_refund: 'Ajukan pengembalian dana', payment_disputes: 'Masalah pembayaran saya', payment_disputes_empty: 'Belum ada laporan masalah pembayaran', sponsored: 'Sponsored',
   payment_method_fee: 'Biaya metode pembayaran', platform_fee_ak: 'Biaya platform AntarKita', borne_by_ak: 'ditanggung AntarKita', payment_expired: 'Tagihan kedaluwarsa', payment_failed: 'Pembayaran gagal',
   tag_ride_motor: 'Ojek motor cepat & hemat', tag_ride_car: 'Mobil nyaman untuk keluarga', tag_food: 'Makanan favorit diantar', tag_send: 'Paket dalam & antar kota', tag_shop: 'Indomaret, Alfamart, apotek & supermarket', tag_market: 'Bahan masak dari pasar terdekat', tag_box: 'Mobil box / pick up, pindahan', tag_travel: 'Travel antar kota, jemput di rumah', tag_pay: 'Saldo & metode bayar', notifications: 'Notifikasi', payment_methods: 'Pembayaran', tap_detail: 'ketuk untuk detail',
+  // AntarVoucher v5 (KONTRAK-V5 §4) — kunci baru; zh/ar jatuh ke Indonesia bila tidak diterjemahkan
+  v5_buy_voucher: 'Beli AntarVoucher', v5_buy_tab: 'Beli', v5_my_codes: 'Kode saya', v5_redeem_code: 'Tukar kode', v5_redeem_hint: 'Punya kode hadiah AKV-…? Masukkan di sini untuk menambah saldo.',
+  v5_redeem_btn: 'Tukarkan', v5_redeem_ok: 'Kode ditukar — saldo bertambah {amount}', v5_voucher_redeem: 'Voucher AntarKita',
+  v5_gateway_unavailable_title: 'Tidak tersedia pada mode AntarVoucher', v5_gateway_unavailable_text: 'Pembayaran lewat payment gateway (e-wallet, QRIS, kartu, virtual account) tidak dipakai. Isi saldo dengan membeli AntarVoucher via transfer ke rekening resmi PT Antar Kita Indonesia.',
+  v5_service_fee_ppn: 'Biaya layanan AntarKita (termasuk PPN {pct} %)', v5_no_payment_fee: 'Tidak ada biaya pembayaran',
+  v5_balance_cap: 'Batas saldo {cap}', v5_room_left: 'Sisa ruang {room}', v5_cap_reached: 'Saldo Anda sudah mencapai batas. Gunakan saldo dulu sebelum membeli lagi.',
+  v5_pick_nominal: 'Pilih nominal voucher', v5_custom_nominal: 'Nominal lain', v5_pick_bank: 'Transfer ke rekening resmi', v5_create_code: 'Buat kode & instruksi transfer',
+  v5_your_code: 'Kode voucher Anda', v5_transfer_exact: 'Transfer PERSIS nominal ini (3 digit terakhir = kode unik)', v5_i_transferred: 'Saya sudah transfer',
+  v5_status_pending_payment: 'Menunggu pembayaran', v5_status_issued: 'Terbit — belum ditukar', v5_status_redeemed: 'Sudah masuk saldo', v5_status_expired: 'Kedaluwarsa', v5_status_void: 'Dibatalkan',
+  v5_purchase_closed: 'Pembelian AntarVoucher belum dibuka', v5_purchase_closed_text: 'Admin belum membuka pembelian voucher. Saldo yang sudah ada tetap bisa dipakai.',
+  v5_closed_loop_note: 'Saldo AntarVoucher hanya untuk layanan AntarKita, tidak berbunga, bukan simpanan. Kode yang belum ditukar kedaluwarsa setelah {days} hari. Sisa saldo dapat diminta kembali sesuai S&K.',
+  v5_no_codes: 'Belum ada kode voucher', v5_no_codes_sub: 'Kode dari pembelian atau hadiah akan tampil di sini.', v5_expires: 'Berlaku s.d.', v5_redeemed_at: 'Ditukar',
 };
 export type TKey = keyof typeof id;
 
@@ -74,6 +86,18 @@ const en: Partial<Record<TKey, string>> = {
   request_refund: 'Request a refund', payment_disputes: 'My payment issues', payment_disputes_empty: 'No payment issues reported', sponsored: 'Sponsored',
   payment_method_fee: 'Payment method fee', platform_fee_ak: 'AntarKita platform fee', borne_by_ak: 'covered by AntarKita', payment_expired: 'Bill expired', payment_failed: 'Payment failed',
   tag_ride_motor: 'Fast & cheap motorbike rides', tag_ride_car: 'Comfortable cars for families', tag_food: 'Favorite food delivered', tag_send: 'Parcels in-city & intercity', tag_shop: 'Indomaret, Alfamart, pharmacy & supermarket', tag_market: 'Groceries from the nearest wet market', tag_box: 'Box truck / pickup, moving', tag_travel: 'Intercity travel, home pickup', tag_pay: 'Balance & payment methods', notifications: 'Notifications', payment_methods: 'Payment', tap_detail: 'tap for details',
+  // AntarVoucher v5
+  v5_buy_voucher: 'Buy AntarVoucher', v5_buy_tab: 'Buy', v5_my_codes: 'My codes', v5_redeem_code: 'Redeem code', v5_redeem_hint: 'Have a gift code AKV-…? Enter it here to add balance.',
+  v5_redeem_btn: 'Redeem', v5_redeem_ok: 'Code redeemed — balance +{amount}', v5_voucher_redeem: 'AntarKita Voucher',
+  v5_gateway_unavailable_title: 'Not available in AntarVoucher mode', v5_gateway_unavailable_text: 'Payment gateway (e-wallet, QRIS, card, virtual account) is not used. Top up by buying AntarVoucher via bank transfer to the official PT Antar Kita Indonesia account.',
+  v5_service_fee_ppn: 'AntarKita service fee (incl. VAT {pct} %)', v5_no_payment_fee: 'No payment fee',
+  v5_balance_cap: 'Balance limit {cap}', v5_room_left: 'Room left {room}', v5_cap_reached: 'Your balance has reached the limit. Spend some before buying more.',
+  v5_pick_nominal: 'Choose voucher amount', v5_custom_nominal: 'Other amount', v5_pick_bank: 'Transfer to official account', v5_create_code: 'Create code & transfer instructions',
+  v5_your_code: 'Your voucher code', v5_transfer_exact: 'Transfer EXACTLY this amount (last 3 digits = unique code)', v5_i_transferred: 'I have transferred',
+  v5_status_pending_payment: 'Awaiting payment', v5_status_issued: 'Issued — not redeemed', v5_status_redeemed: 'Added to balance', v5_status_expired: 'Expired', v5_status_void: 'Voided',
+  v5_purchase_closed: 'AntarVoucher purchase not open yet', v5_purchase_closed_text: 'Admin has not opened voucher purchases. Existing balance can still be used.',
+  v5_closed_loop_note: 'AntarVoucher balance is only for AntarKita services, earns no interest and is not a deposit. Unredeemed codes expire after {days} days. Remaining balance can be refunded per the Terms.',
+  v5_no_codes: 'No voucher codes yet', v5_no_codes_sub: 'Codes from purchases or gifts will appear here.', v5_expires: 'Valid until', v5_redeemed_at: 'Redeemed',
 };
 
 const zh: Partial<Record<TKey, string>> = {
@@ -104,6 +128,8 @@ const zh: Partial<Record<TKey, string>> = {
   request_refund: '申请退款', payment_disputes: '我的支付问题', payment_disputes_empty: '暂无支付问题', sponsored: 'Sponsored',
   payment_method_fee: '支付方式手续费', platform_fee_ak: 'AntarKita 平台费', borne_by_ak: '由 AntarKita 承担', payment_expired: '账单已过期', payment_failed: '支付失败',
   tag_ride_motor: '快捷实惠的摩托出行', tag_ride_car: '舒适的家庭用车', tag_food: '最爱美食送到家', tag_send: '同城及跨城包裹', tag_shop: '代购 Indomaret、Alfamart、药店、超市', tag_market: '就近传统市场食材代购', tag_box: '厢式车/皮卡，搬家', tag_travel: '城际拼车，上门接送', tag_pay: '余额与支付方式', notifications: '通知', payment_methods: '支付', tap_detail: '点击查看详情',
+  // AntarVoucher v5 (sebagian; sisanya jatuh ke Indonesia)
+  v5_buy_voucher: '购买 AntarVoucher', v5_my_codes: '我的代码', v5_redeem_code: '兑换代码', v5_voucher_redeem: 'AntarKita 代金券', v5_gateway_unavailable_title: 'AntarVoucher 模式下不可用', v5_service_fee_ppn: 'AntarKita 服务费（含增值税 {pct} %）', v5_i_transferred: '我已转账',
 };
 
 const ar: Partial<Record<TKey, string>> = {
@@ -134,6 +160,8 @@ const ar: Partial<Record<TKey, string>> = {
   request_refund: 'طلب استرداد', payment_disputes: 'مشكلات الدفع الخاصة بي', payment_disputes_empty: 'لا توجد مشكلات دفع', sponsored: 'Sponsored',
   payment_method_fee: 'رسوم طريقة الدفع', platform_fee_ak: 'رسوم منصة AntarKita', borne_by_ak: 'تتحملها AntarKita', payment_expired: 'انتهت صلاحية الفاتورة', payment_failed: 'فشل الدفع',
   tag_ride_motor: 'رحلات دراجة سريعة واقتصادية', tag_ride_car: 'سيارات مريحة للعائلة', tag_food: 'طعامك المفضل يصل إليك', tag_send: 'طرود داخل المدينة وبين المدن', tag_shop: 'تسوّق من Indomaret وAlfamart والصيدليات', tag_market: 'مكوّنات الطبخ من أقرب سوق شعبي', tag_box: 'شاحنة صندوق/بيك أب، نقل أثاث', tag_travel: 'سفر بين المدن مع توصيل من المنزل', tag_pay: 'الرصيد وطرق الدفع', notifications: 'الإشعارات', payment_methods: 'الدفع', tap_detail: 'اضغط للتفاصيل',
+  // AntarVoucher v5 (sebagian; sisanya jatuh ke Indonesia)
+  v5_buy_voucher: 'شراء AntarVoucher', v5_my_codes: 'أكوادي', v5_redeem_code: 'استبدال الكود', v5_voucher_redeem: 'قسيمة AntarKita', v5_gateway_unavailable_title: 'غير متاح في وضع AntarVoucher', v5_service_fee_ppn: 'رسوم خدمة AntarKita (شاملة ضريبة القيمة المضافة {pct} %)', v5_i_transferred: 'لقد قمت بالتحويل',
 };
 
 const DICT: Record<Locale, Partial<Record<TKey, string>>> = { id, en, zh, ar };

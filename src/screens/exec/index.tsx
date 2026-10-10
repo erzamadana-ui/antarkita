@@ -24,6 +24,8 @@ import type { ExecAccess, ExecReport, ReportRun, Recommendation, ServiceType, Sk
 import { SkemaReportView } from '@/screens/admin/_skema-report';
 import { ContributionView } from '@/screens/admin/_contribution-view';
 import type { ContributionGroup } from '@/lib/admin';
+import { FloatCard } from '@/screens/admin/voucher';
+import { voucherFloatStatus, cityTargetsProgress, monthKey, type VoucherFloatStatus, type CityTargetProgress } from '@/lib/voucherV5';
 
 /* ───────────────────── Bagian `pnl` (opsional, migrasi 0026) ───────────────────── */
 
@@ -189,6 +191,10 @@ export default function ExecPortal() {
               <StatCard index={4} icon="people-outline" label="Pelanggan bertransaksi" value={r.summary.customers} hint={`${r.summary.cities} kota aktif`} color={adminTone.slate} />
               <StatCard index={5} icon="wallet-outline" label="Payout mitra" value={rupiah(r.summary.driver_payout + r.summary.merchant_payout)} hint={`driver ${rupiah(r.summary.driver_payout)} · merchant ${rupiah(r.summary.merchant_payout)}`} color={adminTone.orange} />
             </Row>
+
+            {/* ── v5 · Dana float AntarVoucher + progres target kota (KONTRAK-V5 §4 exec) ── */}
+            <SectionHead title="AntarVoucher & target kota" hint="Σ saldo beredar vs ambang BI Rp1 miliar (izin PJP) · realisasi bulan berjalan vs target order/NPR per kota" />
+            <VoucherExecSection />
 
             {/* ── Laba Rugi (P&L) — hanya bila server mengirim `pnl` ── */}
             {pnl ? (
@@ -559,3 +565,42 @@ const s = StyleSheet.create({
   reco: { flex: 1, padding: adminSpace.lg, borderRadius: adminRadius.lg, borderWidth: 1 },
   recoIcon: { width: 32, height: 32, borderRadius: adminRadius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
 });
+
+/* ───────────────── v5 · Float + progres target kota untuk eksekutif ───────────────── */
+const T_STATUS_X: Record<CityTargetProgress['status'], { label: string; tone: 'ok' | 'wait' | 'bad' | 'off' }> = {
+  on_track: { label: 'On track', tone: 'ok' }, at_risk: { label: 'At risk', tone: 'wait' }, behind: { label: 'Behind', tone: 'bad' }, no_target: { label: 'Tanpa target', tone: 'off' },
+};
+function VoucherExecSection() {
+  const [fl, setFl] = useState<VoucherFloatStatus | null>(null);
+  const [flErr, setFlErr] = useState<string | null>(null);
+  const [rows, setRows] = useState<CityTargetProgress[]>([]);
+  const [tErr, setTErr] = useState<string | null>(null);
+  const load = useCallback(() => {
+    voucherFloatStatus().then((f) => { setFl(f); setFlErr(null); }).catch((e: Error) => setFlErr(`Dana float: ${e.message}`));
+    cityTargetsProgress(monthKey()).then((r) => { setRows(Array.isArray(r) ? r : []); setTErr(null); }).catch((e: Error) => setTErr(`Progres target kota: ${e.message}`));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const tot = rows.reduce((a, r) => ({ t: a.t + Number(r.target_orders || 0), o: a.o + Number(r.actual_orders || 0), n: a.n + Number(r.actual_npr || 0), tn: a.tn + Number(r.target_npr || 0) }), { t: 0, o: 0, n: 0, tn: 0 });
+  const nBehind = rows.filter((r) => r.status === 'behind').length, nRisk = rows.filter((r) => r.status === 'at_risk').length;
+  return (
+    <View style={{ gap: adminSpace.lg }}>
+      <FloatCard fl={fl} err={flErr} onRetry={load} compact />
+      <Row gap={adminSpace.md} style={{ flexWrap: 'wrap' }}>
+        <StatCard index={0} icon="flag-outline" label="Order vs target (bulan ini)" value={`${tot.o.toLocaleString('id-ID')} / ${tot.t.toLocaleString('id-ID')}`} hint={tot.t ? pctId((tot.o / tot.t) * 100) + ' dari target semua kota' : 'belum ada target — minta ops mengisi'} color={adminTone.blue} />
+        <StatCard index={1} icon="cash-outline" label="NPR vs target" value={rupiah(tot.n)} hint={tot.tn ? `target ${rupiah(tot.tn)} (${pctId((tot.n / tot.tn) * 100)})` : 'NPR = pendapatan platform − PPN − promo'} color={adminTone.teal} />
+        <StatCard index={2} icon="warning-outline" label="Kota behind / at risk" value={`${nBehind} / ${nRisk}`} hint={`${rows.length} kota bertarget · pro-rata ${rows[0]?.prorata_pct != null ? pctId(rows[0].prorata_pct) : '—'} bulan berjalan`} color={nBehind ? adminTone.red : nRisk ? adminTone.amber : adminTone.green} />
+      </Row>
+      <Panel title="Progres target per kota" subtitle="Status: on_track ≥ 100 % pro-rata hari, at_risk 80–100 %, behind < 80 %. COGS/order = biaya tetap kota ÷ target order; rekomendasi biaya layanan = COGS × (1 + margin target), pembulatan Rp500." icon="speedometer-outline" padded={false}>
+        {tErr ? <Text style={[af.small, { color: adminTone.red, padding: adminSpace.md }]} selectable>{tErr}</Text> : null}
+        <DataTable keyField="city_id" rows={rows as unknown as Record<string, unknown>[]} emptyText={tErr ? 'Tidak bisa membaca progres target' : 'Belum ada target kota bulan ini'} emptyIcon="flag-outline" columns={[
+          { key: 'city_name', label: 'Kota', width: 150, render: (r) => { const x = r as unknown as CityTargetProgress; return <View style={{ minWidth: 0 }}><Text style={af.bodyStrong} numberOfLines={1}>{x.city_name || '—'}</Text><Text style={af.tiny} numberOfLines={1}>ops {x.pic_ops || '—'} · fin {x.pic_finance || '—'}</Text></View>; } },
+          { key: 'status', label: 'Status', width: 110, render: (r) => { const st = T_STATUS_X[(r.status as CityTargetProgress['status'])] ?? T_STATUS_X.no_target; return <Pill text={st.label} tone={st.tone} />; } },
+          { key: 'orders', label: 'Order real / target', width: 150, align: 'right', mono: true, render: (r) => <Text style={af.mono}>{Number(r.actual_orders ?? 0).toLocaleString('id-ID')} / {Number(r.target_orders ?? 0).toLocaleString('id-ID')} ({pctId(Number(r.pct_orders ?? 0))})</Text> },
+          { key: 'npr', label: 'NPR real / target', width: 230, align: 'right', mono: true, render: (r) => <Text style={af.mono} numberOfLines={1}>{rupiah(Number(r.actual_npr ?? 0))} / {rupiah(Number(r.target_npr ?? 0))} ({pctId(Number(r.pct_npr ?? 0))})</Text> },
+          { key: 'cogs_per_order', label: 'COGS/order', width: 120, align: 'right', mono: true, render: (r) => <Text style={af.mono}>{rupiah(Number(r.cogs_per_order ?? 0))}</Text> },
+          { key: 'platform_fee_recommended', label: 'Rek. biaya layanan', width: 150, align: 'right', mono: true, render: (r) => <Text style={[af.mono, { color: adminTone.teal, fontWeight: '700' }]}>{rupiah(Number(r.platform_fee_recommended ?? 0))}</Text> },
+        ]} />
+      </Panel>
+    </View>
+  );
+}

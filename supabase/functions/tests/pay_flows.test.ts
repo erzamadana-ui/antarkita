@@ -383,3 +383,14 @@ Deno.test("T1 getSecrets: ketat per env; override env var wajib FINPAY_ENV; Midt
   assert.equal(await getSecrets(db, "midtrans", "production", e({ MIDTRANS_SERVER_KEY: "SB-Mid-server-x" })), null);
   assert.equal((await getSecrets(db, "midtrans", "sandbox", e({ MIDTRANS_SERVER_KEY: "SB-Mid-server-x" })))?.serverKey, "SB-Mid-server-x");
 });
+
+// 0114 AntarVoucher v5: payment_mode=voucher_only → pay-create menolak 409 PAYMENT_MODE_VOUCHER_ONLY (sebelum menyentuh provider);
+// setting belum ada (pra-v5) atau 'gateway' → perilaku lama (tes-tes di atas).
+Deno.test("pay-create: payment_mode voucher_only → 409 PAYMENT_MODE_VOUCHER_ONLY", async () => {
+  const c = createSetup({ settings: { payment_mode: "voucher_only" } });
+  const res = await c.h(post("pay-create", { purpose: "order", order_id: ORDER, channel: "qris" }, auth));
+  assert.equal(res.status, 409);
+  const body = await res.json();
+  assert.equal(body.code, "PAYMENT_MODE_VOUCHER_ONLY");
+  assert.equal(c.db.tables.payments.length, 0);
+});

@@ -18,6 +18,7 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { create } from 'zustand';
 import { rpc, realtimeChannel } from '@/lib/supabase';
+import { useVoucherConfig } from '@/hooks/useVoucherV5';
 import type { AppPublicSettings, PaymentChannels, SendLimit, SendLimits, SendVehicle } from '@/lib/types';
 
 interface State { settings: AppPublicSettings | null; loading: boolean; loadedAt: number; load: (force?: boolean) => Promise<void> }
@@ -87,6 +88,8 @@ export const useAppSettingsStore = create<State>((set, get) => ({
             antarpay_enabled: r?.antarpay_enabled === true,
             // 0089: saluran per metode — GAGAL-TERTUTUP sama seperti sakelar global.
             payment_channels: normalizePaymentChannels(r?.payment_channels),
+            // v5: hanya dipakai bila server 0114 mengirimnya; selain itu `useVoucherOnly()` membaca voucher_public_config.
+            payment_mode: r?.payment_mode === 'voucher_only' || r?.payment_mode === 'gateway' ? r.payment_mode : null,
           },
           loadedAt: Date.now(),
         });
@@ -137,7 +140,20 @@ export function useAppSettings() {
   const maxKm = (service: string): number | null => { const v = settings?.max_km?.[service]; return typeof v === 'number' && v > 0 ? v : null; };
   const sendLimits = settings?.send_limits ?? DEFAULT_SEND_LIMITS;
   const waitApologyMinutes = settings?.wait_apology_minutes ?? DEFAULT_WAIT_APOLOGY_MIN;
-  return { settings, loading, isEnabled, maxKm, sendLimits, waitApologyMinutes, reload: () => load(true) };
+  const paymentMode = settings?.payment_mode ?? null;
+  return { settings, loading, isEnabled, maxKm, sendLimits, waitApologyMinutes, paymentMode, reload: () => load(true) };
+}
+
+/**
+ * AntarVoucher v5 (KONTRAK-V5 §1 `payment_mode`): true = hanya Tunai & AntarVoucher, tanpa payment gateway.
+ * Sumber: `app_public_settings.payment_mode` bila server 0114 sudah mengirimnya; bila belum, `voucher_public_config()`
+ * lewat `useVoucherConfig()`. Gagal-aman ke voucher_only (gateway disembunyikan) — server pun menolak 409 di mode itu.
+ */
+export function useVoucherOnly() {
+  const { settings } = useAppSettings();
+  const { config, loading, voucherOnly: fromConfig } = useVoucherConfig();
+  const voucherOnly = settings?.payment_mode ? settings.payment_mode === 'voucher_only' : fromConfig;
+  return { voucherOnly, config, loading };
 }
 
 /** Teks tunggal untuk banner/info saat AntarVoucher dinonaktifkan admin (0088). */

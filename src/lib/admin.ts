@@ -22,6 +22,8 @@ export type AdminRole = 'superadmin' | 'finance' | 'ops' | 'cs' | 'viewer';
 export type AdminPerm =
   // nama UI (dipetakan ke nama server lewat SERVER_PERM_ALIAS)
   | 'audit' | 'settings' | 'gateway' | 'approvals' | 'refund_approve' | 'ads_review' | 'ads_product' | 'ops' | 'tickets'
+  // v5 AntarVoucher: `finance` = peran keuangan (payout/batch pencairan/pajak), dipakai layar Keuangan & Target kota
+  | 'finance'
   // nama server (admin_role_perms, migrasi 0107)
   | 'view' | 'orders_view' | 'payments_view' | 'ledger' | 'report' | 'refund' | 'refund_execute' | 'payout' | 'reconcile' | 'fee'
   | 'wallet_adjust' | 'approval' | 'dispute' | 'dispute_resolve' | 'ticket' | 'driver' | 'merchant' | 'city' | 'orders' | 'ads'
@@ -84,6 +86,8 @@ const SERVER_PERM_ALIAS: Record<string, string[]> = {
   audit: ['report'], settings: ['payment_config'], gateway: ['payment_config', 'gateway_secret'],
   approvals: ['approval'], refund_approve: ['refund'], ads_review: ['ads'], ads_product: ['ads'],
   ops: ['driver', 'merchant', 'city', 'orders'], tickets: ['ticket'],
+  // v5: izin "finance" dipenuhi salah satu izin uang peran Keuangan (admin_role_perms 0107); server tetap penentu akhir.
+  finance: ['payout', 'reconcile', 'refund', 'wallet_adjust'],
 };
 /** Izin efektif untuk sebuah info peran. `null` (belum termuat / RPC gagal) → izinkan; server tetap memeriksa. */
 export function permsAllow(info: MyAdminRole | null, perm?: AdminPerm | AdminPerm[] | null): boolean {

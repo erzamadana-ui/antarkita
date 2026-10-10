@@ -7,7 +7,7 @@ import { Card, Empty, Row, IconCircle, Badge } from '@/components/ui';
 import { BrandGradient } from '@/components/glass';
 import { AnimatedNumber, Entrance, PressableScale, Skeleton } from '@/components/motion';
 import { useAuth } from '@/store/auth';
-import { useAntarVoucher } from '@/hooks/useAppSettings';
+import { useAntarVoucher, useVoucherOnly } from '@/hooks/useAppSettings';
 import { AntarVoucherOffBanner } from '@/components/AntarVoucherNotice';
 import { supabase } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
@@ -24,6 +24,8 @@ const txMeta: Record<WalletTx['type'], { label: string; icon: string; color: str
   withdrawal: { label: 'Penarikan', icon: 'arrow-up-circle', color: colors.warning },
   fee: { label: 'Potongan platform', icon: 'remove-circle', color: colors.danger },
   adjustment: { label: 'Penyesuaian', icon: 'construct', color: colors.textSecondary },
+  // v5: penukaran kode AntarVoucher (KONTRAK-V5 §2 kind `voucher_redeem`)
+  voucher_redeem: { label: 'Voucher AntarKita', icon: 'ticket', color: colors.success },
 };
 
 /** Tampilan dompet yang dipakai customer & driver/merchant. */
@@ -40,6 +42,8 @@ export function WalletView({ allowWithdraw, bottomSpace = 40, header }: { allowW
   const uid = session?.user.id;
   // 0088: saat AntarVoucher nonaktif, saldo & riwayat tetap terlihat; tombol Top Up / Tarik Saldo disembunyikan (server pun menolak).
   const { enabled: antarpayOn } = useAntarVoucher();
+  // v5 voucher_only: "Top Up" → "Beli Voucher" (langsung ke /pay/voucher, tanpa pilihan gateway).
+  const { voucherOnly } = useVoucherOnly();
 
   const load = useCallback(async () => {
     if (!uid) return;
@@ -70,7 +74,9 @@ export function WalletView({ allowWithdraw, bottomSpace = 40, header }: { allowW
           <AnimatedNumber value={wallet?.balance ?? 0} format={rupiah} style={{ color: '#fff', fontSize: 30, fontWeight: '700', marginVertical: 8, letterSpacing: -0.5 }} />
           {antarpayOn ? (
             <Row gap={10} style={{ marginTop: 8 }}>
-              <WalletAction icon="add" label="Top Up" onPress={() => router.push('/pay/topup')} />
+              {voucherOnly
+                ? <WalletAction icon="ticket-outline" label="Beli Voucher" onPress={() => router.push('/pay/voucher')} />
+                : <WalletAction icon="add" label="Top Up" onPress={() => router.push('/pay/topup')} />}
               {allowWithdraw && <WalletAction icon="arrow-up" label="Tarik Saldo" onPress={() => router.push('/pay/withdraw')} />}
             </Row>
           ) : null}
@@ -140,7 +146,9 @@ export function WalletView({ allowWithdraw, bottomSpace = 40, header }: { allowW
         </Card></Entrance>
       )}
       <View style={{ marginTop: 16 }}>
-        <Badge text="Isi saldo lewat top up instan atau transfer ke rekening resmi PT Antar Kita Indonesia" color={colors.textSecondary} />
+        <Badge text={voucherOnly
+          ? 'Saldo AntarVoucher hanya untuk layanan AntarKita (closed loop), tidak berbunga. Isi dengan membeli voucher via transfer ke rekening resmi PT Antar Kita Indonesia.'
+          : 'Isi saldo lewat top up instan atau transfer ke rekening resmi PT Antar Kita Indonesia'} color={colors.textSecondary} />
       </View>
     </ScrollView>
   );

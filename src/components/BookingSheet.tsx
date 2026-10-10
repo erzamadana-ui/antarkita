@@ -10,11 +10,27 @@ import { colors, font, radius, glass, shadow } from '@/lib/theme';
 import { rupiah, promoOwnerLabel } from '@/lib/format';
 import type { Order, PaymentMethod, PromoFunder, ProviderChannel, ServiceEconomicsPublic, ServiceType } from '@/lib/types';
 import { usePayPrefs, EWALLETS, GATEWAY_CHANNELS, PAYMENT_CHANNELS, channelLabel } from '@/store/payprefs';
-import { buildCheckoutRows, checkoutNoteText, channelFeeText, estimatePgFee, useProviderPublic, type PriceRow, type PayFeeEstimate } from '@/lib/payments';
+import { buildCheckoutRows, checkoutNoteText, channelFeeText, estimatePgFee, useProviderPublic, getFeeDisplayMode, setFeeDisplayMode, type PriceRow, type PayFeeEstimate } from '@/lib/payments';
 import { useAdAttribution } from '@/lib/ads';
-import { useAntarVoucher, usePaymentChannels, CHANNELS_OFF_TEXT } from '@/hooks/useAppSettings';
+import { useAntarVoucher, usePaymentChannels, useVoucherOnly, CHANNELS_OFF_TEXT } from '@/hooks/useAppSettings';
+import { useTaxSettings } from '@/hooks/useVoucherV5';
 import { AntarVoucherOffNote } from '@/components/AntarVoucherNotice';
 import { useEffect } from 'react';
+
+/**
+ * AntarVoucher v5: sinkronkan mode tampilan rincian biaya (`lib/payments` → buildCheckoutRows/receiptRows/PriceBlock)
+ * dari `payment_mode` + `tax_settings_public`. Dipanggil di useCheckoutFees/useServiceEconomics sehingga semua
+ * layar checkout otomatis memakai label "Biaya layanan AntarKita (termasuk PPN n %)" tanpa baris biaya pembayaran.
+ */
+export function useFeeDisplayMode() {
+  const { voucherOnly } = useVoucherOnly();
+  const tax = useTaxSettings();
+  const ppnPct = Number(tax.ppn_pct) || 0;
+  const ppnInclusive = tax.ppn_inclusive !== false;
+  // Disetel saat render (idempoten) agar baris yang dihitung di render yang sama sudah memakai mode terbaru.
+  setFeeDisplayMode({ voucherOnly, ppnPct, ppnInclusive });
+  return { voucherOnly, ppnPct, ppnInclusive };
+}
 
 
 /** Pilihan metode bayar + promo + catatan — dipakai ride, food, send. */
@@ -25,6 +41,12 @@ export const paidViaOf = (m: PayChoice, ewallet?: string | null) => (m === 'ewal
 export function handleShortfall(e: unknown, router: ReturnType<typeof useRouter>, ewallet?: string | null) {
   const m = /SALDO_KURANG:(\d+)/.exec((e as Error).message ?? '');
   if (!m) return false;
+  // v5 voucher_only: tidak ada gateway → arahkan ke pembelian AntarVoucher (kode via transfer).
+  if (getFeeDisplayMode().voucherOnly) {
+    toast.show(`Saldo AntarVoucher kurang ${rupiah(Number(m[1]))} — beli voucher dulu`);
+    router.push('/pay/voucher' as never);
+    return true;
+  }
   const amount = Math.max(10000, Math.ceil(Number(m[1]) / 1000) * 1000);
   toast.show(`Saldo kurang ${rupiah(Number(m[1]))} — lengkapi lewat ${ewallet ? (EWALLETS.find((x) => x.key === ewallet)?.label ?? 'e-wallet') : 'e-wallet'}`);
   router.push({ pathname: '/pay/gateway', params: { amount: String(amount), method: ewallet ?? 'gopay', reason: 'order' } } as never);
@@ -55,6 +77,7 @@ export function goAfterOrder(router: ReturnType<typeof useRouter>, o: Order, suc
 const econCache = new Map<ServiceType, Promise<ServiceEconomicsPublic>>();
 /** `service_economics_public(service)` — biaya platform pelanggan, jasa belanja, komisi driver (sumber angka, bukan konstanta klien). */
 export function useServiceEconomics(service: ServiceType) {
+  useFeeDisplayMode();   // v5: layar yang hanya memakai hook ini (travel) ikut mendapat label/mode rincian yang benar
   const [econ, setEcon] = useState<ServiceEconomicsPublic | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -84,8 +107,10 @@ export const checkoutNote = checkoutNoteText;
  */
 export function useCheckoutFees({ service, method, ewallet, amount }: { service: ServiceType; method: PayChoice; ewallet?: string | null; amount: number }) {
   const { econ, error: econError } = useServiceEconomics(service);
+  const { voucherOnly } = useFeeDisplayMode();
   const { provider, providerName } = useProviderPublic();
-  const channel = method === 'ewallet' ? paidViaOf(method, ewallet) : null;
+  // v5 voucher_only: tidak ada kanal gateway → estimasi biaya pembayaran selalu Rp0 (tunai/AntarVoucher).
+  const channel = method === 'ewallet' && !voucherOnly ? paidViaOf(method, ewallet) : null;
   const provCh = channel ? provider?.channels.find((c) => c.key === channel) ?? null : null;
   const gateway = !!channel && (!!provCh || GATEWAY_CHANNELS.includes(channel));
   const base = Math.max(0, Math.round(amount || 0));
@@ -130,11 +155,13 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
   const { prefs, loaded, load, save } = usePayPrefs();
   const { enabled: antarpayOn } = useAntarVoucher();
   const { isChannelOn, nonCashOn } = usePaymentChannels();
+  // v5 voucher_only (KONTRAK-V5 §4): hanya Tunai & AntarVoucher; kanal gateway disembunyikan (server menolak 409).
+  const { voucherOnly } = useFeeDisplayMode();
   // v3 §1: kanal gateway + biayanya dari payment_provider_public() (hanya `enabled`). Bila RPC gagal → daftar lama (0089).
   const { provider, channels: provChannels, providerName } = useProviderPublic();
   const cashOn = isChannelOn('cash');
   const walletOn = isChannelOn('antarpay');
-  const wallets: { key: string; label: string; color: string; icon: string; ch: ProviderChannel | null }[] = provider
+  const wallets: { key: string; label: string; color: string; icon: string; ch: ProviderChannel | null }[] = voucherOnly ? [] : provider
     ? provChannels.map((c) => { const meta = PAYMENT_CHANNELS.find((x) => x.key === c.key); return { key: c.key, label: c.label || channelLabel(c.key), color: meta?.color ?? colors.info, icon: meta?.icon ?? channelIcon(c.key), ch: c }; })
     : EWALLETS.filter((x) => isChannelOn(x.key)).map((x) => ({ key: x.key, label: x.label, color: x.color, icon: x.icon, ch: null }));
   const ewalletOn = wallets.length > 0;
@@ -179,7 +206,7 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
       <Text style={font.label}>Pembayaran</Text>
       <Row gap={8}>
         {cashOn && <PayOption active={method === 'cash'} onPress={() => onMethod('cash')} icon="cash-outline" title="Tunai" subtitle="Ke driver" />}
-        {walletOn && <PayOption active={method === 'wallet'} onPress={() => onMethod('wallet')} icon="wallet-outline" title="AntarVoucher" subtitle={rupiah(wallet?.balance ?? 0)} />}
+        {walletOn && <PayOption active={method === 'wallet'} onPress={() => onMethod('wallet')} icon="wallet-outline" title={voucherOnly ? 'Saldo AntarVoucher' : 'AntarVoucher'} subtitle={rupiah(wallet?.balance ?? 0)} />}
         {ewalletOn && ew && <PayOption active={method === 'ewallet'} onPress={() => onMethod('ewallet')} icon={ew.icon as never} title={ew.label} subtitle={feeText(ew)} color={ew.color} />}
       </Row>
       {method === 'ewallet' && ewalletOn && wallets.length > 1 ? (

@@ -21,11 +21,16 @@ import { rupiah, km, timeAgo, serviceLabel, statusLabel, vehicleClassLabel, form
 import { serviceDef } from '@/lib/services';
 import type { AvailableOrder } from '@/lib/types';
 import { SelfieGate } from '@/components/Safety';
+import { DepositBanner, useDepositGate, handleDepositError } from '@/screens/driver/deposit';
 
 export default function DriverHome() {
   const router = useRouter();
   const { profile } = useAuth();
   const { driver, online, busy, setOnline, available, active, accept, reject, myPos, setMyPos } = useDriverSession();
+  // AntarVoucher v5: deposit komisi — saklar online & tombol terima dikunci bila saldo < driver_min_balance_accept.
+  const deposit = useDepositGate(driver?.status === 'approved');
+  const depositBlocked = deposit.blocked;
+  const goTo = (href: string) => router.push(href as never);
   const { location, refresh } = useCurrentLocation();
   const { info: priority } = useDriverPriority(driver?.status === 'approved');
   const radiusText = usePickupRadiusText();
@@ -39,6 +44,10 @@ export default function DriverHome() {
   const pos = myPos ?? (driver?.lat && driver.lng ? { lat: driver.lat, lng: driver.lng } : location);
 
   const toggle = async (v: boolean) => {
+    if (v && depositBlocked && deposit.status) {
+      toast.error(`Saldo AntarVoucher ${rupiah(deposit.status.balance)} — minimal ${rupiah(deposit.status.min_balance)} untuk online. Beli AntarVoucher dulu.`);
+      return;
+    }
     try {
       let p: { lat: number; lng: number } | undefined;
       if (v) { const fix = await refresh(); if (!fix) { toast.error('Lokasi tidak tersedia. Izinkan akses GPS lalu coba lagi.'); return; } p = fix; setMyPos({ ...fix, heading: null }); }
@@ -47,12 +56,14 @@ export default function DriverHome() {
     } catch (e) {
       const msg = (e as Error).message;
       if (msg.includes('SELFIE_REQUIRED')) { setSelfie(myPos ?? location ?? null); toast.show('Verifikasi wajah dulu sebelum online'); return; }
+      if (handleDepositError(e, deposit.status, goTo)) { void deposit.reload(); return; }
       toast.error(msg);
     }
   };
   const afterSelfie = async () => {
     const p = selfie || undefined; setSelfie(false);
-    try { await setOnline(true, p || undefined); toast.success('Anda online — siap menerima order'); } catch (e) { toast.error((e as Error).message); }
+    try { await setOnline(true, p || undefined); toast.success('Anda online — siap menerima order'); }
+    catch (e) { if (handleDepositError(e, deposit.status, goTo)) { void deposit.reload(); return; } toast.error((e as Error).message); }
   };
 
   const markers = useMemo<MapMarker[]>(() => {
@@ -63,9 +74,17 @@ export default function DriverHome() {
   }, [pos.lat, pos.lng, driver, available, selected, myPos?.heading]);
   const fitTo = useMemo(() => selected ? [pos, { lat: selected.pickup_lat, lng: selected.pickup_lng }, { lat: selected.dropoff_lat, lng: selected.dropoff_lng }] : [pos], [pos.lat, pos.lng, selected]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [accepting, setAccepting] = useState<string | null>(null);
   const doAccept = async (o: AvailableOrder) => {
+    if (accepting) return;
+    if (depositBlocked && deposit.status) { handleDepositError(new Error('DEPOSIT_REQUIRED'), deposit.status, goTo); return; }
+    setAccepting(o.id);
     try { const ord = await accept(o.id); setSelected(null); toast.success('Order diterima!'); router.push(`/driver/order/${ord.id}` as never); }
-    catch (e) { toast.error((e as Error).message); }
+    catch (e) {
+      // v5: server menolak DEPOSIT_REQUIRED bila saldo turun di bawah minimum (mis. setelah komisi tunai dipotong).
+      if (handleDepositError(e, deposit.status, goTo)) { void deposit.reload(); return; }
+      toast.error((e as Error).message);
+    } finally { setAccepting(null); }
   };
   // Tolak: order hilang dari daftar (animasi keluar) & tidak muncul lagi — server menyaringnya untuk driver ini
   const doReject = async (reason: string | null) => {
@@ -113,7 +132,7 @@ export default function DriverHome() {
           <Text style={{ fontSize: 12, fontWeight: '700', color: online ? colors.success : colors.textMuted }}>{online ? 'Online' : 'Offline'}</Text>
         </Row>
       </View>
-      <Switch value={online} onValueChange={toggle} disabled={busy} trackColor={{ true: colors.primary, false: colors.border }} thumbColor="#fff" style={Platform.OS === 'ios' ? { transform: [{ scale: 0.8 }] } : undefined} />
+      <Switch value={online} onValueChange={toggle} disabled={busy || (!online && depositBlocked)} trackColor={{ true: colors.primary, false: colors.border }} thumbColor="#fff" style={Platform.OS === 'ios' ? { transform: [{ scale: 0.8 }] } : undefined} />
     </View>
   );
 
@@ -160,11 +179,16 @@ export default function DriverHome() {
             </PressableScale>
           </Entrance>
         )}
+        {/* v5: banner deposit AntarVoucher — tampil kapan pun saldo < minimum; juga saat RPC gagal (baris kecil) */}
+        {!selected && (depositBlocked || (deposit.error && !deposit.status)) && (
+          <Entrance index={active ? 1 : 0}><DepositBanner status={deposit.status} error={deposit.error} onRetry={deposit.reload} /></Entrance>
+        )}
         {online && !selected && <Entrance index={active ? 1 : 0}><PriorityCard info={priority} /></Entrance>}
         {!selected && <Entrance index={active ? 2 : 1}><DriverCodeCard code={myCode?.code} todayCount={myCode?.orders_direct_today} onPress={() => router.push('/driver/code' as never)} /></Entrance>}
         {!online ? (
           <Animated.View entering={FadeIn.duration(motion.base)} exiting={FadeOut.duration(motion.fast)}>
-            <Empty icon="power-outline" title="Anda sedang offline" subtitle="Aktifkan saklar online di kiri atas untuk melihat order di sekitar Anda." />
+            <Empty icon="power-outline" title="Anda sedang offline"
+              subtitle={depositBlocked ? 'Saklar online dikunci: saldo AntarVoucher di bawah minimum deposit. Beli AntarVoucher lewat tombol di atas, lalu aktifkan online.' : 'Aktifkan saklar online di kiri atas untuk melihat order di sekitar Anda.'} />
           </Animated.View>
         ) : selected ? (
           <Animated.View key={selected.id} entering={ZoomIn.duration(motion.base)} exiting={FadeOut.duration(motion.fast)} style={s.offer}>
@@ -199,7 +223,7 @@ export default function DriverHome() {
             {!!selected.priority_note && <Row gap={6} style={{ marginTop: 8 }}><Ionicons name="information-circle-outline" size={12} color={colors.textMuted} /><Text style={[font.tiny, { flex: 1 }]}>{selected.priority_note}</Text></Row>}
             <Row gap={8} style={{ marginTop: 14 }}>
               <Button title="Tolak" size="lg" variant="outline" color={colors.danger} onPress={() => setRejecting(selected)} style={{ flex: 1 }} />
-              <Button title="Terima Order" size="lg" onPress={() => doAccept(selected)} style={{ flex: 1.6 }} />
+              <Button title={depositBlocked ? 'Deposit belum cukup' : 'Terima Order'} size="lg" loading={accepting === selected.id} disabled={!!accepting || depositBlocked} onPress={() => doAccept(selected)} style={{ flex: 1.6 }} />
             </Row>
           </Animated.View>
         ) : feed.length === 0 ? (
@@ -235,7 +259,7 @@ export default function DriverHome() {
                   <OrderLoadInfo order={o} style={{ marginTop: 8 }} />
                   <Row gap={8} style={{ marginTop: 10 }}>
                     <Button title="Tolak" size="sm" variant="outline" color={colors.danger} icon="close" onPress={() => setRejecting(o)} style={{ flex: 1 }} />
-                    <Button title="Terima" size="sm" icon="checkmark" onPress={() => doAccept(o)} style={{ flex: 1 }} />
+                    <Button title="Terima" size="sm" icon="checkmark" loading={accepting === o.id} disabled={!!accepting || depositBlocked} onPress={() => doAccept(o)} style={{ flex: 1 }} />
                   </Row>
                 </View>
               </Animated.View>

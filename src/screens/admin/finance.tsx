@@ -5,21 +5,24 @@
 //   • Finpay  → edge function `pay-disburse` { withdrawal_id } (hanya bila app_settings.disbursement_provider = 'finpay').
 // admin_review_withdrawal butuh PIN (gerbang ensureUnlocked).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, Linking, Platform } from 'react-native';
+import { View, Text, Pressable, Linking, Platform, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  AdminPage, Panel, DataTable, Toolbar, FilterBar, StatCard, Pill, RowActions, AdminDialog, statusTone, adminFont as font, adminTone, adminSpace, adminTable,
+  AdminPage, Panel, DataTable, Toolbar, FilterBar, StatCard, Pill, RowActions, AdminDialog, RequirePerm, statusTone, adminFont as font, adminTone, adminSpace, adminTable,
 } from '@/components/admin';
 import { Row, Button, Input, toast } from '@/components/ui';
 import { PAYOUT_STATUS_LABEL, payoutTone, invokeEdge, useAdminCan, type WithdrawalV3Extra } from '@/lib/admin';
 import { rpc, supabase } from '@/lib/supabase';
 import { signedUrl } from '@/lib/upload';
-import { adminExportCsv } from '@/lib/csv';
+import { adminExportCsv, exportPayoutBatchCsv } from '@/lib/csv';
+import { confirmAsync } from '@/lib/mitra';
+import { adminPayoutQueue, adminPayoutBatchCreate, adminPayoutBatchExport, adminPayoutBatchSettle, type PayoutQueueRow, type PayoutBatch, type PayoutExportRow } from '@/lib/voucherV5';
+import { useVoucherConfig } from '@/hooks/useVoucherV5';
 import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import { colors } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
 import type { Profile, TopupRequest, WithdrawalRequest } from '@/lib/types';
-import { usePager, Pager, fmtDate, fmtAgo, Trunc, WideTableHint } from './_shared';
+import { usePager, Pager, fmtDate, fmtAgo, Trunc, WideTableHint, ErrorNote } from './_shared';
 
 type T = TopupRequest & { user?: Profile | null };
 type W = WithdrawalRequest & WithdrawalV3Extra & { user?: Profile | null; auto?: boolean; bank_verified?: boolean };
@@ -136,6 +139,8 @@ export default function AdminFinance() {
         <StatCard index={2} icon="shield-checkmark-outline" color={kpi.unverified > 0 ? adminTone.red : adminTone.green} label="Rekening belum terverifikasi" value={kpi.unverified} hint="pada permintaan penarikan yang menunggu" />
         <StatCard index={3} icon="swap-vertical-outline" color={adminTone.teal} label="Arus kas dompet (disetujui)" value={rupiah(kpi.approvedNet)} hint="top up disetujui − penarikan disetujui" />
       </Row>
+
+      <PayoutQueueV5 onChanged={load} />
 
       <Toolbar right={<Text style={font.tiny}>{shownTopups.length + shownWds.length} baris ditampilkan · maks 200 terbaru per jenis</Text>}>
         <FilterBar value={filter} onChange={setFilter} options={[{ key: 'pending', label: 'Menunggu' }, { key: 'payout', label: 'Disetujui · dana belum sampai' }, { key: 'approved', label: 'Disetujui' }, { key: 'rejected', label: 'Ditolak' }, { key: 'all', label: 'Semua' }]} />
@@ -275,5 +280,175 @@ export default function AdminFinance() {
 
       <Text style={font.tiny}>Halaman ini hanya menangani arus kas dompet (top up lama (AntarVoucher) & penarikan). Pembelian voucher baru & pencocokan mutasi bank ada di <Text style={[font.tiny, { color: adminTone.teal, fontWeight: '700' }]} onPress={() => router.push('/(admin)/voucher' as never)}>AntarVoucher</Text>. Untuk GMV, pendapatan, bagi hasil mitra, dan marjin per layanan/kota, buka <Text style={[font.tiny, { color: adminTone.teal, fontWeight: '700' }]} onPress={() => router.push('/(admin)/finance-report' as never)}>Laporan Keuangan</Text>.</Text>
     </AdminPage>
+  );
+}
+
+/* ───────────────────────── v5 · Antrean pencairan SLA 24 jam + batch transfer massal (KONTRAK-V5 §3) ───────────────────────── */
+// admin_payout_queue → baris dengan sla_remaining_min/overdue; admin_payout_batch_create (PIN) mengumpulkan approved tanpa batch;
+// admin_payout_batch_export → CSV transfer massal (src/lib/csv.ts); admin_payout_batch_settle (PIN) → ok/failed per baris.
+// Daftar batch dibaca langsung dari tabel payout_batches (RLS admin, migrasi 0114 DB Agent).
+
+const BATCH_LABEL: Record<PayoutBatch['status'], { label: string; tone: 'wait' | 'info' | 'ok' }> = {
+  open: { label: 'Terbuka · belum diekspor', tone: 'wait' }, exported: { label: 'CSV diekspor · menunggu bukti transfer', tone: 'info' }, settled: { label: 'Selesai', tone: 'ok' },
+};
+const slaText = (m: number | null | undefined, overdue: boolean) => {
+  if (m == null) return 'SLA belum disetel';
+  const a = Math.abs(Math.round(m)); const h = Math.floor(a / 60), mm = a % 60;
+  const t = h ? `${h} j ${mm} mnt` : `${mm} mnt`;
+  return overdue ? `LEWAT ${t}` : `sisa ${t}`;
+};
+type SettleDraft = Record<string, { status: 'ok' | 'failed'; bank_ref: string; reason: string }>;
+
+function PayoutQueueV5({ onChanged }: { onChanged: () => Promise<void> | void }) {
+  const can = useAdminCan();
+  const { config } = useVoucherConfig();
+  const [queue, setQueue] = useState<PayoutQueueRow[]>([]);
+  const [batches, setBatches] = useState<PayoutBatch[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [settleBatch, setSettleBatch] = useState<PayoutBatch | null>(null);
+  const [settleRows, setSettleRows] = useState<PayoutExportRow[]>([]);
+  const [draft, setDraft] = useState<SettleDraft>({});
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [q, { data: b, error }] = await Promise.all([
+        adminPayoutQueue(),
+        supabase.from('payout_batches').select('*').order('created_at', { ascending: false }).limit(30),
+      ]);
+      setQueue(Array.isArray(q) ? q : []);
+      if (error) toast.error(`Daftar batch: ${error.message}`); else setBatches((b as PayoutBatch[]) ?? []);
+      setErr(null);
+    } catch (e) { setErr(`Antrean pencairan: ${(e as Error).message}`); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const unbatched = queue.filter((r) => r.status === 'approved' && !r.batch_id);
+  const overdue = queue.filter((r) => r.overdue && r.status !== 'settled');
+  const sumQ = (xs: PayoutQueueRow[]) => xs.reduce((a, b) => a + Number(b.amount || 0), 0);
+  const pg = usePager([...queue].sort((a, b) => (a.sla_remaining_min ?? 1e9) - (b.sla_remaining_min ?? 1e9)), 25);
+
+  const createBatch = async () => {
+    if (!unbatched.length) return toast.error('Tidak ada permintaan disetujui yang belum masuk batch');
+    if (!(await confirmAsync('Buat batch transfer?', `${unbatched.length} permintaan disetujui · total ${rupiah(sumQ(unbatched))} akan dikumpulkan ke satu batch. Setelah itu unduh CSV transfer massal dan unggah ke internet banking.`, 'Ya, buat batch'))) return;
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    setBusy('create');
+    try { const b = await adminPayoutBatchCreate(); toast.success(`Batch ${b?.id ? b.id.slice(0, 8) : ''} dibuat · ${b?.count ?? unbatched.length} baris · ${rupiah(Number(b?.total ?? sumQ(unbatched)))}`); await load(); }
+    catch (e) { handleAdminError(e); } finally { setBusy(null); }
+  };
+  const exportBatch = async (b: PayoutBatch) => {
+    setBusy(`x:${b.id}`);
+    try { const rows = await adminPayoutBatchExport(b.id); await exportPayoutBatchCsv(b.id, Array.isArray(rows) ? rows : []); await load(); }
+    catch (e) { handleAdminError(e); } finally { setBusy(null); }
+  };
+  const openSettle = async (b: PayoutBatch) => {
+    setBusy(`o:${b.id}`);
+    try {
+      // Baris batch diambil dari export (idempoten di server; status batch tetap exported).
+      const rows = await adminPayoutBatchExport(b.id);
+      const list = Array.isArray(rows) ? rows : [];
+      if (!list.length) return toast.error('Batch tidak punya baris');
+      setSettleRows(list); setDraft(Object.fromEntries(list.map((r) => [r.withdrawal_id, { status: 'ok' as const, bank_ref: '', reason: '' }]))); setSettleBatch(b);
+    } catch (e) { handleAdminError(e); } finally { setBusy(null); }
+  };
+  const submitSettle = async () => {
+    if (!settleBatch) return;
+    const refs = settleRows.map((r) => { const d = draft[r.withdrawal_id]; return { withdrawal_id: r.withdrawal_id, status: d?.status ?? 'ok', bank_ref: d?.bank_ref.trim() || undefined, reason: d?.reason.trim() || undefined }; });
+    const badOk = refs.filter((x) => x.status === 'ok' && (!x.bank_ref || x.bank_ref.length < 3));
+    if (badOk.length) return toast.error(`${badOk.length} baris "berhasil" belum punya nomor referensi bank (min 3 karakter)`);
+    const badFail = refs.filter((x) => x.status === 'failed' && !x.reason);
+    if (badFail.length) return toast.error(`${badFail.length} baris "gagal" belum punya alasan`);
+    const nOk = refs.filter((x) => x.status === 'ok').length, nFail = refs.length - nOk;
+    if (!(await confirmAsync('Tandai batch selesai?', `${nOk} transfer berhasil (status settled, mitra diberi tahu) · ${nFail} gagal (request ditolak, saldo mitra dikembalikan). Tindakan tidak bisa dibatalkan.`, 'Ya, tandai selesai'))) return;
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    setBusy(`s:${settleBatch.id}`);
+    try { await adminPayoutBatchSettle(settleBatch.id, refs); toast.success(`Batch ${settleBatch.id.slice(0, 8)} selesai · ${nOk} berhasil · ${nFail} gagal`); setSettleBatch(null); await load(); await onChanged(); }
+    catch (e) { handleAdminError(e); } finally { setBusy(null); }
+  };
+  const setD = (id: string, patch: Partial<SettleDraft[string]>) => setDraft((d) => ({ ...d, [id]: { ...(d[id] ?? { status: 'ok', bank_ref: '', reason: '' }), ...patch } }));
+
+  return (
+    <>
+      <Row gap={adminSpace.md} style={{ flexWrap: 'wrap' }}>
+        <StatCard index={0} icon="time-outline" label="Antrean pencairan (SLA 24 jam)" value={queue.length} hint={`${rupiah(sumQ(queue))} · pending + disetujui belum sampai`} color={adminTone.blue} />
+        <StatCard index={1} icon="alert-circle-outline" label="Lewat SLA" value={overdue.length} hint={overdue.length ? `${rupiah(sumQ(overdue))} — prioritaskan!` : 'semua dalam SLA'} color={overdue.length ? adminTone.red : adminTone.green} />
+        <StatCard index={2} icon="layers-outline" label="Siap masuk batch" value={unbatched.length} hint={`${rupiah(sumQ(unbatched))} disetujui tanpa batch`} color={adminTone.teal} />
+        <StatCard index={3} icon="albums-outline" label="Batch belum selesai" value={batches.filter((b) => b.status !== 'settled').length} hint={`cutoff ${config.payment_mode === 'voucher_only' ? 'mode AntarVoucher' : 'mode gateway'} · lihat tabel batch`} color={adminTone.amber} />
+      </Row>
+
+      <Panel title={`Antrean pencairan (${queue.length})`} subtitle="Diurutkan dari sisa SLA terkecil. Merah = sudah lewat 24 jam sejak request (security_events payout.sla_breach). Alur: setujui (tabel Penarikan di bawah) → Buat batch → Unduh CSV → transfer di internet banking → Tandai selesai." icon="time-outline" iconColor={adminTone.blue} padded={false}
+        right={<RequirePerm perm="finance" fallback={<Text style={font.tiny}>Batch: izin keuangan (payout)</Text>}><Button size="sm" title={`Buat batch (${unbatched.length})`} icon="layers-outline" loading={busy === 'create'} disabled={!unbatched.length || busy !== null} onPress={createBatch} /></RequirePerm>}>
+        <View style={{ padding: adminSpace.md, paddingBottom: 0 }}><ErrorNote text={err} onRetry={load} /></View>
+        <DataTable rows={pg.rows as unknown as Record<string, unknown>[]} emptyText={loading ? 'Memuat…' : 'Tidak ada permintaan pencairan dalam antrean'} emptyIcon="time-outline"
+          columns={[
+            { key: 'name', label: 'Mitra', width: 180, render: (r) => { const x = r as unknown as PayoutQueueRow; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.bodyStrong} title={x.name}>{x.name || '—'}</Trunc><Text style={font.tiny}>{x.role || '—'}</Text></View>; } },
+            { key: 'amount', label: 'Nominal', width: 118, align: 'right', mono: true, render: (r) => <Text style={font.mono}>{rupiah(Number(r.amount))}</Text> },
+            { key: 'bank', label: 'Rekening', width: 200, render: (r) => { const x = r as unknown as PayoutQueueRow; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.small} title={`${x.bank_code ?? ''} ${x.account_no ?? ''}`}>{x.bank_code ?? '—'} · {x.account_no ?? '—'}</Trunc><Trunc style={font.tiny} title={x.account_name ?? ''}>a.n. {x.account_name ?? '—'}</Trunc></View>; } },
+            { key: 'sla', label: 'SLA', width: 150, render: (r) => { const x = r as unknown as PayoutQueueRow; return <View style={{ gap: 3, alignItems: 'flex-start' }}><Pill text={slaText(x.sla_remaining_min, x.overdue)} tone={x.overdue ? 'bad' : (x.sla_remaining_min ?? 1e9) < 240 ? 'wait' : 'ok'} /><Text style={font.tiny}>jatuh tempo {fmtDate(x.sla_due_at)}</Text></View>; } },
+            { key: 'status', label: 'Status', width: 150, render: (r) => { const x = r as unknown as PayoutQueueRow; return <View style={{ gap: 3, alignItems: 'flex-start' }}><Pill text={sl[x.status] ?? x.status} tone={statusTone(x.status)} />{x.batch_id ? <Pill text={`batch ${x.batch_id.slice(0, 8)}`} tone="info" /> : x.status === 'approved' ? <Pill text="belum masuk batch" tone="wait" /> : null}</View>; } },
+            { key: 'created_at', label: 'Request', width: 134, render: (r) => <Text style={font.tiny}>{fmtDate(String(r.created_at))} · {fmtAgo(String(r.created_at))}</Text> },
+          ]} />
+        <View style={{ padding: adminSpace.md, gap: 6 }}><WideTableHint /><Pager p={pg} noun="permintaan" /></View>
+      </Panel>
+
+      <Panel title={`Batch transfer massal (${batches.length})`} subtitle="Satu batch = satu berkas CSV untuk internet banking (kolom: nama, bank, no rekening, nominal, berita). Setelah transfer, isi nomor referensi per baris lalu tandai selesai." icon="albums-outline" iconColor={adminTone.amber} padded={false}>
+        <DataTable rows={batches as unknown as Record<string, unknown>[]} emptyText={loading ? 'Memuat…' : 'Belum ada batch — buat dari antrean di atas'} emptyIcon="albums-outline"
+          columns={[
+            { key: 'id', label: 'Batch', width: 120, render: (r) => <Text style={font.mono} selectable>{String(r.id).slice(0, 8)}</Text> },
+            { key: 'created_at', label: 'Dibuat', width: 140, render: (r) => <Text style={font.tiny}>{fmtDate(String(r.created_at))}</Text> },
+            { key: 'count', label: 'Baris', width: 70, align: 'right', mono: true, render: (r) => <Text style={font.mono}>{Number(r.count ?? 0)}</Text> },
+            { key: 'total', label: 'Total', width: 130, align: 'right', mono: true, render: (r) => <Text style={font.mono}>{rupiah(Number(r.total ?? 0))}</Text> },
+            { key: 'status', label: 'Status', width: 230, render: (r) => { const b = r as unknown as PayoutBatch; const lb = BATCH_LABEL[b.status] ?? { label: b.status, tone: 'wait' as const }; return <View style={{ gap: 3, alignItems: 'flex-start' }}><Pill text={lb.label} tone={lb.tone} /><Text style={font.tiny}>{b.exported_at ? `ekspor ${fmtDate(b.exported_at)}` : ''}{b.settled_at ? ` · selesai ${fmtDate(b.settled_at)}` : ''}</Text></View>; } },
+            { key: 'actions', label: 'Aksi', width: 300, align: 'right', render: (r) => {
+              const b = r as unknown as PayoutBatch;
+              if (b.status === 'settled' || !can('finance')) return <Text style={font.tiny}>{b.status === 'settled' ? 'selesai' : 'izin keuangan'}</Text>;
+              return (
+                <Row gap={6} style={{ justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                  <Button size="sm" variant="secondary" title={Platform.OS === 'web' ? 'Unduh CSV' : 'Bagikan CSV'} icon="download-outline" loading={busy === `x:${b.id}`} disabled={busy !== null} onPress={() => exportBatch(b)} />
+                  <Button size="sm" title="Tandai selesai" icon="checkmark-done-outline" color={colors.success} loading={busy === `o:${b.id}`} disabled={busy !== null} onPress={() => openSettle(b)} />
+                </Row>
+              );
+            } },
+          ]} />
+        <View style={{ padding: adminSpace.md, gap: 6 }}><WideTableHint /></View>
+      </Panel>
+
+      <AdminDialog visible={!!settleBatch} onClose={() => (busy ? undefined : setSettleBatch(null))} title={`Tandai batch ${settleBatch?.id.slice(0, 8) ?? ''} selesai`} width={760}
+        subtitle={settleBatch ? `${settleRows.length} baris · ${rupiah(Number(settleBatch.total ?? 0))} · isi nomor referensi transfer per baris; baris gagal wajib beralasan (saldo mitra dikembalikan)` : undefined}>
+        <View style={{ gap: 8, maxHeight: 440 }}>
+          <Row gap={8} style={{ justifyContent: 'flex-end' }}>
+            <Button size="sm" variant="ghost" title="Semua berhasil" onPress={() => setDraft((d) => Object.fromEntries(Object.entries(d).map(([k, v]) => [k, { ...v, status: 'ok' as const }])))} />
+          </Row>
+          <ScrollView style={{ maxHeight: 340 }}>
+            <View style={{ gap: 8 }}>
+              {settleRows.map((r) => {
+                const d = draft[r.withdrawal_id] ?? { status: 'ok' as const, bank_ref: '', reason: '' };
+                return (
+                  <View key={r.withdrawal_id} style={{ gap: 6, padding: adminSpace.sm, borderWidth: 1, borderColor: d.status === 'failed' ? adminTone.red : adminTone.border, borderRadius: 8 }}>
+                    <Row between style={{ flexWrap: 'wrap', gap: 6 }}>
+                      <View style={{ flex: 1, minWidth: 200 }}><Text style={font.bodyStrong} numberOfLines={1}>{r.account_name || r.name} · {rupiah(Number(r.amount))}</Text><Text style={font.tiny}>{r.bank_code} {r.account_no} · {r.withdrawal_id.slice(0, 8)}</Text></View>
+                      <Row gap={6}>
+                        <Button size="sm" variant={d.status === 'ok' ? 'primary' : 'outline'} title="Berhasil" onPress={() => setD(r.withdrawal_id, { status: 'ok' })} />
+                        <Button size="sm" variant={d.status === 'failed' ? 'danger' : 'outline'} title="Gagal" onPress={() => setD(r.withdrawal_id, { status: 'failed' })} />
+                      </Row>
+                    </Row>
+                    {d.status === 'ok'
+                      ? <Input placeholder="Nomor referensi bank (mis. BCA-20261010-000123)" value={d.bank_ref} onChangeText={(v) => setD(r.withdrawal_id, { bank_ref: v })} autoCapitalize="characters" />
+                      : <Input placeholder="Alasan gagal (rekening salah / ditolak bank) — saldo mitra dikembalikan" value={d.reason} onChangeText={(v) => setD(r.withdrawal_id, { reason: v })} />}
+                  </View>
+                );
+              })}
+            </View>
+          </ScrollView>
+          <Row gap={8} style={{ justifyContent: 'flex-end' }}>
+            <Button size="sm" variant="ghost" title="Batal" disabled={busy !== null} onPress={() => setSettleBatch(null)} />
+            <Button size="sm" title="Tandai selesai" icon="checkmark-done" loading={!!settleBatch && busy === `s:${settleBatch.id}`} disabled={busy !== null} onPress={submitSettle} />
+          </Row>
+        </View>
+      </AdminDialog>
+    </>
   );
 }

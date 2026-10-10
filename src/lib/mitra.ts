@@ -53,6 +53,8 @@ export interface BreakdownV3Extra {
   settlement_status?: SettlementStatus | null; payout_status?: PayoutStatus | null;
   promo_funded_by?: FundedBy | null; pg_fee_funded_by?: FundedBy | null;
   gross_customer?: number | null; promo?: number | null; pg_fee?: number | null; customer_platform_fee?: number | null;
+  /** AntarVoucher v5 (KONTRAK-V5 §5), opsional — bila server mengirim: R kotor platform, PPN inklusif (ledger `tax_output`), tarif. Bila tidak ada, klien menampilkan ESTIMASI dari ppnPart(). */
+  platform_revenue?: number | null; tax_output?: number | null; ppn?: number | null; ppn_pct?: number | null; ppn_inclusive?: boolean | null;
 }
 export type DriverBreakdownV3 = DriverOrderBreakdown & BreakdownV3Extra;
 export type MerchantBreakdownV3 = MerchantOrderBreakdown & BreakdownV3Extra;

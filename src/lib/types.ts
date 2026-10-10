@@ -19,7 +19,8 @@ export interface Profile {
 }
 export interface Wallet { user_id: string; balance: number; updated_at: string }
 export interface WalletTx {
-  id: string; user_id: string; type: 'topup' | 'payment' | 'earning' | 'refund' | 'withdrawal' | 'fee' | 'adjustment';
+  /** v5: `voucher_redeem` = penukaran kode AntarVoucher (KONTRAK-V5 §2). */
+  id: string; user_id: string; type: 'topup' | 'payment' | 'earning' | 'refund' | 'withdrawal' | 'fee' | 'adjustment' | 'voucher_redeem';
   amount: number; balance_after: number; order_id: string | null; note: string | null; created_at: string;
 }
 export interface TopupRequest {
@@ -253,6 +254,8 @@ export interface AppPublicSettings {
   antarpay_enabled: boolean;
   /** 0089: status EFEKTIF tiap saluran pembayaran (sudah memperhitungkan sakelar global AntarVoucher). */
   payment_channels: PaymentChannels;
+  /** v5 (0114): mode pembayaran bila server sudah mengirimkannya; null = belum ada → pakai `voucher_public_config`. */
+  payment_mode: 'voucher_only' | 'gateway' | null;
 }
 
 /** 0089: peta saluran pembayaran → aktif/tidak (`payment_channels_public()`). */

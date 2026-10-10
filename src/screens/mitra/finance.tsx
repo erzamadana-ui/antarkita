@@ -15,6 +15,9 @@ import {
   type PeriodKey, type MyDispute, type DisputeStatus, type SettlementStatus,
 } from '@/lib/mitra';
 import type { Order } from '@/lib/types';
+import { ppnPart } from '@/lib/voucherV5';
+import { useTaxSettings } from '@/hooks/useVoucherV5';
+import { PayoutSlaLine } from '@/components/EarningBreakdown';
 
 type ReportOrder = Order & { settlement_status?: SettlementStatus | null };
 
@@ -40,20 +43,29 @@ export function EarningsReportCard({ role, ownerId, accent = colors.primary }: {
   }, [ownerId, role, period]);
   useEffect(() => { load(); }, [load]);
 
+  const tax = useTaxSettings();
   const net = (o: ReportOrder) => (role === 'driver' ? driverEarningOf(o) : o.merchant_earning ?? 0);
   const sum = useMemo(() => {
     const list = rows ?? [];
     const total = list.reduce((a, o) => a + net(o), 0);
     const base = list.reduce((a, o) => a + (role === 'driver' ? o.fare_delivery ?? 0 : o.items_subtotal ?? 0), 0);
     const tip = list.reduce((a, o) => a + (o.tip ?? 0), 0);
+    // v5 (KONTRAK-V5 §5): bagian AntarKita per periode = biaya layanan pelanggan + komisi/fee mitra (dari snapshot persen di `orders`)
+    // — ESTIMASI klien; angka final per order ada di buku besar (driver_order_breakdown / merchant_order_breakdown).
+    const fee = list.reduce((a, o) => {
+      const pct = Number(role === 'driver' ? o.driver_commission_pct_snap ?? 0 : o.merchant_fee_pct_snap ?? 0);
+      const cut = Math.round(((role === 'driver' ? o.fare_delivery ?? 0 : o.items_subtotal ?? 0) * pct) / 100);
+      return a + (role === 'driver' ? o.platform_fee ?? 0 : 0) + cut;
+    }, 0);
+    const ppn = ppnPart(fee, tax.ppn_pct, tax.ppn_inclusive);
     const byDay = new Map<string, { n: number; total: number }>();
     for (const o of list) {
       const d = ymd(new Date(o.completed_at ?? o.created_at));
       const cur = byDay.get(d) ?? { n: 0, total: 0 };
       byDay.set(d, { n: cur.n + 1, total: cur.total + net(o) });
     }
-    return { count: list.length, total, base, tip, days: Array.from(byDay.entries()).sort((a, b) => b[0].localeCompare(a[0])) };
-  }, [rows, role]); // eslint-disable-line react-hooks/exhaustive-deps
+    return { count: list.length, total, base, tip, fee, ppn, days: Array.from(byDay.entries()).sort((a, b) => b[0].localeCompare(a[0])) };
+  }, [rows, role, tax.ppn_pct, tax.ppn_inclusive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const exportCsv = async () => {
     const list = rows ?? [];
@@ -89,6 +101,12 @@ export function EarningsReportCard({ role, ownerId, accent = colors.primary }: {
               ? <View style={s.tile}><Text style={font.tiny}>Total tip</Text><Text style={[font.body, { fontWeight: '700' }]}>{rupiah(sum.tip)}</Text></View>
               : <View style={s.tile}><Text style={font.tiny}>Fee & promo merchant</Text><Text style={[font.body, { fontWeight: '700' }]}>{rupiah(Math.max(0, sum.base - sum.total))}</Text></View>}
           </Row>
+          {sum.count > 0 ? (
+            <Row gap={10}>
+              <View style={s.tile}><Text style={font.tiny}>Fee AntarKita (estimasi)</Text><Text style={[font.body, { fontWeight: '700' }]}>{rupiah(sum.fee)}</Text></View>
+              <View style={s.tile}><Text style={font.tiny}>PPN {tax.ppn_pct} % ({tax.ppn_inclusive ? 'termasuk' : 'ditambahkan'}) · estimasi</Text><Text style={[font.body, { fontWeight: '700' }]}>{rupiah(sum.ppn)}</Text></View>
+            </Row>
+          ) : null}
           {days.length ? (
             <View style={{ gap: 2 }}>
               {days.map(([d, v]) => (
@@ -102,7 +120,8 @@ export function EarningsReportCard({ role, ownerId, accent = colors.primary }: {
             </View>
           ) : <Text style={font.small}>Belum ada pesanan selesai pada periode ini.</Text>}
           <Button title="Ekspor CSV" size="sm" variant="secondary" icon="download-outline" color={accent} onPress={exportCsv} disabled={!sum.count} />
-          <Text style={font.tiny}>Ringkasan dari pesanan selesai. Rincian final per pesanan (komisi/fee, promo, biaya pembayaran & penanggungnya) ada di buku besar tiap pesanan.</Text>
+          <Text style={font.tiny}>Ringkasan dari pesanan selesai. Fee AntarKita & PPN di sini estimasi dari persen snapshot pesanan — tidak memotong hak Anda lebih dari yang tercatat; angka final per pesanan ada di buku besar tiap pesanan. Mode AntarVoucher: tidak ada biaya payment gateway.</Text>
+          <PayoutSlaLine />
         </>
       )}
     </View>

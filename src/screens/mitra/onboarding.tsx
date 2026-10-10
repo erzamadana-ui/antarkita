@@ -102,6 +102,8 @@ export default function MitraOnboarding() {
         </View>
       </Entrance>
       <Text style={[font.tiny, { textAlign: 'center', marginTop: 20 }]}>Pengajuan diverifikasi admin (dokumen, kendaraan, sertifikasi). Notifikasi masuk di kotak masuk.</Text>
+      {/* v5: deposit AntarVoucher hanya untuk driver & mitra travel (KONTRAK-V5 §1) */}
+      <Text style={[font.tiny, { textAlign: 'center', marginTop: 8 }]}>Driver & mitra travel perlu deposit AntarVoucher (beli voucher via transfer ke rekening AntarKita) agar bisa menerima order — komisi order tunai dipotong dari saldo ini; pencairan pendapatan diproses ≤ 24 jam.</Text>
     </Screen>
   );
 }

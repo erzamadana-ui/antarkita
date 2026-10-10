@@ -9,6 +9,7 @@ import { PressableScale, Skeleton } from '@/components/motion';
 import { SupportRef } from '@/components/OrderDetails';
 import { fetchPaymentHistory, providerLabel } from '@/lib/payments';
 import { useT } from '@/lib/i18n';
+import { useVoucherOnly } from '@/hooks/useAppSettings';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { rupiah, formatDate, payStatusLabel, payStatusColor } from '@/lib/format';
 import { channelLabel } from '@/store/payprefs';
@@ -17,6 +18,7 @@ import type { PaymentHistoryRow } from '@/lib/types';
 export default function PaymentHistory() {
   const router = useRouter();
   const t = useT();
+  const { voucherOnly } = useVoucherOnly();
   const [rows, setRows] = useState<PaymentHistoryRow[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -37,17 +39,19 @@ export default function PaymentHistory() {
           contentContainerStyle={{ gap: 10, paddingBottom: 40 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           ListHeaderComponent={err ? <View style={s.err}><Text style={[font.small, { color: colors.danger, flex: 1 }]}>{err}</Text><Button title={t('retry')} size="sm" variant="ghost" icon="refresh" onPress={load} /></View> : null}
-          ListEmptyComponent={err ? null : <Empty icon="card-outline" title={t('payment_history_empty')} subtitle="Pembayaran lewat e-wallet, QRIS, VA, dan kartu akan tampil di sini." />}
+          ListEmptyComponent={err ? null : <Empty icon="card-outline" title={t('payment_history_empty')} subtitle={voucherOnly ? 'Pembelian & penukaran AntarVoucher tampil di menu Beli AntarVoucher; mutasi saldo di halaman Saldo.' : 'Pembayaran lewat e-wallet, QRIS, VA, dan kartu akan tampil di sini.'} />}
           renderItem={({ item: p }) => {
             const color = payStatusColor(p.pay_status);
             const ch = p.channel_label ?? (p.channel ? channelLabel(p.channel) : '—');
+            // v5: kind/purpose `voucher_redeem` (penukaran kode AntarVoucher) → "Voucher AntarKita"
+            const isVoucher = p.purpose === 'voucher_redeem' || p.purpose === 'voucher';
             return (
               <PressableScale disabled={!p.order_id} onPress={() => p.order_id && router.push({ pathname: '/orders/receipt', params: { id: p.order_id } } as never)} scaleTo={0.98} haptic={false} style={s.item}>
                 <Row gap={12} style={{ alignItems: 'flex-start' }}>
-                  <View style={[s.icon, { backgroundColor: color + '1A' }]}><Ionicons name={p.purpose === 'topup' ? 'add-circle-outline' : 'receipt-outline'} size={20} color={color} /></View>
+                  <View style={[s.icon, { backgroundColor: color + '1A' }]}><Ionicons name={isVoucher ? 'ticket-outline' : p.purpose === 'topup' ? 'add-circle-outline' : 'receipt-outline'} size={20} color={color} /></View>
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                     <Row between style={{ gap: 8 }}>
-                      <Text style={{ fontWeight: '700', color: colors.text, flex: 1 }} numberOfLines={1}>{p.purpose === 'topup' ? 'Top up AntarVoucher' : `Pesanan ${p.order_code ?? ''}`}</Text>
+                      <Text style={{ fontWeight: '700', color: colors.text, flex: 1 }} numberOfLines={1}>{isVoucher ? t('v5_voucher_redeem') : p.purpose === 'topup' ? 'Top up AntarVoucher' : `Pesanan ${p.order_code ?? ''}`}</Text>
                       <Text style={{ fontWeight: '700', color: colors.text }}>{rupiah(p.amount)}</Text>
                     </Row>
                     <Text style={font.tiny} numberOfLines={1}>{ch} · {p.provider_label ?? providerLabel(p.provider)} · {formatDate(p.paid_at ?? p.created_at)}</Text>

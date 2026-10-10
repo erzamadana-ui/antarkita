@@ -1,5 +1,8 @@
 # Payment Gateway AntarKita — rekomendasi & panduan plug-and-play (Midtrans)
 
+> **Catatan mode `voucher_only` (AntarVoucher v5, 10 Okt 2026).** Sejak v5, setting `payment_mode` (default `voucher_only`, lihat `docs/antarvoucher/KONTRAK-V5.md` §1) **menonaktifkan seluruh payment gateway**: `payment_channels` gopay/shopeepay/qris/ovo/dana/bank_transfer/card = false, `gateway_order_payment_enabled = false`; `request_topup` dan `order_payment_prepare` menolak dengan `PAYMENT_MODE_VOUCHER_ONLY`, edge function `midtrans-create`/`pay-create` menjawab **409 `PAYMENT_MODE_VOUCHER_ONLY`**. Metode yang hidup hanya **tunai** dan **AntarVoucher** (saldo closed loop yang dibeli lewat transfer manual ke rekening perusahaan; kode `AKV-…` terbit dari aplikasi; verifikasi oleh tim keuangan ≤ 1 hari kerja). Pencairan mitra diproses tim keuangan lewat batch CSV transfer massal bank, SLA ≤ 1×24 jam — **tidak ada API payout otomatis**.
+> **Kode gateway di bawah ini dipertahankan dormant** (tidak di-drop, tidak di-deploy ulang): tabel, RPC, dan edge function tetap ada agar `admin_set_payment_mode('gateway')` dapat memulihkan perilaku lama secara reversibel (uji V5-14). Panduan di bawah hanya berlaku bila mode dikembalikan ke `gateway` dan hanya setelah keputusan pemilik.
+
 ## Rekomendasi (riset Sep 2026)
 | | Midtrans (GoTo) | Xendit | DOKU |
 |---|---|---|---|

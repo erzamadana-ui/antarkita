@@ -10,12 +10,12 @@ import { PressableScale } from '@/components/motion';
 import { CallButton } from '@/components/call/IncomingCall';
 import { ModerationMenu } from '@/components/moderation';
 import type { CallPeer } from '@/lib/call';
-import { PriceSummary } from '@/components/BookingSheet';
+import { PriceSummary, useFeeDisplayMode } from '@/components/BookingSheet';
 import { DriverEarningBreakdown } from '@/components/EarningBreakdown';
 import { channelLabel } from '@/store/payprefs';
 import { colors, font, radius, glass, shadow } from '@/lib/theme';
 import { rupiah, km, formatTime, formatDate, merchantStatusLabel, phoneDisplay, phoneMasked, extraKindLabel, promoOwnerLabel, paidViaLabel, pctLabel, payStatusLabel, payStatusColor, disputeKindLabel } from '@/lib/format';
-import { usePaymentStatus, useProviderPublic, providerLabel, fetchRefundPolicy, requestRefund, openDispute, REFUND_OPEN_TEXT, DISPUTE_OPEN_TEXT } from '@/lib/payments';
+import { usePaymentStatus, useProviderPublic, providerLabel, fetchRefundPolicy, requestRefund, openDispute, REFUND_OPEN_TEXT, DISPUTE_OPEN_TEXT, getFeeDisplayMode, platformFeeLabel } from '@/lib/payments';
 import { IS_CUSTOMER_APP } from '@/lib/app';
 import { useT } from '@/lib/i18n';
 import { useAuth } from '@/store/auth';
@@ -153,6 +153,7 @@ export function ShoppingListBlock({ order }: { order: Order }) {
 }
 
 export function PriceBlock({ order, forDriver, providerName }: { order: Order; forDriver?: boolean; providerName?: string | null }) {
+  useFeeDisplayMode();   // v5: pastikan mode rincian (voucher_only + PPN) tersinkron sebelum baris disusun
   // Driver: rincian dari buku besar (driver_order_breakdown, 0099) — bukan rekonstruksi dari driver_earning.
   if (forDriver) return <DriverEarningBreakdown orderId={order.id} status={order.status} title={null} />;
   // Pelanggan (§0.4): harga barang · ongkir · biaya platform · biaya metode pembayaran · biaya tambahan · diskon (+ penanggung) · total
@@ -162,6 +163,9 @@ export function PriceBlock({ order, forDriver, providerName }: { order: Order; f
   const comm = order.driver_commission_pct_snap;
   const ride = order.service === 'ride_motor' || order.service === 'ride_car';
   const payLabel = order.pg_channel ? (providerName ?? channelLabel(order.pg_channel)) : order.payment_method === 'cash' ? 'Tunai' : 'AntarVoucher';
+  // v5 voucher_only: label "Biaya layanan AntarKita (termasuk PPN n %)", baris biaya pembayaran hanya bila pesanan lama memungutnya.
+  const mode = getFeeDisplayMode();
+  const showPayFee = !mode.voucherOnly || payFee > 0;
   return (
     <PriceSummary rows={[
       { label: order.service === 'food' ? 'Harga makanan' : 'Harga barang', value: order.items_subtotal },
@@ -169,9 +173,9 @@ export function PriceBlock({ order, forDriver, providerName }: { order: Order; f
         hint: comm == null ? null : Number(comm) === 0 ? '100 % untuk driver' : `Komisi platform ${pctLabel(comm)}` },
       { label: 'Ongkir antar kota', value: order.intercity_fare ?? 0 },
       { label: 'Jasa belanja', value: shopping ? (order.service_fee ?? 0) : 0 },
-      { label: 'Biaya platform AntarKita', value: order.platform_fee, keep: true },
-      { label: `Biaya metode pembayaran (${payLabel})`, value: payFee, keep: true,
-        hint: order.pg_channel ? `${channelLabel(order.pg_channel)}${payFee ? '' : ' · ditanggung AntarKita'}` : 'Tanpa biaya metode pembayaran' },
+      { label: platformFeeLabel(mode), value: order.platform_fee, keep: true },
+      ...(showPayFee ? [{ label: `Biaya metode pembayaran (${payLabel})`, value: payFee, keep: true,
+        hint: order.pg_channel ? `${channelLabel(order.pg_channel)}${payFee ? '' : ' · ditanggung AntarKita'}` : 'Tanpa biaya metode pembayaran' }] : []),
       { label: 'Biaya tambahan (parkir/tol/tunggu)', value: order.extras_total ?? 0 },
       { label: 'Tip driver', value: order.tip ?? 0 },
       { label: `Diskon promo${order.promo_code ? ` (${order.promo_code})` : ''}`, value: order.discount, minus: true, hint: funder ? promoOwnerLabel[funder] : null },

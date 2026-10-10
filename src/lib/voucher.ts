@@ -109,12 +109,23 @@ export function validateNominal(n: number, min: number, max: number, fmt: (v: nu
 }
 
 const ERRORS: [string, string][] = [
-  ['VOUCHER_PURCHASE_DISABLED', 'Pembelian AntarVoucher lewat transfer rekening resmi belum dibuka. Silakan gunakan top up instan.'],
+  ['VOUCHER_PURCHASE_DISABLED', 'Pembelian AntarVoucher belum dibuka. Sementara ini gunakan pembayaran tunai.'],
   ['VOUCHER_BANK_NOT_READY', 'Rekening resmi untuk bank ini belum tersedia. Pilih bank lain atau coba lagi nanti.'],
   ['VOUCHER_TOO_MANY_OPEN', 'Masih ada pembelian yang berjalan. Selesaikan transfernya atau batalkan dulu sebelum membuat yang baru.'],
   ['VOUCHER_STATE', 'Status pembelian sudah berubah (mungkin sudah diproses atau kedaluwarsa). Muat ulang untuk melihat status terbaru.'],
   ['VOUCHER_BUSY', 'Sistem sedang sibuk. Coba lagi sebentar.'],
   ['SALDO_TIDAK_CUKUP', 'Saldo AntarVoucher tidak cukup untuk transaksi ini.'],
+  // v5 (KONTRAK-V5 §3) — nama kode galat server [ASUMSI, dicocokkan substring; Lead/DB menyelaraskan]
+  ['PAYMENT_MODE_VOUCHER_ONLY', 'Mode AntarVoucher aktif — pembayaran lewat payment gateway tidak tersedia. Beli AntarVoucher untuk mengisi saldo.'],
+  ['VOUCHER_BALANCE_CAP', 'Saldo Anda akan melebihi batas maksimum. Gunakan saldo dulu sebelum membeli atau menukar voucher lagi.'],
+  ['VOUCHER_FLOAT_LIMIT', 'Pembelian voucher sementara dihentikan (batas dana beredar). Coba lagi nanti.'],
+  ['VOUCHER_CODE_USED', 'Kode voucher ini sudah pernah ditukar.'],
+  ['VOUCHER_CODE_EXPIRED', 'Kode voucher sudah kedaluwarsa.'],
+  ['VOUCHER_CODE_REDEEMED', 'Kode voucher ini sudah pernah ditukar.'],
+  ['VOUCHER_CODE_STATE', 'Kode voucher belum aktif (menunggu pembayaran) atau sudah tidak berlaku.'],
+  ['VOUCHER_CODE_NOT_FOUND', 'Kode voucher tidak ditemukan. Periksa kembali penulisannya (AKV-XXXX-XXXX-XXXX).'],
+  ['VOUCHER_CODE_INVALID', 'Kode voucher tidak valid. Periksa kembali penulisannya (AKV-XXXX-XXXX-XXXX).'],
+  ['RATE_LIMIT', 'Terlalu banyak percobaan. Coba lagi beberapa saat lagi.'],
 ];
 /** Pesan ramah untuk kode galat server 0112 (pesan lain diteruskan apa adanya — sudah melalui friendlyError). */
 export function voucherError(e: unknown): string {

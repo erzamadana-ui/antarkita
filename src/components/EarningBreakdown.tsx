@@ -16,9 +16,11 @@ import { colors, font, radius, shadow } from '@/lib/theme';
 import { rupiah, pctLabel } from '@/lib/format';
 import {
   settlementMeta, payoutMeta, fundedByLabel, loadOrderMoney, openDispute, disputeKindLabel, parseAmount,
-  type DriverBreakdownV3, type MerchantBreakdownV3, type OrderMoneyRow, type SettlementStatus, type PayoutStatus, type DisputeKind,
+  type DriverBreakdownV3, type MerchantBreakdownV3, type OrderMoneyRow, type SettlementStatus, type PayoutStatus, type DisputeKind, type BreakdownV3Extra,
 } from '@/lib/mitra';
 import type { OrderStatus } from '@/lib/types';
+import { ppnPart } from '@/lib/voucherV5';
+import { useTaxSettings } from '@/hooks/useVoucherV5';
 
 /** Muat satu RPC rincian + baris order (cadangan kolom v3); `dep` (mis. status order) memicu muat ulang. */
 function useBreakdown<T>(fn: string, orderId: string | null | undefined, dep?: unknown, enabled = true) {
@@ -93,6 +95,43 @@ function CustomerInfo({ gross, promo, promoBy, pgFee, pgBy, platformFee, extra }
   if (extra) lines.push(...extra);
   if (!lines.length) return null;
   return <View style={s.info}><MoneyLines title="Transaksi pelanggan" lines={lines} /></View>;
+}
+
+/**
+ * AntarVoucher v5 (KONTRAK-V5 §5): bagian AntarKita dari order = fee platform (dibayar pelanggan) + komisi/fee mitra,
+ * dan PPN inklusif di dalamnya (ledger `tax_output`). Tidak memotong hak mitra — informasi transparansi.
+ * Bila server belum mengirim `platform_revenue`/`tax_output`, angka dihitung di klien dari ppnPart() dan DITANDAI "estimasi".
+ */
+function PlatformShare({ b, partnerCut }: { b: BreakdownV3Extra; partnerCut: number }) {
+  const tax = useTaxSettings();
+  const pct = b.ppn_pct ?? tax.ppn_pct;
+  const inclusive = b.ppn_inclusive ?? tax.ppn_inclusive;
+  const serverFee = b.platform_revenue != null;
+  const fee = b.platform_revenue ?? ((b.customer_platform_fee ?? 0) + partnerCut);
+  const serverTax = b.tax_output ?? b.ppn;
+  const ppn = serverTax ?? ppnPart(fee, pct, inclusive);
+  const est = !(serverFee && serverTax != null);
+  if (fee <= 0 && !serverTax) return null;
+  const lines: Line[] = [
+    { label: `Fee AntarKita${est ? ' (estimasi)' : ''}`, value: fee, keep: true, hint: 'Biaya layanan pelanggan + komisi/fee mitra. Tidak ada biaya payment gateway di mode AntarVoucher.' },
+    { label: `PPN ${pct} % (${inclusive ? 'termasuk' : 'ditambahkan'})${est ? ' · estimasi' : ''}`, value: ppn, keep: true, hint: inclusive ? 'Sudah termasuk di dalam fee AntarKita — bukan potongan tambahan untuk Anda.' : null },
+  ];
+  return (
+    <View style={s.info}>
+      <MoneyLines title="Bagian AntarKita (informasi)" lines={lines} />
+      {est ? <Text style={[font.tiny, { marginTop: 4 }]}>Estimasi dari tarif PPN yang berlaku; angka final ada di buku besar order.</Text> : null}
+    </View>
+  );
+}
+
+/** v5: SLA pencairan by request ≤ 24 jam (payout_sla_hours). */
+export function PayoutSlaLine({ hours = 24 }: { hours?: number }) {
+  return (
+    <Row gap={6} style={{ alignItems: 'flex-start' }}>
+      <Ionicons name="time-outline" size={14} color={colors.textMuted} style={{ marginTop: 1 }} />
+      <Text style={[font.tiny, { flex: 1 }]}>Pencairan diproses ≤ {hours} jam sejak permintaan (SLA) — ajukan dari menu Tarik Saldo.</Text>
+    </Row>
+  );
 }
 
 /** Status settlement (order) & payout (penarikan) — kontrak §3/§8. */
@@ -196,6 +235,7 @@ export function DriverEarningBreakdown({ orderId, status, title = 'Rincian penda
       <CustomerInfo gross={gross} promo={promo} promoBy={b.promo_funded_by ?? o?.promo_funded_by} pgFee={pg} pgBy={b.pg_fee_funded_by ?? o?.pg_fee_borne_by} platformFee={b.customer_platform_fee ?? o?.platform_fee} />
       <MoneyLines title="Hak Anda" lines={lines} total={b.bersih ?? 0} totalLabel="Pendapatan bersih" />
       {note ? <Text style={font.tiny}>{note}</Text> : null}
+      <PlatformShare b={b} partnerCut={full ? 0 : (b.komisi ?? 0)} />
       {(b.penggantian_belanja ?? 0) > 0 && (
         <Row between style={s.info}>
           <Text style={[font.small, { flex: 1 }]}>Penggantian belanja yang Anda talangi</Text>
@@ -217,6 +257,7 @@ export function DriverEarningBreakdown({ orderId, status, title = 'Rincian penda
         </View>
       ) : b.keterangan ? <Text style={font.tiny}>{b.keterangan}</Text> : null}
       <SettlementBadges settlement={settlement} payout={b.payout_status} />
+      <PayoutSlaLine />
       {disputable && (status ?? b.status) === 'completed' ? <ReportDiff orderId={orderId} code={b.code} /> : null}
     </View>
   );
@@ -246,7 +287,9 @@ export function MerchantOrderBreakdown({ orderId, status, auto = true, disputabl
         extra={ongkir > 0 ? [{ label: 'Ongkir (100 % hak driver)', value: ongkir, hint: 'Tidak termasuk hak merchant.' }] : undefined} />
       <MoneyLines title="Hak merchant" lines={lines} total={b.diterima ?? 0} totalLabel="Diterima" />
       {note ? <Text style={font.tiny}>{note}</Text> : null}
+      <PlatformShare b={b} partnerCut={b.fee ?? 0} />
       <SettlementBadges settlement={settlement} payout={b.payout_status} />
+      <PayoutSlaLine />
       {disputable && (status ?? b.status) === 'completed' ? <ReportDiff orderId={orderId} code={b.code} /> : null}
     </View>
   );

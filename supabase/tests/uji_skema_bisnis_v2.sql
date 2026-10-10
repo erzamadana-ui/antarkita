@@ -153,6 +153,8 @@ begin
     insert into admin_security (user_id, pin_hash) select adm, extensions.crypt('123456', extensions.gen_salt('bf')) where not exists (select 1 from admin_security where user_id = adm);
     update admin_security set pin_hash = extensions.crypt('123456', extensions.gen_salt('bf')), failed = 0, locked_until = null where user_id = adm;
     perform admin_unlock('123456');
+    insert into app_settings (key, value) values ('payment_mode', '"gateway"'::jsonb), ('driver_deposit_required', 'false'::jsonb), ('driver_debt_limit', '-500000'::jsonb)
+    on conflict (key) do update set value = excluded.value, updated_at = now();   -- 0114 v5: berkas ini menguji mode gateway & batas minus lama (v5 diuji di uji_antarvoucher_v5.sql)
     r := admin_set_antarpay_enabled(true);
     foreach k in array payment_channel_keys() loop r := admin_set_payment_channel(k, true); end loop;
     -- promo uji: pemilik biaya platform (semua layanan) & merchant (food)

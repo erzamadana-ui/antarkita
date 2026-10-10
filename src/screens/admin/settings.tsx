@@ -3,7 +3,7 @@ import { View, Text, Switch, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { AdminPage, AdminSelect, RequirePerm, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, AdminCard as Card } from '@/components/admin';
-import { useAdminSecurity } from '@/store/adminSecurity';
+import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import { handleSettingsError, useAdminCan } from '@/lib/admin';
 import { ErrorNote } from './_shared';
 import { Input, Button, Row, Badge, toast } from '@/components/ui';
@@ -11,6 +11,10 @@ import { Entrance } from '@/components/motion';
 import { rpc, supabase } from '@/lib/supabase';
 import { useAppSettingsStore } from '@/hooks/useAppSettings';
 import { colors } from '@/lib/theme';
+import { rupiah } from '@/lib/format';
+import { confirmAsync } from '@/lib/mitra';
+import { useVoucherConfig } from '@/hooks/useVoucherV5';
+import { adminSetPaymentMode, adminSetTaxSettings, taxSettingsPublic, type PaymentMode } from '@/lib/voucherV5';
 import type { AdminBusinessSettings, AppPublicSettings, SendVehicle } from '@/lib/types';
 
 /** Layanan yang bisa dimatikan admin (kunci = nilai p_service di admin_set_service_enabled). */
@@ -181,6 +185,10 @@ export default function AdminSettings() {
       </Entrance>
 
       <Entrance index={1}>
+        <VoucherV5Settings />
+      </Entrance>
+
+      <Entrance index={1}>
         <PaymentV3Settings />
       </Entrance>
 
@@ -284,6 +292,224 @@ export default function AdminSettings() {
         <TurnCard />
       </Entrance>
     </AdminPage>
+  );
+}
+
+/* ───────────────── v5 · AntarVoucher closed-loop (KONTRAK-V5 §1) ───────────────── */
+// Tiga kartu: Mode pembayaran (admin_set_payment_mode, superadmin + PIN), Pajak (admin_set_tax_settings, finance + PIN),
+// AntarVoucher (nominal/cap/float/deposit/payout lewat admin_set_settings — kunci harus terdaftar di app_setting_specs oleh DB Agent).
+
+type V5Key =
+  | 'voucher_denominations' | 'voucher_min_nominal' | 'voucher_max_nominal' | 'voucher_balance_cap_customer' | 'voucher_balance_cap_partner'
+  | 'voucher_float_limit' | 'voucher_float_alert_pct' | 'voucher_code_ttl_hours' | 'voucher_auto_redeem' | 'driver_deposit_required'
+  | 'driver_min_balance_accept' | 'payout_sla_hours' | 'payout_batch_cutoffs' | 'auto_payout_max' | 'auto_payout_daily_max' | 'cogs_margin_target_pct';
+type V5Field = { key: V5Key; label: string; kind: 'int' | 'bool' | 'list' | 'times'; unit?: string; min?: number; max?: number; hint: string; def: unknown };
+const V5_FIELDS: V5Field[] = [
+  { key: 'voucher_denominations', label: 'Denominasi voucher', kind: 'list', unit: 'Rp', hint: 'Nominal yang ditawarkan UI, pisahkan koma. Server tetap menerima nominal bebas dalam batas min/max.', def: [20000, 50000, 100000, 200000, 500000, 1000000] },
+  { key: 'voucher_min_nominal', label: 'Nominal minimum', kind: 'int', unit: 'Rp', min: 1000, max: 100000000, hint: 'Batas bawah satu pembelian', def: 20000 },
+  { key: 'voucher_max_nominal', label: 'Nominal maksimum', kind: 'int', unit: 'Rp', min: 1000, max: 100000000, hint: 'Batas atas satu pembelian', def: 2000000 },
+  { key: 'voucher_balance_cap_customer', label: 'Cap saldo pelanggan', kind: 'int', unit: 'Rp', min: 0, max: 100000000, hint: 'Saldo + nominal ≤ cap (pelindungan konsumen)', def: 2000000 },
+  { key: 'voucher_balance_cap_partner', label: 'Cap saldo mitra', kind: 'int', unit: 'Rp', min: 0, max: 100000000, hint: 'Driver/merchant/travel — deposit komisi', def: 5000000 },
+  { key: 'voucher_float_limit', label: 'Batas float (BI)', kind: 'int', unit: 'Rp', min: 0, max: 1000000000000, hint: 'Ambang izin PJP: Σ saldo beredar < Rp1 miliar (PADG 32/2025 Ps. 21) [FAKTA SUMBER]', def: 1000000000 },
+  { key: 'voucher_float_alert_pct', label: 'Alarm float', kind: 'int', unit: '%', min: 1, max: 100, hint: 'Alarm merah ke admin bila Σ saldo ≥ persen ini dari batas', def: 65 },
+  { key: 'voucher_code_ttl_hours', label: 'Masa berlaku kode', kind: 'int', unit: 'jam', min: 1, max: 8760, hint: 'Kode terbit tapi belum di-redeem kedaluwarsa', def: 720 },
+  { key: 'voucher_auto_redeem', label: 'Auto-redeem setelah verifikasi', kind: 'bool', hint: 'Kode langsung masuk saldo pembeli saat pembayaran diverifikasi', def: true },
+  { key: 'driver_deposit_required', label: 'Deposit wajib driver/mitra travel', kind: 'bool', hint: 'Saldo < minimum → tidak bisa terima order (DEPOSIT_REQUIRED)', def: true },
+  { key: 'driver_min_balance_accept', label: 'Saldo minimum terima order', kind: 'int', unit: 'Rp', min: 0, max: 10000000, hint: 'Komisi order tunai dipotong dari saldo; saldo tidak boleh minus', def: 0 },
+  { key: 'payout_sla_hours', label: 'SLA pencairan', kind: 'int', unit: 'jam', min: 1, max: 168, hint: 'Janji ke mitra: dana sampai ≤ SLA sejak request', def: 24 },
+  { key: 'payout_batch_cutoffs', label: 'Jam cutoff batch (WIB)', kind: 'times', hint: 'Jam pembuatan batch transfer, format HH:MM, pisahkan koma', def: ['10:00', '15:00'] },
+  { key: 'auto_payout_max', label: 'Maks satu pencairan otomatis', kind: 'int', unit: 'Rp', min: 0, max: 1000000000, hint: 'Request ≤ nilai ini disetujui otomatis (tetap menunggu batch)', def: 1000000 },
+  { key: 'auto_payout_daily_max', label: 'Maks pencairan otomatis / hari', kind: 'int', unit: 'Rp', min: 0, max: 10000000000, hint: 'Akumulasi per hari', def: 5000000 },
+  { key: 'cogs_margin_target_pct', label: 'Target margin di atas COGS', kind: 'int', unit: '%', min: 0, max: 500, hint: 'Rekomendasi biaya layanan = ceil(COGS/order × (1+margin) / 500) × 500', def: 30 },
+];
+const v5Unq = (v: unknown): unknown => (typeof v === 'string' && /^".*"$/.test(v) ? v.slice(1, -1) : v);
+const v5ToText = (f: V5Field, v: unknown): string | boolean => {
+  const u = v5Unq(v);
+  if (f.kind === 'bool') return u === true || String(u).toLowerCase() === 'true';
+  if (f.kind === 'list' || f.kind === 'times') {
+    const arr = Array.isArray(u) ? u : typeof u === 'string' ? (() => { try { return JSON.parse(u) as unknown[]; } catch { return String(u).split(','); } })() : [];
+    return (arr as unknown[]).map((x) => String(x).trim()).filter(Boolean).join(', ');
+  }
+  return u == null ? '' : String(u);
+};
+
+function VoucherV5Settings() {
+  const can = useAdminCan();
+  const { config, reload: reloadPublic } = useVoucherConfig();
+  const [mode, setMode] = useState<PaymentMode | null>(null);
+  const [modeBusy, setModeBusy] = useState(false);
+  const [tax, setTax] = useState({ ppn_pct: '11', ppn_inclusive: true, pph_partner_pct: '0' });
+  const [taxBusy, setTaxBusy] = useState(false);
+  const [draft, setDraft] = useState<Record<string, string | boolean>>({});
+  const [initial, setInitial] = useState<Record<string, string | boolean>>({});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const keys = [...V5_FIELDS.map((f) => f.key), 'payment_mode', 'ppn_pct', 'ppn_inclusive', 'pph_partner_pct'];
+      const [{ data, error }, pubTax] = await Promise.all([
+        supabase.from('app_settings').select('key,value').in('key', keys),
+        taxSettingsPublic().catch(() => null),
+      ]);
+      if (error) throw new Error(error.message);
+      const m = new Map(((data as { key: string; value: unknown }[]) ?? []).map((x) => [x.key, x.value]));
+      const vals = Object.fromEntries(V5_FIELDS.map((f) => [f.key, v5ToText(f, m.has(f.key) ? m.get(f.key) : f.def)]));
+      setDraft(vals); setInitial(vals);
+      const pm = String(v5Unq(m.get('payment_mode')) ?? 'voucher_only');
+      setMode(pm === 'gateway' ? 'gateway' : 'voucher_only');
+      const ppn = m.has('ppn_pct') ? v5Unq(m.get('ppn_pct')) : pubTax?.ppn_pct ?? 11;
+      const inc = m.has('ppn_inclusive') ? v5Unq(m.get('ppn_inclusive')) : pubTax?.ppn_inclusive ?? true;
+      setTax({ ppn_pct: String(ppn ?? 11), ppn_inclusive: inc === true || String(inc) === 'true', pph_partner_pct: String(v5Unq(m.get('pph_partner_pct')) ?? '0') });
+      setErr(null);
+    } catch (e) { setErr(`Pengaturan AntarVoucher: ${(e as Error).message}`); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const switchMode = async (next: PaymentMode) => {
+    if (next === mode) return;
+    const msg = next === 'voucher_only'
+      ? 'Semua saluran gateway (GoPay, ShopeePay, QRIS, OVO, DANA, VA, kartu) DINONAKTIFKAN; pelanggan hanya bisa bayar Tunai atau AntarVoucher. Top up via gateway ditolak (PAYMENT_MODE_VOUCHER_ONLY).'
+      : 'Mode gateway mengembalikan perilaku lama (saluran per gateway aktif kembali, biaya PG kembali dibebankan). Pastikan kredensial provider siap.';
+    if (!(await confirmAsync(`Ubah mode pembayaran ke ${next === 'voucher_only' ? 'AntarVoucher saja' : 'Gateway'}?`, msg, 'Ya, ubah mode'))) return;
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    setModeBusy(true);
+    try {
+      await adminSetPaymentMode(next);
+      setMode(next);
+      toast.success(`Mode pembayaran: ${next === 'voucher_only' ? 'AntarVoucher saja (gateway nonaktif)' : 'Gateway'} · tercatat di log & security_events`);
+      useAppSettingsStore.getState().load(true); await Promise.all([reloadPublic(), load()]);
+    } catch (e) { handleAdminError(e); } finally { setModeBusy(false); }
+  };
+
+  const saveTax = async () => {
+    const ppn = Number(tax.ppn_pct.replace(',', '.')), pph = Number(tax.pph_partner_pct.replace(',', '.'));
+    if (!Number.isFinite(ppn) || ppn < 0 || ppn > 30) return toast.error('PPN harus 0–30 %');
+    if (!Number.isFinite(pph) || pph < 0 || pph > 30) return toast.error('PPh mitra harus 0–30 %');
+    if (!(await confirmAsync('Simpan pengaturan pajak?', `PPN ${ppn} % (${tax.ppn_inclusive ? 'termasuk dalam biaya layanan' : 'ditambahkan di atas biaya layanan'}) · PPh mitra ${pph} %. Berlaku untuk order baru; entry ledger tax_output mengikuti nilai ini.`, 'Ya, simpan'))) return;
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    setTaxBusy(true);
+    try {
+      await adminSetTaxSettings({ ppn_pct: ppn, ppn_inclusive: tax.ppn_inclusive, pph_partner_pct: pph });
+      toast.success('Pengaturan pajak disimpan & tercatat di log'); useAppSettingsStore.getState().load(true); await load();
+    } catch (e) { handleAdminError(e); } finally { setTaxBusy(false); }
+  };
+
+  const changed = V5_FIELDS.filter((f) => draft[f.key] !== initial[f.key]);
+  const saveVoucher = async () => {
+    const p: Record<string, unknown> = {};
+    for (const f of changed) {
+      const v = draft[f.key];
+      if (f.kind === 'bool') { p[f.key] = !!v; continue; }
+      if (f.kind === 'list') {
+        const arr = String(v).split(',').map((x) => Number(x.trim().replace(/\./g, ''))).filter((n) => Number.isFinite(n) && n > 0);
+        if (!arr.length) return toast.error(`${f.label}: isi minimal satu nominal`);
+        p[f.key] = Array.from(new Set(arr)).sort((a, b) => a - b); continue;
+      }
+      if (f.kind === 'times') {
+        const arr = String(v).split(',').map((x) => x.trim()).filter(Boolean);
+        if (!arr.length || arr.some((t) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(t))) return toast.error(`${f.label}: format HH:MM, mis. 10:00, 15:00`);
+        p[f.key] = arr; continue;
+      }
+      const n = Number(String(v).replace(/\s/g, '').replace(/\./g, '').replace(',', '.'));
+      if (!Number.isInteger(n)) return toast.error(`${f.label} harus bilangan bulat`);
+      if ((f.min != null && n < f.min) || (f.max != null && n > f.max)) return toast.error(`${f.label} harus ${(f.min ?? 0).toLocaleString('id-ID')}–${(f.max ?? 0).toLocaleString('id-ID')} ${f.unit ?? ''}`);
+      p[f.key] = n;
+    }
+    const minN = Number(p.voucher_min_nominal ?? String(draft.voucher_min_nominal)), maxN = Number(p.voucher_max_nominal ?? String(draft.voucher_max_nominal));
+    if (Number.isFinite(minN) && Number.isFinite(maxN) && minN > maxN) return toast.error('Nominal minimum tidak boleh melebihi maksimum');
+    if (!Object.keys(p).length) return toast.show('Tidak ada perubahan');
+    if (!(await confirmAsync('Simpan pengaturan AntarVoucher?', `${Object.keys(p).length} kunci diubah: ${Object.keys(p).join(', ')}. Berlaku langsung untuk pembelian & order baru.`, 'Ya, simpan'))) return;
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    setBusy(true);
+    try { await rpc('admin_set_settings', { p }); toast.success(`Pengaturan AntarVoucher disimpan (${Object.keys(p).length} kunci) & tercatat di log`); useAppSettingsStore.getState().load(true); await Promise.all([reloadPublic(), load()]); }
+    catch (e) { handleSettingsError(e); } finally { setBusy(false); }
+  };
+
+  const voucherOnly = (mode ?? config.payment_mode) === 'voucher_only';
+  const ppnN = Number(tax.ppn_pct) || 0;
+  const contohR = 5000, contohT = tax.ppn_inclusive ? Math.round((contohR * ppnN) / (100 + ppnN)) : Math.round((contohR * ppnN) / 100);
+  return (
+    <View style={{ gap: adminSpace.md }}>
+      <Card style={{ gap: 12 }}>
+        <Row between style={{ flexWrap: 'wrap', gap: 8 }}>
+          <View style={{ flex: 1, minWidth: 260 }}>
+            <Row gap={8} style={{ flexWrap: 'wrap', alignItems: 'center' }}>
+              <Text style={font.h2}>Mode pembayaran</Text>
+              {mode === null ? <Badge text="Memuat…" color={colors.textMuted} /> : <Badge text={voucherOnly ? 'AntarVoucher saja' : 'Gateway'} color={voucherOnly ? colors.success : colors.warning} />}
+            </Row>
+            <Text style={font.small}>Closed loop penuh (KONTRAK-V5 §0): pelanggan bayar Tunai atau AntarVoucher; mitra beli voucher sebagai deposit; tidak ada payment gateway sehingga potongan per transaksi = pajak + fee AntarKita saja. Mengubah mode: superadmin + PIN, reversibel.</Text>
+          </View>
+          <RequirePerm perm="settings" fallback={<Text style={font.tiny}>Ubah mode butuh izin payment_config (superadmin)</Text>}>
+            <Row gap={8} style={{ flexWrap: 'wrap' }}>
+              <Button title="AntarVoucher saja" icon="ticket-outline" variant={voucherOnly ? 'primary' : 'outline'} loading={modeBusy && !voucherOnly} disabled={modeBusy || mode === null || voucherOnly} onPress={() => switchMode('voucher_only')} />
+              <Button title="Gateway (lama)" icon="card-outline" variant={!voucherOnly ? 'primary' : 'outline'} loading={modeBusy && voucherOnly} disabled={modeBusy || mode === null || !voucherOnly} onPress={() => switchMode('gateway')} />
+            </Row>
+          </RequirePerm>
+        </Row>
+        <Text style={font.tiny}>payment_mode = {mode ?? '…'} · publik: {config.payment_mode} · pembelian voucher {config.purchase_enabled ? 'aktif' : 'nonaktif'} (sakelar di menu AntarVoucher) · rekening resmi siap {config.banks.length}</Text>
+      </Card>
+
+      <Card style={{ gap: 12 }}>
+        <Row between style={{ flexWrap: 'wrap', gap: 8 }}>
+          <View style={{ flex: 1, minWidth: 260 }}>
+            <Text style={font.h2}>Pajak</Text>
+            <Text style={font.small}>PPN atas pendapatan platform (biaya layanan, komisi, fee merchant). Inklusif = pelanggan melihat "termasuk PPN", tidak ada baris tambahan. PPh mitra 0 sampai ada keputusan pajak [ASUMSI tarif — konfirmasi konsultan].</Text>
+          </View>
+          <RequirePerm perm={['finance', 'settings']} fallback={<Text style={font.tiny}>Simpan butuh izin keuangan + PIN</Text>}>
+            <Button title="Simpan pajak" icon="save-outline" loading={taxBusy} onPress={saveTax} />
+          </RequirePerm>
+        </Row>
+        <View style={st.grid}>
+          <Input label="PPN (%)" value={tax.ppn_pct} keyboardType="decimal-pad" onChangeText={(v) => setTax((t) => ({ ...t, ppn_pct: v.replace(/[^\d.,]/g, '') }))} containerStyle={{ flexGrow: 1, minWidth: 150, flexBasis: '30%' }} right={<Text style={font.tiny}>%</Text>} />
+          <Input label="PPh pemotongan ke mitra (%)" value={tax.pph_partner_pct} keyboardType="decimal-pad" onChangeText={(v) => setTax((t) => ({ ...t, pph_partner_pct: v.replace(/[^\d.,]/g, '') }))} containerStyle={{ flexGrow: 1, minWidth: 150, flexBasis: '30%' }} right={<Text style={font.tiny}>%</Text>} />
+          <View style={[st.limitCard, { justifyContent: 'center' }]}>
+            <Row between style={{ alignItems: 'center', gap: 8 }}>
+              <View style={{ flex: 1 }}><Text style={font.bodyStrong}>PPN termasuk dalam harga</Text><Text style={font.tiny}>{tax.ppn_inclusive ? 'Biaya layanan sudah termasuk PPN' : 'PPN ditambahkan di atas biaya layanan'}</Text></View>
+              <Switch value={tax.ppn_inclusive} disabled={!can(['finance', 'settings'])} onValueChange={(v) => setTax((t) => ({ ...t, ppn_inclusive: v }))} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />
+            </Row>
+          </View>
+        </View>
+        <Text style={font.tiny}>Contoh: pendapatan platform kotor R = {rupiah(contohR)} → PPN T = {rupiah(contohT)} → bersih {rupiah(contohR - contohT)} (entry ledger tax_output).</Text>
+      </Card>
+
+      <Card style={{ gap: 12 }}>
+        <Row between style={{ flexWrap: 'wrap', gap: 8 }}>
+          <View style={{ flex: 1, minWidth: 260 }}>
+            <Text style={font.h2}>AntarVoucher — nominal, cap, float, deposit & pencairan</Text>
+            <Text style={font.small}>Disimpan lewat admin_set_settings (PIN + log). Float dipantau di menu AntarVoucher; batas Rp1 miliar adalah ambang izin PJP Bank Indonesia.</Text>
+          </View>
+          <RequirePerm perm="settings" fallback={<Text style={font.tiny}>Simpan butuh izin payment_config (superadmin)</Text>}>
+            <Button title={changed.length ? `Simpan (${changed.length})` : 'Simpan'} icon="save-outline" disabled={!changed.length} loading={busy} onPress={saveVoucher} />
+          </RequirePerm>
+        </Row>
+        <ErrorNote text={err} onRetry={load} />
+        <View style={st.grid}>
+          {V5_FIELDS.map((f) => {
+            const v = draft[f.key];
+            const dirty = v !== undefined && v !== initial[f.key];
+            const ro = !can('settings');
+            return (
+              <View key={f.key} style={[st.limitCard, ro && { opacity: 0.7 }]}>
+                <Text style={font.bodyStrong} numberOfLines={1}>{f.label}</Text>
+                <Text style={font.tiny} numberOfLines={2}>{f.hint}</Text>
+                {f.kind === 'bool' ? (
+                  <Row gap={8} style={{ alignItems: 'center', minHeight: 40 }}>
+                    <Switch value={!!v} disabled={ro} onValueChange={(b) => setDraft((d) => ({ ...d, [f.key]: b }))} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />
+                    <Text style={font.small}>{v ? 'Aktif' : 'Nonaktif'}</Text>
+                  </Row>
+                ) : (
+                  <Input value={String(v ?? '')} editable={!ro} keyboardType={f.kind === 'int' ? 'number-pad' : 'default'}
+                    onChangeText={(t) => setDraft((d) => ({ ...d, [f.key]: f.kind === 'int' ? t.replace(/[^\d]/g, '') : t }))}
+                    right={f.unit ? <Text style={font.tiny}>{f.unit}</Text> : undefined} style={{ fontWeight: dirty ? '700' : undefined, color: dirty ? adminTone.blue : undefined }} />
+                )}
+                <Text style={font.tiny} numberOfLines={1}>{f.key}{f.min != null && f.max != null ? ` · ${f.min.toLocaleString('id-ID')}–${f.max.toLocaleString('id-ID')}` : ''}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </Card>
+    </View>
   );
 }
 

@@ -136,7 +136,9 @@ async function readPersisted(): Promise<MapConfig | null> {
 }
 
 export const useMapConfigStore = create<State>((set, get) => ({
-  config: DEFAULT_MAP_CONFIG,
+  // Keadaan awal WAJIB sudah dinormalisasi: DEFAULT_MAP_CONFIG mentah masih memuat placeholder {key} → Leaflet
+  // melempar "No value provided for variable {key}" pada render pertama (cold start tanpa salinan lokal) — temuan uji v5.
+  config: normalizeMapConfig(DEFAULT_MAP_CONFIG),
   loadedAt: 0,
   loading: false,
   load: async (force = false) => {

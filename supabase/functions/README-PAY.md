@@ -1,5 +1,7 @@
 # Pembayaran v3 — Edge Functions (Finpay + Midtrans)
 
+> **Catatan mode `voucher_only` (AntarVoucher v5, 10 Okt 2026).** Bila `app_settings.payment_mode = 'voucher_only'` (default v5), **gateway dinonaktifkan**: `pay-create` dan `midtrans-create` harus menolak dengan **HTTP 409 `{ code: 'PAYMENT_MODE_VOUCHER_ONLY' }`** sebelum menyentuh provider (guard dibuat Agen DB; cek `getSetting('payment_mode')` di awal handler). Webhook (`pay-webhook/*`, `midtrans-webhook`) tetap di-deploy agar notifikasi susulan transaksi lama masih di-ingest; `pay-disburse`/Finpay Disbursement **tidak dipakai** — pencairan v5 diproses tim keuangan lewat batch CSV (`admin_payout_batch_create/export/settle`) dengan SLA ≤ 1×24 jam. **Seluruh kode di direktori ini dipertahankan dormant** (tidak dihapus) supaya `admin_set_payment_mode('gateway')` memulihkan alur lama tanpa deploy ulang. Secret provider boleh dibiarkan kosong pada mode ini.
+
 Rujukan kontrak: `docs/finpay-v3/KONTRAK-API-V3.md` §1–§4, §8, §9. Semua status/uang ditulis DB lewat RPC
 service_role (`payment_event_ingest`, `payout_event_ingest`, `refund_execute_result`, `reconcile_daily`).
 

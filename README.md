@@ -1,6 +1,6 @@
 # AntarKita
 
-Super-app ala Gojek: **AntarRide** (ojek motor), **AntarCar** (mobil), **AntarFood**, **AntarSend** (dalam/antar kota), **AntarShop** (Indomaret/Alfamart/apotek/supermarket), **AntarMarket** (pasar tradisional), **AntarBox** (mobil box/pick up), **AntarTravel** (travel antar kota, carter, sopir harian), dan **AntarVoucher** (dompet + payment gateway). Satu basis kode React Native + Expo → **3 aplikasi terpisah** untuk Android, iOS, dan Web; backend **Supabase** (Postgres + PostGIS, Auth, Realtime, Storage, Edge Functions).
+Super-app ala Gojek: **AntarRide** (ojek motor), **AntarCar** (mobil), **AntarFood**, **AntarSend** (dalam/antar kota), **AntarShop** (Indomaret/Alfamart/apotek/supermarket), **AntarMarket** (pasar tradisional), **AntarBox** (mobil box/pick up), **AntarTravel** (travel antar kota, carter, sopir harian), dan **AntarVoucher** (saldo prabayar closed loop; pembayaran tunai atau AntarVoucher, tanpa payment gateway sejak v5 — lihat bagian Pembayaran). Satu basis kode React Native + Expo → **3 aplikasi terpisah** untuk Android, iOS, dan Web; backend **Supabase** (Postgres + PostGIS, Auth, Realtime, Storage, Edge Functions).
 
 ## 3 aplikasi (tahap 6)
 
@@ -108,7 +108,18 @@ Tanpa API key: tile OpenStreetMap, pencarian Photon → Nominatim, rute OSRM pub
 
 Untuk produksi:
 * **Google Maps**: isi `EXPO_PUBLIC_GOOGLE_MAPS_KEY` di `.env` → pencarian tempat, reverse geocode, dan rute otomatis memakai Google (Places, Geocoding, Directions). Tile peta tetap Leaflet; bila ingin Google Maps SDK native, ganti `src/components/map/MapView.tsx` dengan `react-native-maps` (butuh build native).
-* **Pembayaran otomatis** (Midtrans/Xendit): lihat `docs/INTEGRASI.md`.
+* **Pembayaran otomatis** (Midtrans/Xendit): lihat `docs/INTEGRASI.md` — **nonaktif pada mode `voucher_only`** (lihat bagian Pembayaran di bawah).
+
+## Pembayaran (AntarVoucher v5 — mode `voucher_only`)
+
+Sejak 10 Okt 2026 (branch `antarvoucher-v5`, kontrak `docs/antarvoucher/KONTRAK-V5.md`, spesifikasi ringkas `docs/antarvoucher/SPEK-V5.md`) AntarKita berjalan **tanpa payment gateway**:
+
+* **Metode pembayaran pelanggan: tunai atau AntarVoucher.** AntarVoucher = saldo prabayar tertutup (closed loop) yang hanya berlaku di AntarKita, tidak berbunga, bukan simpanan, bukan uang elektronik berizin. Pelanggan memilih nominal → aplikasi menerbitkan kode `AKV-XXXX-XXXX-XXXX` + instruksi transfer ke rekening PT Antar Kita Indonesia → menekan "Sudah transfer" → tim keuangan mencocokkan mutasi bank (maker–checker) ≤ 1 hari kerja → kode terbit dan otomatis ditukar ke saldo. Batas saldo per pengguna (pelanggan Rp2 jt, mitra Rp5 jt) dan total dana float (< Rp1 miliar, PADG 32/2025 Ps. 21) dijaga di server (`voucher_float_status`).
+* **Mitra (driver/travel): deposit AntarVoucher** untuk menerima order (`driver_deposit_required`); komisi pesanan tunai dipotong dari saldo, saldo tidak boleh minus.
+* **Pencairan mitra** by request, SLA ≤ 1×24 jam (`sla_due_at`), auto-approve ≤ batas, lalu batch CSV transfer massal bank yang diunggah tim keuangan (`admin_payout_batch_*`). Tidak ada API transfer bank otomatis.
+* **Pajak:** biaya layanan AntarKita ditampilkan **termasuk PPN** (`ppn_inclusive`, tarif `ppn_pct`); ledger memposting `tax_output`. Tidak ada entri `pg_fee`.
+* **Gateway (Midtrans/Finpay) dormant:** `payment_mode='voucher_only'` membuat `request_topup`/`order_payment_prepare`/`pay-create`/`midtrans-create` menolak (`PAYMENT_MODE_VOUCHER_ONLY`, HTTP 409). Kode tidak dihapus; `admin_set_payment_mode('gateway')` memulihkannya. Catatan di `docs/PAYMENT-GATEWAY.md` dan `supabase/functions/README-PAY.md`.
+* Halaman hukum: S&K v1.5 (`docs/rilis/terms.html`) dan Kebijakan Privasi v1.4 (`docs/rilis/privacy.html`) — draf, berlaku setelah disetujui Legal & Finance.
 * **Push notification**: lihat `docs/INTEGRASI.md` (Expo Notifications + trigger Supabase → Edge Function).
 
 ## Skrip

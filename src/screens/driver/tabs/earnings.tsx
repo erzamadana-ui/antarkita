@@ -91,7 +91,9 @@ function EarningRules() {
       <Text style={[font.tiny, { flex: 1 }]}>
         {text ?? (loading ? 'Memuat aturan komisi terbaru…' : `Aturan komisi belum bisa dimuat${error ? ` (${error})` : ''} — persentase yang berlaku selalu tercantum di rincian tiap order.`)}
         {' '}Tip pelanggan & biaya tambahan (parkir/tol/tunggu) 100 % milik Anda.
-        {' '}Order tunai: Anda memegang uang pelanggan, lalu setoran ke platform (biaya platform, komisi, fee merchant) dipotong dari saldo saat order selesai. Jaga saldo tetap di atas batas minus yang ditetapkan admin.
+        {' '}Order tunai: Anda memegang uang pelanggan, lalu setoran ke platform (biaya platform, komisi, fee merchant) dipotong dari saldo saat order selesai.
+        {' '}Saldo AntarVoucher berfungsi sebagai deposit: bila turun di bawah minimum yang ditetapkan admin, Anda tidak bisa online/menerima order sampai membeli AntarVoucher lagi (transfer ke rekening AntarKita, tanpa biaya payment gateway).
+        {' '}Fee AntarKita sudah termasuk PPN — tidak ada potongan pajak tambahan dari hak Anda. Pencairan diproses ≤ 24 jam (SLA).
       </Text>
     </Row>
   );

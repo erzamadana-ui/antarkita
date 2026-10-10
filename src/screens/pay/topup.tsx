@@ -12,13 +12,52 @@ import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen } from '@/components/ui';
 import { Entrance, PressableScale } from '@/components/motion';
-import { useAntarVoucher } from '@/hooks/useAppSettings';
+import { useAntarVoucher, useVoucherOnly } from '@/hooks/useAppSettings';
 import { AntarVoucherOffBanner } from '@/components/AntarVoucherNotice';
 import { colors, font, radius } from '@/lib/theme';
+import { rupiah } from '@/lib/format';
+import { Button, Card } from '@/components/ui';
 
 function TopUpScreen() {
   const router = useRouter();
   const { enabled: antarVoucherOn } = useAntarVoucher();   // 0088: gateway top up ditolak server saat nonaktif
+  // v5 voucher_only (KONTRAK-V5 §4): tidak ada gateway — jelaskan model voucher, arahkan ke /pay/voucher.
+  const { voucherOnly, config } = useVoucherOnly();
+
+  if (voucherOnly) {
+    return (
+      <Screen title="Isi AntarVoucher" back maxWidth={560}>
+        <View style={{ gap: 16 }}>
+          {!antarVoucherOn && <Entrance index={0}><AntarVoucherOffBanner /></Entrance>}
+          <Entrance index={0}>
+            <Card>
+              <View style={{ gap: 12 }}>
+                <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+                  <View style={[s.optIcon, { backgroundColor: colors.primary }]}><Ionicons name="ticket-outline" size={20} color="#fff" /></View>
+                  <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                    <Text style={font.h3}>Isi saldo dengan membeli AntarVoucher</Text>
+                    <Text style={font.small}>AntarKita tidak lagi memakai payment gateway. Saldo diisi dengan membeli voucher: pilih nominal, transfer ke rekening resmi PT Antar Kita Indonesia, kode voucher terbit otomatis dan saldo bertambah setelah dana dicocokkan.</Text>
+                  </View>
+                </View>
+                <View style={s.soft}>
+                  <Bullet text="Tanpa biaya pembayaran — yang Anda transfer = saldo yang Anda terima." />
+                  <Bullet text={`Nominal ${rupiah(config.min)} – ${rupiah(config.max)} per pembelian.`} />
+                  <Bullet text="Saldo hanya untuk layanan AntarKita (closed loop), tidak berbunga, sisa saldo bisa diminta kembali sesuai S&K." />
+                </View>
+                <Button title="Beli AntarVoucher" icon="ticket-outline" size="lg" disabled={!antarVoucherOn} onPress={() => router.push('/pay/voucher' as never)} />
+              </View>
+            </Card>
+          </Entrance>
+          <Entrance index={1}>
+            <View style={s.warn}>
+              <Ionicons name="shield-checkmark-outline" size={20} color={colors.danger} />
+              <Text style={[font.small, { flex: 1, minWidth: 0, color: colors.text }]}>Jangan transfer ke rekening selain yang tertera di aplikasi. AntarKita tidak pernah meminta transfer lewat chat atau telepon.</Text>
+            </View>
+          </Entrance>
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen title="Isi AntarVoucher" back maxWidth={560}>
@@ -68,7 +107,17 @@ function Option({ icon, color, title, subtitle, onPress, disabled }: { icon: Rea
   );
 }
 
+function Bullet({ text }: { text: string }) {
+  return (
+    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
+      <Ionicons name="checkmark-circle" size={16} color={colors.primary} style={{ marginTop: 2 }} />
+      <Text style={[font.small, { flex: 1 }]}>{text}</Text>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
+  soft: { gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: colors.bgSoft },
   opt: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 72, padding: 14, borderRadius: radius.lg, borderWidth: 1.5 },
   optIcon: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   warn: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: colors.dangerLight },

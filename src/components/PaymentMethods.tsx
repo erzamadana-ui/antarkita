@@ -10,7 +10,7 @@ import { Entrance, PressableScale, AnimatedNumber } from '@/components/motion';
 import { BrandGradient } from '@/components/glass';
 import { useAuth } from '@/store/auth';
 import { usePayPrefs, EWALLETS } from '@/store/payprefs';
-import { useAntarVoucher, usePaymentChannels, CHANNELS_OFF_TEXT } from '@/hooks/useAppSettings';
+import { useAntarVoucher, usePaymentChannels, useVoucherOnly, CHANNELS_OFF_TEXT } from '@/hooks/useAppSettings';
 import { AntarVoucherOffBanner } from '@/components/AntarVoucherNotice';
 import { colors, font, radius, glass, shadow } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
@@ -35,13 +35,15 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
   const nfc = useNfcSupport();
   const { enabled: antarpayOn } = useAntarVoucher();
   const { isChannelOn, nonCashOn } = usePaymentChannels();
+  // v5 voucher_only (KONTRAK-V5 §4): hanya Tunai & Saldo AntarVoucher; gopay/qris/e-money disembunyikan; top up → beli voucher.
+  const { voucherOnly } = useVoucherOnly();
   const { provider, channels: provChannels, providerName } = useProviderPublic();
   useEffect(() => { if (uid && !loaded) load(uid); }, [uid, loaded, load]);
   if (!uid) return null;
   // 0089: saluran yang dimatikan admin tidak ditampilkan (server juga menolaknya).
   const walletOn = isChannelOn('antarpay');
-  const emoneyOn = isChannelOn('emoney_nfc');
-  const wallets: { key: string; label: string; color: string; icon: string; fee: string | null }[] = provider
+  const emoneyOn = !voucherOnly && isChannelOn('emoney_nfc');
+  const wallets: { key: string; label: string; color: string; icon: string; fee: string | null }[] = voucherOnly ? [] : provider
     ? provChannels.map((c) => { const old = EWALLETS.find((x) => x.key === c.key); return { key: c.key, label: c.label, color: old?.color ?? colors.info, icon: old?.icon ?? (c.key === 'card' ? 'card' : c.key.startsWith('retail_') ? 'storefront' : 'wallet'), fee: channelFeeText(c, 0) }; })
     : EWALLETS.filter((x) => isChannelOn(x.key)).map((x) => ({ key: x.key as string, label: x.label as string, color: x.color as string, icon: x.icon as string, fee: null }));
   const pgName = providerName ?? 'payment gateway';
@@ -61,10 +63,12 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
         <BrandGradient colors={[colors.primary, '#13A29F', '#0E7C7B']} style={[s.hero, shadow.glow(colors.primary)]}>
           <Row between>
             <View>
-              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 }}>SALDO ANTARPAY</Text>
+              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 }}>SALDO ANTARVOUCHER</Text>
               <AnimatedNumber value={wallet?.balance ?? 0} format={rupiah} style={{ color: '#fff', fontSize: 30, fontWeight: '700', letterSpacing: -0.5 }} />
             </View>
-            {antarpayOn && <Button title="Top up" size="sm" color="#0B1F2A" icon="add" onPress={() => router.push('/pay/gateway' as never)} />}
+            {antarpayOn && (voucherOnly
+              ? <Button title="Beli voucher" size="sm" color="#0B1F2A" icon="ticket-outline" onPress={() => router.push('/pay/voucher' as never)} />
+              : <Button title="Top up" size="sm" color="#0B1F2A" icon="add" onPress={() => router.push('/pay/gateway' as never)} />)}
           </Row>
         </BrandGradient>
       </Entrance>
@@ -74,9 +78,10 @@ export function PaymentMethodsPanel({ compact }: { compact?: boolean }) {
       <Entrance index={1}><Card style={{ gap: 10 }}>
         <Text style={font.label}>Metode utama saat memesan</Text>
         {isChannelOn('cash') && <MethodRow active={method === 'cash'} onPress={() => pick('cash')} icon="cash-outline" color={colors.success} title="Tunai" subtitle="Bayar langsung ke driver" />}
-        {walletOn && <MethodRow active={method === 'wallet'} onPress={() => pick('wallet')} icon="wallet-outline" color={colors.primary} title="Saldo AntarVoucher" subtitle={`Saldo ${rupiah(wallet?.balance ?? 0)} · dipotong otomatis`} />}
+        {walletOn && <MethodRow active={method === 'wallet'} onPress={() => pick('wallet')} icon="wallet-outline" color={colors.primary} title="Saldo AntarVoucher" subtitle={voucherOnly ? `Saldo ${rupiah(wallet?.balance ?? 0)} · dipotong otomatis · isi dengan beli voucher` : `Saldo ${rupiah(wallet?.balance ?? 0)} · dipotong otomatis`} />}
         {ewalletOn && <MethodRow active={method === 'ewallet'} onPress={() => pick('ewallet', wallets.some((w) => w.key === ew) ? (ew as string) : wallets[0].key)} icon="phone-portrait-outline" color={colors.info} title={`E-wallet${ew && wallets.some((w) => w.key === ew) ? ` · ${wallets.find((e) => e.key === ew)?.label}` : ''}`} subtitle={`${wallets.map((w) => w.label).join(' · ')} — via ${pgName}, dibayar langsung per pesanan`} />}
-        {antarpayOn && !nonCashOn && <Text style={font.tiny}>{CHANNELS_OFF_TEXT}</Text>}
+        {antarpayOn && !nonCashOn && !voucherOnly && <Text style={font.tiny}>{CHANNELS_OFF_TEXT}</Text>}
+        {voucherOnly && <Text style={font.tiny}>Mode AntarVoucher: pembayaran hanya Tunai atau Saldo AntarVoucher. Tidak ada e-wallet/QRIS dan tidak ada biaya pembayaran tambahan.</Text>}
       </Card></Entrance>
 
       {ewalletOn && <Entrance index={2}><Card style={{ gap: 10 }}>

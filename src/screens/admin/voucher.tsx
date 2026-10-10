@@ -23,6 +23,7 @@ import { rupiah } from '@/lib/format';
 import { useAuth } from '@/store/auth';
 import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import { asList, shortId, todayWib, useAdminCan } from '@/lib/admin';
+import { voucherFloatStatus, formatVoucherCode, type VoucherFloatStatus, type VoucherCode, type VoucherCodeStatus } from '@/lib/voucherV5';
 import { ErrorNote, fmtDate, fmtAgo, moneyCol, Trunc, WideTableHint, usePager, Pager } from './_shared';
 
 /* ───────────────────────────── Tipe (kontrak 0112) ───────────────────────────── */
@@ -96,8 +97,20 @@ const M_FILTERS: { key: string; label: string }[] = [
   { key: 'matched', label: 'Tercocok' }, { key: 'refunded', label: 'Sudah dikembalikan' }, { key: 'all', label: 'Semua' },
 ];
 const TABS = [
-  { key: 'queue', label: 'Antrean pembelian' }, { key: 'mutations', label: 'Mutasi bank' }, { key: 'banks', label: 'Rekening resmi' },
+  { key: 'queue', label: 'Antrean pembelian' }, { key: 'codes', label: 'Kode voucher' }, { key: 'mutations', label: 'Mutasi bank' }, { key: 'banks', label: 'Rekening resmi' },
   { key: 'reconcile', label: 'Rekonsiliasi' }, { key: 'switch', label: 'Sakelar pembelian' },
+];
+/* v5: status kode voucher (voucher_codes, migrasi 0114) */
+const C_STATUS: Record<VoucherCodeStatus, { label: string; tone: ToneKey }> = {
+  pending_payment: { label: 'Menunggu pembayaran', tone: 'wait' },
+  issued: { label: 'Terbit · belum di-redeem', tone: 'brand' },
+  redeemed: { label: 'Sudah masuk saldo', tone: 'ok' },
+  expired: { label: 'Kedaluwarsa', tone: 'off' },
+  void: { label: 'Dibatalkan', tone: 'bad' },
+};
+const C_FILTERS: { key: string; label: string }[] = [
+  { key: 'issued', label: 'Terbit' }, { key: 'pending_payment', label: 'Menunggu pembayaran' }, { key: 'redeemed', label: 'Sudah di-redeem' },
+  { key: 'expired', label: 'Kedaluwarsa' }, { key: 'void', label: 'Dibatalkan' }, { key: 'all', label: 'Semua' },
 ];
 
 const nowHm = () => new Date(Date.now() + 7 * 3600e3).toISOString().slice(11, 16);
@@ -141,9 +154,13 @@ export default function AdminVoucher() {
   const [banks, setBanks] = useState<BankAccount[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // v5: dana float seluruh saldo beredar (pelanggan + mitra) vs ambang BI Rp1 miliar — voucher_float_status (0114).
+  const [fl, setFl] = useState<VoucherFloatStatus | null>(null);
+  const [flErr, setFlErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    voucherFloatStatus().then((f) => { setFl(f); setFlErr(null); }).catch((e: Error) => setFlErr(`Dana float: ${e.message}`));
     try {
       const [queue, bl] = await Promise.all([
         rpc<Queue>('admin_voucher_queue', { p_status: null }),
@@ -183,16 +200,132 @@ export default function AdminVoucher() {
             color={floatPct >= 90 ? adminTone.red : floatPct >= 75 ? adminTone.amber : adminTone.violet} />
         </Row>
 
+        <FloatCard fl={fl} err={flErr} onRetry={load} />
+
         <FilterBar options={TABS} value={tab} onChange={setTab} />
         <ErrorNote text={err} onRetry={load} />
 
         {tab === 'queue' ? <QueueTab q={q} loading={loading} reload={load} /> : null}
+        {tab === 'codes' ? <CodesTab /> : null}
         {tab === 'mutations' ? <MutationsTab q={q} banks={banks} loading={loading} reload={load} /> : null}
         {tab === 'banks' ? <BanksTab banks={banks} loading={loading} reload={load} /> : null}
         {tab === 'reconcile' ? <ReconcileTab /> : null}
         {tab === 'switch' ? <SwitchTab banks={banks} /> : null}
       </RequirePerm>
     </AdminPage>
+  );
+}
+
+/* ───────────────────────────── v5 · Dana float (KONTRAK-V5 §0 catatan regulasi) ───────────────────────────── */
+
+export function FloatCard({ fl, err, onRetry, compact }: { fl: VoucherFloatStatus | null; err: string | null; onRetry?: () => void; compact?: boolean }) {
+  const pct = Number(fl?.pct ?? 0);
+  const alert = !!fl?.alert;
+  const tone: ToneKey = alert ? 'bad' : pct >= 50 ? 'wait' : 'ok';
+  const t = TONE[tone];
+  const bar = Math.max(0, Math.min(100, pct));
+  return (
+    <Panel title="Dana float AntarVoucher" icon={alert ? 'alert-circle-outline' : 'speedometer-outline'} iconColor={t.fg}
+      subtitle="Σ seluruh saldo beredar (pelanggan + mitra) vs ambang Bank Indonesia Rp1 miliar — di bawah ambang tidak perlu izin PJP (PADG 32/2025 Ps. 21) [FAKTA SUMBER]"
+      right={fl ? <Pill text={alert ? 'ALARM — mendekati ambang' : pct >= 50 ? 'Waspada' : 'Aman'} tone={tone} icon={alert ? 'warning' : undefined} /> : null}>
+      <View style={{ gap: 10 }}>
+        <ErrorNote text={err} onRetry={onRetry} />
+        {!fl && !err ? <Text style={font.small}>Menghitung float…</Text> : null}
+        {fl ? (
+          <>
+            {alert ? (
+              <Note tone="bad" icon="warning-outline" title={`Float ${pct.toLocaleString('id-ID', { maximumFractionDigits: 1 })} % dari ambang — di atas alarm`}>
+                Hentikan sementara pembelian voucher bernilai besar, dorong mitra mencairkan saldo, dan konsultasikan opini hukum / pengajuan izin PJP sebelum float menyentuh Rp1 miliar. Server menolak pembelian yang membuat Σ beredar melewati batas.
+              </Note>
+            ) : null}
+            <Row gap={adminSpace.md} style={{ flexWrap: 'wrap' }}>
+              <StatCard index={0} icon="wallet-outline" label="Total beredar" value={rupiah(Number(fl.total_outstanding))} hint={`${pct.toLocaleString('id-ID', { maximumFractionDigits: 1 })} % dari batas ${rupiah(Number(fl.limit))}`} color={t.fg} />
+              <StatCard index={1} icon="people-outline" label="Saldo pelanggan" value={rupiah(Number(fl.customers))} hint={`cap per pelanggan ${rupiah(Number(fl.cap_customer))}`} color={adminTone.blue} />
+              <StatCard index={2} icon="bicycle-outline" label="Saldo mitra (deposit)" value={rupiah(Number(fl.partners))} hint={`cap per mitra ${rupiah(Number(fl.cap_partner))}`} color={adminTone.violet} />
+              {!compact ? <StatCard index={3} icon="shield-outline" label="Sisa ruang ke ambang" value={rupiah(Math.max(0, Number(fl.limit) - Number(fl.total_outstanding)))} hint={`dihitung ${fmtAgo(fl.updated_at)}`} color={alert ? adminTone.red : adminTone.green} /> : null}
+            </Row>
+            <View style={{ height: 10, borderRadius: 5, backgroundColor: adminTone.surfaceAlt, borderWidth: 1, borderColor: adminTone.border, overflow: 'hidden' }}>
+              <View style={{ width: `${bar}%`, height: '100%', backgroundColor: t.fg }} />
+            </View>
+            <Text style={font.tiny}>Alarm menyala saat Σ beredar ≥ voucher_float_alert_pct dari voucher_float_limit (ubah di Pengaturan → AntarVoucher). Sumber: voucher_float_status().</Text>
+          </>
+        ) : null}
+      </View>
+    </Panel>
+  );
+}
+
+/* ───────────────────────────── v5 · Kode voucher (voucher_codes) ───────────────────────────── */
+// Admin membaca tabel voucher_codes langsung (SELECT) — mengandalkan policy admin RLS di migrasi 0114 (DB Agent).
+// Bila policy belum ada, hasil kosong/galat ditampilkan apa adanya (tidak ditelan).
+
+type CodeRow = VoucherCode & { buyer_id: string | null; redeemed_by: string | null; buyer_name?: string | null; redeemer_name?: string | null };
+
+function CodesTab() {
+  const [rows, setRows] = useState<CodeRow[]>([]);
+  const [filter, setFilter] = useState('issued');
+  const [qText, setQText] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.from('voucher_codes').select('*').order('created_at', { ascending: false }).limit(500);
+      if (error) throw new Error(error.message);
+      const list = (data as CodeRow[]) ?? [];
+      const ids = Array.from(new Set(list.flatMap((c) => [c.buyer_id, c.redeemed_by]).filter((x): x is string => !!x)));
+      let names = new Map<string, string>();
+      if (ids.length) {
+        const { data: pr, error: pe } = await supabase.from('profiles').select('id,full_name').in('id', ids);
+        if (pe) toast.error(`Nama pengguna: ${pe.message}`);
+        names = new Map(((pr as { id: string; full_name: string | null }[]) ?? []).map((p) => [p.id, p.full_name ?? '']));
+      }
+      setRows(list.map((c) => ({ ...c, buyer_name: c.buyer_id ? names.get(c.buyer_id) ?? null : null, redeemer_name: c.redeemed_by ? names.get(c.redeemed_by) ?? null : null })));
+      setErr(null);
+    } catch (e) { setErr(`Kode voucher: ${(e as Error).message}`); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const qn = qText.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const shown = useMemo(() => rows.filter((c) => (filter === 'all' || c.status === filter)
+    && (!qn || c.code.replace(/[^A-Z0-9]/g, '').includes(qn) || (c.buyer_name ?? '').toUpperCase().includes(qText.trim().toUpperCase()))), [rows, filter, qn, qText]);
+  const pg = usePager(shown, 25);
+  const counts = useMemo(() => {
+    const m: Record<string, { n: number; sum: number }> = {};
+    for (const c of rows) { const k = c.status; m[k] = m[k] ?? { n: 0, sum: 0 }; m[k].n += 1; m[k].sum += Number(c.nominal || 0); }
+    return m;
+  }, [rows]);
+  const expSoon = (c: CodeRow) => c.status === 'issued' && c.expires_at && new Date(c.expires_at).getTime() - Date.now() < 3 * 86400e3;
+
+  return (
+    <>
+      <Row gap={adminSpace.md} style={{ flexWrap: 'wrap' }}>
+        <StatCard index={0} icon="ticket-outline" label="Terbit · belum di-redeem" value={counts.issued?.n ?? 0} hint={`${rupiah(counts.issued?.sum ?? 0)} belum masuk saldo`} color={adminTone.teal} onPress={() => setFilter('issued')} />
+        <StatCard index={1} icon="hourglass-outline" label="Menunggu pembayaran" value={counts.pending_payment?.n ?? 0} hint={rupiah(counts.pending_payment?.sum ?? 0)} color={adminTone.amber} onPress={() => setFilter('pending_payment')} />
+        <StatCard index={2} icon="checkmark-done-outline" label="Sudah di-redeem" value={counts.redeemed?.n ?? 0} hint={rupiah(counts.redeemed?.sum ?? 0)} color={adminTone.green} onPress={() => setFilter('redeemed')} />
+        <StatCard index={3} icon="time-outline" label="Kedaluwarsa" value={counts.expired?.n ?? 0} hint="kode tidak di-redeem sampai TTL" color={adminTone.slate} onPress={() => setFilter('expired')} />
+      </Row>
+      <Toolbar q={qText} onQ={setQText} placeholder="Cari kode (AKV-…) atau nama pembeli" right={<Text style={font.tiny}>{shown.length} dari {rows.length} kode · maks 500 terbaru</Text>}>
+        <FilterBar options={C_FILTERS} value={filter} onChange={setFilter} />
+      </Toolbar>
+      <ErrorNote text={err} onRetry={load} />
+      <Panel title={`Kode voucher (${shown.length})`} subtitle="Kode AKV-XXXX-XXXX-XXXX terbit setelah pembayaran diverifikasi; auto-redeem memasukkannya ke saldo pembeli. Kode tidak pernah dibuat manual dari panel." icon="ticket-outline" padded={false}>
+        <DataTable rows={pg.rows as unknown as Record<string, unknown>[]} emptyText={loading ? 'Memuat…' : err ? 'Tidak bisa membaca voucher_codes (lihat galat di atas)' : 'Tidak ada kode pada filter ini'} emptyIcon="ticket-outline"
+          columns={[
+            { key: 'code', label: 'Kode', width: 200, render: (r) => <Text style={font.mono} selectable>{formatVoucherCode(String(r.code))}</Text> },
+            moneyCol('nominal', 'Nominal', 120),
+            { key: 'status', label: 'Status', width: 190, render: (r) => { const c = r as unknown as CodeRow; const st = C_STATUS[c.status] ?? { label: c.status, tone: 'neutral' as ToneKey }; return <View style={{ gap: 3, alignItems: 'flex-start' }}><Pill text={st.label} tone={st.tone} />{expSoon(c) ? <Pill text="kedaluwarsa < 3 hari" tone="wait" /> : null}</View>; } },
+            { key: 'buyer', label: 'Pembeli', width: 180, render: (r) => { const c = r as unknown as CodeRow; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.bodyStrong} title={c.buyer_name ?? ''}>{c.buyer_name || '—'}</Trunc><Text style={font.tiny}>{c.buyer_id ? shortId(c.buyer_id) : '—'}</Text></View>; } },
+            { key: 'redeemed_by', label: 'Di-redeem oleh', width: 170, render: (r) => { const c = r as unknown as CodeRow; return c.redeemed_by ? <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.small} title={c.redeemer_name ?? ''}>{c.redeemer_name || shortId(c.redeemed_by)}</Trunc><Text style={font.tiny}>{fmtDate(c.redeemed_at)}</Text></View> : <Text style={font.tiny}>—</Text>; } },
+            { key: 'issued_at', label: 'Terbit', width: 134, render: (r) => <Text style={font.tiny}>{fmtDate(String(r.issued_at ?? ''))}</Text> },
+            { key: 'expires_at', label: 'Kedaluwarsa', width: 134, render: (r) => <Text style={[font.tiny, expSoon(r as unknown as CodeRow) ? { color: adminTone.red, fontWeight: '700' } : null]}>{fmtDate(String(r.expires_at ?? ''))}</Text> },
+            { key: 'purchase_id', label: 'Pembelian', width: 110, render: (r) => <Text style={font.tiny}>{r.purchase_id ? shortId(String(r.purchase_id)) : '—'}</Text> },
+          ]} />
+        <View style={{ padding: adminSpace.md, gap: 6 }}><WideTableHint /><Pager p={pg} noun="kode" /></View>
+      </Panel>
+    </>
   );
 }
 

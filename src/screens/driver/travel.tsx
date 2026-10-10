@@ -1,6 +1,6 @@
 // Dasbor Mitra AntarTravel — buat jadwal, lihat manifest penumpang & alamat jemput, berangkat/tiba, pendapatan,
 // serta titipan barang AntarSend antar kota (Tahap 9: travel_send_available / accept / pickup / complete)
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Linking, Alert, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -16,6 +16,12 @@ import { supabase, rpc, realtimeChannel } from '@/lib/supabase';
 import { colors, font, radius, shadow, motion } from '@/lib/theme';
 import { rupiah, formatSchedule, cityName, tripStatusLabel, travelStatusLabel, travelKindLabel, travelRequestStatusLabel, accommodationLabel } from '@/lib/format';
 import type { TravelPartner, TravelRoute, TravelManifestRow, TravelTrip, TravelOpenRequest, TravelSendOrder, Order } from '@/lib/types';
+import { DepositBanner, useDepositGate, handleDepositError } from '@/screens/driver/deposit';
+
+// AntarVoucher v5: status deposit mitra travel dibagikan ke tab (travel_offer_create / travel_accept_send dijaga server DEPOSIT_REQUIRED).
+type DepositGate = ReturnType<typeof useDepositGate>;
+const DepositCtx = createContext<DepositGate | null>(null);
+const useDeposit = () => useContext(DepositCtx);
 
 const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 const TIMES = ['05:00', '06:00', '07:00', '08:00', '09:00', '10:00', '13:00', '15:00', '17:00', '19:00', '21:00', '23:00'];
@@ -36,6 +42,7 @@ export default function TravelPartnerHome() {
   const [notes, setNotes] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const [manifest, setManifest] = useState<Record<string, TravelManifestRow[]>>({});
+  const deposit = useDepositGate(me?.status === 'approved');
 
   useEffect(() => { if (uid) supabase.from('travel_partners').select('*').eq('id', uid).maybeSingle().then(({ data }) => setMe((data as TravelPartner) ?? travelPartner ?? null)); }, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { supabase.from('travel_routes').select('*').eq('active', true).then(({ data }) => setRoutes((data as TravelRoute[]) ?? [])); }, []);
@@ -110,7 +117,10 @@ export default function TravelPartnerHome() {
             <Row gap={8}><Ionicons name="wallet-outline" size={20} color={colors.primary} /><Text style={font.small}>Saldo AntarVoucher</Text></Row>
             <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 18 }}>{rupiah(wallet?.balance ?? 0)}</Text>
           </Row>
+          {deposit.status?.required && !deposit.blocked ? <Text style={[font.tiny, { marginTop: 6 }]}>Deposit minimal {rupiah(deposit.status.min_balance)} terpenuhi — Anda bisa mengambil titipan & mengirim penawaran.</Text> : null}
         </Card></Entrance>
+        {/* v5: banner deposit AntarVoucher — tombol ambil titipan / kirim penawaran dikunci sampai saldo cukup */}
+        {(deposit.blocked || (deposit.error && !deposit.status)) && <Entrance index={1}><DepositBanner status={deposit.status} error={deposit.error} onRetry={deposit.reload} accent={colors.travel} /></Entrance>}
 
         {/* Chip pil mode */}
         <Row gap={8} style={{ flexWrap: 'wrap' }}>
@@ -119,7 +129,7 @@ export default function TravelPartnerHome() {
           <Chip label="Titipan barang" active={tab === 'send'} onPress={() => setTab('send')} />
         </Row>
 
-        {tab === 'send' ? <SendParcelTab uid={uid} /> : tab === 'requests' ? <RequestsTab me={travelPartner ?? me} /> : (
+        {tab === 'send' ? <DepositCtx.Provider value={deposit}><SendParcelTab uid={uid} /></DepositCtx.Provider> : tab === 'requests' ? <DepositCtx.Provider value={deposit}><RequestsTab me={travelPartner ?? me} /></DepositCtx.Provider> : (
           <>
         <Entrance index={1}><Card style={{ gap: 10 }}>
           <Text style={font.label}>Buat jadwal keberangkatan</Text>
@@ -256,14 +266,22 @@ function RequestCard({ r, me, open, onToggle, onDone }: { r: TravelOpenRequest; 
   const canOffer = ['open', 'offered'].includes(r.status) && !r.my_offer;
   const progress = REQ_PROGRESS[r.status];
 
+  const router = useRouter();
+  const deposit = useDeposit();
+  const depositBlocked = !!deposit?.blocked;
   const send = async () => {
     if (total <= 0) return toast.error('Isi harga penawaran');
+    if (busy) return;
+    if (depositBlocked) { handleDepositError(new Error('DEPOSIT_REQUIRED'), deposit?.status, (h) => router.push(h as never)); return; }
     setBusy(true);
     try {
       const breakdown = { daily_rate: num(rate) || undefined, days: r.days, accommodation_nights: selfAcc ? nights : 0, accommodation_fee: selfAcc ? num(accFee) : 0, fuel_est: r.fuel === 'partner' ? num(fuelEst) : 0, overtime_rate: num(overtime) || undefined };
       await rpc('travel_offer_create', { p_request: r.id, p_price: total, p_breakdown: breakdown, p_message: message || null });
       toast.success('Penawaran terkirim'); onDone();
-    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+    } catch (e) {
+      if (handleDepositError(e, deposit?.status, (h) => router.push(h as never))) { void deposit?.reload(); return; }
+      toast.error((e as Error).message);
+    } finally { setBusy(false); }
   };
   const setSt = (st: 'ongoing' | 'completed') => {
     const msg = st === 'ongoing' ? 'Mulai perjalanan? Pastikan penumpang sudah dijemput.' : 'Tandai selesai? Pendapatan akan diteruskan ke AntarVoucher Anda.';
@@ -331,7 +349,7 @@ function RequestCard({ r, me, open, onToggle, onDone }: { r: TravelOpenRequest; 
               <Row gap={8}><Chip label="Pakai kalkulator" active={!manual} onPress={() => setManual(false)} /><Chip label="Harga total manual" active={manual} onPress={() => setManual(true)} /></Row>
               {manual && <Input label="Harga total" keyboardType="number-pad" value={price} onChangeText={(v) => setPrice(v.replace(/\D/g, ''))} />}
               <Input placeholder="Pesan untuk pelanggan (mobil, sopir, syarat)" value={message} onChangeText={setMessage} />
-              <Button title={`Kirim penawaran ${rupiah(total)}`} icon="paper-plane-outline" loading={busy} onPress={send} />
+              <Button title={depositBlocked ? 'Deposit AntarVoucher belum cukup' : `Kirim penawaran ${rupiah(total)}`} icon="paper-plane-outline" loading={busy} disabled={depositBlocked} onPress={send} />
               <Text style={font.tiny}>Komisi platform dipotong dari harga setelah perjalanan selesai. Pelanggan bebas memilih penawaran.</Text>
             </View>
           )}
@@ -378,10 +396,18 @@ function SendParcelTab({ uid }: { uid?: string | null }) {
     return over;
   };
 
+  const router = useRouter();
+  const deposit = useDeposit();
+  const depositBlocked = !!deposit?.blocked;
   const act = async (id: string, fn: 'travel_accept_send' | 'travel_pickup_send' | 'travel_complete_send', ok: string) => {
+    if (busy) return;
     setBusy(id);
     try { await rpc(fn, { p_order: id }); toast.success(ok); await load(); }
-    catch (e) { toast.error((e as Error).message); } finally { setBusy(null); }
+    catch (e) {
+      // v5: travel_accept_send dijaga deposit — pesan ramah + tombol beli, lalu muat ulang status.
+      if (handleDepositError(e, deposit?.status, (h) => router.push(h as never))) { void deposit?.reload(); return; }
+      toast.error((e as Error).message);
+    } finally { setBusy(null); }
   };
 
   return (
@@ -459,7 +485,7 @@ function SendParcelTab({ uid }: { uid?: string | null }) {
               <Text style={[font.tiny, { flex: 1, color: colors.danger, fontWeight: '700' }]}>Melebihi batas muatan mitra travel ({over.join(' · ')}). Titipan ini harus dibawa mobil box — jangan diambil.</Text>
             </Row>
           )}
-          <Button title={over.length > 0 ? 'Melebihi batas muatan' : 'Ambil titipan'} icon={over.length > 0 ? 'close-circle-outline' : 'download-outline'} style={{ marginTop: 10 }} loading={busy === r.id} disabled={over.length > 0}
+          <Button title={over.length > 0 ? 'Melebihi batas muatan' : depositBlocked ? 'Deposit AntarVoucher belum cukup' : 'Ambil titipan'} icon={over.length > 0 ? 'close-circle-outline' : depositBlocked ? 'wallet-outline' : 'download-outline'} style={{ marginTop: 10 }} loading={busy === r.id} disabled={over.length > 0 || depositBlocked || !!busy}
             onPress={() => confirmThen(`Ambil titipan ${r.code}? Anda bertanggung jawab mengantarnya sampai tujuan.`, () => act(r.id, 'travel_accept_send', 'Titipan diambil'))} />
         </Animated.View>
         );

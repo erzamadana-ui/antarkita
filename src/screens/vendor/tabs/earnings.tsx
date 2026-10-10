@@ -17,6 +17,7 @@ import { useMyOrders } from '@/hooks/useOrder';
 import { colors, font, motion, radius, shadow } from '@/lib/theme';
 import { rupiah, formatDate } from '@/lib/format';
 import { EarningsReportCard, MyDisputesCard } from '@/screens/mitra/finance';
+import { PayoutSlaLine } from '@/components/EarningBreakdown';
 
 export default function VendorEarnings() {
   const merchant = useAuth((s) => s.merchant);
@@ -28,9 +29,11 @@ export default function VendorEarnings() {
           <Text style={[font.tiny, { flex: 1 }]}>
             Belanja AntarMarket dibayar driver langsung di lapak Anda saat mengambil barang — nilainya tidak masuk saldo AntarVoucher dan tidak dipotong fee.
             {' '}Saldo di bawah memuat transaksi lain dengan AntarKita (mis. penyesuaian, refund, pendapatan non-tunai) dan bisa dicairkan ke rekening lapak.
+            {' '}Fee AntarKita (bila ada) sudah termasuk PPN — tidak ada biaya payment gateway di mode AntarVoucher.
           </Text>
         </Row>
       </Entrance>
+      <Entrance index={0}><View style={s.sla}><PayoutSlaLine /></View></Entrance>
       {merchant ? (
         <>
           <Entrance index={1}><EarningsReportCard role="merchant" ownerId={merchant.id} accent={colors.market} /></Entrance>
@@ -78,6 +81,7 @@ function MerchantBreakdowns({ merchantId }: { merchantId: string }) {
 
 const s = StyleSheet.create({
   note: { padding: 12, borderRadius: radius.md, backgroundColor: colors.market + '12', alignItems: 'flex-start' },
+  sla: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.md, backgroundColor: colors.bgSoft },
   card: { gap: 8, padding: 14, borderRadius: radius.lg, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border, ...shadow.soft },
   row: { padding: 10, borderRadius: radius.md, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border },
 });

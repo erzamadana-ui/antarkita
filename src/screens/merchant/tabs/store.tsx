@@ -13,6 +13,7 @@ import { pickAndUpload } from '@/lib/upload';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { HalalBadge } from '@/components/MerchantStatus';
 import { EarningsReportCard, MyDisputesCard } from '@/screens/mitra/finance';
+import { PayoutSlaLine } from '@/components/EarningBreakdown';
 
 type Item = { icon: IconName; color?: string; title: string; subtitle?: string; onPress: () => void; danger?: boolean };
 
@@ -63,8 +64,13 @@ export default function MerchantStore() {
       {tabs}
       {tab === 'wallet' ? <WalletView allowWithdraw bottomSpace={TAB_BAR_SPACE + 16} header={
         <View style={{ gap: 12, marginBottom: 12 }}>
-          <Entrance index={0}><EarningsReportCard role="merchant" ownerId={merchant.id} accent={colors.food} /></Entrance>
-          <Entrance index={1}><MyDisputesCard /></Entrance>
+          {/* v5: fee AntarKita sudah termasuk PPN; pencairan by request SLA ≤ 24 jam; deposit AntarVoucher TIDAK wajib untuk merchant (KONTRAK-V5 §1) */}
+          <Entrance index={0}><View style={s.v5note}>
+            <Text style={font.tiny}>Hak merchant = nilai barang − fee AntarKita (sudah termasuk PPN). Tidak ada biaya payment gateway di mode AntarVoucher.</Text>
+            <PayoutSlaLine />
+          </View></Entrance>
+          <Entrance index={1}><EarningsReportCard role="merchant" ownerId={merchant.id} accent={colors.food} /></Entrance>
+          <Entrance index={2}><MyDisputesCard /></Entrance>
         </View>
       } /> : (
         <View style={{ gap: 16, paddingHorizontal: 16 }}>
@@ -126,6 +132,7 @@ export default function MerchantStore() {
   );
 }
 const s = StyleSheet.create({
+  v5note: { gap: 6, padding: 12, borderRadius: radius.md, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border },
   storeCard: { backgroundColor: '#fff', borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', ...shadow.card },
   cover: { width: '100%', height: 150, backgroundColor: colors.bgSoft },
   openRow: { padding: 12, borderRadius: radius.md, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border },

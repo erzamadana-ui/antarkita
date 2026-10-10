@@ -10,6 +10,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Switch, Pressable } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { AdminPage, Table, StatCard, Pill, AdminDialog, RequirePerm, adminFont as font, adminTone, adminSpace, adminRadius, AdminCard as Card, TONE } from '@/components/admin';
 import { Row, Input, Button, Chip, Badge, toast } from '@/components/ui';
@@ -21,6 +22,7 @@ import { useAppSettingsStore } from '@/hooks/useAppSettings';
 import { PAYMENT_CHANNELS, GATEWAY_CHANNELS, channelLabel } from '@/store/payprefs';
 import type { AdminPaymentChannels, GatewayStatus, PaymentChannels } from '@/lib/types';
 import { fmtDate, WideTableHint, ErrorNote } from './_shared';
+import { useVoucherConfig } from '@/hooks/useVoucherV5';
 import {
   PROVIDERS, SECRET_FIELDS, asList, maskSecret, providerLabel, webhookUrl, SUPABASE_BASE,
   type GatewaySecretRow, type PaymentEnv, type PaymentProvider, type PaymentProviderPublic,
@@ -152,6 +154,7 @@ export default function AdminGateway() {
   const stats = st?.stats;
   return (
     <AdminPage title="Payment Gateway" subtitle="Provider aktif (Midtrans / Finpay), kredensial per lingkungan, webhook, saluran pembayaran, dan konfigurasi Midtrans lama." onRefresh={load}>
+      <VoucherOnlyBanner />
       <ProviderActiveCard />
       <RequirePerm perm="gateway_secret"><SecretsCard /></RequirePerm>
 
@@ -657,3 +660,29 @@ const s = StyleSheet.create({
   stepText: { color: '#fff', fontWeight: '700', fontSize: 12, lineHeight: 16 },
   secret: { flexGrow: 1, flexBasis: 260, minWidth: 240, gap: 6, padding: adminSpace.md, borderRadius: adminRadius.card, borderWidth: 1, borderColor: adminTone.border, backgroundColor: adminTone.surfaceAlt },
 });
+
+/* ───────────────── v5 · Banner mode AntarVoucher (payment_mode = voucher_only) ───────────────── */
+function VoucherOnlyBanner() {
+  const router = useRouter();
+  const { config, voucherOnly, loading } = useVoucherConfig();
+  if (loading || !voucherOnly) return null;
+  return (
+    <View style={[s.note, { backgroundColor: TONE.wait.bg, borderColor: TONE.wait.border }]}>
+      <Row gap={10} style={{ alignItems: 'flex-start' }}>
+        <Ionicons name="ticket-outline" size={22} color={TONE.wait.fg} style={{ marginTop: 1 }} />
+        <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+          <Text style={[font.bodyStrong, { color: TONE.wait.fg }]}>Mode AntarVoucher aktif — payment gateway nonaktif</Text>
+          <Text style={font.small}>
+            payment_mode = voucher_only (KONTRAK-V5): pelanggan membayar Tunai atau AntarVoucher; top up gateway, saluran GoPay/ShopeePay/QRIS/OVO/DANA/VA/kartu dan edge pay-*/midtrans-create ditolak server (409 PAYMENT_MODE_VOUCHER_ONLY).
+            Pengaturan di halaman ini tetap tersimpan tetapi TIDAK dipakai transaksi sampai mode diubah kembali ke Gateway (Pengaturan → Mode pembayaran, superadmin + PIN).
+            {config.purchase_enabled ? ' Pembelian voucher aktif.' : ' Pembelian voucher saat ini nonaktif — pelanggan hanya bisa bayar tunai.'}
+          </Text>
+          <Row gap={8} style={{ flexWrap: 'wrap' }}>
+            <Button size="sm" variant="secondary" title="Buka Pengaturan" icon="settings-outline" onPress={() => router.push('/(admin)/settings' as never)} />
+            <Button size="sm" variant="ghost" title="Menu AntarVoucher" icon="ticket-outline" onPress={() => router.push('/(admin)/voucher' as never)} />
+          </Row>
+        </View>
+      </Row>
+    </View>
+  );
+}

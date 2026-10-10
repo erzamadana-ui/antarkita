@@ -15,6 +15,8 @@ import { useCities } from '@/hooks/useTravel';
 import { supabase, rpc, realtimeChannel } from '@/lib/supabase';
 import { colors, font, radius, shadow, motion } from '@/lib/theme';
 import { rupiah, formatSchedule, paidViaLabel, travelStatusLabel, tripStatusLabel, cityName } from '@/lib/format';
+import { platformFeeLabel } from '@/lib/payments';
+import { useFeeDisplayMode } from '@/components/BookingSheet';
 import type { TravelBooking, TravelTrip, TravelRoute, TravelPartner, Profile } from '@/lib/types';
 
 type Full = TravelBooking & { trip: TravelTrip & { route: TravelRoute; partner: TravelPartner & { profile: Profile } } };
@@ -27,6 +29,7 @@ export default function TravelBookingDetail() {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const cities = useCities();
+  const feeMode = useFeeDisplayMode();   // v5: label "Biaya layanan AntarKita (termasuk PPN n %)" di mode voucher_only
   const [b, setB] = useState<Full | null | undefined>(undefined);
   const [tab, setTab] = useState<Tab>('ringkasan');
   const heroH = Math.round(height * 0.4);
@@ -113,7 +116,7 @@ export default function TravelBookingDetail() {
                 </View></Entrance>
                 <Entrance index={2}><View style={s.card}>
                   <Row between><Text style={font.small}>{b.is_private ? 'Carter private' : `${b.pax} kursi`}</Text><Text style={font.body}>{rupiah(b.price - b.platform_fee)}</Text></Row>
-                  <Row between style={{ marginTop: 6 }}><Text style={font.small}>Biaya platform AntarKita</Text><Text style={font.body}>{rupiah(b.platform_fee)}</Text></Row>
+                  <Row between style={{ marginTop: 6 }}><Text style={font.small}>{platformFeeLabel(feeMode)}</Text><Text style={font.body}>{rupiah(b.platform_fee)}</Text></Row>
                   <View style={s.divider} />
                   <Row between><Text style={font.h3}>Total</Text><Text style={[font.h3, { color: sc }]}>{rupiah(b.price)}</Text></Row>
                 </View></Entrance>

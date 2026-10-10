@@ -108,6 +108,26 @@ function ongkirHintOf(service: ServiceType, econ?: ServiceEconomicsPublic | null
   return `Tarif untuk driver · komisi platform ${pctLabel(comm)}`;
 }
 
+/* ───────────── AntarVoucher v5: mode tampilan rincian biaya (KONTRAK-V5 §4) ─────────────
+ * voucher_only → tidak ada baris biaya metode pembayaran; baris biaya platform berlabel
+ * "Biaya layanan AntarKita (termasuk PPN n %)". Angka TIDAK diubah (server tetap sumber kebenaran; PPN inklusif).
+ * Nilai disinkronkan oleh `useFeeDisplayMode()` (BookingSheet) dari `useVoucherConfig()` + `useTaxSettings()`.
+ * Gagal-aman: sebelum konfigurasi termuat, mode dianggap voucher_only (sama dengan FALLBACK useVoucherV5). */
+export interface FeeDisplayMode { voucherOnly: boolean; ppnPct: number; ppnInclusive: boolean }
+let feeDisplayMode: FeeDisplayMode = { voucherOnly: true, ppnPct: 11, ppnInclusive: true };
+export const getFeeDisplayMode = (): FeeDisplayMode => feeDisplayMode;
+export function setFeeDisplayMode(m: Partial<FeeDisplayMode>) {
+  const next = { ...feeDisplayMode, ...m };
+  if (next.voucherOnly !== feeDisplayMode.voucherOnly || next.ppnPct !== feeDisplayMode.ppnPct || next.ppnInclusive !== feeDisplayMode.ppnInclusive) feeDisplayMode = next;
+}
+/** Label baris biaya platform/layanan sesuai mode. */
+export function platformFeeLabel(mode: FeeDisplayMode = feeDisplayMode): string {
+  if (!mode.voucherOnly) return 'Biaya platform AntarKita';
+  return mode.ppnInclusive && mode.ppnPct > 0 ? `Biaya layanan AntarKita (termasuk PPN ${mode.ppnPct} %)` : 'Biaya layanan AntarKita';
+}
+export const platformFeeHint = (mode: FeeDisplayMode = feeDisplayMode): string =>
+  mode.voucherOnly ? 'Biaya aplikasi, terpisah dari ongkir — tidak ada biaya pembayaran' : 'Biaya aplikasi, terpisah dari ongkir';
+
 /** Baris "Biaya metode pembayaran (<Provider>)" — Rp0 + "ditanggung AntarKita" bila tidak dibebankan ke pelanggan. */
 export function paymentFeeRow(pay: PayFeeEstimate): PriceRow {
   if (pay.kind !== 'gateway') return { label: `Biaya metode pembayaran (${pay.label})`, value: 0, keep: true, hint: 'Tanpa biaya metode pembayaran' };
@@ -128,8 +148,10 @@ export function buildCheckoutRows(p: CheckoutRowsInput): PriceRow[] {
   rows.push({ label: p.ongkirLabel ?? 'Ongkir', value: p.ongkir, keep: true, hint: p.ongkirHint !== undefined ? p.ongkirHint : ongkirHintOf(p.service, p.econ) });
   if (p.ongkirExtra) rows.push(...p.ongkirExtra);
   if (p.serviceFee) rows.push({ label: 'Jasa belanja', value: p.serviceFee, hint: 'Jasa belanja oleh driver (dibagi driver & platform)' });
-  rows.push({ label: 'Biaya platform AntarKita', value: p.platformFee, keep: true, hint: 'Biaya aplikasi, terpisah dari ongkir' });
-  if (p.pay) rows.push(paymentFeeRow(p.pay));
+  // v5: label & baris biaya pembayaran mengikuti mode (voucher_only → tanpa baris biaya pembayaran). Angka tetap dari server.
+  const mode = feeDisplayMode;
+  rows.push({ label: platformFeeLabel(mode), value: p.platformFee, keep: true, hint: platformFeeHint(mode) });
+  if (p.pay && !mode.voucherOnly) rows.push(paymentFeeRow(p.pay));
   if (p.extra) rows.push(...p.extra);
   if (p.discount > 0) {
     // create_order: promo "merchant" tanpa merchant (ride/send/…) otomatis ditanggung platform
@@ -292,9 +314,10 @@ export function receiptRows(r: Receipt, providerName?: string | null): PriceRow[
   rows.push({ label: 'Ongkir', value: r.delivery_fee ?? 0, keep: true, hint: r.driver_share_note ?? null });
   if (r.intercity_fare) rows.push({ label: 'Ongkir antar kota', value: r.intercity_fare });
   if (r.service_fee) rows.push({ label: 'Jasa belanja', value: r.service_fee });
-  rows.push({ label: 'Biaya platform AntarKita', value: r.platform_fee ?? 0, keep: true });
+  rows.push({ label: platformFeeLabel(), value: r.platform_fee ?? 0, keep: true });
   const pg = r.pg_fee_customer ?? 0;
-  rows.push({ label: `Biaya metode pembayaran (${providerName ?? providerLabel(r.provider)})`, value: pg, keep: true, hint: pg === 0 && r.provider ? 'Ditanggung AntarKita' : null });
+  // v5 voucher_only: baris biaya pembayaran disembunyikan kecuali pesanan lama yang memang memungut biaya gateway (pg > 0).
+  if (!feeDisplayMode.voucherOnly || pg > 0) rows.push({ label: `Biaya metode pembayaran (${providerName ?? providerLabel(r.provider)})`, value: pg, keep: true, hint: pg === 0 && r.provider ? 'Ditanggung AntarKita' : null });
   if (r.helpers_fee) rows.push({ label: 'Pembantu angkat', value: r.helpers_fee });
   if (r.extras) rows.push({ label: 'Biaya tambahan (parkir/tol/tunggu)', value: r.extras });
   if (r.tip) rows.push({ label: 'Tip driver', value: r.tip });
