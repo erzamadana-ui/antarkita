@@ -14,7 +14,8 @@ name: Play Store AAB (rilis bertanda tangan)
 #                               Tanpa secret ini AAB tetap terbangun, tetapi aplikasi TIDAK bisa
 #                               mendaftar token FCM → semua notifikasi push mati di rilis Play.
 #
-# versionCode = github.run_number + ANDROID_VERSION_CODE_OFFSET (dibaca dari app.config.ts, fallback 100) — selalu naik.
+# versionCode = (git rev-list --count HEAD) + ANDROID_VERSION_CODE_OFFSET (dibaca dari app.config.ts, fallback 1000) — G-25:
+#   SATU deret yang sama dengan APK (android.yml); selalu naik selama riwayat commit linear. Butuh checkout fetch-depth: 0.
 # versionName = "version" di package.json.
 # Panduan lengkap: docs/rilis/CHECKLIST-GO-LIVE.md
 
@@ -89,6 +90,9 @@ jobs:
       GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g
     steps:
       - uses: actions/checkout@v4
+        with:
+          # G-25: versionCode dari jumlah commit → butuh seluruh riwayat.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -171,16 +175,17 @@ jobs:
           "
           echo "path=./google-services.json" >> "$GITHUB_OUTPUT"
 
-      - name: Hitung versionCode & versionName
+      - name: Hitung versionCode & versionName (deret tunggal APK & AAB)
         id: ver
         run: |
           OFFSET=$(grep -oE 'ANDROID_VERSION_CODE_OFFSET[[:space:]]*=[[:space:]]*[0-9]+' app.config.ts | grep -oE '[0-9]+$' | head -n1)
-          OFFSET=${OFFSET:-100}
-          CODE=$(( ${{ github.run_number }} + OFFSET ))
+          OFFSET=${OFFSET:-1000}
+          CODE=$(( $(git rev-list --count HEAD) + OFFSET ))
+          [ "$CODE" -gt 182 ] || { echo "::error::versionCode $CODE tidak melampaui deret lama (APK 182 / AAB 114) — periksa fetch-depth"; exit 1; }
           NAME=$(node -p "require('./package.json').version")
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
-          echo "versionCode=$CODE (run ${{ github.run_number }} + offset $OFFSET), versionName=$NAME"
+          echo "versionCode=$CODE (commit $(git rev-list --count HEAD) + offset $OFFSET), versionName=$NAME"
 
       - name: Prebuild proyek Android (Expo) — ${{ matrix.app }}
         env:

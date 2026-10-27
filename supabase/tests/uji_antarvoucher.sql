@@ -54,6 +54,11 @@ begin
     perform admin_unlock('123456');
     perform admin_set_antarpay_enabled(true);
     insert into app_settings (key, value) values ('payment_mode', '"gateway"'::jsonb) on conflict (key) do update set value = excluded.value;   -- 0114 v5: S8 memakai request_topup (jalur lama); kode voucher v5 diuji di uji_antarvoucher_v5.sql
+    -- 0115 go-live: berkas ini menguji keadaan 0112 (pembelian tertutup, hanya placeholder Himbara, saluran transfer bank hidup) →
+    -- rekening BCA go-live dinonaktifkan, flag pembelian ditutup, saluran bank_transfer dinyalakan (semua ikut ROLLBACK)
+    update company_bank_accounts set active = false where not is_placeholder;
+    insert into app_settings (key, value) values ('antarvoucher_purchase_enabled', 'false'::jsonb) on conflict (key) do update set value = excluded.value;
+    perform admin_set_payment_channel('bank_transfer', true);
     finA := pg_temp.av_admin('finance'); finB := pg_temp.av_admin('finance'); legal := pg_temp.av_admin('superadmin');
     vw := pg_temp.av_admin('viewer'); cs := pg_temp.av_admin('cs');
     cust := pg_temp.av_customer(); cust2 := pg_temp.av_customer();

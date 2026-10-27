@@ -4,7 +4,7 @@
 //     · admin_voucher_mutation_refund (mutasi tanpa pembelian) · admin_voucher_mutation_refund_done (ref transfer balik).
 //   • Penerbitan: admin_voucher_approve (checker ≠ pencocok) · admin_voucher_reject.
 //   • Refund voucher terbit: admin_voucher_refund_request (maker) → admin_voucher_refund_execute (checker ≠ maker).
-//   • Rekening resmi: admin_voucher_bank_list / _upsert / _verify('finance'|'legal').
+//   • Rekening resmi: admin_voucher_bank_list / _upsert (tambah/ubah, bank_code bebas mis. 'bca') / _verify('finance'|'legal') / _verify_owner(p_id, p_reason) (v6).
 //   • Rekonsiliasi: admin_wallet_reconcile(p_from, p_to). Sakelar: admin_set_antarvoucher_purchase_enabled.
 // Semua aksi yang mengubah data butuh PIN panel (admin_require_unlock) + izin RBAC; server penentu akhir.
 // PRINSIP: saldo HANYA terbit dari mutasi bank yang tercocok — bukti/screenshot tidak pernah menambah saldo.
@@ -24,6 +24,7 @@ import { useAuth } from '@/store/auth';
 import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import { asList, shortId, todayWib, useAdminCan } from '@/lib/admin';
 import { voucherFloatStatus, formatVoucherCode, type VoucherFloatStatus, type VoucherCode, type VoucherCodeStatus } from '@/lib/voucherV5';
+import { BANK_OPTIONS, bankMeta } from '@/lib/voucher';
 import { ErrorNote, fmtDate, fmtAgo, moneyCol, Trunc, WideTableHint, usePager, Pager } from './_shared';
 
 /* ───────────────────────────── Tipe (kontrak 0112) ───────────────────────────── */
@@ -51,6 +52,8 @@ interface BankAccount {
   id: string; bank_code: string; bank_name: string; account_no: string | null; account_name: string | null; is_placeholder: boolean; active: boolean;
   display_order: number; finance_verified_by: string | null; finance_verified_at: string | null; legal_verified_by: string | null; legal_verified_at: string | null;
   note: string | null; updated_at: string; public_ok: boolean;
+  /** 0115 (go-live): verifikasi pemilik lewat admin_voucher_bank_verify_owner — opsional (server < 0115 tidak mengirim). */
+  owner_verified_by?: string | null; owner_verified_at?: string | null; owner_verified_reason?: string | null;
 }
 interface Reconcile {
   from: string; to: string; ok: boolean; voucher_terbit: number; mutasi_bank_tercocok: number; selisih_voucher_vs_bank: number;
@@ -743,6 +746,11 @@ function BanksTab({ banks, loading, reload }: { banks: BankAccount[]; loading: b
   const [edit, setEdit] = useState<BankAccount | null>(null);
   const [f, setF] = useState({ account_no: '', account_name: '', active: false, display_order: '', note: '' });
   const [busy, setBusy] = useState<string | null>(null);
+  // v6: tambah rekening baru (bank_code bebas — BCA dkk., server yang memvalidasi) + verifikasi pemilik beralasan
+  const [adding, setAdding] = useState(false);
+  const [na, setNa] = useState({ bank_code: 'bca', bank_name: '', account_no: '', account_name: '', display_order: '', note: '' });
+  const [ownerFor, setOwnerFor] = useState<BankAccount | null>(null);
+  const [ownerReason, setOwnerReason] = useState('');
 
   useEffect(() => {
     supabase.from('app_settings').select('value').eq('key', 'voucher_legal_entity_name').maybeSingle()
@@ -765,7 +773,7 @@ function BanksTab({ banks, loading, reload }: { banks: BankAccount[]; loading: b
       const ok = await runAction(() => rpc<{ public_ok: boolean }>('admin_voucher_bank_upsert', { p: {
         id: edit.id, account_no: noDigits || null, account_name: f.account_name.trim() || null, active: f.active,
         display_order: f.display_order.trim() ? Number(digits(f.display_order)) : null, note: f.note.trim() || null,
-      } }), (r) => ((r as { public_ok?: boolean })?.public_ok ? `Rekening ${edit.bank_name} disimpan — tampil ke pengguna` : `Rekening ${edit.bank_name} disimpan — belum tampil ke pengguna (butuh verifikasi Finance & Legal)`), reload);
+      } }), (r) => ((r as { public_ok?: boolean })?.public_ok ? `Rekening ${edit.bank_name} disimpan — tampil ke pengguna` : `Rekening ${edit.bank_name} disimpan — belum tampil ke pengguna (butuh verifikasi Finance & Legal, atau pemilik)`), reload);
       if (ok) setEdit(null);
     } finally { setBusy(null); }
   };
@@ -775,6 +783,34 @@ function BanksTab({ banks, loading, reload }: { banks: BankAccount[]; loading: b
       await runAction(() => rpc('admin_voucher_bank_verify', { p_id: b.id, p_as: as }), `Rekening ${b.bank_name} diverifikasi ${as === 'finance' ? 'Finance' : 'Legal'}`, reload);
     } finally { setBusy(null); }
   };
+  /** 0115: verifikasi pemilik (superadmin, izin payment_config) — `admin_voucher_bank_verify_owner(p_id, p_reason)` → {id, public_ok}.
+   *  Pengganti maker≠checker Finance/Legal saat hanya ada satu admin; alasan ≥ 10 karakter tercatat di audit_logs + security_events. */
+  const verifyOwner = async () => {
+    const b = ownerFor;
+    const reason = ownerReason.trim();
+    if (!b || reason.length < 10 || busy) return;
+    setBusy(`owner:${b.id}`);
+    try {
+      const ok = await runAction(() => rpc<{ id: string; public_ok: boolean }>('admin_voucher_bank_verify_owner', { p_id: b.id, p_reason: reason }),
+        (r) => ((r as { public_ok?: boolean })?.public_ok ? `Rekening ${b.bank_name} diverifikasi pemilik — tampil ke pengguna` : `Rekening ${b.bank_name} diverifikasi pemilik — belum tampil ke pengguna (cek syarat lain)`), reload);
+      if (ok) { setOwnerFor(null); setOwnerReason(''); }
+    } finally { setBusy(null); }
+  };
+  const openAdd = () => { setNa({ bank_code: 'bca', bank_name: bankMeta('bca').label, account_no: '', account_name: entity, display_order: String(banks.length + 1), note: '' }); setAdding(true); };
+  const naDigits = digits(na.account_no);
+  const naErr = naDigits && !/^\d{8,20}$/.test(naDigits) ? 'Nomor rekening harus 8–20 digit angka' : null;
+  const naNameErr = !na.bank_name.trim() ? 'Nama bank wajib diisi' : null;
+  const addBank = async () => {
+    if (naErr || naNameErr || busy) return;
+    setBusy('add');
+    try {
+      const ok = await runAction(() => rpc<{ id: string; public_ok: boolean }>('admin_voucher_bank_upsert', { p: {
+        bank_code: na.bank_code, bank_name: na.bank_name.trim(), account_no: naDigits || null, account_name: na.account_name.trim() || null,
+        display_order: na.display_order.trim() ? Number(digits(na.display_order)) : null, note: na.note.trim() || null,
+      } }), `Rekening ${na.bank_name.trim()} ditambahkan — nonaktif & belum terverifikasi (lanjutkan: Ubah → Aktif, lalu verifikasi)`, reload);
+      if (ok) setAdding(false);
+    } finally { setBusy(null); }
+  };
 
   const badges = (b: BankAccount) => {
     const out: { text: string; tone: ToneKey; icon?: React.ComponentProps<typeof Ionicons>['name'] }[] = [];
@@ -782,33 +818,42 @@ function BanksTab({ banks, loading, reload }: { banks: BankAccount[]; loading: b
     else if (b.public_ok) out.push({ text: 'Tampil ke pengguna', tone: 'ok', icon: 'eye-outline' });
     else {
       const miss = [!b.finance_verified_at && 'Finance', !b.legal_verified_at && 'Legal'].filter(Boolean).join('/');
-      if (miss) out.push({ text: `Menunggu verifikasi ${miss}`, tone: 'wait', icon: 'hourglass-outline' });
+      if (miss && !b.owner_verified_at) out.push({ text: `Menunggu verifikasi ${miss} (atau pemilik)`, tone: 'wait', icon: 'hourglass-outline' });
       if (!b.active) out.push({ text: 'Nonaktif', tone: 'off' });
       if (entity && b.account_name && !nameOk(b)) out.push({ text: 'Nama ≠ badan usaha', tone: 'bad', icon: 'warning-outline' });
-      if (!miss && b.active && nameOk(b)) out.push({ text: 'Belum lolos syarat tampil', tone: 'bad' });
+      if ((!miss || b.owner_verified_at) && b.active && nameOk(b)) out.push({ text: 'Belum lolos syarat tampil', tone: 'bad' });
     }
     return out;
   };
 
   return (
     <>
-      <Note tone="bad" icon="warning" title="Jangan isi nomor rekening sebelum rekening atas nama PT benar-benar dibuka & disetujui Finance dan Legal">
+      <Note tone="bad" icon="warning" title="Jangan isi nomor rekening sebelum rekening atas nama perusahaan benar-benar dibuka & disetujui">
         <Text style={font.body}>
           Rekening hanya tampil ke pengguna bila: bukan placeholder, nomor 8–20 digit, atas nama badan usaha persis "{entity || '…'}" (setelan voucher_legal_entity_name), aktif,
-          diverifikasi Finance DAN Legal oleh dua admin berbeda. Mengubah nomor atau nama pemilik membatalkan verifikasi — harus diverifikasi ulang.
+          dan diverifikasi — Finance DAN Legal oleh dua admin berbeda, ATAU "Verifikasi (pemilik)" oleh superadmin dengan alasan tertulis (0115). Mengubah nomor atau nama pemilik membatalkan verifikasi — harus diverifikasi ulang.
         </Text>
       </Note>
 
-      <Panel title={`Rekening resmi PT · Himbara (${banks.length})`} subtitle="Tujuan transfer pembelian AntarVoucher. Mengubah data butuh izin payment_config; verifikasi butuh izin reconcile." icon="business-outline" padded={false}>
+      <Panel title={`Rekening resmi perusahaan (${banks.length})`} subtitle="Tujuan transfer pembelian AntarVoucher. Mengubah/menambah data butuh izin payment_config; verifikasi butuh izin reconcile." icon="business-outline" padded={false}
+        right={can('payment_config') ? <Button size="sm" title="Tambah rekening" icon="add-circle-outline" onPress={openAdd} /> : undefined}>
         <DataTable rows={banks as unknown as Record<string, unknown>[]} emptyText={loading ? 'Memuat…' : 'Belum ada rekening'} emptyIcon="business-outline"
           columns={[
-            { key: 'bank_name', label: 'Bank', width: 200, render: (r) => { const b = r as unknown as BankAccount; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.bodyStrong} title={b.bank_name}>{b.bank_name}</Trunc><Text style={font.tiny}>kode {b.bank_code.toUpperCase()} · urutan {b.display_order}</Text></View>; } },
+            { key: 'bank_name', label: 'Bank', width: 220, render: (r) => { const b = r as unknown as BankAccount; const m = bankMeta(b.bank_code, b.bank_name); return (
+              <Row gap={8} style={{ minWidth: 0, alignSelf: 'stretch' }}>
+                <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: m.color + '1A', alignItems: 'center', justifyContent: 'center' }}>
+                  {m.code === 'other' ? <Ionicons name="business" size={16} color={m.color} /> : <Text style={{ fontSize: m.short.length > 3 ? 9 : 11, fontWeight: '800', color: m.color }}>{m.short}</Text>}
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}><Trunc style={font.bodyStrong} title={b.bank_name}>{b.bank_name}</Trunc><Text style={font.tiny}>kode {b.bank_code.toUpperCase()} · urutan {b.display_order}</Text></View>
+              </Row>
+            ); } },
             { key: 'account_no', label: 'Nomor · pemilik', width: 220, flex: 1, render: (r) => { const b = r as unknown as BankAccount; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Text style={font.mono} selectable>{b.account_no ?? '— belum diisi —'}</Text><Trunc style={[font.small, entity && b.account_name && !nameOk(b) ? { color: adminTone.red } : null]} title={b.account_name ?? ''}>{b.account_name ? `a.n. ${b.account_name}` : 'nama pemilik belum diisi'}</Trunc></View>; } },
             { key: 'status', label: 'Status', width: 210, render: (r) => { const b = r as unknown as BankAccount; return <View style={{ gap: 4, alignItems: 'flex-start' }}>{badges(b).map((x) => <Pill key={x.text} text={x.text} tone={x.tone} icon={x.icon} />)}</View>; } },
             { key: 'verif', label: 'Verifikasi', width: 190, render: (r) => { const b = r as unknown as BankAccount; const who = (id: string | null) => (id ? `${shortId(id)}${id === me ? ' (Anda)' : ''}` : ''); return (
               <View style={{ gap: 2, minWidth: 0, alignSelf: 'stretch' }}>
                 <Trunc style={[font.small, { color: b.finance_verified_at ? TONE.ok.fg : adminTone.muted }]} title={who(b.finance_verified_by)}>Finance: {b.finance_verified_at ? `${fmtDate(b.finance_verified_at, false)} · ${who(b.finance_verified_by)}` : 'belum'}</Trunc>
                 <Trunc style={[font.small, { color: b.legal_verified_at ? TONE.ok.fg : adminTone.muted }]} title={who(b.legal_verified_by)}>Legal: {b.legal_verified_at ? `${fmtDate(b.legal_verified_at, false)} · ${who(b.legal_verified_by)}` : 'belum'}</Trunc>
+                {b.owner_verified_at ? <Trunc style={[font.small, { color: TONE.ok.fg }]} title={b.owner_verified_reason ?? ''}>Pemilik: {fmtDate(b.owner_verified_at, false)} · {who(b.owner_verified_by ?? null)}</Trunc> : null}
               </View>
             ); } },
             { key: 'actions', label: 'Aksi', width: adminTable.actionsWideW, align: 'right', render: (r) => {
@@ -818,10 +863,12 @@ function BanksTab({ banks, loading, reload }: { banks: BankAccount[]; loading: b
               return (
                 <RowActions
                   primary={[can('payment_config') && { key: 'ed', label: 'Ubah', icon: 'create-outline', variant: 'soft', onPress: () => openEdit(b) }]}
-                  menu={can('reconcile') ? [
-                    { key: 'vf', label: b.finance_verified_at ? 'Verifikasi ulang Finance' : 'Verifikasi Finance', icon: 'shield-checkmark-outline', disabled: placeholder || busy === `finance:${b.id}`, hint: placeholder ? 'isi nomor rekening dulu' : undefined, onPress: () => { verify(b, 'finance'); } },
-                    { key: 'vl', label: b.legal_verified_at ? 'Verifikasi ulang Legal' : 'Verifikasi Legal', icon: 'document-lock-outline', disabled: placeholder || iAmFinance || busy === `legal:${b.id}`, hint: placeholder ? 'isi nomor rekening dulu' : iAmFinance ? 'harus admin lain dari verifikator Finance' : undefined, onPress: () => { verify(b, 'legal'); } },
-                  ] : []}
+                  menu={[
+                    can('reconcile') && { key: 'vf', label: b.finance_verified_at ? 'Verifikasi ulang Finance' : 'Verifikasi Finance', icon: 'shield-checkmark-outline', disabled: placeholder || busy === `finance:${b.id}`, hint: placeholder ? 'isi nomor rekening dulu' : undefined, onPress: () => { verify(b, 'finance'); } },
+                    can('reconcile') && { key: 'vl', label: b.legal_verified_at ? 'Verifikasi ulang Legal' : 'Verifikasi Legal', icon: 'document-lock-outline', disabled: placeholder || iAmFinance || busy === `legal:${b.id}`, hint: placeholder ? 'isi nomor rekening dulu' : iAmFinance ? 'harus admin lain dari verifikator Finance' : undefined, onPress: () => { verify(b, 'legal'); } },
+                    // 0115: jalur pemilik — superadmin (payment_config), alasan ≥ 10 karakter
+                    can('payment_config') && { key: 'vo', label: b.owner_verified_at ? 'Verifikasi ulang (pemilik)' : 'Verifikasi (pemilik)', icon: 'ribbon-outline', disabled: placeholder || busy === `owner:${b.id}`, hint: placeholder ? 'isi nomor rekening dulu' : 'superadmin · alasan ≥ 10 karakter', onPress: () => { setOwnerReason(''); setOwnerFor(b); } },
+                  ]}
                 />
               );
             } },
@@ -847,7 +894,7 @@ function BanksTab({ banks, loading, reload }: { banks: BankAccount[]; loading: b
           <Row between style={{ gap: 10 }}>
             <View style={{ flex: 1 }}>
               <Text style={font.bodyStrong}>Aktif</Text>
-              <Text style={font.small}>Tetap tidak tampil ke pengguna sebelum diverifikasi Finance & Legal.</Text>
+              <Text style={font.small}>Tetap tidak tampil ke pengguna sebelum diverifikasi (Finance & Legal, atau pemilik).</Text>
             </View>
             <Switch value={f.active} onValueChange={(v) => setF((p) => ({ ...p, active: v }))} trackColor={{ true: colors.success, false: colors.border }} thumbColor="#fff" />
           </Row>
@@ -856,6 +903,47 @@ function BanksTab({ banks, loading, reload }: { banks: BankAccount[]; loading: b
           <Row gap={8} style={{ justifyContent: 'flex-end' }}>
             <Button size="sm" variant="ghost" title="Batal" onPress={() => setEdit(null)} />
             <Button size="sm" title="Simpan" icon="save-outline" loading={busy === 'save'} disabled={!!editErr} onPress={save} />
+          </Row>
+        </View>
+      </AdminDialog>
+
+      {/* v6: tambah rekening resmi baru (mis. BCA) — dibuat NONAKTIF & tanpa verifikasi; server memvalidasi bank_code */}
+      <AdminDialog visible={adding} onClose={() => setAdding(false)} width={560} title="Tambah rekening resmi perusahaan"
+        subtitle="Butuh PIN panel & izin payment_config. Rekening baru nonaktif dan belum terverifikasi (Finance+Legal, atau pemilik).">
+        <View style={{ gap: 10 }}>
+          <Note tone="wait" icon="warning-outline">Hanya rekening atas nama badan usaha yang sudah dibuka. Jangan memakai rekening pribadi atau mengarang nomor.</Note>
+          <AdminSelect label="Bank" icon="business-outline" width="100%" value={na.bank_code}
+            options={BANK_OPTIONS.map((m) => ({ value: m.code, label: m.label, sublabel: `kode ${m.code}` }))}
+            onChange={(v) => setNa((p) => ({ ...p, bank_code: v, bank_name: v === 'other' ? '' : bankMeta(v).label }))} />
+          <Input label="Nama bank (tampil ke pengguna)" placeholder="mis. Bank Central Asia (BCA)" value={na.bank_name} onChangeText={(v) => setNa((p) => ({ ...p, bank_name: v }))} error={naNameErr} />
+          <Input label="Nomor rekening" placeholder="8–20 digit, tanpa spasi (boleh kosong = placeholder)" value={na.account_no} onChangeText={(v) => setNa((p) => ({ ...p, account_no: digits(v) }))} keyboardType="number-pad" maxLength={20} error={naErr} />
+          <View style={{ gap: 4 }}>
+            <Input label="Nama pemilik rekening" placeholder={entity || 'nama badan usaha'} value={na.account_name} onChangeText={(v) => setNa((p) => ({ ...p, account_name: v }))} />
+            <Text style={[font.small, na.account_name && entity && na.account_name.trim().toLowerCase() !== entity.trim().toLowerCase() ? { color: adminTone.red } : null]}>
+              Harus sama persis dengan nama badan usaha di setelan voucher_legal_entity_name: "{entity || '—'}".
+            </Text>
+          </View>
+          <Row gap={10} style={{ flexWrap: 'wrap' }}>
+            <View style={{ width: 120 }}><Input label="Urutan tampil" value={na.display_order} onChangeText={(v) => setNa((p) => ({ ...p, display_order: digits(v) }))} keyboardType="number-pad" /></View>
+            <View style={{ flex: 1, minWidth: 200 }}><Input label="Catatan" value={na.note} onChangeText={(v) => setNa((p) => ({ ...p, note: v }))} /></View>
+          </Row>
+          <Row gap={8} style={{ justifyContent: 'flex-end' }}>
+            <Button size="sm" variant="ghost" title="Batal" onPress={() => setAdding(false)} />
+            <Button size="sm" title="Tambah" icon="add-circle-outline" loading={busy === 'add'} disabled={!!naErr || !!naNameErr} onPress={addBank} />
+          </Row>
+        </View>
+      </AdminDialog>
+
+      {/* v6: verifikasi pemilik (GM) dengan alasan ≥ 10 karakter → admin_voucher_bank_verify_owner */}
+      <AdminDialog visible={!!ownerFor} onClose={() => setOwnerFor(null)} width={520} title={`Verifikasi pemilik — ${ownerFor?.bank_name ?? ''}`}
+        subtitle={ownerFor ? `${ownerFor.account_no ?? '—'} · a.n. ${ownerFor.account_name ?? '—'}. Butuh PIN panel & izin payment_config (superadmin); alasan tercatat di log aktivitas & security_events.` : undefined}>
+        <View style={{ gap: 10 }}>
+          <Text style={font.small}>Tulis dasar verifikasi, mis. "Buku tabungan BCA a.n. PT dicek langsung oleh GM 27/10/2026". Minimal 10 karakter.</Text>
+          <Input value={ownerReason} onChangeText={setOwnerReason} multiline style={{ minHeight: 72 }} placeholder="Alasan / dasar verifikasi (min. 10 karakter)" maxLength={500}
+            error={ownerReason.length > 0 && ownerReason.trim().length < 10 ? 'Minimal 10 karakter' : null} />
+          <Row gap={8} style={{ justifyContent: 'flex-end' }}>
+            <Button size="sm" variant="ghost" title="Batal" onPress={() => setOwnerFor(null)} />
+            <Button size="sm" title="Verifikasi (pemilik)" icon="ribbon-outline" loading={!!ownerFor && busy === `owner:${ownerFor.id}`} disabled={ownerReason.trim().length < 10} onPress={verifyOwner} />
           </Row>
         </View>
       </AdminDialog>
@@ -997,7 +1085,7 @@ function SwitchTab({ banks }: { banks: BankAccount[] }) {
           <View style={{ gap: 4 }}>
             <Text style={font.small}>Rekening siap tampil: {ready} dari {banks.length}{ready === 0 ? ' — server menolak mengaktifkan (VOUCHER_BANK_NOT_READY).' : ''}</Text>
             {pub ? <Text style={font.small}>AntarVoucher (saldo): {pub.enabled ? 'aktif' : 'nonaktif'} · nominal {rupiah(pub.min)}–{rupiah(pub.max)} · batas transfer {pub.ttl_hours} jam.</Text> : null}
-            <Text style={font.small}>Pembelian benar-benar terbuka bagi pengguna hanya bila: sakelar ini aktif, AntarVoucher (saldo) aktif, dan ada ≥ 1 rekening terverifikasi Finance & Legal.</Text>
+            <Text style={font.small}>Pembelian benar-benar terbuka bagi pengguna hanya bila: sakelar ini aktif, AntarVoucher (saldo) aktif, dan ada ≥ 1 rekening terverifikasi (Finance & Legal, atau pemilik).</Text>
           </View>
         </View>
       </Panel>

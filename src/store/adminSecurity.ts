@@ -30,7 +30,12 @@ export const useAdminSecurity = create<AdminSecurityState>((set, get) => ({
     } catch { set({ loaded: true }); return get().status; }
   },
   unlock: async (pin) => {
-    const st = await rpc<AdminPinStatus>('admin_unlock', { p_pin: pin });
+    // 0115 G-06: PIN salah tidak lagi RAISE (supaya counter & lockout tersimpan) — RPC mengembalikan {ok:false, error, failed, locked_until}
+    const st = await rpc<AdminPinStatus & { ok?: boolean; error?: string; failed?: number }>('admin_unlock', { p_pin: pin });
+    if (st && st.ok === false) {
+      set((s) => ({ status: s.status ? { ...s.status, unlocked: false, locked_until: st.locked_until ?? s.status.locked_until } : s.status }));
+      throw new Error(st.error || 'PIN salah');
+    }
     const norm = { ...st, has_pin: !!st.has_pin, unlocked: !!st.unlocked };
     set({ status: norm, modal: false });
     return norm;

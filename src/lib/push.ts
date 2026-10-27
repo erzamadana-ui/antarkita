@@ -42,7 +42,7 @@ import { rpc } from './supabase';
 import { APP } from './app';
 import { play as playSound, startRing, stopRing } from './sound';
 import { useCall } from './call';
-import { notificationData, notifTargetFor } from '@/hooks/useNotifications';
+import { notificationData, notifTargetFor, orderRoute } from '@/hooks/useNotifications';
 
 export type NotifyKind = 'order' | 'message' | 'call';
 
@@ -135,7 +135,7 @@ export function routeForPushData(raw: RawData): string | null {
     // Bila sudah lewat, jangan buka layar panggilan kosong — arahkan ke pesanannya bila ada.
     const call = useCall.getState();
     if ((call.phase === 'incoming' || call.phase === 'connecting' || call.phase === 'active') && call.callId) return `/call/${call.callId}`;
-    return orderId ? `/order/${orderId}` : null;
+    return orderId ? orderRoute(orderId) : null;
   }
   if (route === 'chat' && orderId) return `/order/${orderId}/chat`;
 

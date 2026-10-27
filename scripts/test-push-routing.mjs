@@ -127,6 +127,11 @@ console.log('push.ts — uji rute notifikasi & pendaftaran token');
   check('aplikasi Mitra: AntarPay → halaman penghasilan, bukan halaman pelanggan', () => {
     assert.equal(mitra.routeForPushData({ withdrawal_id: 'w-1' }), '/(driver)/earnings');
   });
+  check('aplikasi Mitra: notifikasi pesanan → layar order driver (G-24), chat tetap /order/:id/chat', () => {
+    assert.equal(mitra.routeForPushData({ order_id: 'o-5', kind: 'order', notification_id: '1' }), '/driver/order/o-5');
+    assert.equal(mitra.routeForPushData({ call_id: 'c-1', order_id: 'o-5', caller_id: 'u-1', route: 'call' }), '/driver/order/o-5');
+    assert.equal(mitra.routeForPushData({ order_id: 'o-5', message_id: '9', route: 'chat' }), '/order/o-5/chat');
+  });
   const admin = build({ app: 'admin' }).push;
   check('aplikasi Admin: tanpa tujuan → tidak memaksa membuka /inbox (rute itu tidak ada di Admin)', () => {
     assert.equal(admin.routeForPushData({ kind: 'system' }), null);

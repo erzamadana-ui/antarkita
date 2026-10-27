@@ -9,6 +9,7 @@ import { useT } from '@/lib/i18n';
 import { useAuth } from '@/store/auth';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { APP, APP_NAME, APP_URL } from '@/lib/app';
+import { ApkBanner } from '@/components/ApkDownload';
 
 export default function Login() {
   const router = useRouter();
@@ -64,6 +65,8 @@ export default function Login() {
           </Pressable>
         ) : <Text style={[font.tiny, { textAlign: 'center', padding: 6 }]}>Akun admin dibuat oleh admin lain lewat menu Pengguna.</Text>}
       </View></Entrance>
+      {/* Web (pelanggan/mitra): tautan unduh APK Android */}
+      <Entrance index={3} style={{ marginTop: 14 }}><ApkBanner /></Entrance>
     </Screen>
   );
 }

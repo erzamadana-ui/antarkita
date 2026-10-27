@@ -10,7 +10,7 @@
 // pemanggilnya (RootLayout, kotak masuk, useDriver, layar chat) tidak perlu tahu bedanya.
 import { play as playSound, startRing, stopRing } from './sound';
 import { APP } from './app';
-import { notificationData, notifTargetFor } from '@/hooks/useNotifications';
+import { notificationData, notifTargetFor, orderRoute } from '@/hooks/useNotifications';
 
 export type NotifyKind = 'order' | 'message' | 'call';
 
@@ -36,7 +36,7 @@ export function routeForPushData(raw: Record<string, unknown> | null | undefined
   const d = (raw ?? {}) as Record<string, unknown>;
   const orderId = typeof d.order_id === 'string' ? d.order_id : undefined;
   if (d.route === 'chat' && orderId) return `/order/${orderId}/chat`;
-  if (d.route === 'call') return orderId ? `/order/${orderId}` : null;
+  if (d.route === 'call') return orderId ? orderRoute(orderId) : null;
   const target = notifTargetFor(notificationData({ data: d, merchant_id: null }));
   if (target) return target.route;
   return APP === 'admin' ? null : '/inbox';

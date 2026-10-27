@@ -20,6 +20,42 @@ export interface VoucherStatusPublic {
 
 export interface VoucherBankAccount { bank_code: string; bank_name: string; account_no: string; account_name: string }
 
+/** Tampilan per bank (label, singkatan untuk "logo" teks, warna). Kode datang dari server
+ *  (`voucher_bank_accounts_public()` / `company_bank_accounts.bank_code`); kode yang tidak dikenal
+ *  jatuh ke `other` (ikon generik) — klien tidak pernah menolak bank yang dikembalikan server. */
+export interface BankMeta { code: string; label: string; short: string; color: string }
+export const BANK_META: Record<string, BankMeta> = {
+  bca: { code: 'bca', label: 'Bank Central Asia (BCA)', short: 'BCA', color: '#0060AF' },
+  bri: { code: 'bri', label: 'Bank Rakyat Indonesia (BRI)', short: 'BRI', color: '#00529C' },
+  bni: { code: 'bni', label: 'Bank Negara Indonesia (BNI)', short: 'BNI', color: '#F15A23' },
+  mandiri: { code: 'mandiri', label: 'Bank Mandiri', short: 'MDR', color: '#003D79' },
+  btn: { code: 'btn', label: 'Bank Tabungan Negara (BTN)', short: 'BTN', color: '#005BAA' },
+  bsi: { code: 'bsi', label: 'Bank Syariah Indonesia (BSI)', short: 'BSI', color: '#00A39D' },
+  cimb: { code: 'cimb', label: 'CIMB Niaga', short: 'CIMB', color: '#7B1F2B' },
+  permata: { code: 'permata', label: 'Bank Permata', short: 'PMT', color: '#00704A' },
+  danamon: { code: 'danamon', label: 'Bank Danamon', short: 'DNM', color: '#E4002B' },
+  seabank: { code: 'seabank', label: 'SeaBank', short: 'SEA', color: '#F47721' },
+  jago: { code: 'jago', label: 'Bank Jago', short: 'JAGO', color: '#F5A623' },
+  other: { code: 'other', label: 'Bank lain', short: 'BANK', color: '#5B6B7A' },
+};
+/** Daftar pilihan bank untuk admin saat menambah rekening (urutan tampil). */
+export const BANK_OPTIONS: BankMeta[] = ['bca', 'bri', 'bni', 'mandiri', 'btn', 'bsi', 'cimb', 'permata', 'danamon', 'seabank', 'jago', 'other'].map((c) => BANK_META[c]);
+/** Meta bank dari kode; bila kode tidak dikenal, coba tebak dari nama bank; sisanya generik. */
+export function bankMeta(code?: string | null, name?: string | null): BankMeta {
+  const c = (code ?? '').trim().toLowerCase();
+  if (c && BANK_META[c]) return BANK_META[c];
+  const n = (name ?? '').toLowerCase();
+  if (n) {
+    for (const m of BANK_OPTIONS) if (m.code !== 'other' && (n.includes(m.code) || n.includes(m.short.toLowerCase()))) return m;
+    if (n.includes('central asia')) return BANK_META.bca;
+    if (n.includes('rakyat')) return BANK_META.bri;
+    if (n.includes('negara indonesia')) return BANK_META.bni;
+    if (n.includes('tabungan negara')) return BANK_META.btn;
+    if (n.includes('syariah indonesia')) return BANK_META.bsi;
+  }
+  return { ...BANK_META.other, label: (name ?? '').trim() || BANK_META.other.label };
+}
+
 export interface VoucherPurchase {
   id: string;
   reference: string;
@@ -39,6 +75,8 @@ export interface VoucherPurchase {
   reason?: string | null;
   /** Hanya ada selama rekening masih terverifikasi (my_voucher_purchases). */
   bank_name?: string | null;
+  /** Opsional — server lama tidak mengirimnya; klien menebak dari bank_name (bankMeta). */
+  bank_code?: string | null;
   account_no?: string | null;
   account_name?: string | null;
   idempotent?: boolean;

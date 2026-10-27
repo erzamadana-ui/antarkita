@@ -13,6 +13,7 @@ import { rpc, supabase } from '@/lib/supabase';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { marketCategoryLabel } from '@/lib/format';
 import { qualityColor } from '../shared';
+import { ApkBanner } from '@/components/ApkDownload';
 
 const CATS = ['sayur', 'buah', 'bumbu', 'daging_ikan', 'sembako', 'lainnya'];
 const digits = (v: string) => v.replace(/\D/g, '');
@@ -160,6 +161,7 @@ export default function VendorAccount() {
         {merchant ? <Button title="Beralih ke Mode Merchant" variant="secondary" icon="storefront-outline" onPress={async () => { await setMode('merchant'); router.replace('/(merchant)' as never); }} /> : null}
         <Button title="Keluar" variant="outline" color={colors.danger} icon="log-out-outline" onPress={confirmSignOut} />
       </Entrance>
+      <ApkBanner style={{ marginTop: 22 }} />
       <Row style={{ justifyContent: 'center', marginTop: 24 }}><Text style={font.tiny}>AntarKita Mitra v3.0</Text></Row>
     </Screen>
   );

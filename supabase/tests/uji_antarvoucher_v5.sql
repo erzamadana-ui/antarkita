@@ -3,6 +3,7 @@
 -- (SLA, batch, settle ok/failed), pemantau SLA, target kota, blokir top up gateway, mode reversibel, PPh memo.
 -- Satu transaksi, di-ROLLBACK (RAISE 'SIMULASI_SELESAI'). Lokal: scripts/db-lokal.sh test supabase/tests/uji_antarvoucher_v5.sql
 -- Mengandaikan akun uji seed.sql (a0..01 superadmin PIN 123456, a0..02 pelanggan saldo 200.000, a0..03 driver motor saldo 100.000).
+-- 0115: rekening BCA go-live juga lolos public_ok → banks ≥ 1 (bukan tepat 1).
 -- Kode baris: S<nomor> OK|BUG (penghitung db-lokal.sh); S<nomor> = V5-<nomor>.
 
 create or replace function pg_temp.v5_as(p_uid uuid) returns void language sql as $$
@@ -80,7 +81,7 @@ begin
     perform pg_temp.v5_as(legal); perform admin_voucher_bank_verify(bri, 'legal');
     perform pg_temp.v5_as(adm); perform admin_set_antarvoucher_purchase_enabled(true);
     r2 := voucher_public_config();
-    ok := payment_mode() = 'voucher_only' and (r2->>'purchase_enabled')::boolean and jsonb_array_length(r2->'banks') = 1 and jsonb_typeof(r2->'denominations') = 'array'
+    ok := payment_mode() = 'voucher_only' and (r2->>'purchase_enabled')::boolean and jsonb_array_length(r2->'banks') >= 1 and jsonb_typeof(r2->'denominations') = 'array'
           and (r2->>'cap_customer')::bigint = 2000000 and (r2->'tax'->>'ppn_pct')::numeric = 11 and (driver_deposit_status()->>'required')::boolean;
     log := log || format('S0 %s persiapan: payment_mode=%s purchase_enabled=%s bank=%s denominasi=%s cap=%s/%s ppn=%s%%',
       case when ok then 'OK' else 'BUG' end, payment_mode(), r2->>'purchase_enabled', jsonb_array_length(r2->'banks'), r2->'denominations', r2->>'cap_customer', r2->>'cap_partner', r2->'tax'->>'ppn_pct') || E'\n';

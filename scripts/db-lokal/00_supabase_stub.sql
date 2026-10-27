@@ -40,6 +40,9 @@
 --  10. Placeholder public.qa_run_script(bigint, text) — ada di produksi
 --               tanpa migrasi; 0086 melakukan ALTER FUNCTION padanya.
 --  11. _lokal.migrasi — pencatat migrasi yang sudah diterapkan (db-lokal.sh).
+--  12. Shim supabase_vault: vault.secrets, view vault.decrypted_secrets,
+--               vault.create_secret/update_secret (0116 push_dispatch_secret;
+--               plaintext, hanya bila ekstensi supabase_vault tidak ada).
 -- Juga: hak bawaan proyek Supabase pada skema public (default privileges
 -- FOR ROLE postgres → anon/authenticated/service_role), dan kepemilikan
 -- skema auth/storage oleh supabase_auth_admin/supabase_storage_admin.
@@ -445,3 +448,47 @@ create table if not exists _lokal.migrasi (
   nama       text primary key,
   applied_at timestamptz not null default now()
 );
+
+-- ---------------------------------------------------------------------
+-- 12. Shim supabase_vault (0116 push_dispatch_secret) — HANYA bila ekstensi
+--     supabase_vault tidak ada. Menyimpan secret APA ADANYA (plaintext) di
+--     vault.secrets; di produksi kolom `secret` terenkripsi dan hanya view
+--     vault.decrypted_secrets yang membukanya. Bentuk tabel/view/fungsi
+--     mengikuti supabase_vault 0.3: vault.secrets, vault.decrypted_secrets,
+--     vault.create_secret(new_secret, new_name, new_description, new_key_id),
+--     vault.update_secret(secret_id, new_secret, new_name, new_description, new_key_id).
+-- ---------------------------------------------------------------------
+do $vaultstub$
+begin
+  if exists (select 1 from pg_extension where extname = 'supabase_vault') then return; end if;
+  execute 'create schema if not exists vault';
+  execute $t$create table if not exists vault.secrets (
+    id          uuid primary key default gen_random_uuid(),
+    name        text unique,
+    description text not null default '',
+    secret      text not null,
+    key_id      uuid,
+    nonce       bytea,
+    created_at  timestamptz not null default now(),
+    updated_at  timestamptz not null default now())$t$;
+  execute $v$create or replace view vault.decrypted_secrets as
+    select id, name, description, secret, secret as decrypted_secret, key_id, nonce, created_at, updated_at from vault.secrets$v$;
+  execute $f$create or replace function vault.create_secret(new_secret text, new_name text default null, new_description text default '', new_key_id uuid default null)
+    returns uuid language plpgsql as $b$
+    declare v_id uuid;
+    begin
+      insert into vault.secrets (name, description, secret, key_id) values (new_name, coalesce(new_description, ''), new_secret, new_key_id) returning id into v_id;
+      return v_id;
+    end $b$ $f$;
+  execute $f$create or replace function vault.update_secret(secret_id uuid, new_secret text default null, new_name text default null, new_description text default null, new_key_id uuid default null)
+    returns void language plpgsql as $b$
+    begin
+      update vault.secrets set secret = coalesce(new_secret, secret), name = coalesce(new_name, name),
+        description = coalesce(new_description, description), key_id = coalesce(new_key_id, key_id), updated_at = now()
+       where id = secret_id;
+      if not found then raise exception 'secret % tidak ditemukan', secret_id; end if;
+    end $b$ $f$;
+  execute 'revoke all on schema vault from public';
+  execute 'revoke all on vault.secrets, vault.decrypted_secrets from public, anon, authenticated, service_role';
+  execute 'revoke all on function vault.create_secret(text, text, text, uuid), vault.update_secret(uuid, text, text, text, uuid) from public, anon, authenticated, service_role';
+end $vaultstub$;

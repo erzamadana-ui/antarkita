@@ -12,6 +12,7 @@ import { useT } from '@/lib/i18n';
 import { colors, font, motion, radius, shadow } from '@/lib/theme';
 import { LanguageRow } from '@/components/LanguagePicker';
 import { APP, APP_NAME, APP_TAGLINE } from '@/lib/app';
+import { ApkBanner } from '@/components/ApkDownload';
 
 type Slide = { art: ArtKind; title: string; sub: string; chips: string[] };
 
@@ -87,6 +88,8 @@ export default function Welcome() {
               <Button title={t('login')} size="lg" variant={last && APP === 'admin' ? 'primary' : 'outline'} color={last && APP === 'admin' ? colors.primary : colors.text} style={!(last && APP === 'admin') ? s.whiteBtn : undefined} onPress={() => router.push('/(auth)/login')} />
               <Text style={[font.tiny, { textAlign: 'center' }]}>{APP === 'mitra' ? 'Sudah punya akun mitra? Masuk, lalu lanjutkan pengajuan kemitraan Anda.' : APP === 'admin' ? 'Akun pelanggan/mitra tidak bisa masuk ke panel ini.' : t('partner_hint')}</Text>
               <LanguageRow />
+              {/* Web (pelanggan/mitra): tautan unduh APK Android — distribusi langsung via GitHub Release */}
+              <ApkBanner style={{ marginTop: 6 }} />
             </View>
           </Entrance>
         </View>

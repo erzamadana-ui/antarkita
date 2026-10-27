@@ -58,7 +58,7 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 
 ### A4. Versi & konfigurasi kode (sudah disiapkan — cukup dicek)
 - [ ] `package.json` → `"version": "3.0.0"` = versionName yang tampil di Play. Naikkan (mis. 3.0.1) setiap rilis ke produksi.
-- [ ] `app.config.ts` → `ANDROID_VERSION_CODE_OFFSET = 100`; versionCode = nomor run workflow + 100, otomatis naik. **Jangan diturunkan** setelah pernah diunggah ke Play.
+- [ ] `app.config.ts` → `ANDROID_VERSION_CODE_OFFSET = 1000`; versionCode = jumlah commit (`git rev-list --count HEAD`) + 1000 — SATU deret untuk APK (android.yml) dan AAB (release-aab.yml), otomatis naik (G-25; deret lama: APK 182, AAB 114). **Jangan diturunkan** setelah pernah diunggah ke Play; jangan squash/rewrite riwayat `main` (jumlah commit turun = versionCode turun).
 - [ ] Package id berbeda: `id.antarkita.app` (Pelanggan) dan `id.antarkita.mitra` (Mitra) — jangan diubah setelah rilis pertama.
 - [ ] Ikon 1024×1024 di `apps/pelanggan/assets/icon.png` dan `apps/mitra/assets/icon.png` sudah final (Play menolak ikon placeholder).
 - [x] **Ikon notifikasi** `apps/<app>/assets/notification-icon.png` (96×96 putih transparan) sudah ada dan terdaftar di plugin `expo-notifications` (`app.config.ts`). Diverifikasi 9 Sep 2026 dari hasil `expo prebuild`: `res/drawable-*/notification_icon.png` (24/36/48/72/96 px) + `meta-data … default_notification_icon` di manifest. Tanpa ini Android memakai ikon aplikasi dan notifikasi tampil sebagai kotak putih.

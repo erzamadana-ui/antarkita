@@ -34,14 +34,18 @@ const assets = `./apps/${APP}/assets`;
 // Satu berkas google-services.json boleh memuat ketiga applicationId (pelanggan/mitra/admin).
 const googleServicesFile = (process.env.GOOGLE_SERVICES_JSON ?? '').trim() || undefined;
 
-// Versi rilis Play Store.
+// Versi rilis Android.
 //   versionName  ← package.json "version" (satu sumber kebenaran)
-//   versionCode  ← env ANDROID_VERSION_CODE (CI: github.run_number + ANDROID_VERSION_CODE_OFFSET), default 1 saat dev lokal.
-// ANDROID_VERSION_CODE_OFFSET dibaca oleh .github/workflows/release-aab.yml (grep) — jangan ganti nama konstanta ini.
-const ANDROID_VERSION_CODE_OFFSET = 100;
+//   versionCode  ← env ANDROID_VERSION_CODE — SATU deret untuk APK (android.yml) dan AAB (release-aab.yml):
+//                  CODE = (git rev-list --count HEAD) + ANDROID_VERSION_CODE_OFFSET, dihitung di workflow (checkout fetch-depth: 0).
+//                  G-25: sebelumnya APK memakai run_number+100 (terakhir 182) dan AAB run_number lain (terakhir 114) → dua deret
+//                  bentrok di perangkat (APK lama vs AAB Play). Offset 1000 menjamin hasil > 182 (218 commit → 1218 pada 27 Okt 2026).
+//                  Cadangan: GITHUB_RUN_NUMBER + offset lama (workflow lama), lalu 1 saat dev lokal.
+// ANDROID_VERSION_CODE_OFFSET dibaca oleh kedua workflow (grep) — jangan ganti nama konstanta ini.
+const ANDROID_VERSION_CODE_OFFSET = 1000;
 const envCode = Number.parseInt(process.env.ANDROID_VERSION_CODE ?? '', 10);
 const runNumber = Number.parseInt(process.env.GITHUB_RUN_NUMBER ?? '', 10);
-const versionCode = envCode > 0 ? envCode : runNumber > 0 ? runNumber + ANDROID_VERSION_CODE_OFFSET : 1;
+const versionCode = envCode > 0 ? envCode : runNumber > 0 ? runNumber + 100 : 1;
 
 // Versi rilis App Store (iOS).
 //   CFBundleShortVersionString ← package.json "version" (sama dengan Android, satu sumber kebenaran)

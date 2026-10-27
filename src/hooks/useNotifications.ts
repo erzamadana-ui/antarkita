@@ -61,12 +61,19 @@ export interface NotifTarget { route: string; label: string }
  *
  * Mengembalikan null bila notifikasi tidak punya halaman tujuan (mis. pengumuman umum).
  */
+/**
+ * Rute detail pesanan per aplikasi (G-24): app Mitra memakai layar driver `/driver/order/[id]`
+ * (apps/mitra/app/driver/order/[id].tsx) — `/order/[id]` di Mitra adalah layar pelanggan generik
+ * (tombol "Pesan lagi" dsb. tidak relevan). Pelanggan & Admin tetap `/order/[id]`.
+ */
+export const orderRoute = (orderId: string) => (APP === 'mitra' ? `/driver/order/${orderId}` : `/order/${orderId}`);
+
 export function notifTargetFor(d: NotificationData, promoCode?: string | null): NotifTarget | null {
   const customer = APP === 'pelanggan';
   // 1. Tiket / percakapan dengan Admin & CS (mis. notifikasi "Pesan dari Admin AntarKita")
   if (d.ticket_id) return { route: `/support/${d.ticket_id}`, label: 'tiket bantuan' };
-  // 2. Pesanan
-  if (d.order_id) return { route: `/order/${d.order_id}`, label: 'detail pesanan' };
+  // 2. Pesanan (Mitra → layar driver, lihat orderRoute)
+  if (d.order_id) return { route: orderRoute(d.order_id), label: 'detail pesanan' };
   // 3. AntarTravel — permintaan carter/sopir harian & booking kursi
   if (d.travel_request_id) return customer
     ? { route: `/travel/request/${d.travel_request_id}`, label: 'permintaan travel' }

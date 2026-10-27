@@ -92,8 +92,10 @@ Uji: `npm run test:push`
    (Project settings → Service accounts → Generate new private key). Tanpa ini `push-send`
    menandai antrean `skipped`, bukan error.
 
-3. **`admin_set_push_config(url, service_role_key)`** — sekali saja, supaya `push_dispatch()`
-   tahu URL Edge Function `push-send` dan kunci pemanggilnya.
+3. **`admin_set_push_dispatch(url, anon_key, secret)`** (0116, menggantikan `admin_set_push_config(url, service_role_key)`) —
+   sekali saja, supaya `push_dispatch()` tahu URL Edge Function `push-send`, anon key (publik) untuk lolos gateway, dan
+   rahasia `x-push-secret` (= secret `PUSH_DISPATCH_SECRET` di Edge Function). Kunci service_role TIDAK lagi disimpan di
+   tabel. Langkah operasional lengkap + uji: **docs/OPS-PUSH.md**.
 
 4. **Ikon notifikasi (opsional, disarankan)** — buat `apps/<app>/assets/notification-icon.png`
    (96×96, putih penuh + transparan), lalu tambahkan `icon` pada plugin `expo-notifications`

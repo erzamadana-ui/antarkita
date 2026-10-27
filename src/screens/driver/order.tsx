@@ -36,6 +36,8 @@ export default function DriverOrder() {
   const { location } = useCurrentLocation();
   const [live, setLive] = useState<{ lat: number; lng: number; heading: number | null } | null>(null);
   const [pinAsk, setPinAsk] = useState(false);
+  // G-15: satu aksi status/lepas order berjalan pada satu waktu (cegah ketuk ganda saat jaringan lambat)
+  const [busy, setBusy] = useState<null | 'status' | 'cancel'>(null);
   useWatchLocation(true, (p) => setLive(p));
   const me = live ?? (driver?.lat && driver.lng ? { lat: driver.lat, lng: driver.lng } : location);
 
@@ -51,12 +53,15 @@ export default function DriverOrder() {
   }, [order?.status, me.lat, me.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const update = async (status: OrderStatus, pin?: string) => {
+    if (busy) return;
+    setBusy('status');
     try { await rpc('driver_update_order_status', { p_order_id: id, p_status: status, p_pin: pin ?? null }); setPinAsk(false); await reload(); if (status === 'completed') { await refreshWallet(); toast.success('Order selesai. Pendapatan masuk ke saldo.'); } }
     catch (e) {
       const msg = (e as Error).message;
       if (msg.includes('PIN_REQUIRED')) { if (pin) throw new Error('PIN salah. Minta PIN 4 digit dari pelanggan.'); setPinAsk(true); return; }
       if (pin) throw e; toast.error(msg);
     }
+    finally { setBusy(null); }
   };
   const complete = () => {
     if (!order) return;
@@ -65,7 +70,13 @@ export default function DriverOrder() {
     Alert.alert('Selesaikan order?', msg, [{ text: 'Belum' }, { text: 'Selesai', onPress: () => update('completed') }]);
   };
   const cancel = () => {
-    const doIt = async () => { try { await rpc('cancel_order', { p_order_id: id, p_reason: 'Driver berhalangan' }); toast.show('Order dilepas, dicarikan driver lain'); router.replace('/(driver)'); } catch (e) { toast.error((e as Error).message); } };
+    if (busy) return;
+    const doIt = async () => {
+      setBusy('cancel');
+      try { await rpc('cancel_order', { p_order_id: id, p_reason: 'Driver berhalangan' }); toast.show('Order dilepas, dicarikan driver lain'); router.replace('/(driver)'); }
+      catch (e) { toast.error((e as Error).message); }
+      finally { setBusy(null); }
+    };
     if (Platform.OS === 'web') { if (confirm('Lepas order ini? Terlalu sering membatalkan dapat menurunkan prioritas Anda.')) doIt(); return; }
     Alert.alert('Lepas order?', 'Terlalu sering membatalkan dapat menurunkan prioritas Anda.', [{ text: 'Tidak' }, { text: 'Lepas', style: 'destructive', onPress: doIt }]);
   };
@@ -165,10 +176,10 @@ export default function DriverOrder() {
 
         {/* Tombol aksi teal */}
         <Animated.View key={`act-${order.status}-${order.merchant_status ?? ''}`} entering={FadeInDown.duration(motion.base)} style={{ gap: 8 }}>
-          {order.status === 'accepted' && <Button title={order.service === 'food' ? 'Sudah tiba di merchant' : order.service === 'shop' ? 'Sudah tiba di toko' : order.service === 'market' ? 'Sudah tiba di pasar' : 'Sudah tiba di titik jemput'} size="lg" onPress={() => update('arrived')} />}
-          {order.status === 'arrived' && <Button title={order.service === 'food' ? (foodNotReady ? 'Menunggu pesanan siap…' : 'Pesanan diambil, antar sekarang') : order.service === 'send' ? 'Paket diterima, antar sekarang' : isShopping ? (shopNotTotaled ? 'Masukkan total belanja dulu' : 'Belanja selesai, antar sekarang') : 'Penumpang naik, mulai perjalanan'} size="lg" disabled={foodNotReady || shopNotTotaled} onPress={() => update('in_progress')} />}
-          {order.status === 'in_progress' && <Button title={order.service === 'ride_motor' || order.service === 'ride_car' ? 'Penumpang sampai, selesaikan' : 'Sudah diterima, selesaikan'} size="lg" onPress={complete} />}
-          {(order.status === 'accepted' || order.status === 'arrived') && <Button title="Lepas order" variant="ghost" color={colors.danger} onPress={cancel} />}
+          {order.status === 'accepted' && <Button title={order.service === 'food' ? 'Sudah tiba di merchant' : order.service === 'shop' ? 'Sudah tiba di toko' : order.service === 'market' ? 'Sudah tiba di pasar' : 'Sudah tiba di titik jemput'} size="lg" loading={busy === 'status'} disabled={!!busy} onPress={() => update('arrived')} />}
+          {order.status === 'arrived' && <Button title={order.service === 'food' ? (foodNotReady ? 'Menunggu pesanan siap…' : 'Pesanan diambil, antar sekarang') : order.service === 'send' ? 'Paket diterima, antar sekarang' : isShopping ? (shopNotTotaled ? 'Masukkan total belanja dulu' : 'Belanja selesai, antar sekarang') : 'Penumpang naik, mulai perjalanan'} size="lg" loading={busy === 'status'} disabled={foodNotReady || shopNotTotaled || !!busy} onPress={() => update('in_progress')} />}
+          {order.status === 'in_progress' && <Button title={order.service === 'ride_motor' || order.service === 'ride_car' ? 'Penumpang sampai, selesaikan' : 'Sudah diterima, selesaikan'} size="lg" loading={busy === 'status'} disabled={!!busy} onPress={complete} />}
+          {(order.status === 'accepted' || order.status === 'arrived') && <Button title="Lepas order" variant="ghost" color={colors.danger} loading={busy === 'cancel'} disabled={!!busy} onPress={cancel} />}
           {active && <Button title="Laporkan masalah / insiden" variant="ghost" color={colors.textSecondary} icon="flag-outline" onPress={() => router.push({ pathname: '/support/new', params: { order_id: order.id, category: 'order' } } as never)} />}
         </Animated.View>
         <View style={s.block}><DriverEarningBreakdown orderId={order.id} status={order.status} /></View>

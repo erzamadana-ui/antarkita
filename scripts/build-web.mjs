@@ -19,7 +19,8 @@ if (cname && base) console.warn(`⚠ PAGES_CNAME=${cname} tetapi EXPO_PUBLIC_BAS
 fs.rmSync('dist', { recursive: true, force: true });
 for (const [app, sub] of [['pelanggan', ''], ['mitra', '/mitra'], ['admin', '/admin']]) {
   console.log(`\n▶ expo export ${app} (base ${base}${sub || '/'} → ${site}${sub}/)`);
-  execSync(`npx expo export --platform web --output-dir dist${sub}`, {
+  // --clear: cache Metro antar-APP membuat bundel app sebelumnya terbawa (APP salah) saat dibangun berurutan di mesin yang sama.
+  execSync(`npx expo export --platform web --output-dir dist${sub} --clear`, {
     stdio: 'inherit',
     env: { ...process.env, APP: app, EXPO_PUBLIC_APP: app, EXPO_PUBLIC_BASE_URL: `${base}${sub}`, EXPO_PUBLIC_SITE_ROOT: site, EXPO_PUBLIC_SITE_URL: `${site}${sub}` },
   });

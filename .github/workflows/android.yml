@@ -31,6 +31,9 @@ jobs:
         app: [pelanggan, mitra]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # G-25: versionCode dihitung dari jumlah commit (git rev-list --count HEAD) → butuh seluruh riwayat.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -64,8 +67,23 @@ jobs:
           echo "minify=${{ inputs.minify || 'false' }}" >> "$GITHUB_OUTPUT"
           echo "ABI yang dibangun: $ABI · minify: ${{ inputs.minify || 'false' }}"
 
+      # G-25: SATU deret versionCode untuk APK & AAB = jumlah commit + offset (app.config.ts ANDROID_VERSION_CODE_OFFSET,
+      # cadangan 1000). Monoton naik selama riwayat linear; deret lama APK (run_number+100, terakhir 182) sudah terlampaui.
+      - name: Hitung versionCode & versionName (deret tunggal)
+        id: ver
+        run: |
+          OFFSET=$(grep -oE 'ANDROID_VERSION_CODE_OFFSET[[:space:]]*=[[:space:]]*[0-9]+' app.config.ts | grep -oE '[0-9]+$' | head -n1)
+          OFFSET=${OFFSET:-1000}
+          CODE=$(( $(git rev-list --count HEAD) + OFFSET ))
+          [ "$CODE" -gt 182 ] || { echo "::error::versionCode $CODE tidak melampaui deret APK lama (182) — periksa fetch-depth"; exit 1; }
+          NAME=$(node -p "require('./package.json').version")
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "versionCode=$CODE (commit $(git rev-list --count HEAD) + offset $OFFSET), versionName=$NAME"
+
       - name: Prebuild proyek Android (Expo) — aplikasi ${{ matrix.app }}
         env:
+          ANDROID_VERSION_CODE: ${{ steps.ver.outputs.code }}
           APP: ${{ matrix.app }}
           EXPO_PUBLIC_APP: ${{ matrix.app }}
           EXPO_PUBLIC_SITE_ROOT: https://apps.antarkitaindonesia.com
@@ -77,6 +95,13 @@ jobs:
           EXPO_PUBLIC_BUILD_COMMIT: ${{ github.sha }}
           CI: 1
         run: npx expo prebuild --platform android --no-install
+
+      - name: Verifikasi versionCode hasil prebuild
+        run: |
+          GRADLE=android/app/build.gradle
+          [ -f "$GRADLE" ] || { echo "::error::$GRADLE tidak ada — prebuild gagal diam-diam."; exit 1; }
+          grep -qE 'versionCode[[:space:]]*=?[[:space:]]*${{ steps.ver.outputs.code }}\b' "$GRADLE" || { echo "::error::versionCode tidak sesuai (diharapkan ${{ steps.ver.outputs.code }}): $(grep -E 'versionCode' "$GRADLE" | head -n1)"; exit 1; }
+          echo "versionCode OK: ${{ steps.ver.outputs.code }}"
 
       # OPSIONAL. Hanya jalan bila input `minify` dicentang. Ditulis ke
       # android/gradle.properties (hasil prebuild, tidak masuk git) supaya
@@ -116,6 +141,7 @@ jobs:
 
       - name: Build APK release (upload keystore bila ada; cadangan keystore debug — cukup untuk distribusi langsung/uji)
         env:
+          ANDROID_VERSION_CODE: ${{ steps.ver.outputs.code }}
           APP: ${{ matrix.app }}
           EXPO_PUBLIC_APP: ${{ matrix.app }}
           EXPO_PUBLIC_SITE_ROOT: https://apps.antarkitaindonesia.com
@@ -140,7 +166,7 @@ jobs:
         run: |
           for F in antarkita-${{ matrix.app }}-${{ github.run_number }}*.apk; do
             SZ=$(du -h "$F" | cut -f1); SHA=$(sha256sum "$F" | cut -d' ' -f1)
-            echo "| $F | ${{ steps.opsi.outputs.abi }} | minify=${{ steps.opsi.outputs.minify }} | $SZ | \`$SHA\` | ${{ github.sha }} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| $F | vc ${{ steps.ver.outputs.code }} · v${{ steps.ver.outputs.name }} | ${{ steps.opsi.outputs.abi }} | minify=${{ steps.opsi.outputs.minify }} | $SZ | \`$SHA\` | ${{ github.sha }} |" >> "$GITHUB_STEP_SUMMARY"
             echo "$SHA  $F" > "$F.sha256"
             echo "Ukuran $F = $SZ · SHA-256 $SHA · commit ${{ github.sha }}"
           done

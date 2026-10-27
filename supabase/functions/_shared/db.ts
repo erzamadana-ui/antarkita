@@ -18,6 +18,7 @@ export function serviceClient(): DbLike {
   if (!cachedService) {
     registerSecret(service());
     registerSecret(Deno.env.get("CRON_SECRET"));
+    registerSecret(Deno.env.get("PUSH_DISPATCH_SECRET"));   // 0116 push-send
     cachedService = createClient(url(), service(), { auth: { persistSession: false, autoRefreshToken: false } }) as unknown as DbLike;
   }
   return cachedService;

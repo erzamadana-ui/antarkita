@@ -75,12 +75,25 @@ begin
   --     sementara"; simulasi_e2e S0 menyalakannya sendiri lalu memulihkan di S54/S55.
   insert into app_settings (key, value) values ('antarpay_enabled', 'true'::jsonb)
   on conflict (key) do update set value = 'true'::jsonb, updated_at = now();
-  update app_settings
-     set value = (select jsonb_object_agg(k, true) from jsonb_object_keys(value) k), updated_at = now()
-   where key = 'payment_channels' and jsonb_typeof(value) = 'object';
-  insert into app_settings (key, value)
-  values ('pg_methods', (select coalesce(jsonb_agg(x), '[]'::jsonb) from unnest(payment_gateway_channel_keys()) x))
-  on conflict (key) do update set value = excluded.value, updated_at = now();
+  -- 0115 (go-live 27 Okt 2026): bila payment_mode = voucher_only, saluran gateway TETAP mati seperti produksi
+  -- (uji yang butuh gateway menyalakannya sendiri lewat admin_set_payment_mode('gateway') lalu memulihkan).
+  if to_regproc('public.payment_mode') is null or payment_mode() <> 'voucher_only' then
+    update app_settings
+       set value = (select jsonb_object_agg(k, true) from jsonb_object_keys(value) k), updated_at = now()
+     where key = 'payment_channels' and jsonb_typeof(value) = 'object';
+    insert into app_settings (key, value)
+    values ('pg_methods', (select coalesce(jsonb_agg(x), '[]'::jsonb) from unnest(payment_gateway_channel_keys()) x))
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  else
+    -- Samakan dengan produksi: sebelum 0115 semua saluran prod hidup, jadi snapshot yang dipulihkan
+    -- admin_set_payment_mode('gateway') di lokal pun berisi semua saluran hidup + pg_methods lengkap.
+    update app_settings
+       set value = value || jsonb_build_object(
+             'payment_channels', (select jsonb_object_agg(k, true) from jsonb_object_keys(value->'payment_channels') k),
+             'pg_methods', (select coalesce(jsonb_agg(x), '[]'::jsonb) from unnest(payment_gateway_channel_keys()) x)),
+           updated_at = now()
+     where key = 'payment_mode_snapshot' and jsonb_typeof(value->'payment_channels') = 'object';
+  end if;
   insert into admin_security (user_id, pin_hash, pin_set_at)
   values (adm, extensions.crypt('123456', extensions.gen_salt('bf')), now())
   on conflict (user_id) do update set pin_hash = excluded.pin_hash, failed = 0, locked_until = null;

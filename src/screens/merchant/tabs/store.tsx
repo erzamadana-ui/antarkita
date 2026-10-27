@@ -14,6 +14,7 @@ import { colors, font, radius, shadow } from '@/lib/theme';
 import { HalalBadge } from '@/components/MerchantStatus';
 import { EarningsReportCard, MyDisputesCard } from '@/screens/mitra/finance';
 import { PayoutSlaLine } from '@/components/EarningBreakdown';
+import { ApkBanner } from '@/components/ApkDownload';
 
 type Item = { icon: IconName; color?: string; title: string; subtitle?: string; onPress: () => void; danger?: boolean };
 
@@ -125,6 +126,7 @@ export default function MerchantStore() {
                 </PressableScale>
               ))}
             </View>
+            <ApkBanner style={{ marginTop: 14 }} />
           </Entrance>
         </View>
       )}

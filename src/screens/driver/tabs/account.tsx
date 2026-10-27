@@ -11,6 +11,7 @@ import { useMode } from '@/store/mode';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { FUEL_LABEL } from '@/lib/vehicles';
 import { vehicleClassLabel } from '@/lib/format';
+import { ApkBanner } from '@/components/ApkDownload';
 
 // Status pengajuan dalam Bahasa Indonesia (sebelumnya kode mentah 'pending'/'rejected'/'suspended' bocor ke layar)
 const STATUS_LABEL: Record<string, string> = { pending: 'Menunggu verifikasi', approved: 'Mitra aktif', rejected: 'Pendaftaran ditolak', suspended: 'Ditangguhkan' };
@@ -104,6 +105,7 @@ export default function DriverAccount() {
         {marketVendor ? <Button title="Beralih ke Lapak Pasar" variant="secondary" icon="basket-outline" onPress={() => router.replace('/(vendor)' as never)} /> : null}
         <Button title="Keluar" variant="outline" color={colors.danger} icon="log-out-outline" onPress={async () => { await signOut(); router.replace('/(auth)/welcome'); }} />
       </Entrance>
+      <ApkBanner style={{ marginTop: 22 }} />
       <Row style={{ justifyContent: 'center', marginTop: 24 }}><Text style={font.tiny}>AntarKita Mitra v3.0</Text></Row>
     </Screen>
   );

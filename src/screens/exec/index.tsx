@@ -105,7 +105,12 @@ export default function ExecPortal() {
   const login = async () => {
     if (pin.length < 6) return doShake();
     setBusy(true);
-    try { const r = await rpc<{ token: string; level: string; expires_at: string }>('exec_login', { p_pin: pin }); SESSION = r; setSess(r); setPin(''); toast.success(`Selamat datang, ${execLevelLabel[r.level] ?? r.level}`); }
+    try {
+      // 0115 G-06: PIN salah tidak lagi RAISE (supaya counter & lockout tersimpan) — RPC mengembalikan {ok:false, error, failed, locked_until}
+      const r = await rpc<{ ok?: boolean; error?: string; token: string; level: string; expires_at: string }>('exec_login', { p_pin: pin });
+      if (!r || r.ok === false || !r.token) throw new Error(r?.error || 'PIN eksekutif salah');
+      SESSION = r; setSess(r); setPin(''); toast.success(`Selamat datang, ${execLevelLabel[r.level] ?? r.level}`);
+    }
     catch (e) { doShake(); toast.error((e as Error).message); setPin(''); } finally { setBusy(false); }
   };
   const logout = () => { SESSION = null; setSess(null); setReport(null); };

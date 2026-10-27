@@ -7,13 +7,14 @@ type RpcHandler = (args: Row) => DbResult | Promise<DbResult>;
 
 class Query implements PromiseLike<DbResult> {
   private filters: ((r: Row) => boolean)[] = [];
-  private op: "select" | "update" = "select";
+  private op: "select" | "update" | "delete" = "select";
   private patch: Row = {};
   private mode: "many" | "maybe" | "single" = "many";
   private lim = Infinity;
   constructor(private db: MockDb, private table: string) {}
   select(_cols?: string) { return this; }
   update(patch: Row) { this.op = "update"; this.patch = patch; return this; }
+  delete() { this.op = "delete"; return this; }
   eq(c: string, v: unknown) { this.filters.push((r) => r[c] === v); return this; }
   neq(c: string, v: unknown) { this.filters.push((r) => r[c] !== v); return this; }
   in(c: string, vs: unknown[]) { this.filters.push((r) => vs.includes(r[c])); return this; }
@@ -32,6 +33,10 @@ class Query implements PromiseLike<DbResult> {
       this.db.updates.push({ table: this.table, patch: this.patch, count: hit.length });
       hit.forEach((r) => Object.assign(r, this.patch));
       hit = hit.map((r) => ({ ...r }));
+    } else if (this.op === "delete") {
+      this.db.deletes.push({ table: this.table, count: hit.length });
+      this.db.tables[this.table] = rows.filter((r) => !hit.includes(r));
+      hit = hit.map((r) => ({ ...r }));
     }
     if (this.mode === "maybe") return { data: hit[0] ?? null, error: null };
     if (this.mode === "single") return hit[0] ? { data: hit[0], error: null } : { data: null, error: { message: "not found", code: "PGRST116" } };
@@ -46,6 +51,7 @@ export class MockDb implements DbLike {
   tables: Record<string, Row[]> = {};
   rpcCalls: { fn: string; args: Row }[] = [];
   updates: { table: string; patch: Row; count: number }[] = [];
+  deletes: { table: string; count: number }[] = [];
   handlers: Record<string, RpcHandler> = {};
   constructor(tables: Record<string, Row[]> = {}, handlers: Record<string, RpcHandler> = {}) {
     this.tables = tables;

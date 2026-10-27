@@ -46,6 +46,8 @@ export default function OrderTracking() {
   const { waitApologyMinutes } = useAppSettings();
   const [rated, setRated] = useState<{ driver?: number; merchant?: number }>({});
   const [comment, setComment] = useState('');
+  // G-15: kunci tombol "Batalkan pesanan" selama RPC berjalan (cegah ketuk ganda → dua cancel_order)
+  const [cancelling, setCancelling] = useState(false);
   // AntarNow (Tahap 11): pratinjau driver tujuan disimpan saat memesan — RLS profiles belum
   // mengizinkan pelanggan membaca profil driver itu sebelum ordernya diterima.
   const antarNowDriver = useAntarNow((st) => st.driver);
@@ -89,7 +91,13 @@ export default function OrderTracking() {
   }, [order, driver?.lat, driver?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cancel = () => {
-    const doIt = async (reason: string) => { try { await rpc('cancel_order', { p_order_id: id, p_reason: reason }); toast.show('Pesanan dibatalkan'); reload(); } catch (e) { toast.error((e as Error).message); } };
+    if (cancelling) return;
+    const doIt = async (reason: string) => {
+      setCancelling(true);
+      try { await rpc('cancel_order', { p_order_id: id, p_reason: reason }); toast.show('Pesanan dibatalkan'); reload(); }
+      catch (e) { toast.error((e as Error).message); }
+      finally { setCancelling(false); }
+    };
     if (Platform.OS === 'web') { const r = prompt('Alasan pembatalan (opsional):'); if (r !== null) doIt(r || 'Dibatalkan pelanggan'); return; }
     Alert.alert('Batalkan pesanan?', 'Pesanan yang sudah dibayar AntarVoucher akan dikembalikan ke saldo.', [{ text: 'Tidak' }, { text: 'Ya, batalkan', style: 'destructive', onPress: () => doIt('Dibatalkan pelanggan') }]);
   };
@@ -215,9 +223,10 @@ export default function OrderTracking() {
           </View>
         )}
         {active && <Button title="Laporkan masalah pesanan" variant="ghost" color={colors.textSecondary} icon="flag-outline" onPress={() => router.push({ pathname: '/support/new', params: { order_id: order.id, category: 'order' } } as never)} />}
-        {canCancel && <Button title="Batalkan pesanan" variant="outline" color={colors.danger} onPress={cancel} />}
-        {!active && <Button title="Ada kendala dengan pesanan ini?" variant="ghost" color={colors.textSecondary} icon="help-circle-outline" onPress={() => router.push({ pathname: '/support/new', params: { order_id: order.id, category: 'order' } } as never)} />}
-        {!active && <Button title={order.service === 'food' && order.merchant ? `Pesan lagi dari ${order.merchant.name}` : 'Pesan lagi rute ini'} icon="refresh" variant="secondary" onPress={() => {
+        {canCancel && <Button title="Batalkan pesanan" variant="outline" color={colors.danger} loading={cancelling} disabled={cancelling} onPress={cancel} />}
+        {/* G-24: "Ada kendala" & "Pesan lagi" hanya di app Pelanggan — rute /food/[id] dan rute pemesanan tidak ada di app Mitra/Admin */}
+        {!active && IS_CUSTOMER_APP && <Button title="Ada kendala dengan pesanan ini?" variant="ghost" color={colors.textSecondary} icon="help-circle-outline" onPress={() => router.push({ pathname: '/support/new', params: { order_id: order.id, category: 'order' } } as never)} />}
+        {!active && IS_CUSTOMER_APP && <Button title={order.service === 'food' && order.merchant ? `Pesan lagi dari ${order.merchant.name}` : 'Pesan lagi rute ini'} icon="refresh" variant="secondary" onPress={() => {
           if (order.service === 'food' && order.merchant_id) { router.replace(`/food/${order.merchant_id}` as never); return; }
           const b = useBooking.getState();
           b.setDropoff({ lat: order.dropoff_lat, lng: order.dropoff_lng, address: order.dropoff_address, name: order.dropoff_address.split(',')[0] });

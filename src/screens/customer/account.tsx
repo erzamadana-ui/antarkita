@@ -13,6 +13,7 @@ import { useT, useI18n, LOCALES } from '@/lib/i18n';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { phoneDisplay, rupiah } from '@/lib/format';
 import { openApp, APP_URL } from '@/lib/app';
+import { ApkBanner } from '@/components/ApkDownload';
 
 type Item = { icon: IconName; color?: string; title: string; subtitle?: string; onPress: () => void; danger?: boolean };
 
@@ -99,6 +100,7 @@ export default function Account() {
           </View>
         </Entrance>
       ))}
+      <ApkBanner style={{ marginTop: 22 }} />
       <Row style={{ justifyContent: 'center', marginTop: 24 }}><Text style={font.tiny}>AntarKita v3.0</Text></Row>
     </Screen>
   );

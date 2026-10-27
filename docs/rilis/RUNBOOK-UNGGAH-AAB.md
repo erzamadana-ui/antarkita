@@ -84,7 +84,7 @@ Workflow sudah punya langkah `r0adkll/upload-google-play@v1` yang otomatis mengu
 ## 6. Pemecahan masalah
 
 **"Version code 111 has already been used"** saat unggah ke Play
-- Berarti AAB dengan versionCode itu sudah pernah diunggah (mungkin di track lain atau draf yang terhapus). Jalankan workflow lagi → run berikutnya memberi versionCode baru (nomor run + 100). Jangan mengedit `ANDROID_VERSION_CODE_OFFSET` untuk "melompati" angka kecuali nomor run GitHub di-reset (repo dipindah/dibuat ulang) — kalau itu terjadi, naikkan offset ke ≥ versionCode terakhir di Play.
+- Berarti AAB dengan versionCode itu sudah pernah diunggah (mungkin di track lain atau draf yang terhapus). versionCode = jumlah commit + 1000 (deret tunggal APK & AAB, G-25) → buat commit baru di `main` lalu jalankan workflow lagi untuk versionCode baru. Jangan mengedit `ANDROID_VERSION_CODE_OFFSET` untuk "melompati" angka kecuali riwayat commit di-reset/squash (jumlah commit turun) — kalau itu terjadi, naikkan offset ke ≥ versionCode terakhir di Play.
 - Kedua app (Pelanggan & Mitra) punya ruang versionCode masing-masing di Play, jadi 111 di keduanya tidak bentrok.
 
 **Workflow gagal di langkah "Pastikan rahasia keystore tersedia"**

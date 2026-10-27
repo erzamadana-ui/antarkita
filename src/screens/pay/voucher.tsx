@@ -27,9 +27,21 @@ import {
 import {
   voucherStatusMeta, voucherStatusLabel, voucherStatusColor, canMarkSent, canCancel, canDispute, showsInstructions,
   newIdempotencyKey, formatCountdown, splitTransferAmount, validateNominal, voucherError, isMissingRpc,
-  fetchMyVoucherPurchases, markVoucherSent, cancelVoucherPurchase, disputeVoucherPurchase,
+  fetchMyVoucherPurchases, markVoucherSent, cancelVoucherPurchase, disputeVoucherPurchase, bankMeta,
   type VoucherBankAccount, type VoucherPurchase,
 } from '@/lib/voucher';
+
+/** "Logo" bank: kotak berwarna khas bank + singkatan (tanpa aset gambar; kode tak dikenal → generik). */
+function BankLogo({ code, name, size = 36, active }: { code?: string | null; name?: string | null; size?: number; active?: boolean }) {
+  const m = bankMeta(code, name);
+  const generic = m.code === 'other';
+  return (
+    <View style={{ width: size, height: size, borderRadius: Math.round(size / 3), backgroundColor: active ? m.color : m.color + '1A', alignItems: 'center', justifyContent: 'center' }} accessibilityElementsHidden>
+      {generic ? <Ionicons name="business" size={Math.round(size / 2)} color={active ? '#fff' : m.color} />
+        : <Text style={{ fontSize: m.short.length > 3 ? Math.round(size * 0.26) : Math.round(size * 0.32), fontWeight: '800', letterSpacing: 0.3, color: active ? '#fff' : m.color }} numberOfLines={1}>{m.short}</Text>}
+    </View>
+  );
+}
 
 type Tab = 'buy' | 'codes' | 'redeem';
 
@@ -300,7 +312,7 @@ function PurchaseForm({ denominations, min, max, ttlHours, room, banks, onRetryB
                   <PressableScale key={b.bank_code} onPress={() => setBankCode(b.bank_code)} scaleTo={0.98} haptic={false}
                     accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={`Bank ${b.bank_name}`}
                     style={[s.bank, on && { borderColor: colors.primary, backgroundColor: colors.primaryLight }]}>
-                    <View style={[s.bankLogo, on && { backgroundColor: colors.primary }]}><Ionicons name="business" size={18} color={on ? '#fff' : colors.primary} /></View>
+                    <BankLogo code={b.bank_code} name={b.bank_name} active={on} />
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={{ fontWeight: '700', color: colors.text, fontSize: 16 }} numberOfLines={2}>{b.bank_name}</Text>
                       <Text style={font.tiny} numberOfLines={2}>a.n. {b.account_name}</Text>
@@ -567,13 +579,18 @@ function PurchaseDetail({ p, code, onChange, onClose, onReload }: {
       <Entrance index={2}>
         <Card>
           <View style={{ gap: 14 }}>
-            {!code ? <CopyField label="Kode referensi (berita transfer)" value={p.reference} what="Kode referensi" /> : null}
+            {/* Berita/catatan transfer: kode voucher (v5) atau kode referensi (pembelian lama 0112) — membantu Finance mencocokkan */}
+            {!code ? <CopyField label="Kode referensi (berita transfer)" value={p.reference} what="Kode referensi" />
+              : instr ? <CopyField label="Berita / catatan transfer (bila tersedia)" value={codeText ?? p.reference} what="Berita transfer" /> : null}
 
             {instr ? (
               <>
                 <View style={{ gap: 6 }}>
                   <Text style={font.label}>Bank tujuan</Text>
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>{p.bank_name ?? '—'}</Text>
+                  <Row gap={10}>
+                    <BankLogo code={p.bank_code} name={p.bank_name} size={40} />
+                    <Text style={{ flex: 1, minWidth: 0, fontSize: 16, fontWeight: '700', color: colors.text }} numberOfLines={2}>{p.bank_name ?? '—'}</Text>
+                  </Row>
                 </View>
                 {hasAccount ? (
                   <CopyField label="Nomor rekening" value={p.account_no!} what="Nomor rekening" big />
@@ -583,9 +600,13 @@ function PurchaseDetail({ p, code, onChange, onClose, onReload }: {
                 {p.account_name ? (
                   <View style={{ gap: 6 }}>
                     <Text style={font.label}>Atas nama</Text>
-                    <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>{p.account_name}</Text>
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }} selectable>{p.account_name}</Text>
                   </View>
                 ) : null}
+                <Row gap={8} style={{ alignItems: 'flex-start' }}>
+                  <Ionicons name="shield-checkmark" size={16} color={colors.danger} style={{ marginTop: 2 }} />
+                  <Text style={[font.tiny, { flex: 1, minWidth: 0, color: colors.danger, fontWeight: '600' }]}>Hanya transfer ke rekening yang tampil di aplikasi ini. Pastikan nama bank, nomor rekening, dan atas nama sama persis sebelum mengirim.</Text>
+                </Row>
               </>
             ) : p.bank_name ? (
               <View style={{ gap: 6 }}>
@@ -693,7 +714,6 @@ const s = StyleSheet.create({
   barFg: { height: 8, borderRadius: 4 },
   err: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: colors.dangerLight },
   bank: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, padding: 12, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.border, backgroundColor: '#fff' },
-  bankLogo: { width: 36, height: 36, borderRadius: 12, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
   notice: { gap: 10, padding: 12, borderRadius: radius.md, backgroundColor: colors.infoLight, borderWidth: 1, borderColor: colors.info + '33' },
   item: { padding: 12, borderRadius: radius.lg, backgroundColor: '#fff', borderWidth: 1, borderColor: colors.border },
   rowIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
