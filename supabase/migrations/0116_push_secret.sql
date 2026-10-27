@@ -167,7 +167,7 @@ begin
                                   'Authorization', 'Bearer ' || v_key,
                                   'x-push-secret', v_secret),
     body := jsonb_build_object('ids', to_jsonb(v_ids)),
-    timeout_milliseconds := 8000) into v_req;
+    timeout_milliseconds := 25000) into v_req;   -- 27 Okt: cold start + OAuth FCM bisa > 8 dtk
   update push_config set last_dispatch_at = now(), last_request_id = v_req, last_error = null where id;
   return jsonb_build_object('ok', true, 'queued', array_length(v_ids, 1), 'request_id', v_req);
 end $$;

@@ -4,7 +4,7 @@
 --   psql "$PROD_DB_URL" -X -v ON_ERROR_STOP=1 -1 -f scripts/prod/golive-2026-10-27-data.sql
 -- Bagian:
 --   1. Akun uji dinonaktifkan: email *@example.com dan profil bernama 'TESTING' (@gmail) → profiles.is_active=false,
---      auth.users.banned_until='infinity', driver/mitra travel/vendor ditangguhkan & offline (pola 0085).
+--      auth.users.banned_until='2999-12-31 23:59:59+00', driver/mitra travel/vendor ditangguhkan & offline (pola 0085).
 --      TIDAK disentuh: erzamadana@gmail.com, sigitekoprayogo1804@gmail.com, suryadi*, akun lain.
 --   2. exec_access admin@antaraja.id → active=false.
 --   3. payments provider midtrans yang masih pending → EXPIRED (status legacy 'expire'; CHECK payments_status_check tidak punya
@@ -35,7 +35,7 @@ begin
   update public.profiles set is_active = false, status_reason = coalesce(status_reason, 'Akun uji dinonaktifkan go-live 27 Okt 2026')
    where id = any(v_ids) and is_active;
   get diagnostics n_prof = row_count;
-  update auth.users set banned_until = 'infinity'::timestamptz
+  update auth.users set banned_until = '2999-12-31 23:59:59+00'::timestamptz
    where id = any(v_ids) and (banned_until is null or banned_until < now());
   get diagnostics n_auth = row_count;
   update public.drivers set status = 'suspended', is_online = false, status_reason = coalesce(status_reason, 'Akun uji dinonaktifkan go-live 27 Okt 2026')
