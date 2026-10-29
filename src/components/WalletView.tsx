@@ -147,8 +147,8 @@ export function WalletView({ allowWithdraw, bottomSpace = 40, header }: { allowW
       )}
       <View style={{ marginTop: 16 }}>
         <Badge text={voucherOnly
-          ? 'Saldo AntarVoucher hanya untuk layanan AntarKita (closed loop), tidak berbunga. Isi dengan membeli voucher via transfer ke rekening resmi PT Antar Kita Indonesia.'
-          : 'Isi saldo lewat top up instan atau transfer ke rekening resmi PT Antar Kita Indonesia'} color={colors.textSecondary} />
+          ? 'Saldo AntarVoucher hanya untuk layanan AntarKita (closed loop), tidak berbunga. Isi dengan membeli voucher via transfer ke rekening resmi AntarKita yang tampil di aplikasi.'
+          : 'Isi saldo lewat top up instan atau transfer ke rekening resmi AntarKita yang tampil di aplikasi'} color={colors.textSecondary} />
       </View>
     </ScrollView>
   );

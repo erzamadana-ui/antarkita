@@ -26,6 +26,7 @@ import { ContributionView } from '@/screens/admin/_contribution-view';
 import type { ContributionGroup } from '@/lib/admin';
 import { FloatCard } from '@/screens/admin/voucher';
 import { voucherFloatStatus, cityTargetsProgress, monthKey, type VoucherFloatStatus, type CityTargetProgress } from '@/lib/voucherV5';
+import { execCityManagerKpi, rankKpi, KPI_COMPONENTS, KPI_LABEL, KPI_GRADE_RULE, GRADE_COLOR, type CityManagerKpiRow, type KpiGrade } from '@/lib/kpiKota';
 
 /* ───────────────────── Bagian `pnl` (opsional, migrasi 0026) ───────────────────── */
 
@@ -74,7 +75,8 @@ export default function ExecPortal() {
   const [runs, setRuns] = useState<ReportRun[] | null>(null);
   const [runsErr, setRunsErr] = useState<string | null>(null);
   // Tab "Skema Bisnis" (0103): unit economics dari buku besar order lewat exec_report_v2 (token sesi eksekutif).
-  const [tab, setTab] = useState<'ringkasan' | 'skema' | 'kontribusi'>('ringkasan');
+  // Tab "KPI Manager Kota" (0118): exec_city_manager_kpi(p_exec_token, p_month) — top 5 & bottom 5 kota.
+  const [tab, setTab] = useState<'ringkasan' | 'skema' | 'kontribusi' | 'kpi'>('ringkasan');
   // Tab "Contribution margin" (finpay-v3 §6): RPC yang sama dengan Panel Admin (admin_contribution_margin).
   const fetchContribution = useCallback(async (from: string, to: string, group: ContributionGroup) => {
     if (!sess) throw new Error('Sesi eksekutif berakhir, masuk lagi');
@@ -156,7 +158,7 @@ export default function ExecPortal() {
           <Row between style={{ flexWrap: 'wrap', gap: 12 }}>
             <View style={{ flexShrink: 1, minWidth: 260, gap: 3 }}>
               <Text style={s.heroKicker} numberOfLines={2}>LAPORAN MANAJEMEN & PEMEGANG SAHAM · {execLevelLabel[sess.level].toUpperCase()}</Text>
-              <Text style={s.heroTitle} numberOfLines={2}>{tab === 'skema' ? 'AntarKita — Skema Bisnis (unit economics)' : tab === 'kontribusi' ? 'AntarKita — Contribution Margin' : `AntarKita — ${months} bulan terakhir`}</Text>
+              <Text style={s.heroTitle} numberOfLines={2}>{tab === 'skema' ? 'AntarKita — Skema Bisnis (unit economics)' : tab === 'kontribusi' ? 'AntarKita — Contribution Margin' : tab === 'kpi' ? 'AntarKita — KPI Manager Kota' : `AntarKita — ${months} bulan terakhir`}</Text>
               <Text style={s.heroSub} numberOfLines={2}>Dibuat {r ? fmtDate(r.generated_at) : '…'} · sesi berlaku s.d. {new Date(sess.expires_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</Text>
             </View>
             {tab === 'ringkasan' && <Row gap={6} style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -170,9 +172,15 @@ export default function ExecPortal() {
           <Chip label="Ringkasan manajemen" active={tab === 'ringkasan'} onPress={() => setTab('ringkasan')} color="#0B1F2A" />
           <Chip label="Skema Bisnis" active={tab === 'skema'} onPress={() => setTab('skema')} color="#0B1F2A" />
           <Chip label="Contribution margin" active={tab === 'kontribusi'} onPress={() => setTab('kontribusi')} color="#0B1F2A" />
+          <Chip label="KPI Manager Kota" active={tab === 'kpi'} onPress={() => setTab('kpi')} color="#0B1F2A" />
         </Row>
 
-        {tab === 'kontribusi' ? (
+        {tab === 'kpi' ? (
+          <Animated.View entering={FadeInDown.duration(motion.base)} style={{ gap: adminSpace.lg }}>
+            <SectionHead title="KPI Manager Kota" hint="Skor bulanan per kota dari lima komponen (merchant & driver baru, merchant & driver aktif, order) → grade A–D dan bonus manager. Lima kota teratas dan terbawah." />
+            <CityKpiExecSection token={sess.token} onSessionLost={() => { SESSION = null; setSess(null); toast.error('Sesi eksekutif berakhir, masuk lagi'); }} />
+          </Animated.View>
+        ) : tab === 'kontribusi' ? (
           <Animated.View entering={FadeInDown.duration(motion.base)} style={{ gap: adminSpace.lg }}>
             <SectionHead title="Contribution margin" hint="Per layanan / kota / merchant / bulan dari buku besar order. Target 25 % = take rate bersih tahap matang, bukan laba." />
             <ContributionView fetch={fetchContribution} />
@@ -606,6 +614,78 @@ function VoucherExecSection() {
           { key: 'platform_fee_recommended', label: 'Rek. biaya layanan', width: 150, align: 'right', mono: true, render: (r) => <Text style={[af.mono, { color: adminTone.teal, fontWeight: '700' }]}>{rupiah(Number(r.platform_fee_recommended ?? 0))}</Text> },
         ]} />
       </Panel>
+    </View>
+  );
+}
+
+/* ───────────────── 0118 · KPI Manager Kota untuk eksekutif (exec_city_manager_kpi) ───────────────── */
+const BULAN_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+const kpiMonthLabel = (m: string) => { const [y, mo] = m.split('-').map(Number); return `${BULAN_ID[mo - 1] ?? mo} ${y}`; };
+const kpiShiftMonth = (m: string, delta: number) => { const [y, mo] = m.split('-').map(Number); const d = new Date(Date.UTC(y, mo - 1 + delta, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`; };
+const kpiN = (v: unknown) => Number(v ?? 0) || 0;
+
+function CityKpiExecSection({ token, onSessionLost }: { token: string; onSessionLost: () => void }) {
+  const [month, setMonth] = useState(monthKey());
+  const [rows, setRows] = useState<CityManagerKpiRow[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const load = useCallback(() => {
+    setLoading(true);
+    execCityManagerKpi(token, month).then((r) => { setRows(r); setErr(null); }).catch((e: Error) => {
+      if (String(e.message).includes('EXEC_SESSION')) onSessionLost();
+      setRows([]); setErr(`KPI Manager Kota: ${e.message}`);
+    }).finally(() => setLoading(false));
+  }, [token, month, onSessionLost]);
+  useEffect(() => { load(); }, [load]);
+
+  const scored = rankKpi(rows).filter((r) => r.has_target);
+  const top = scored.slice(0, 5);
+  const bottom = scored.length > 5 ? scored.slice(-5).reverse() : [];
+  const avg = scored.length ? scored.reduce((a, r) => a + kpiN(r.score), 0) / scored.length : null;
+  const bonus = scored.reduce((a, r) => a + kpiN(r.bonus_earned), 0);
+  const grades = scored.reduce((a, r) => { const g = r.grade as KpiGrade | null; if (g && GRADE_COLOR[g]) a[g] = (a[g] ?? 0) + 1; return a; }, {} as Partial<Record<KpiGrade, number>>);
+  const noManager = rows.filter((r) => !r.manager_id).length;
+
+  const cols = [
+    { key: 'rank', label: '#', width: 44, align: 'right' as const, mono: true, render: (r: Record<string, unknown>) => <Text style={af.mono}>{String(r._rank)}</Text> },
+    { key: 'city_name', label: 'Kota · manager', width: 190, render: (r: Record<string, unknown>) => { const x = r as unknown as CityManagerKpiRow; return <View style={{ minWidth: 0 }}><Text style={af.bodyStrong} numberOfLines={1}>{x.city_name}</Text><Text style={af.tiny} numberOfLines={1}>{x.manager_name || 'belum ada manager'}</Text></View>; } },
+    { key: 'grade', label: 'Grade', width: 70, align: 'center' as const, render: (r: Record<string, unknown>) => { const g = r.grade as KpiGrade | null; return g && GRADE_COLOR[g] ? <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: GRADE_COLOR[g], alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>{g}</Text></View> : <Pill text="—" tone="off" />; } },
+    { key: 'score', label: 'Skor', width: 76, align: 'right' as const, mono: true, render: (r: Record<string, unknown>) => <Text style={[af.mono, { fontWeight: '700' }]}>{kpiN(r.score).toLocaleString('id-ID', { maximumFractionDigits: 1 })}</Text> },
+    ...KPI_COMPONENTS.map((k) => ({
+      key: k, label: KPI_LABEL[k], width: 130, align: 'right' as const, mono: true,
+      render: (r: Record<string, unknown>) => { const x = r as unknown as CityManagerKpiRow; const p = x.pct?.[k]; return <View style={{ alignItems: 'flex-end' }}><Text style={af.mono}>{kpiN(x.actual?.[k]).toLocaleString('id-ID')} / {kpiN(x.targets?.[k]).toLocaleString('id-ID')}</Text>{p == null ? <Text style={af.tiny}>tanpa target</Text> : <Text style={[af.tiny, { color: Number(p) >= 100 ? adminTone.green : Number(p) >= 80 ? adminTone.amber : adminTone.red, fontWeight: '700' }]}>{pctId(Number(p))}</Text>}</View>; },
+    })),
+    { key: 'bonus_earned', label: 'Bonus diraih', width: 130, align: 'right' as const, mono: true, render: (r: Record<string, unknown>) => <Text style={[af.mono, { color: adminTone.teal, fontWeight: '700' }]}>{rupiah(kpiN(r.bonus_earned))}</Text> },
+  ];
+  const withRank = (xs: CityManagerKpiRow[]) => xs.map((x) => ({ ...x, _rank: scored.indexOf(x) + 1 })) as unknown as Record<string, unknown>[];
+
+  return (
+    <View style={{ gap: adminSpace.lg }}>
+      <Row gap={8} style={{ flexWrap: 'wrap', alignItems: 'center' }}>
+        <Button size="sm" variant="outline" icon="chevron-back" title="" onPress={() => setMonth((m) => kpiShiftMonth(m, -1))} />
+        <Text style={af.h3}>{kpiMonthLabel(month)}</Text>
+        <Button size="sm" variant="outline" icon="chevron-forward" title="" disabled={month >= monthKey()} onPress={() => setMonth((m) => (kpiShiftMonth(m, 1) > monthKey() ? m : kpiShiftMonth(m, 1)))} />
+        {month !== monthKey() ? <Button size="sm" variant="ghost" title="Bulan ini" onPress={() => setMonth(monthKey())} /> : null}
+        {loading ? <Text style={af.tiny}>Memuat…</Text> : null}
+      </Row>
+      {err ? <Text style={[af.small, { color: adminTone.red }]} selectable>{err}</Text> : null}
+      <Row gap={adminSpace.md} style={{ flexWrap: 'wrap' }}>
+        <StatCard index={0} icon="flag-outline" label="Kota bertarget" value={scored.length} hint={`dari ${rows.length} kota · ${noManager} tanpa manager`} color={adminTone.blue} />
+        <StatCard index={1} icon="speedometer-outline" label="Rata-rata skor" value={avg == null ? '—' : avg.toLocaleString('id-ID', { maximumFractionDigits: 1 })} hint={`0–120 berbobot · grade ${KPI_GRADE_RULE}`} color={avg == null ? adminTone.slate : avg >= 80 ? adminTone.green : avg >= 60 ? adminTone.amber : adminTone.red} />
+        <StatCard index={2} icon="cash-outline" label="Total bonus diraih" value={rupiah(bonus)} hint={`pool ${rupiah(scored.reduce((a, r) => a + kpiN(r.bonus_pool), 0))}`} color={adminTone.teal} />
+        <StatCard index={3} icon="ribbon-outline" label="Sebaran grade" value={(['A', 'B', 'C', 'D'] as KpiGrade[]).map((g) => `${g}${grades[g] ?? 0}`).join(' · ')} hint="jumlah kota per grade" color={adminTone.violet} />
+      </Row>
+      <Panel title="5 kota teratas" subtitle="Skor tertinggi bulan ini — kandidat bonus penuh." icon="trophy-outline" iconColor={adminTone.green} padded={false}>
+        <DataTable keyField="city_id" rows={withRank(top)} emptyText={loading ? 'Memuat…' : err ? 'Tidak bisa membaca KPI' : 'Belum ada kota bertarget bulan ini — minta ops mengisi target di Panel Admin › KPI Manager Kota'} emptyIcon="trophy-outline" columns={cols} />
+      </Panel>
+      <Panel title="5 kota terbawah" subtitle="Skor terendah — butuh tindak lanjut manager / Perwakilan Kota." icon="trending-down-outline" iconColor={adminTone.red} padded={false}>
+        <DataTable keyField="city_id" rows={withRank(bottom)} emptyText={scored.length <= 5 ? 'Semua kota bertarget sudah tampil di tabel teratas' : 'Belum ada data'} emptyIcon="trending-down-outline" columns={cols} />
+      </Panel>
+      <FootNote lines={[
+        `Sumber: exec_city_manager_kpi(p_exec_token, p_month), migrasi 0118. Capaian per komponen dibatasi 120 %; skor = Σ bobot × capaian ÷ Σ bobot komponen bertarget; grade ${KPI_GRADE_RULE}.`,
+        'Bonus diraih = bonus pool × min(skor,120)/100 bila skor ≥ 60, selain itu 0 [ASUMSI skema bonus di 0118 — menunggu keputusan GM]; pembayaran tetap lewat GM/Direksi dan payroll, tidak otomatis.',
+        'Kota tanpa target tidak diberi skor dan tidak masuk peringkat.',
+      ]} />
     </View>
   );
 }

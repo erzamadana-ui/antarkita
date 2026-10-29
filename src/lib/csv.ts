@@ -62,3 +62,30 @@ export async function exportPayoutBatchCsv(batchId: string, rows: PayoutExportRo
   try { await Share.share({ title: filename, message: csv }); toast.success(`${rows.length} baris transfer dibagikan & disalin ke papan klip`); }
   catch { toast.show('CSV disalin ke papan klip'); }
 }
+
+/** Unduh teks sebagai berkas (web) atau bagikan + salin (native). Tidak mencatat log — pemanggil yang mencatat. */
+export async function downloadText(filename: string, text: string, mime = 'text/csv;charset=utf-8'): Promise<void> {
+  if (Platform.OS === 'web' && typeof document !== 'undefined') {
+    const blob = new Blob([text], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    return;
+  }
+  await Clipboard.setStringAsync(text);
+  try { await Share.share({ title: filename, message: text }); } catch { toast.show('Berkas disalin ke papan klip'); }
+}
+
+/**
+ * 0119: unduh CSV transfer massal format KlikBCA Bisnis — isi CSV dibuat server (`admin_payout_batch_export_bca`),
+ * klien hanya mencatat log ekspor lalu mengunduh apa adanya (tanpa BOM; KlikBCA Bisnis membaca ANSI/ASCII).
+ */
+export async function exportPayoutBatchBcaCsv(batchId: string, csv: string): Promise<void> {
+  const body = String(csv ?? '').trim();
+  if (!body) { toast.error('Server tidak mengembalikan isi CSV BCA'); return; }
+  const rows = body.split(/\r?\n/).filter(Boolean).length;
+  const filename = `bca-transfer-${batchId.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}.csv`;
+  await rpc('admin_log_event', { p_kind: 'admin.export', p_detail: { what: 'payout_batch_bca', batch_id: batchId, rows, filename } });
+  await downloadText(filename, body);
+  toast.success(`CSV KlikBCA Bisnis diunduh (${rows} baris, ${filename})`);
+}

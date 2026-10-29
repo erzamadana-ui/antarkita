@@ -46,7 +46,7 @@ begin
     perform set_config('antaraja.bypass', 'off', true);
     select id into bca from company_bank_accounts where bank_code = 'bca' and account_no = '0181320108';
     select id into bri from company_bank_accounts where bank_code = 'bri';
-    select value #>> '{}' into v_name from app_settings where key = 'voucher_legal_entity_name';
+    v_name := voucher_account_holder_name();   -- 0117: nama pemilik rekening
     log := log || format('S0 %s persiapan: admin_unlock ok=%s, bca=%s, legal_entity="%s"', case when (r->>'ok')::boolean and bca is not null then 'OK' else 'BUG' end, r->>'ok', bca is not null, v_name) || E'\n';
   exception when others then log := log || 'S0 BUG persiapan: ' || sqlerrm || E'\n'; end;
 
@@ -56,7 +56,7 @@ begin
     select count(*) into n from voucher_bank_accounts_public() where bank_code = 'bca' and account_no = '0181320108' and account_name = v_name;
     r := voucher_public_config();
     select count(*) into n2 from jsonb_array_elements(r->'banks') b where b->>'bank_code' = 'bca' and b->>'account_no' = '0181320108';
-    ok := n = 1 and n2 = 1 and r->>'legal_entity' = v_name and (select owner_verified_at is not null and owner_verified_reason like 'Keputusan GM%' from company_bank_accounts where id = bca);
+    ok := n = 1 and n2 = 1 and r->>'account_holder' = v_name and (select owner_verified_at is not null and owner_verified_reason like 'Keputusan GM%' from company_bank_accounts where id = bca);
     log := log || format('S1 %s rekening BCA publik: voucher_bank_accounts_public=%s, voucher_public_config.banks=%s (total %s), a.n. "%s", owner_verified=%s',
       case when ok then 'OK' else 'BUG' end, n, n2, jsonb_array_length(r->'banks'), v_name, (select owner_verified_at is not null from company_bank_accounts where id = bca)) || E'\n';
   exception when others then log := log || 'S1 BUG rekening publik: ' || sqlerrm || E'\n'; end;

@@ -879,7 +879,7 @@ function BanksTab({ banks, loading, reload }: { banks: BankAccount[]; loading: b
       <AdminDialog visible={!!edit} onClose={() => setEdit(null)} width={560} title={`Ubah rekening ${edit?.bank_name ?? ''}`}
         subtitle="Butuh PIN panel & izin payment_config. Tercatat di log aktivitas (nomor disamarkan).">
         <View style={{ gap: 10 }}>
-          <Note tone="wait" icon="warning-outline">Isi hanya bila rekening atas nama PT sudah dibuka dan disetujui Finance & Legal. Jangan mengarang atau memakai rekening pribadi.</Note>
+          <Note tone="wait" icon="warning-outline">Isi hanya bila rekening resmi yang namanya sama dengan setelan Nama pemilik rekening sudah dibuka dan disetujui Finance & Legal. Jangan mengarang atau memakai rekening pribadi.</Note>
           <Input label="Nomor rekening" placeholder="8–20 digit, tanpa spasi" value={f.account_no} onChangeText={(v) => setF((p) => ({ ...p, account_no: digits(v) }))} keyboardType="number-pad" maxLength={20} error={editErr} />
           <View style={{ gap: 4 }}>
             <Input label="Nama pemilik rekening" placeholder={entity || 'nama badan usaha'} value={f.account_name} onChangeText={(v) => setF((p) => ({ ...p, account_name: v }))} />
@@ -1092,7 +1092,7 @@ function SwitchTab({ banks }: { banks: BankAccount[] }) {
 
       <AdminDialog visible={confirmOn} onClose={() => setConfirmOn(false)} title="Aktifkan pembelian AntarVoucher?" tone={adminTone.amber}>
         <View style={{ gap: 10 }}>
-          <Note tone="wait" icon="warning-outline">Pastikan Legal & Finance sudah menyetujui secara tertulis: rekening atas nama PT, nama badan usaha, batas float (kajian izin PJP), dan SOP pencocokan mutasi bank.</Note>
+          <Note tone="wait" icon="warning-outline">Pastikan Legal & Finance sudah menyetujui secara tertulis: rekening resmi yang namanya sama dengan setelan Nama pemilik rekening, nama badan usaha, batas float (kajian izin PJP), dan SOP pencocokan mutasi bank.</Note>
           <Text style={font.body}>Pengguna akan melihat instruksi transfer ke {ready} rekening terverifikasi. Tindakan butuh PIN panel dan tercatat di log aktivitas.</Text>
           <Row gap={8} style={{ justifyContent: 'flex-end' }}>
             <Button size="sm" variant="ghost" title="Batal" onPress={() => setConfirmOn(false)} />

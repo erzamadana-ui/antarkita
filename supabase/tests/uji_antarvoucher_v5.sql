@@ -76,7 +76,7 @@ begin
     cust := pg_temp.v5_customer(); cust2 := pg_temp.v5_customer();
     select id into bri from company_bank_accounts where bank_code = 'bri';
     perform pg_temp.v5_as(adm);
-    perform admin_voucher_bank_upsert(jsonb_build_object('id', bri, 'account_no', '0000111122223333', 'account_name', 'PT Antar Kita Indonesia', 'active', true));
+    perform admin_voucher_bank_upsert(jsonb_build_object('id', bri, 'account_no', '0000111122223333', 'account_name', voucher_account_holder_name(), 'active', true));
     perform pg_temp.v5_as(finA); perform admin_voucher_bank_verify(bri, 'finance');
     perform pg_temp.v5_as(legal); perform admin_voucher_bank_verify(bri, 'legal');
     perform pg_temp.v5_as(adm); perform admin_set_antarvoucher_purchase_enabled(true);

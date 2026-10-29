@@ -19,6 +19,9 @@ export interface VoucherPublicConfig {
   code_ttl_hours: number;
   auto_redeem: boolean;
   banks: VoucherBankAccount[];
+  /** 0117: nama pemilik rekening resmi (voucher_account_holder_name); null bila belum disetel. */
+  account_holder?: string | null;
+  legal_entity?: string | null;
 }
 
 export interface VoucherCode {
@@ -109,6 +112,33 @@ export interface PayoutBatch {
   settled_at: string | null;
 }
 
+/** 0119: satu sesi transfer harian (cutoff 09:00 · 13:00 · 17:00 WIB, atau 'manual' untuk batch di luar jadwal). */
+export type PayoutSessionCutoff = '09:00' | '13:00' | '17:00' | 'manual' | (string & {});
+export type PayoutSessionStatus = 'menunggu' | 'kosong' | 'dibuat' | 'selesai';
+export interface PayoutSession {
+  session_id: string | null;
+  session_date: string;
+  cutoff: PayoutSessionCutoff;
+  status: PayoutSessionStatus;
+  /** Cutoff sudah lewat (WIB) — sesi 'menunggu' yang is_past = cron belum jalan / batch otomatis nonaktif. */
+  is_past: boolean;
+  batch_id: string | null;
+  batch_status: PayoutBatch['status'] | null;
+  items: number;
+  total: number;
+  settled_items: number;
+  failed_items: number;
+  /** Permintaan disetujui yang saat ini belum masuk batch (hanya diisi untuk sesi yang belum dibuat). */
+  pending_now_items: number;
+  pending_now_total: number;
+  /** Sesi manual: label yang diketik admin. */
+  note: string | null;
+  created_at: string | null;
+  closed_at: string | null;
+}
+/** Hasil admin_payout_batch_create_now: sesi 'manual' + batch yang dibuat. Melempar PAYOUT_BATCH_EMPTY bila tidak ada antrean. */
+export interface PayoutBatchCreateNowResult { session: PayoutSession & { id: string }; batch: PayoutBatch | null }
+
 export interface PayoutExportRow {
   withdrawal_id: string;
   user_id: string;
@@ -146,6 +176,11 @@ export const adminPayoutBatchCreate = () => rpc<PayoutBatch>('admin_payout_batch
 export const adminPayoutBatchExport = (batchId: string) => rpc<PayoutExportRow[]>('admin_payout_batch_export', { p_batch: batchId });
 export const adminPayoutBatchSettle = (batchId: string, refs: { withdrawal_id: string; bank_ref?: string; status: 'ok' | 'failed'; reason?: string }[]) =>
   rpc<unknown>('admin_payout_batch_settle', { p_batch: batchId, p_refs: refs });
+// 0119: sesi transfer harian
+export const adminPayoutSessions = async (date: string | null) => { const r = await rpc<unknown>('admin_payout_sessions', { p_date: date }); return Array.isArray(r) ? (r as PayoutSession[]) : []; };
+export const adminPayoutBatchCreateNow = (label: string | null) => rpc<PayoutBatchCreateNowResult>('admin_payout_batch_create_now', { p_label: label });
+/** CSV format KlikBCA Bisnis (teks utuh dari server). */
+export const adminPayoutBatchExportBca = (batchId: string) => rpc<string>('admin_payout_batch_export_bca', { p_batch: batchId });
 
 // ---- util
 /** PPN inklusif: bagian pajak dari nilai kotor R. */

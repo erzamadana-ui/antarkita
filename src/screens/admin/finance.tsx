@@ -5,18 +5,22 @@
 //   • Finpay  → edge function `pay-disburse` { withdrawal_id } (hanya bila app_settings.disbursement_provider = 'finpay').
 // admin_review_withdrawal butuh PIN (gerbang ensureUnlocked).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, Linking, Platform, ScrollView } from 'react-native';
+import { View, Text, Pressable, Linking, Platform, ScrollView, StyleSheet } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import {
-  AdminPage, Panel, DataTable, Toolbar, FilterBar, StatCard, Pill, RowActions, AdminDialog, RequirePerm, statusTone, adminFont as font, adminTone, adminSpace, adminTable,
+  AdminPage, Panel, DataTable, Toolbar, FilterBar, StatCard, Pill, RowActions, AdminDialog, RequirePerm, statusTone, adminFont as font, adminTone, adminSpace, adminRadius, adminIcon, adminTable,
 } from '@/components/admin';
 import { Row, Button, Input, toast } from '@/components/ui';
 import { PAYOUT_STATUS_LABEL, payoutTone, invokeEdge, useAdminCan, type WithdrawalV3Extra } from '@/lib/admin';
 import { rpc, supabase } from '@/lib/supabase';
 import { signedUrl } from '@/lib/upload';
-import { adminExportCsv, exportPayoutBatchCsv } from '@/lib/csv';
+import { adminExportCsv, exportPayoutBatchCsv, exportPayoutBatchBcaCsv } from '@/lib/csv';
 import { confirmAsync } from '@/lib/mitra';
-import { adminPayoutQueue, adminPayoutBatchCreate, adminPayoutBatchExport, adminPayoutBatchSettle, type PayoutQueueRow, type PayoutBatch, type PayoutExportRow } from '@/lib/voucherV5';
+import {
+  adminPayoutQueue, adminPayoutBatchCreate, adminPayoutBatchExport, adminPayoutBatchSettle, adminPayoutSessions, adminPayoutBatchCreateNow, adminPayoutBatchExportBca,
+  type PayoutQueueRow, type PayoutBatch, type PayoutExportRow, type PayoutSession, type PayoutSessionStatus,
+} from '@/lib/voucherV5';
 import { useVoucherConfig } from '@/hooks/useVoucherV5';
 import { handleAdminError, useAdminSecurity } from '@/store/adminSecurity';
 import { colors } from '@/lib/theme';
@@ -372,6 +376,8 @@ function PayoutQueueV5({ onChanged }: { onChanged: () => Promise<void> | void })
 
   return (
     <>
+      <PayoutSessionsPanel batches={batches} busy={busy} setBusy={setBusy} onSettle={openSettle} onExportGeneral={exportBatch} onReload={async () => { await load(); await onChanged(); }} />
+
       <Row gap={adminSpace.md} style={{ flexWrap: 'wrap' }}>
         <StatCard index={0} icon="time-outline" label="Antrean pencairan (SLA 24 jam)" value={queue.length} hint={`${rupiah(sumQ(queue))} · pending + disetujui belum sampai`} color={adminTone.blue} />
         <StatCard index={1} icon="alert-circle-outline" label="Lewat SLA" value={overdue.length} hint={overdue.length ? `${rupiah(sumQ(overdue))} — prioritaskan!` : 'semua dalam SLA'} color={overdue.length ? adminTone.red : adminTone.green} />
@@ -452,3 +458,156 @@ function PayoutQueueV5({ onChanged }: { onChanged: () => Promise<void> | void })
     </>
   );
 }
+
+/* ───────────────────── 0119 · Sesi transfer harian (09:00 · 13:00 · 17:00 WIB) ───────────────────── */
+// admin_payout_sessions(p_date) → status per cutoff; admin_payout_batch_create_now(p_label) (PIN) = batch manual di luar jadwal;
+// admin_payout_batch_export_bca(p_batch) → teks CSV KlikBCA Bisnis. Jadwal cutoff dibaca dari app_settings.payout_batch_cutoffs.
+
+const SESSION_CUTOFFS = ['09:00', '13:00', '17:00'] as const;
+const SESSION_STATUS: Record<PayoutSessionStatus, { label: string; tone: 'wait' | 'off' | 'info' | 'ok'; icon: React.ComponentProps<typeof Ionicons>['name'] }> = {
+  menunggu: { label: 'Menunggu cutoff', tone: 'wait', icon: 'time-outline' },
+  kosong: { label: 'Kosong — tidak ada permintaan', tone: 'off', icon: 'remove-circle-outline' },
+  dibuat: { label: 'Batch dibuat · belum selesai', tone: 'info', icon: 'albums-outline' },
+  selesai: { label: 'Selesai', tone: 'ok', icon: 'checkmark-done-outline' },
+};
+const pad2 = (n: number) => String(n).padStart(2, '0');
+/** Tanggal hari ini menurut WIB → "YYYY-MM-DD". */
+const todayWib = () => { const t = new Date(Date.now() + 7 * 3600000); return `${t.getUTCFullYear()}-${pad2(t.getUTCMonth() + 1)}-${pad2(t.getUTCDate())}`; };
+const shiftDay = (d: string, delta: number) => { const [y, m, dd] = d.split('-').map(Number); const x = new Date(Date.UTC(y, m - 1, dd + delta)); return `${x.getUTCFullYear()}-${pad2(x.getUTCMonth() + 1)}-${pad2(x.getUTCDate())}`; };
+const dayLabel = (d: string) => { const [y, m, dd] = d.split('-').map(Number); return new Date(Date.UTC(y, m - 1, dd)).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }); };
+
+function PayoutSessionsPanel({ batches, busy, setBusy, onSettle, onExportGeneral, onReload }: {
+  batches: PayoutBatch[]; busy: string | null; setBusy: (v: string | null) => void;
+  onSettle: (b: PayoutBatch) => Promise<void>; onExportGeneral: (b: PayoutBatch) => Promise<void>; onReload: () => Promise<void>;
+}) {
+  const can = useAdminCan();
+  const [date, setDate] = useState(todayWib());
+  const [sessions, setSessions] = useState<PayoutSession[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [cutoffs, setCutoffs] = useState<string[] | null>(null);
+  const [label, setLabel] = useState('');
+  const [manualOn, setManualOn] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { setSessions(await adminPayoutSessions(date)); setErr(null); }
+    catch (e) { setSessions([]); setErr(`Sesi transfer: ${(e as Error).message}`); }
+    finally { setLoading(false); }
+  }, [date]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    supabase.from('app_settings').select('value').eq('key', 'payout_batch_cutoffs').maybeSingle()
+      .then(({ data }) => { const v = (data as { value?: unknown } | null)?.value; setCutoffs(Array.isArray(v) ? v.map(String) : null); });
+  }, []);
+
+  /** Server (0119) mengirim satu baris per cutoff dari setelan + sesi manual hari itu. Bila RPC gagal/kosong, tiga sesi baku tampil sebagai 'menunggu'. */
+  const cards = useMemo<PayoutSession[]>(() => (sessions.length ? sessions : SESSION_CUTOFFS.map((c) => ({
+    session_id: null, session_date: date, cutoff: c, status: 'menunggu' as const, is_past: false, batch_id: null, batch_status: null, items: 0, total: 0, settled_items: 0, failed_items: 0,
+    pending_now_items: 0, pending_now_total: 0, note: null, created_at: null, closed_at: null,
+  }))), [sessions, date]);
+  const isManual = (c: PayoutSession) => String(c.cutoff) === 'manual' || !/^\d{2}:\d{2}$/.test(String(c.cutoff));
+  const batchOf = (sx: PayoutSession): PayoutBatch | null => {
+    if (!sx.batch_id) return null;
+    return batches.find((b) => b.id === sx.batch_id) ?? { id: sx.batch_id, created_at: sx.created_at ?? new Date().toISOString(), cutoff: String(sx.cutoff), status: sx.batch_status ?? (sx.status === 'selesai' ? 'settled' : 'exported'), total: Number(sx.total || 0), count: Number(sx.items || 0), exported_at: null, settled_at: null };
+  };
+
+  const exportBca = async (sx: PayoutSession) => {
+    if (!sx.batch_id) return;
+    setBusy(`bca:${sx.batch_id}`);
+    try { const csv = await adminPayoutBatchExportBca(sx.batch_id); await exportPayoutBatchBcaCsv(sx.batch_id, String(csv ?? '')); await onReload(); await load(); }
+    catch (e) { handleAdminError(e); } finally { setBusy(null); }
+  };
+  const createNow = async () => {
+    const pending = cards.reduce((a, c) => Math.max(a, Number(c.pending_now_items || 0)), 0);
+    const pendingTotal = cards.reduce((a, c) => Math.max(a, Number(c.pending_now_total || 0)), 0);
+    if (!(await confirmAsync('Buat batch transfer sekarang?', `${pending ? `${pending} permintaan disetujui (${rupiah(pendingTotal)}) yang belum masuk batch` : 'Semua permintaan disetujui yang belum masuk batch'} akan dikumpulkan ke satu batch manual (di luar jadwal cutoff). Setelah itu unduh CSV dan transfer di KlikBCA Bisnis.`, 'Ya, buat batch'))) return;
+    if (!(await useAdminSecurity.getState().ensureUnlocked())) return;
+    setBusy('create-now');
+    try {
+      const r = await adminPayoutBatchCreateNow(label.trim() || null);
+      const b = r?.batch, sess = r?.session;
+      toast.success(`Batch manual ${b?.id ? b.id.slice(0, 8) : ''} dibuat · ${Number(sess?.items ?? b?.count ?? 0)} baris · ${rupiah(Number(sess?.total ?? b?.total ?? 0))}`);
+      setLabel(''); setManualOn(false); await onReload(); await load();
+    } catch (e) {
+      if (/PAYOUT_BATCH_EMPTY/.test(String((e as Error).message))) toast.show('Tidak ada pencairan disetujui yang menunggu batch');
+      else handleAdminError(e);
+    } finally { setBusy(null); }
+  };
+
+  const today = todayWib();
+  const isToday = date === today;
+  const totalDay = cards.reduce((a, c) => a + Number(c.total || 0), 0), itemsDay = cards.reduce((a, c) => a + Number(c.items || 0), 0);
+  const cutoffText = cutoffs?.length ? cutoffs.join(' · ') : '09:00 · 13:00 · 17:00';
+  const cutoffMismatch = !!cutoffs && (cutoffs.length !== 3 || cutoffs.some((c, i) => c !== SESSION_CUTOFFS[i]));
+
+  return (
+    <Panel title="Daftar transfer harian (3 sesi: 09:00 · 13:00 · 17:00 WIB)" subtitle="Setiap cutoff server mengumpulkan permintaan pencairan yang sudah disetujui menjadi satu batch. Unduh CSV (format KlikBCA Bisnis / umum), transfer di internet banking, lalu Tandai selesai dengan nomor referensi per baris." icon="calendar-outline" iconColor={adminTone.teal}
+      right={<Row gap={6} style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <Pressable onPress={() => setDate((d) => shiftDay(d, -1))} style={sx.navBtn} accessibilityLabel="Hari sebelumnya"><Ionicons name="chevron-back" size={adminIcon.md} color={adminTone.ink2} /></Pressable>
+        <View style={sx.day}><Ionicons name="calendar-outline" size={adminIcon.sm} color={adminTone.teal} /><Text style={font.bodyStrong}>{dayLabel(date)}</Text></View>
+        <Pressable onPress={() => setDate((d) => (shiftDay(d, 1) > today ? d : shiftDay(d, 1)))} style={[sx.navBtn, isToday && { opacity: 0.35 }]} disabled={isToday} accessibilityLabel="Hari berikutnya"><Ionicons name="chevron-forward" size={adminIcon.md} color={adminTone.ink2} /></Pressable>
+        {!isToday ? <Button size="sm" variant="ghost" title="Hari ini" onPress={() => setDate(today)} /> : null}
+        <RequirePerm perm="finance" fallback={<Text style={font.tiny}>Batch manual: izin keuangan</Text>}>
+          <Button size="sm" variant="secondary" title="Buat batch sekarang" icon="flash-outline" disabled={busy !== null || !isToday} onPress={() => setManualOn((v) => !v)} />
+        </RequirePerm>
+      </Row>}>
+      <View style={{ gap: adminSpace.md }}>
+        <ErrorNote text={err} onRetry={load} />
+        {manualOn && isToday ? (
+          <View style={sx.manualBox}>
+            <Text style={font.small}>Batch manual mengumpulkan semua permintaan disetujui yang belum masuk batch, tanpa menunggu cutoff berikutnya. Butuh PIN panel; tercatat di log keuangan.</Text>
+            <Row gap={8} style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <Input label="Label (opsional)" placeholder="mis. susulan 15:30 — driver lewat SLA" value={label} onChangeText={setLabel} containerStyle={{ flex: 1, minWidth: 220 }} />
+              <Button size="sm" title="Buat batch manual" icon="flash-outline" loading={busy === 'create-now'} disabled={busy !== null} onPress={createNow} />
+              <Button size="sm" variant="ghost" title="Batal" disabled={busy !== null} onPress={() => setManualOn(false)} />
+            </Row>
+          </View>
+        ) : null}
+        <Row gap={adminSpace.md} style={{ flexWrap: 'wrap', alignItems: 'stretch' }}>
+          {cards.map((c, i) => {
+            const m = SESSION_STATUS[c.status] ?? SESSION_STATUS.menunggu;
+            const b = batchOf(c);
+            const manual = isManual(c);
+            const late = c.status === 'menunggu' && c.is_past;
+            return (
+              <View key={c.session_id ?? `${c.cutoff}-${i}`} style={[sx.card, c.status === 'dibuat' && { borderColor: adminTone.blue + '66' }, c.status === 'selesai' && { borderColor: adminTone.green + '66' }]}>
+                <Row between style={{ gap: 8 }}>
+                  <Row gap={8}>
+                    <View style={[sx.clock, { backgroundColor: (c.status === 'selesai' ? adminTone.green : c.status === 'dibuat' ? adminTone.blue : adminTone.slate) + '14' }]}><Ionicons name={manual ? 'flash-outline' : 'time-outline'} size={adminIcon.md} color={c.status === 'selesai' ? adminTone.green : c.status === 'dibuat' ? adminTone.blue : adminTone.slate} /></View>
+                    <View style={{ flexShrink: 1, minWidth: 0 }}><Text style={font.h3} numberOfLines={1}>{manual ? `Manual${c.note ? ` · ${c.note}` : ''}` : `Sesi ${c.cutoff} WIB`}</Text><Text style={font.tiny} numberOfLines={1}>{b ? `batch ${b.id.slice(0, 8)}${c.failed_items ? ` · ${c.failed_items} gagal` : ''}` : c.status === 'menunggu' ? `${Number(c.pending_now_items || 0)} disetujui (${rupiah(Number(c.pending_now_total || 0))}) menunggu cutoff` : c.note || '—'}</Text></View>
+                  </Row>
+                  <Pill text={late ? 'Lewat cutoff · belum dibuat' : m.label} tone={late ? 'bad' : m.tone} icon={m.icon} />
+                </Row>
+                <Row gap={adminSpace.lg} style={{ marginTop: adminSpace.md, flexWrap: 'wrap' }}>
+                  <View><Text style={font.label}>Baris</Text><Text style={font.num}>{Number(c.items || 0).toLocaleString('id-ID')}</Text></View>
+                  <View><Text style={font.label}>Total</Text><Text style={[font.num, { fontSize: 18, lineHeight: 24 }]}>{rupiah(Number(c.total || 0))}</Text></View>
+                  <View><Text style={font.label}>Dana sampai</Text><Text style={font.mono}>{Number(c.settled_items || 0)} / {Number(c.items || 0)}</Text></View>
+                </Row>
+                {b && c.status !== 'kosong' ? (
+                  <Row gap={6} style={{ marginTop: adminSpace.md, flexWrap: 'wrap' }}>
+                    <Button size="sm" variant="secondary" title="Unduh CSV BCA" icon="download-outline" loading={busy === `bca:${b.id}`} disabled={busy !== null} onPress={() => exportBca(c)} />
+                    <Button size="sm" variant="outline" title="Unduh CSV umum" icon="document-outline" loading={busy === `x:${b.id}`} disabled={busy !== null} onPress={() => onExportGeneral(b)} />
+                    {c.status !== 'selesai' && can('finance') ? <Button size="sm" title="Tandai selesai" icon="checkmark-done-outline" color={colors.success} loading={busy === `o:${b.id}`} disabled={busy !== null} onPress={() => onSettle(b)} /> : null}
+                  </Row>
+                ) : <Text style={[font.tiny, { marginTop: adminSpace.md }]}>{c.status === 'menunggu' ? (late ? 'Cutoff sudah lewat tetapi sesi belum dibuat — cron payout_batch_auto belum jalan atau batch otomatis nonaktif; pakai "Buat batch sekarang".' : isToday ? 'Batch dibuat otomatis saat cutoff (cron tiap 5 menit); pakai "Buat batch sekarang" bila perlu lebih cepat.' : 'Tidak ada batch pada sesi ini.') : `Tidak ada permintaan disetujui pada sesi ini${c.note ? ` (${c.note})` : ''}.`}</Text>}
+              </View>
+            );
+          })}
+        </Row>
+        <Row gap={10} style={{ flexWrap: 'wrap' }}>
+          <Text style={font.tiny}>{loading ? 'Memuat sesi…' : `${itemsDay} baris · ${rupiah(totalDay)} pada ${dayLabel(date)}`}</Text>
+          <Text style={font.tiny}>· Jadwal cutoff (setelan payout_batch_cutoffs): {cutoffText} WIB{cutoffMismatch ? ' — berbeda dari 3 sesi baku 09:00 · 13:00 · 17:00; selaraskan di Pengaturan' : ''}. Sesi 09:00 & 13:00 hanya mengambil pencairan ≥ payout_min_amount; sisanya ikut sesi terakhir. CSV BCA = format KlikBCA Bisnis [ASUMSI — verifikasi dengan template resmi sebelum unggah pertama].</Text>
+        </Row>
+      </View>
+    </Panel>
+  );
+}
+
+const sx = StyleSheet.create({
+  navBtn: { width: 30, height: 30, borderRadius: adminRadius.sm, borderWidth: 1, borderColor: adminTone.border, backgroundColor: adminTone.surface, alignItems: 'center', justifyContent: 'center' },
+  day: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, height: 30, borderRadius: adminRadius.sm, borderWidth: 1, borderColor: adminTone.border, backgroundColor: adminTone.surface },
+  card: { flexGrow: 1, flexBasis: 300, minWidth: 280, padding: adminSpace.lg, borderWidth: 1, borderColor: adminTone.border, borderRadius: adminRadius.card, backgroundColor: adminTone.surfaceAlt },
+  clock: { width: 32, height: 32, borderRadius: adminRadius.md, alignItems: 'center', justifyContent: 'center' },
+  manualBox: { gap: 8, padding: adminSpace.md, borderWidth: 1, borderColor: adminTone.teal + '55', backgroundColor: adminTone.teal + '0D', borderRadius: adminRadius.md },
+});

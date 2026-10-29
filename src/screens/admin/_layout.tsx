@@ -41,6 +41,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/(admin)/vendors', label: 'Mitra Pasar', icon: 'leaf-outline', iconActive: 'leaf' },
       { href: '/(admin)/logistics', label: 'Logistik & Travel', icon: 'navigate-outline', iconActive: 'navigate' },
       { href: '/(admin)/kota', label: 'Kota & Wilayah', icon: 'globe-outline', iconActive: 'globe' },
+      { href: '/(admin)/kpi-kota', label: 'KPI Manager Kota', icon: 'podium-outline', iconActive: 'podium', perm: ['ops', 'finance', 'report'] },
     ],
   },
   {
@@ -110,6 +111,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/(admin)/automation', label: 'Otomasi', icon: 'flash-outline', iconActive: 'flash' },
       { href: '/(admin)/map', label: 'Peta', icon: 'globe-outline', iconActive: 'globe' },
+      { href: '/(admin)/aset-merek', label: 'Aset Merek', icon: 'color-palette-outline', iconActive: 'color-palette' },
       { href: '/(admin)/settings', label: 'Pengaturan', icon: 'settings-outline', iconActive: 'settings', perm: ['settings', 'orders'] },
     ],
   },

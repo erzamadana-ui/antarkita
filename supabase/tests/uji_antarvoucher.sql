@@ -97,14 +97,14 @@ begin
   begin
     perform pg_temp.av_as(adm);
     msg := ''; begin r := admin_voucher_bank_upsert(jsonb_build_object('id', bri, 'account_no', '12ab')); exception when others then msg := sqlerrm; end;
-    r := admin_voucher_bank_upsert(jsonb_build_object('id', bri, 'account_no', '0000111122223333', 'account_name', 'Erza Pradipta Madana', 'active', true));
+    r := admin_voucher_bank_upsert(jsonb_build_object('id', bri, 'account_no', '0000111122223333', 'account_name', 'Nama Orang Lain', 'active', true));
     perform pg_temp.av_as(finA); r2 := admin_voucher_bank_verify(bri, 'finance');
     msg2 := ''; begin r2 := admin_voucher_bank_verify(bri, 'legal'); exception when others then msg2 := sqlerrm; end;
     perform pg_temp.av_as(legal); r2 := admin_voucher_bank_verify(bri, 'legal');
     ok := msg like '%8–20 digit%' and msg2 like 'MAKER_CHECKER%' and not (r2->>'public_ok')::boolean;   -- nama pribadi → tidak tampil
     -- nama diganti ke badan usaha resmi → verifikasi batal, harus ulang
     perform pg_temp.av_as(adm);
-    r := admin_voucher_bank_upsert(jsonb_build_object('id', bri, 'account_name', 'PT Antar Kita Indonesia'));
+    r := admin_voucher_bank_upsert(jsonb_build_object('id', bri, 'account_name', voucher_account_holder_name()));
     b0 := (select count(*) from company_bank_accounts where id = bri and finance_verified_at is null and legal_verified_at is null);
     perform pg_temp.av_as(finA); perform admin_voucher_bank_verify(bri, 'finance');
     perform pg_temp.av_as(legal); r2 := admin_voucher_bank_verify(bri, 'legal');

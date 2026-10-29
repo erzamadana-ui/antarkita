@@ -489,6 +489,7 @@ function PurchaseDetail({ p, code, onChange, onClose, onReload }: {
   p: VoucherPurchase; code: VoucherCode | null; onChange: (p: VoucherPurchase) => void; onClose: () => void; onReload: () => Promise<void>;
 }) {
   const t = useT();
+  const { config } = useVoucherConfig();   // 0117: account_holder = nama pemilik rekening resmi (setelan admin)
   const live = p.status === 'awaiting_transfer' || p.status === 'submitted';
   const now = useNow(live);
   const left = new Date(p.expires_at).getTime() - now;
@@ -517,11 +518,11 @@ function PurchaseDetail({ p, code, onChange, onClose, onReload }: {
 
   const steps = useMemo(() => [
     'Buka m-banking / ATM / internet banking Anda.',
-    `Transfer ke ${p.bank_name ?? 'bank tujuan'}${p.account_no ? ` ${p.account_no}` : ''} a.n. ${p.account_name ?? 'PT Antar Kita Indonesia'}.`,
+    `Transfer ke ${p.bank_name ?? 'bank tujuan'}${p.account_no ? ` ${p.account_no}` : ''} a.n. ${p.account_name ?? config.account_holder ?? 'rekening resmi AntarKita'}.`,
     `Masukkan nominal PERSIS ${rupiah(p.transfer_amount)} — jangan dibulatkan.`,
     `Tulis kode ${codeText ?? p.reference} di berita/catatan transfer (bila tersedia).`,
     'Tekan "Saya sudah transfer" agar pencocokan lebih cepat. Saldo masuk setelah dana dicocokkan.',
-  ], [p.bank_name, p.account_no, p.account_name, p.transfer_amount, p.reference, codeText]);
+  ], [p.bank_name, p.account_no, p.account_name, p.transfer_amount, p.reference, codeText, config.account_holder]);
 
   return (
     <View style={{ gap: 16 }}>
