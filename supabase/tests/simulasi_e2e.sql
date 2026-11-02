@@ -73,7 +73,8 @@ begin
       ('rate_limit_create_order_per_hour', '100000'::jsonb), ('rate_limit_payment_prepare_per_hour', '100000'::jsonb),
       ('rate_limit_withdrawal_per_hour', '100000'::jsonb),
       ('payment_mode', '"gateway"'::jsonb), ('driver_deposit_required', 'false'::jsonb), ('driver_debt_limit', '-500000'::jsonb),   -- 0114 v5: berkas ini menguji mode gateway & batas minus lama (v5 diuji di uji_antarvoucher_v5.sql)
-      ('legacy_topup_manual_approval', 'true'::jsonb)   -- 0112: skenario lama mendanai saldo uji via top up manual; jalur AntarVoucher diuji di uji_antarvoucher.sql
+      ('legacy_topup_manual_approval', 'true'::jsonb),   -- 0112: skenario lama mendanai saldo uji via top up manual; jalur AntarVoucher diuji di uji_antarvoucher.sql
+      ('antifraud_orders_per_hour_max', '100000'::jsonb), ('antifraud_new_account_hours', '0'::jsonb)   -- 0121: berkas ini membuat puluhan pesanan/jam dari satu akun seed (anti order fiktif diuji di uji_antifraud_0121.sql)
     on conflict (key) do update set value = excluded.value, updated_at = now();
   exception when others then log := log || 'S0 BUG fixture v3: ' || sqlerrm || E'\n'; end;
 
@@ -259,7 +260,7 @@ begin
   -- ===== S10 Travel kursi bersama =====
   begin
     perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
-    tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '1 day')::text, 'seats_total', 6, 'seat_price', 150000, 'allow_private', true, 'private_price', 800000));
+    tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '1 day')::text, 'seats_total', 6, 'allow_private', true));
     perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
     select balance into b0 from wallets where user_id = cust;
     tb := travel_book(jsonb_build_object('trip_id', tt.id, 'pax', 2, 'pickup_address', 'Jl. Sudirman 45', 'pickup_lat', 0.5, 'pickup_lng', 101.44, 'passengers', jsonb_build_array(jsonb_build_object('name', 'Budi'), jsonb_build_object('name', 'Ani')), 'paid_via', 'wallet'));
@@ -995,7 +996,7 @@ begin
     log := log || format('S33c %s notifikasi permintaan/penawaran travel membawa travel_request_id → %s baris', case when n >= 1 then 'OK' else 'BUG' end, n) || E'\n';
     -- (d) pembatalan jadwal travel oleh mitra → notifikasi ke penumpang harus membawa booking_id
     perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
-    tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '3 days')::text, 'seats_total', 4, 'seat_price', 120000, 'allow_private', false));
+    tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '3 days')::text, 'seats_total', 4, 'allow_private', false));
     perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
     tb := travel_book(jsonb_build_object('trip_id', tt.id, 'pax', 1, 'pickup_address', 'Jl. Uji Notifikasi', 'pickup_lat', 0.5, 'pickup_lng', 101.44,
       'passengers', jsonb_build_array(jsonb_build_object('name', 'Uji QC')), 'paid_via', 'cash'));
@@ -2017,7 +2018,7 @@ begin
 
       -- (a) kursi bersama dibayar dompet
       perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
-      tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '2 days')::text, 'seats_total', 6, 'seat_price', 150000, 'allow_private', false));
+      tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '2 days')::text, 'seats_total', 6, 'allow_private', false));
       perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
       select balance into c0 from wallets where user_id = cust; select balance into p0 from wallets where user_id = drv2;
       tb := travel_book(jsonb_build_object('trip_id', tt.id, 'pax', 2, 'pickup_address', 'S50a Jemput', 'pickup_lat', 0.5, 'pickup_lng', 101.44,
@@ -2028,13 +2029,13 @@ begin
       perform travel_trip_set_status(tt.id, 'arrived', null);
       select balance into p1 from wallets where user_id = drv2;
       plat := tb.price - (p1 - p0);
-      log := log || format('S50a %s travel kursi bersama DOMPET %s: harga tagihan=%s (2 kursi @150.000 + biaya aplikasi %s) | pelanggan Δ%s (harus -%s) | mitra Δ%s (harus %s) | platform=%s',
+      log := log || format('S50a %s travel kursi bersama DOMPET %s: harga tagihan=%s (2 kursi @%s [quote 0124] + biaya aplikasi %s) | pelanggan Δ%s (harus -%s) | mitra Δ%s (harus %s) | platform=%s',
         case when c1 - c0 = -tb.price and p1 - p0 = tb.partner_earning and plat >= 0 then 'OK' else 'BUG' end,
-        tb.code, tb.price, tb.platform_fee, c1 - c0, tb.price, p1 - p0, tb.partner_earning, plat) || E'\n';
+        tb.code, tb.price, tt.seat_price, tb.platform_fee, c1 - c0, tb.price, p1 - p0, tb.partner_earning, plat) || E'\n';
 
       -- (b) kursi bersama dibayar TUNAI: mitra menerima tunai, platform harus menagih komisinya
       perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
-      tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '3 days')::text, 'seats_total', 6, 'seat_price', 150000, 'allow_private', false));
+      tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '3 days')::text, 'seats_total', 6, 'allow_private', false));
       perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
       select balance into c0 from wallets where user_id = cust; select balance into p0 from wallets where user_id = drv2;
       tb := travel_book(jsonb_build_object('trip_id', tt.id, 'pax', 1, 'pickup_address', 'S50b Jemput', 'pickup_lat', 0.5, 'pickup_lng', 101.44,
@@ -2050,7 +2051,7 @@ begin
 
       -- (c) pembatalan booking travel → dana kembali utuh
       perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
-      tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '4 days')::text, 'seats_total', 6, 'seat_price', 150000, 'allow_private', false));
+      tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '4 days')::text, 'seats_total', 6, 'allow_private', false));
       perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
       select balance into c0 from wallets where user_id = cust;
       tb := travel_book(jsonb_build_object('trip_id', tt.id, 'pax', 1, 'pickup_address', 'S50c Jemput', 'pickup_lat', 0.5, 'pickup_lng', 101.44,

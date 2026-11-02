@@ -12,6 +12,8 @@ import { colors, font, radius, shadow } from '@/lib/theme';
 import { FUEL_LABEL } from '@/lib/vehicles';
 import { vehicleClassLabel } from '@/lib/format';
 import { ApkBanner } from '@/components/ApkDownload';
+import { usePayoutAccount } from '@/hooks/usePayoutAccount';
+import { PAYOUT_ACCOUNT_ROUTE, accountSummary, verificationBadge } from '@/lib/payout';
 
 // Status pengajuan dalam Bahasa Indonesia (sebelumnya kode mentah 'pending'/'rejected'/'suspended' bocor ke layar)
 const STATUS_LABEL: Record<string, string> = { pending: 'Menunggu verifikasi', approved: 'Mitra aktif', rejected: 'Pendaftaran ditolak', suspended: 'Ditangguhkan' };
@@ -23,6 +25,9 @@ export default function DriverAccount() {
   const { profile, driver, merchant, signOut, marketVendor } = useAuth();
   const setMode = useMode((s) => s.setMode);
   const approved = driver?.status === 'approved';
+  // 0123: rekening pencairan wajib (bank / e-wallet) — subjudul menampilkan ringkasan rekening tersimpan.
+  const payout = usePayoutAccount(!!driver);
+  const payoutSub = payout.mine ? (payout.mine.exists ? `${accountSummary(payout.mine)} · ${verificationBadge(payout.mine).text}` : payout.mine.required ? 'Belum diisi — wajib sebelum online' : 'Belum diisi') : 'Bank / DANA / OVO / LinkAja / GoPay / ShopeePay';
 
   const groups: { title: string; items: Item[] }[] = [
     { title: 'Akun & kendaraan', items: [
@@ -30,6 +35,11 @@ export default function DriverAccount() {
       { icon: 'car-outline', title: 'Data kendaraan & dokumen', subtitle: [driver?.vehicle_class ? `Kelas: ${vehicleClassLabel[driver.vehicle_class] ?? driver.vehicle_class}` : null, [driver?.vehicle_brand, driver?.vehicle_model].filter(Boolean).join(' ') || null, driver?.vehicle_year ? String(driver.vehicle_year) : null].filter(Boolean).join(' · ') || 'SIM, STNK, foto kendaraan', onPress: () => router.push('/account/become-driver') },
       { icon: 'flash-outline', title: 'Kode AntarNow saya', subtitle: 'Kode 6 karakter agar pelanggan memesan Anda langsung', onPress: () => router.push('/driver/code' as never) },
       { icon: 'bus-outline', color: colors.travel, title: 'Mitra AntarTravel', subtitle: 'Jadwal travel antar kota, manifest penumpang', onPress: () => router.push('/driver/travel' as never) },
+    ] },
+    { title: 'Pendapatan & pencairan', items: [
+      { icon: 'card-outline', color: payout.missing ? colors.warning : colors.primary, title: 'Rekening pencairan', subtitle: payoutSub, onPress: () => router.push(PAYOUT_ACCOUNT_ROUTE as never) },
+      { icon: 'receipt-outline', title: 'Potongan per transaksi', subtitle: 'Biaya platform & PPN tiap order, bersih yang Anda terima', onPress: () => router.push('/potongan' as never) },
+      { icon: 'cash-outline', title: 'Tarik saldo', subtitle: 'Pencairan manual ke rekening tersimpan (auto-sweep 3 sesi/hari)', onPress: () => router.push('/pay/withdraw' as never) },
     ] },
     { title: 'Lainnya', items: [
       { icon: 'shield-checkmark-outline', color: colors.danger, title: 'Pusat Keamanan', subtitle: 'SOS, verifikasi wajah, kontak darurat, laporan insiden', onPress: () => router.push('/safety' as never) },

@@ -13,6 +13,7 @@ import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Screen, Row, Badge, Button, Empty, IconCircle } from '@/components/ui';
 import { Entrance, PressableScale, Skeleton } from '@/components/motion';
 import { useNotifications, notificationData, notifTargetFor, type NotifTarget } from '@/hooks/useNotifications';
+import { friendlyNotifText } from '@/lib/antifraud'; // 0121/0122: teks ramah untuk strike / tunai diblokir / driver diganti
 import { useAuth } from '@/store/auth';
 import { colors, font, glass, motion, radius, shadow } from '@/lib/theme';
 import { timeAgo, formatDateTimeShort } from '@/lib/format';
@@ -56,6 +57,8 @@ export default function Inbox() {
           {items.map((n, i) => {
             const target = notifTarget(n);
             const d = notificationData(n);
+            // 0121/0122: notifikasi antifraud & re-assign memakai teks ramah; judul/isi server tetap jadi cadangan
+            const friendly = friendlyNotifText(n.data as Record<string, unknown> | null);
             return (
               <Entrance key={n.id} index={Math.min(i, 6)} from="up">
                 <PressableScale
@@ -70,10 +73,10 @@ export default function Inbox() {
                     <IconCircle name={n.kind === 'promo' ? 'pricetag-outline' : n.kind === 'order' ? 'receipt-outline' : 'information-circle-outline'} size={42} bg={n.kind === 'promo' ? colors.accentLight : colors.tint} color={n.kind === 'promo' ? colors.warning : colors.primary} />
                     <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
                       <Row between>
-                        <Text style={{ fontWeight: '700', color: colors.text, fontSize: 16, flex: 1 }} numberOfLines={2}>{n.title}</Text>
+                        <Text style={{ fontWeight: '700', color: colors.text, fontSize: 16, flex: 1 }} numberOfLines={2}>{friendly?.title ?? n.title}</Text>
                         {!n.read_at && <View style={s.dot} />}
                       </Row>
-                      {n.body ? <Text style={font.small} numberOfLines={3}>{n.body}</Text> : null}
+                      {friendly ? <Text style={font.small} numberOfLines={4}>{friendly.body}</Text> : n.body ? <Text style={font.small} numberOfLines={3}>{n.body}</Text> : null}
                       <Row gap={8} style={{ flexWrap: 'wrap' }}>
                         {n.promo_code ? <Badge text={`Kode: ${n.promo_code}`} color={colors.accent} /> : null}
                         {d.code ? <Badge text={d.code} color={colors.textMuted} /> : null}

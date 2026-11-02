@@ -13,6 +13,10 @@ import { colors, font, radius, shadow } from '@/lib/theme';
 import { brandsFor, modelsFor, fuelsFor, validateVehicle, isElectricFuel, FUEL_LABEL, type FuelType, type VehicleKind } from '@/lib/vehicles';
 import { useServiceEconomics, driverCommissionText, DRIVER_SERVICES } from '@/lib/mitra';
 import type { DriverDocuments, VehicleType } from '@/lib/types';
+// 0123: langkah akhir pendaftaran wajib menyertakan rekening pencairan (p.payout_account) — lihat docs/KONTRAK-31OKT.md §0123
+import { PayoutAccountForm, handlePayoutRequiredError } from '@/screens/mitra/payout-account';
+import { usePayoutAccount, usePayoutBanks } from '@/hooks/usePayoutAccount';
+import { accountSummary, formFromMine, payoutPayload, validatePayoutForm, type PayoutAccountForm as PayoutFormValue } from '@/lib/payout';
 
 const VEHICLES: { key: VehicleType; label: string; sub: string; art: ArtKind; color: string }[] = [
   { key: 'motor', label: 'Motor', sub: 'AntarRide, Food, Send, Shop', art: 'rider', color: colors.ride },
@@ -55,6 +59,12 @@ export default function BecomeDriver() {
     });
   }, [driver]);
   const set = (k: keyof typeof f) => (v: string | boolean | null) => setF((p) => ({ ...p, [k]: v }));
+  // 0123: rekening pencairan — bila sudah tersimpan di akun (mis. sudah merchant) cukup ditampilkan; bila belum, wajib diisi di sini.
+  const payout = usePayoutAccount(true);
+  const hasPayout = !!payout.mine?.exists;
+  const payoutRequired = payout.mine ? payout.mine.required && !payout.mine.exists : true; // RPC gagal → anggap wajib (server penjaga akhir)
+  const [pf, setPf] = useState<PayoutFormValue>(() => formFromMine(null));
+  const banks = usePayoutBanks(payout.mine?.banks);
 
   const kind = f.vehicle_type as VehicleKind;
   const brands = brandsFor(kind);
@@ -93,16 +103,27 @@ export default function BecomeDriver() {
     if (!/^[A-Z]{1,2}\s?\d{1,4}\s?[A-Z]{0,3}$/i.test(f.vehicle_plate.trim())) return toast.error('Format plat nomor tidak valid (contoh: BA 1234 AB)');
     if (!f.license_number || !f.id_card_number) return toast.error('Nomor SIM dan NIK wajib diisi');
     if (!yr || yr < 1990 || yr > new Date().getFullYear() + 1) return toast.error('Isi tahun kendaraan yang valid');
+    // 0123: rekening pencairan wajib pada langkah akhir (payload memuat dokumen) — divalidasi klien, server memvalidasi ulang.
+    let payoutAccount: Record<string, unknown> | null = null;
+    if (!hasPayout) {
+      const pe = validatePayoutForm(pf);
+      if (pe && payoutRequired) return toast.error(`Rekening pencairan: ${pe}`);
+      if (!pe) payoutAccount = payoutPayload(pf);
+    }
     try {
       await rpc('register_driver', { p: {
         vehicle_type: f.vehicle_type, vehicle_brand: brandName, vehicle_model: modelName || null, fuel_type: f.fuel_type, is_electric: isEv,
         vehicle_plate: f.vehicle_plate.trim(), vehicle_color: f.vehicle_color, vehicle_year: yr, vehicle_condition: f.vehicle_condition, vehicle_capacity: f.vehicle_capacity || null,
         license_number: f.license_number, id_card_number: f.id_card_number, photo_id_url: f.photo_id_url || null, photo_vehicle_url: f.photo_vehicle_url || null,
+        ...(payoutAccount ? { payout_account: payoutAccount } : {}),
       } });
-      await loadProfile();
+      await loadProfile(); void payout.reload();
       toast.success('Pendaftaran terkirim, menunggu verifikasi admin');
       router.back();
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) {
+      if (handlePayoutRequiredError(e, (h) => router.push(h as never))) return;
+      toast.error((e as Error).message);
+    }
   };
 
   const statusInfo = driver ? { pending: ['Menunggu verifikasi', colors.warning], approved: ['Akun mitra aktif', colors.success], suspended: ['Akun ditangguhkan', colors.danger], rejected: ['Ditolak — perbaiki data lalu kirim ulang', colors.danger] }[driver.status] : null;
@@ -224,8 +245,22 @@ export default function BecomeDriver() {
           </Card>
         </Entrance>
 
-        {/* Ringkasan sebelum kirim */}
+        {/* 0123: langkah rekening pencairan — bank / DANA / OVO / LinkAja / GoPay / ShopeePay */}
         <Entrance index={6}>
+          <Card style={{ gap: 12 }}>
+            <Row between><Text style={font.label}>Rekening pencairan</Text>{hasPayout ? <Badge text="Sudah tersimpan" color={colors.success} /> : payoutRequired ? <Badge text="Wajib" color={colors.warning} /> : <Badge text="Opsional" color={colors.textMuted} />}</Row>
+            <Text style={font.tiny}>Pendapatan dicairkan otomatis ke rekening ini 3 sesi per hari (09.00 / 13.00 / 17.00 WIB). Tanpa rekening, Anda tidak bisa online setelah disetujui.</Text>
+            {hasPayout ? (
+              <Row gap={10} style={s.classBox}>
+                <View style={s.hintIcon}><Ionicons name="card-outline" size={20} color={colors.primary} /></View>
+                <View style={{ flex: 1, minWidth: 0 }}><Text style={[font.body, { fontWeight: '700' }]} numberOfLines={1}>{accountSummary(payout.mine)}</Text><Text style={font.tiny}>Ubah lewat menu Akun › Rekening pencairan setelah pendaftaran.</Text></View>
+              </Row>
+            ) : <PayoutAccountForm value={pf} onChange={setPf} banks={banks} compact />}
+          </Card>
+        </Entrance>
+
+        {/* Ringkasan sebelum kirim */}
+        <Entrance index={7}>
           <View style={s.summary}>
             <View style={[s.hintIcon, { backgroundColor: '#fff' }]}><Ionicons name={kind === 'motor' ? 'bicycle-outline' : 'car-outline'} size={20} color={colors.primary} /></View>
             <View style={{ flex: 1, minWidth: 0 }}>

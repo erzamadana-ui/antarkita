@@ -22,6 +22,7 @@ type NavGroup = { title: string; items: NavItem[] };
 /**
  * Struktur menu panel admin — dikelompokkan agar mudah dipindai.
  * v3 (finpay-v3): kelompok Keuangan / Pembayaran / Iklan / Laporan / Keamanan; menu disaring per izin RBAC.
+ * 31 Okt 2026 (0121–0126): Manager Kota, Rate Card Travel, Kebijakan Harga, Rekening Pencairan Mitra, Anti Order Fiktif.
  */
 export const NAV_GROUPS: NavGroup[] = [
   {
@@ -42,6 +43,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/(admin)/logistics', label: 'Logistik & Travel', icon: 'navigate-outline', iconActive: 'navigate' },
       { href: '/(admin)/kota', label: 'Kota & Wilayah', icon: 'globe-outline', iconActive: 'globe' },
       { href: '/(admin)/kpi-kota', label: 'KPI Manager Kota', icon: 'podium-outline', iconActive: 'podium', perm: ['ops', 'finance', 'report'] },
+      { href: '/(admin)/manager-kota', label: 'Manager Kota', icon: 'people-circle-outline', iconActive: 'people-circle', perm: ['city', 'ops', 'finance', 'report'] },
     ],
   },
   {
@@ -53,6 +55,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/(admin)/data-tempat', label: 'Impor Peta (OSM)', icon: 'cloud-download-outline', iconActive: 'cloud-download' },
       { href: '/(admin)/pricing', label: 'Tarif & Promo', icon: 'pricetags-outline', iconActive: 'pricetags', perm: ['pricing', 'promo'] },
       { href: '/(admin)/pricing-intel', label: 'Intelijen Harga', icon: 'trending-up-outline', iconActive: 'trending-up' },
+      { href: '/(admin)/rate-card-travel', label: 'Rate Card Travel', icon: 'bus-outline', iconActive: 'bus', perm: ['pricing', 'report'] },
+      { href: '/(admin)/kebijakan-harga', label: 'Kebijakan Harga', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark', perm: ['pricing', 'fee', 'report'] },
       { href: '/(admin)/blast', label: 'Blast Promo', icon: 'megaphone-outline', iconActive: 'megaphone' },
     ],
   },
@@ -60,6 +64,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'Keuangan',
     items: [
       { href: '/(admin)/finance', label: 'Top up & Payout', icon: 'cash-outline', iconActive: 'cash', perm: ['payout', 'payments_view'] },
+      { href: '/(admin)/rekening-mitra', label: 'Rekening Pencairan Mitra', icon: 'card-outline', iconActive: 'card', perm: ['payout', 'payments_view'] },
       { href: '/(admin)/voucher', label: 'AntarVoucher', icon: 'ticket-outline', iconActive: 'ticket', perm: ['reconcile', 'wallet_adjust', 'payments_view'] },
       { href: '/(admin)/refunds', label: 'Refund', icon: 'return-down-back-outline', iconActive: 'return-down-back', perm: ['refund_approve', 'refund_execute', 'payments_view'] },
       { href: '/(admin)/disputes', label: 'Sengketa (Dispute)', icon: 'alert-circle-outline', iconActive: 'alert-circle', perm: ['dispute', 'dispute_resolve'] },
@@ -103,6 +108,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'Keamanan',
     items: [
       { href: '/(admin)/security', label: 'Pusat Keamanan', icon: 'shield-checkmark-outline', iconActive: 'shield-checkmark' },
+      { href: '/(admin)/anti-fraud', label: 'Anti Order Fiktif', icon: 'hand-left-outline', iconActive: 'hand-left', perm: ['orders_view'] },
       { href: '/(admin)/activity', label: 'Log Audit', icon: 'time-outline', iconActive: 'time', perm: ['audit'] },
     ],
   },

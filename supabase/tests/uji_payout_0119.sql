@@ -33,6 +33,9 @@ begin
 
   -- ===== persiapan: antrean lama dibersihkan (masuk batch pembersihan — ikut ROLLBACK), sesi hari ini dikosongkan, token push admin =====
   perform set_config('antaraja.bypass', 'on', true);
+  -- 0123: auto-sweep saldo mitra di tiap sesi dimatikan di sini supaya skenario 0119 (sesi kosong/min amount) tetap murni;
+  --       auto-sweep diuji tersendiri di uji_payout_accounts_0123.sql. Ikut ROLLBACK.
+  insert into app_settings (key, value) values ('payout_auto_sweep_enabled', 'false'::jsonb) on conflict (key) do update set value = 'false'::jsonb, updated_at = now();
   perform payout_batch_create_internal(null, 'pembersihan uji 0119', 0);
   delete from payout_sessions where session_date = v_today;
   delete from fraud_flags where subject_id in (drv, mer) and status = 'open';

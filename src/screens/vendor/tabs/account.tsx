@@ -67,6 +67,10 @@ export default function VendorAccount() {
     ] },
     { title: 'Akun', items: [
       { icon: 'person-outline', title: 'Edit profil', subtitle: 'Nama, nomor HP, foto', onPress: () => router.push('/account/edit' as never) },
+      // 0126: laporan potongan platform+PPN per transaksi (partner_fee_statement — peran driver/merchant/travel akun ini)
+      { icon: 'receipt-outline', title: 'Potongan per transaksi', subtitle: 'Biaya platform & PPN per order (akun driver/merchant Anda)', onPress: () => router.push('/potongan' as never) },
+      // 0123: rekening pencairan terpusat hanya untuk driver/merchant/mitra travel — lapak pasar memakai kolom rekening lapak di atas.
+      ...(driver || merchant ? [{ icon: 'card-outline' as IconName, title: 'Rekening pencairan driver/merchant', subtitle: 'Bank / e-wallet untuk auto-sweep pendapatan driver & merchant', onPress: () => router.push('/payout-account' as never) }] : []),
       { icon: 'chatbubbles-outline', color: colors.info, title: 'Bantuan & tiket aduan', subtitle: 'CS online', onPress: () => router.push('/support' as never) },
       { icon: 'language-outline', title: 'Bahasa / Language', onPress: () => router.push('/account/language' as never) },
       { icon: 'key-outline', title: 'Ganti kata sandi', subtitle: 'Perbarui kata sandi akun Anda', onPress: () => router.push('/account/password' as never) },

@@ -16,6 +16,11 @@ import { useAntarVoucher, usePaymentChannels, useVoucherOnly, CHANNELS_OFF_TEXT 
 import { useTaxSettings } from '@/hooks/useVoucherV5';
 import { AntarVoucherOffNote } from '@/components/AntarVoucherNotice';
 import { useEffect } from 'react';
+import { Alert, Platform } from 'react-native';
+// 0121 anti order fiktif (docs/KONTRAK-31OKT.md): status pelanggan → sembunyikan Tunai; galat create_order → CTA
+import { useAntarfraudGuard, invalidateAntifraudStatus } from '@/hooks/useAntifraud';
+import { parseOrderError } from '@/lib/antifraud';
+import { IS_CUSTOMER_APP } from '@/lib/app';
 
 /**
  * AntarVoucher v5: sinkronkan mode tampilan rincian biaya (`lib/payments` → buildCheckoutRows/receiptRows/PriceBlock)
@@ -37,8 +42,29 @@ export function useFeeDisplayMode() {
 export type PayChoice = PaymentMethod | 'ewallet';
 /** Nilai `paid_via` untuk create_order: 'cash' | 'wallet' | kode e-wallet (gopay/ovo/…). */
 export const paidViaOf = (m: PayChoice, ewallet?: string | null) => (m === 'ewallet' ? (ewallet ?? 'gopay') : m);
-/** Tangani error SALDO_KURANG:<nominal> → buka gateway e-wallet untuk kekurangannya. Mengembalikan true bila ditangani. */
+/**
+ * 0121: galat create_order berawalan PHONE_REQUIRED|CASH_BLOCKED|ORDER_RATE|NEW_ACCOUNT_CASH_CAP → pesan ramah + CTA
+ * ("Isi nomor HP" → /account/edit, "Beli AntarVoucher" → /pay/voucher, "Bayar dengan AntarVoucher" → `onUseWallet`).
+ * Mengembalikan true bila galat memang antifraud (sudah ditampilkan).
+ */
+export function handleOrderError(e: unknown, router: ReturnType<typeof useRouter>, onUseWallet?: () => void) {
+  const p = parseOrderError(e);
+  if (!p) return false;
+  invalidateAntifraudStatus();
+  const go = () => { if (p.route) router.push(p.route as never); else if (p.cta === 'wallet') onUseWallet?.(); };
+  const ctaLabel = p.ctaLabel ?? (p.cta === 'wallet' ? 'Bayar dengan AntarVoucher' : null);
+  if (!ctaLabel) { toast.error(`${p.title}: ${p.text}`); return true; }
+  if (Platform.OS === 'web') { toast.error(p.text); if (confirm(`${p.title}\n\n${p.text}\n\n${ctaLabel}?`)) go(); return true; }
+  Alert.alert(p.title, p.text, [{ text: 'Nanti' }, { text: ctaLabel, onPress: go }]);
+  return true;
+}
+
+/**
+ * Tangani error SALDO_KURANG:<nominal> → buka gateway e-wallet untuk kekurangannya. Mengembalikan true bila ditangani.
+ * Juga menangani galat antifraud 0121 (handleOrderError) karena semua layar checkout memakai fungsi ini di satu-satunya catch.
+ */
 export function handleShortfall(e: unknown, router: ReturnType<typeof useRouter>, ewallet?: string | null) {
+  if (handleOrderError(e, router)) return true;
   const m = /SALDO_KURANG:(\d+)/.exec((e as Error).message ?? '');
   if (!m) return false;
   // v5 voucher_only: tidak ada gateway → arahkan ke pembelian AntarVoucher (kode via transfer).
@@ -159,7 +185,9 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
   const { voucherOnly } = useFeeDisplayMode();
   // v3 §1: kanal gateway + biayanya dari payment_provider_public() (hanya `enabled`). Bila RPC gagal → daftar lama (0089).
   const { provider, channels: provChannels, providerName } = useProviderPublic();
-  const cashOn = isChannelOn('cash');
+  // 0121: Tunai disembunyikan bila akun diblokir tunai / akun baru melewati batas tunai (server tetap penjaga akhir).
+  const fraud = useAntarfraudGuard(IS_CUSTOMER_APP, feeBase ?? subtotal);
+  const cashOn = isChannelOn('cash') && !fraud.cashHidden;
   const walletOn = isChannelOn('antarpay');
   const wallets: { key: string; label: string; color: string; icon: string; ch: ProviderChannel | null }[] = voucherOnly ? [] : provider
     ? provChannels.map((c) => { const meta = PAYMENT_CHANNELS.find((x) => x.key === c.key); return { key: c.key, label: c.label || channelLabel(c.key), color: meta?.color ?? colors.info, icon: meta?.icon ?? channelIcon(c.key), ch: c }; })
@@ -204,6 +232,17 @@ export function PaymentSection({ method, onMethod, promo, onPromo, notes, onNote
   return (
     <View style={{ gap: 12 }}>
       <Text style={font.label}>Pembayaran</Text>
+      {fraud.banner ? (
+        <View style={[s.fraudBox, { borderColor: (fraud.banner.tone === 'danger' ? colors.danger : fraud.banner.tone === 'warning' ? colors.warning : colors.info) + '66', backgroundColor: (fraud.banner.tone === 'danger' ? colors.danger : fraud.banner.tone === 'warning' ? colors.warning : colors.info) + '12' }]}>
+          <Row gap={8} style={{ alignItems: 'flex-start' }}>
+            <Ionicons name={fraud.banner.tone === 'info' ? 'information-circle-outline' : 'alert-circle-outline'} size={16} color={fraud.banner.tone === 'danger' ? colors.danger : fraud.banner.tone === 'warning' ? colors.warning : colors.info} />
+            <Text style={[font.tiny, { flex: 1, color: colors.text }]}>{fraud.banner.text}</Text>
+          </Row>
+          {fraud.cashHidden && walletOn && method !== 'wallet' ? <Button title="Bayar dengan AntarVoucher" size="sm" variant="secondary" icon="wallet-outline" onPress={() => onMethod('wallet')} style={{ alignSelf: 'flex-start' }} /> : null}
+          {fraud.cashHidden && !walletOn ? <Button title="Beli AntarVoucher" size="sm" variant="secondary" icon="ticket-outline" onPress={() => router.push('/pay/voucher' as never)} style={{ alignSelf: 'flex-start' }} /> : null}
+          {!fraud.status?.phone_verified && fraud.status ? <Button title="Isi nomor HP" size="sm" variant="ghost" icon="call-outline" onPress={() => router.push('/account/edit' as never)} style={{ alignSelf: 'flex-start' }} /> : null}
+        </View>
+      ) : null}
       <Row gap={8}>
         {cashOn && <PayOption active={method === 'cash'} onPress={() => onMethod('cash')} icon="cash-outline" title="Tunai" subtitle="Ke driver" />}
         {walletOn && <PayOption active={method === 'wallet'} onPress={() => onMethod('wallet')} icon="wallet-outline" title={voucherOnly ? 'Saldo AntarVoucher' : 'AntarVoucher'} subtitle={rupiah(wallet?.balance ?? 0)} />}
@@ -293,6 +332,7 @@ export function PriceSummary({ rows, total, totalLabel = 'Total', note }: { rows
 }
 
 const s = StyleSheet.create({
+  fraudBox: { gap: 8, padding: 10, borderRadius: radius.md, borderWidth: 1 },
   pay: { flex: 1, minWidth: 0, alignItems: 'center', gap: 4, borderWidth: 1.5, borderColor: 'rgba(11,31,42,0.08)', borderRadius: radius.lg, paddingVertical: 10, paddingHorizontal: 6, backgroundColor: 'rgba(255,255,255,0.92)' },
   payTitle: { fontWeight: '700', color: colors.text, fontSize: 14, textAlign: 'center', alignSelf: 'stretch' },
   paySub: { ...font.tiny, textAlign: 'center', alignSelf: 'stretch' },

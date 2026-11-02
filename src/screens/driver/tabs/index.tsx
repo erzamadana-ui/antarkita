@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Switch, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,21 +22,34 @@ import { serviceDef } from '@/lib/services';
 import type { AvailableOrder } from '@/lib/types';
 import { SelfieGate } from '@/components/Safety';
 import { DepositBanner, useDepositGate, handleDepositError } from '@/screens/driver/deposit';
+// 0122 penawaran bertahap + 0123 rekening pencairan wajib (lihat docs/KONTRAK-31OKT.md)
+import { OfferCard, DeclineOfferSheet, useCountdown } from '@/screens/driver/offer';
+import { PayoutRequiredBanner, handlePayoutRequiredError } from '@/screens/mitra/payout-account';
+import { usePayoutAccount } from '@/hooks/usePayoutAccount';
+import { splitOffers, parseOfferHeld, onDispatchEvent } from '@/lib/dispatch';
+import { friendlyNotifText } from '@/lib/antifraud';
 
 export default function DriverHome() {
   const router = useRouter();
   const { profile } = useAuth();
-  const { driver, online, busy, setOnline, available, active, accept, reject, myPos, setMyPos } = useDriverSession();
+  const { driver, online, busy, setOnline, available, active, accept, reject, declineOffer, myPos, setMyPos } = useDriverSession();
   // AntarVoucher v5: deposit komisi — saklar online & tombol terima dikunci bila saldo < driver_min_balance_accept.
   const deposit = useDepositGate(driver?.status === 'approved');
   const depositBlocked = deposit.blocked;
   const goTo = (href: string) => router.push(href as never);
+  // 0123: rekening pencairan wajib sebelum online — banner tampil hanya bila server menyatakan required && !exists.
+  const payout = usePayoutAccount(driver?.status === 'approved');
+  // 0122: penawaran eksklusif (dispatch_mode 'offer') dipisah dari siaran & selalu di atas feed.
+  const { offers, rest } = useMemo(() => splitOffers(available), [available]);
+  const [declining, setDeclining] = useState<AvailableOrder | null>(null);
+  // 0122 re-assign: order dilepas server karena tidak bergerak → cukup toast (push data.kind 'accept_no_move').
+  useEffect(() => onDispatchEvent((ev) => { if (ev === 'released') { const t = friendlyNotifText({ kind: 'accept_no_move' }); if (t) toast.error(`${t.title}: ${t.body}`); } }), []);
   const { location, refresh } = useCurrentLocation();
   const { info: priority } = useDriverPriority(driver?.status === 'approved');
   const radiusText = usePickupRadiusText();
   // AntarNow (Tahap 11): kode driver untuk dibacakan ke pelanggan + order langsung diurut paling atas
   const { data: myCode } = useDriverMyCode(driver?.status === 'approved');
-  const feed = useMemo(() => sortDirectFirst(available), [available]);
+  const feed = useMemo(() => sortDirectFirst(rest), [rest]);
   const directCount = useMemo(() => feed.filter((o) => o.direct_for_me && (o.direct_hold_left_s ?? 0) > 0).length, [feed]);
   const [selected, setSelected] = useState<AvailableOrder | null>(null);
   const [rejecting, setRejecting] = useState<AvailableOrder | null>(null);
@@ -57,13 +70,15 @@ export default function DriverHome() {
       const msg = (e as Error).message;
       if (msg.includes('SELFIE_REQUIRED')) { setSelfie(myPos ?? location ?? null); toast.show('Verifikasi wajah dulu sebelum online'); return; }
       if (handleDepositError(e, deposit.status, goTo)) { void deposit.reload(); return; }
+      // 0123: server menolak online tanpa rekening pencairan → dialog + tombol ke /payout-account (banner ikut tampil)
+      if (handlePayoutRequiredError(e, goTo)) { void payout.reload(); return; }
       toast.error(msg);
     }
   };
   const afterSelfie = async () => {
     const p = selfie || undefined; setSelfie(false);
     try { await setOnline(true, p || undefined); toast.success('Anda online — siap menerima order'); }
-    catch (e) { if (handleDepositError(e, deposit.status, goTo)) { void deposit.reload(); return; } toast.error((e as Error).message); }
+    catch (e) { if (handleDepositError(e, deposit.status, goTo)) { void deposit.reload(); return; } if (handlePayoutRequiredError(e, goTo)) { void payout.reload(); return; } toast.error((e as Error).message); }
   };
 
   const markers = useMemo<MapMarker[]>(() => {
@@ -83,8 +98,22 @@ export default function DriverHome() {
     catch (e) {
       // v5: server menolak DEPOSIT_REQUIRED bila saldo turun di bawah minimum (mis. setelah komisi tunai dipotong).
       if (handleDepositError(e, deposit.status, goTo)) { void deposit.reload(); return; }
+      // 0122: order siaran sedang ditawarkan eksklusif ke driver lain → pesan tunggu, bukan galat merah.
+      const held = parseOfferHeld(e);
+      if (held) { toast.show(held.text); setSelected((cur) => (cur?.id === o.id ? null : cur)); return; }
       toast.error((e as Error).message);
     } finally { setAccepting(null); }
+  };
+  // 0122: tolak penawaran eksklusif → driver_decline_offer (ronde berikutnya seketika), bukan driver_reject_order.
+  const doDecline = async (reason: string | null) => {
+    const o = declining;
+    if (!o?.offer_id) return;
+    try {
+      await declineOffer(o.offer_id, o.id, reason);
+      setDeclining(null);
+      setSelected((cur) => (cur?.id === o.id ? null : cur));
+      toast.show('Penawaran ditolak — ditawarkan ke driver berikutnya');
+    } catch (e) { toast.error((e as Error).message); }
   };
   // Tolak: order hilang dari daftar (animasi keluar) & tidak muncul lagi — server menyaringnya untuk driver ini
   const doReject = async (reason: string | null) => {
@@ -146,6 +175,7 @@ export default function DriverHome() {
           <Text style={font.tiny}>{Number(driver?.rating_avg ?? 5).toFixed(1)} · {driver?.total_trips} trip</Text>
         </Row>
       </View>
+      {online && !selected && offers.length > 0 && <Badge text={`${offers.length} penawaran`} color={colors.danger} />}
       {online && !selected && directCount > 0 && <Badge text={`${directCount} langsung`} color={colors.primary} />}
       {online && !selected && available.length > 0 && <Badge text="Baru" color={colors.success} />}
     </Row>
@@ -155,6 +185,7 @@ export default function DriverHome() {
     <>
     <SelfieGate visible={selfie !== false} onDone={afterSelfie} onCancel={() => setSelfie(false)} />
     <RejectOrderSheet visible={!!rejecting} order={rejecting} onClose={() => setRejecting(null)} onConfirm={doReject} />
+    <DeclineOfferSheet visible={!!declining} order={declining} onClose={() => setDeclining(null)} onConfirm={doDecline} />
     <MapScreen
       map={<MapView center={pos} zoom={14} markers={markers} fitTo={fitTo} paddingBottom={20} attributionBottom={196} />}
       back={false}
@@ -183,6 +214,15 @@ export default function DriverHome() {
         {!selected && (depositBlocked || (deposit.error && !deposit.status)) && (
           <Entrance index={active ? 1 : 0}><DepositBanner status={deposit.status} error={deposit.error} onRetry={deposit.reload} /></Entrance>
         )}
+        {/* 0123: rekening pencairan wajib — tampil bila server menyatakan required && belum ada (juga saat RPC gagal: baris kecil) */}
+        {!selected && (payout.missing || (payout.error && !payout.mine)) && (
+          <Entrance index={active ? 1 : 0}><PayoutRequiredBanner mine={payout.mine} error={payout.error} onRetry={payout.reload} /></Entrance>
+        )}
+        {/* 0122: kartu penawaran eksklusif — selalu paling atas, hitung mundur detik, Terima / Tolak dengan alasan */}
+        {online && !selected && offers.map((o) => (
+          <OfferCard key={o.offer_id ?? o.id} order={o} accepting={accepting === o.id} disabled={depositBlocked} disabledLabel="Deposit belum cukup"
+            onAccept={() => doAccept(o)} onDecline={() => setDeclining(o)} onOpen={() => setSelected(o)} />
+        ))}
         {online && !selected && <Entrance index={active ? 1 : 0}><PriorityCard info={priority} /></Entrance>}
         {!selected && <Entrance index={active ? 2 : 1}><DriverCodeCard code={myCode?.code} todayCount={myCode?.orders_direct_today} onPress={() => router.push('/driver/code' as never)} /></Entrance>}
         {!online ? (
@@ -203,6 +243,7 @@ export default function DriverHome() {
               <PressableScale onPress={() => setSelected(null)} scaleTo={0.9} style={s.closeBtn}><Ionicons name="close" size={20} color={colors.textSecondary} /></PressableScale>
             </Row>
             {!!selected.direct_for_me && <View style={{ marginTop: 10 }}><DirectOrderBadge holdLeftSeconds={selected.direct_hold_left_s} /></View>}
+            {selected.dispatch_mode === 'offer' && !!selected.offer_id && <View style={{ marginTop: 10 }}><OfferTimerLine expiresAt={selected.offer_expires_at} round={selected.offer_round} /></View>}
             <Row gap={6} style={{ flexWrap: 'wrap', marginTop: 10 }}>
               {!!selected.vehicle_class && <Badge text={vehicleClassLabel[selected.vehicle_class] ?? selected.vehicle_class} color={colors.info} />}
               {!!selected.scheduled_at && <Badge text={`Jadwal ${formatSchedule(selected.scheduled_at)}`} color={colors.send} />}
@@ -222,11 +263,11 @@ export default function DriverHome() {
             <OrderLoadInfo order={selected} style={{ marginTop: 10 }} />
             {!!selected.priority_note && <Row gap={6} style={{ marginTop: 8 }}><Ionicons name="information-circle-outline" size={12} color={colors.textMuted} /><Text style={[font.tiny, { flex: 1 }]}>{selected.priority_note}</Text></Row>}
             <Row gap={8} style={{ marginTop: 14 }}>
-              <Button title="Tolak" size="lg" variant="outline" color={colors.danger} onPress={() => setRejecting(selected)} style={{ flex: 1 }} />
+              <Button title="Tolak" size="lg" variant="outline" color={colors.danger} onPress={() => (selected.dispatch_mode === 'offer' && selected.offer_id ? setDeclining(selected) : setRejecting(selected))} style={{ flex: 1 }} />
               <Button title={depositBlocked ? 'Deposit belum cukup' : 'Terima Order'} size="lg" loading={accepting === selected.id} disabled={!!accepting || depositBlocked} onPress={() => doAccept(selected)} style={{ flex: 1.6 }} />
             </Row>
           </Animated.View>
-        ) : feed.length === 0 ? (
+        ) : feed.length === 0 ? offers.length > 0 ? null : (
           <Animated.View entering={FadeIn.duration(motion.slow)} exiting={FadeOut.duration(motion.fast)} style={s.radarBox}>
             <Radar color={colors.primary} size={130}><Ionicons name="bicycle" size={24} color={colors.primary} /></Radar>
             <Text style={[font.h3, { marginTop: 4 }]}>Mencari order di sekitar…</Text>
@@ -269,6 +310,19 @@ export default function DriverHome() {
       </Animated.View>
     </MapScreen>
     </>
+  );
+}
+
+/** 0122: baris hitung mundur pada kartu detail penawaran yang dibuka dari OfferCard. */
+function OfferTimerLine({ expiresAt, round }: { expiresAt: string | null | undefined; round: number | null | undefined }) {
+  const left = useCountdown(expiresAt);
+  const color = left <= 8 ? colors.danger : colors.primary;
+  return (
+    <Row gap={6} style={{ padding: 8, borderRadius: radius.md, backgroundColor: color + '14', borderWidth: 1, borderColor: color + '55' }}>
+      <Ionicons name="flash" size={14} color={color} />
+      <Text style={[font.tiny, { flex: 1, fontWeight: '700', color: colors.text }]}>Penawaran eksklusif untuk Anda{round ? ` · ronde ${round}` : ''}</Text>
+      <Text style={{ fontWeight: '800', color, fontVariant: ['tabular-nums'] }}>{left} dtk</Text>
+    </Row>
   );
 }
 

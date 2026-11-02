@@ -24,6 +24,21 @@ import { rpc, supabase } from '@/lib/supabase';
 import { colors, font, radius, motion, shadow } from '@/lib/theme';
 import { rupiah, formatSchedule, formatDate, travelStatusLabel, tripStatusLabel, cityName, travelRequestStatusLabel, travelKindLabel } from '@/lib/format';
 import type { TravelBooking, TravelSearchTrip, TravelPartnerCard, TravelRequest, TravelRequestKind, TravelAccommodation } from '@/lib/types';
+// 0124: estimasi tarif per km (travel_quote) untuk pencarian kursi & permintaan carter
+import { useTravelQuote } from '@/hooks/useTravelQuote';
+import { TravelQuoteCard } from '@/components/TravelQuoteCard';
+
+/** Kota terdekat (nearest_city, radius 80 km) dari sebuah titik — untuk quote carter dari alamat jemput/tujuan. */
+function useNearestCity(lat?: number | null, lng?: number | null) {
+  const [city, setCity] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    if (lat == null || lng == null) { setCity(null); return; }
+    supabase.rpc('nearest_city', { p_lat: lat, p_lng: lng, p_max_km: 80 }).then(({ data, error }) => { if (alive) setCity(error ? null : ((data as string | null) ?? null)); });
+    return () => { alive = false; };
+  }, [lat, lng]);
+  return city;
+}
 
 const DAY_NAMES = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -59,6 +74,8 @@ export default function TravelScreen() {
   const [promo, setPromo] = useState(''); const [, setDiscount] = useState(0); const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const { bookings } = useMyTravelBookings(session?.user.id);
+  // 0124: estimasi per kursi (model termurah) begitu kota asal & tujuan dipilih — sebelum/selain jadwal mitra tampil
+  const qShared = useTravelQuote(from, to, trip ? trip.partner.model : null, priv ? 'charter' : 'shared', pax, mode === 'shared');
 
   useEffect(() => {
     if (!pickup && hasFix) reverseGeocode(location).then((address) => { if (!useBooking.getState().pickup) setPickup({ ...location, address, name: 'Lokasi saya' }); });
@@ -162,6 +179,7 @@ export default function TravelScreen() {
         </View>
 
         {from && !to && <Text style={[font.small, { textAlign: 'center', paddingVertical: 6 }]}>Pilih kota tujuan untuk melihat jadwal keberangkatan.</Text>}
+        {from && to && (qShared.quote || qShared.loading) ? <TravelQuoteCard quote={qShared.quote} loading={qShared.loading} error={qShared.error} audience="customer" title={trip ? (priv ? `Estimasi carter ${trip.partner.model}` : `Estimasi tarif ${trip.partner.model}`) : 'Estimasi tarif per kursi (mulai dari)'} accent={colors.travel} /> : null}
         {from && to && (loading ? <Skeleton height={90} radius={radius.lg} /> : !result?.route ? <Empty icon="bus-outline" title="Rute belum tersedia" subtitle="Belum ada mitra travel untuk rute ini. Coba rute lain atau ajukan carter privat." /> : result.trips.length === 0 ? (
           <Empty icon="calendar-outline" title="Belum ada jadwal" subtitle={`Belum ada keberangkatan ${fromCity?.name} → ${toCity?.name}${day ? ' pada tanggal ini' : ''}. Coba tanggal lain.`} />
         ) : (
@@ -293,6 +311,10 @@ function RequestMode({ kind, uid }: { kind: TravelRequestKind; uid?: string }) {
   const [partners, setPartners] = useState<TravelPartnerCard[] | null>(null);
   const [busy, setBusy] = useState(false);
   const { requests } = useTravelRequests(uid);
+  // 0124: carter 1 hari → kota asal/tujuan dari alamat jemput/tujuan → estimasi quote carter (model sesuai preferensi)
+  const fromCityId = useNearestCity(pickup?.lat, pickup?.lng);
+  const toCityId = useNearestCity(dropoff?.lat, dropoff?.lng);
+  const qCharter = useTravelQuote(fromCityId, toCityId, vehiclePref, 'charter', pax, !daily && !!fromCityId && !!toCityId && fromCityId !== toCityId);
 
   useEffect(() => {
     if (!pickup && hasFix) reverseGeocode(location).then((address) => { if (!useBooking.getState().pickup) setPickup({ ...location, address, name: 'Lokasi saya' }); });
@@ -337,6 +359,8 @@ function RequestMode({ kind, uid }: { kind: TravelRequestKind; uid?: string }) {
         depart_at: departAt.toISOString(), return_at: ret, days: daily ? days : 1, pax, luggage, accommodation, fuel,
         vehicle_pref: vehiclePref, notes: notes || null, budget: Number(budget.replace(/\D/g, '')) || null,
         payment_method: method, paid_via: paidViaOf(method, payPrefs?.ewallet),
+        // 0124: kota asal/tujuan dikirim eksplisit agar penjaga tawaran (TRAVEL_OFFER_TOO_LOW) punya acuan quote
+        ...(fromCityId ? { from_city: fromCityId } : {}), ...(toCityId ? { to_city: toCityId } : {}),
       } });
       await refreshWallet(); useBooking.getState().reset();
       toast.success(`Permintaan ${r.code} terkirim — mitra akan mengirim penawaran`);
@@ -365,6 +389,7 @@ function RequestMode({ kind, uid }: { kind: TravelRequestKind; uid?: string }) {
       )}
 
       <Entrance index={1}><LocationFields pickup={pickup} dropoff={dropoff} pickupLabel="Alamat jemput" dropoffLabel={daily ? 'Rute / kota yang dikunjungi (opsional)' : 'Tujuan'} accent={colors.travel} /></Entrance>
+      {!daily && (qCharter.quote || qCharter.loading) ? <Entrance index={1}><TravelQuoteCard quote={qCharter.quote} loading={qCharter.loading} error={qCharter.error} audience="customer" title="Estimasi tarif carter antar kota" accent={colors.travel} /></Entrance> : null}
 
       <Entrance index={2}><View style={s.group}>
         <Text style={font.label}>Tanggal & jam berangkat</Text>

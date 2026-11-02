@@ -28,6 +28,9 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { TAB_BAR_SPACE } from '@/components/GlassTabBar';
 import { SponsoredRow } from '@/components/SponsoredRow';
 import { isSponsoredMerchant } from '@/lib/ads';
+// 0121: banner strike / tunai dinonaktifkan di beranda pelanggan (my_antifraud_status)
+import { useAntifraudStatus } from '@/hooks/useAntifraud';
+import { antifraudBanner } from '@/lib/antifraud';
 
 export default function CustomerHome() {
   const router = useRouter();
@@ -138,6 +141,7 @@ export default function CustomerHome() {
             {/* Gerbang wilayah: pesan jujur bila AntarKita belum melayani kota pengguna.
                 Sengaja DI ATAS grid layanan supaya pelanggan tahu sebelum mulai memesan. */}
             <CityBanner status={city} />
+            <AntifraudHomeBanner />
 
             {/* Layanan — ikon bulat (kit: Beach / Park / Plane / Train) */}
             <View style={s.grid}>
@@ -296,3 +300,26 @@ const s = StyleSheet.create({
   rowImg: { width: 64, height: 64, borderRadius: 16, backgroundColor: colors.bgSoft },
   rowArrow: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.tint },
 });
+
+/** 0121: tampil hanya bila ada strike atau tunai diblokir — CTA ke pembelian AntarVoucher. */
+function AntifraudHomeBanner() {
+  const router = useRouter();
+  const { status } = useAntifraudStatus(true);
+  if (!status || (!status.cash_blocked && status.strike_count <= 0)) return null;
+  const b = antifraudBanner(status);
+  if (!b) return null;
+  const tone = b.tone === 'danger' ? colors.danger : colors.warning;
+  return (
+    <Entrance index={3}>
+      <PressableScale onPress={() => router.push('/pay/voucher' as never)} scaleTo={0.985} haptic={false} style={[af.box, { borderColor: tone + '66', backgroundColor: tone + '12' }]}>
+        <Ionicons name="alert-circle-outline" size={18} color={tone} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ fontWeight: '700', color: colors.text, fontSize: 13 }}>{status.cash_blocked ? 'Pembayaran tunai dinonaktifkan' : `${status.strike_count} laporan tidak hadir`}</Text>
+          <Text style={font.tiny} numberOfLines={3}>{b.text}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+      </PressableScale>
+    </Entrance>
+  );
+}
+const af = StyleSheet.create({ box: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: radius.lg, borderWidth: 1, marginBottom: 12 } });

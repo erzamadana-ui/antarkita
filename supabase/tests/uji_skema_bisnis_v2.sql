@@ -181,7 +181,8 @@ begin
       ('payments_simulation_enabled', 'true'::jsonb), ('payment_provider_env', '"sandbox"'::jsonb),
       ('wallet_adjust_dual_approval_min', '1000000000000'::jsonb), ('refund_dual_approval_min', '1000000000000'::jsonb),
       ('rate_limit_create_order_per_hour', '100000'::jsonb), ('rate_limit_payment_prepare_per_hour', '100000'::jsonb),
-      ('rate_limit_withdrawal_per_hour', '100000'::jsonb)
+      ('rate_limit_withdrawal_per_hour', '100000'::jsonb),
+      ('antifraud_orders_per_hour_max', '100000'::jsonb), ('antifraud_new_account_hours', '0'::jsonb)   -- 0121 anti order fiktif diuji terpisah (uji_antifraud_0121.sql)
     on conflict (key) do update set value = excluded.value, updated_at = now();
     if exists (select 1 from information_schema.columns where table_name = 'payment_channel_fees' and column_name = 'pass_to_customer_legal_ok') then
       execute $q$update payment_channel_fees set pass_to_customer = true, pass_to_customer_legal_ok = true
@@ -520,7 +521,7 @@ begin
   -- ===== S48 Travel: booking kursi (saldo & tunai) → arrived; carter batal mendadak → denda 30 % = platform_revenue =====
   begin
     perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
-    tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '2 days')::text, 'seats_total', 6, 'seat_price', 150000, 'allow_private', false));
+    tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '2 days')::text, 'seats_total', 6, 'allow_private', false));
     perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
     c0 := pg_temp.v2_saldo(cust); p0 := pg_temp.v2_saldo(drv2);
     tb := travel_book(jsonb_build_object('trip_id', tt.id, 'pax', 2, 'pickup_address', 'V2 Jemput', 'pickup_lat', 0.5, 'pickup_lng', 101.44, 'passengers', jsonb_build_array(jsonb_build_object('name','A'), jsonb_build_object('name','B')), 'paid_via', 'wallet'));
@@ -532,13 +533,13 @@ begin
            coalesce(sum(amount) filter (where entry = 'customer_platform_fee'), 0), coalesce(sum(amount) filter (where entry = 'merchant_fee'), 0)
       into b0, b1, d0, v_pf, d1
       from order_ledger where source = 'travel_bookings' and source_id = tb.id and phase = 'completed';
-    log := log || format('S48a %s travel kursi SALDO %s: harga=%s (2×150.000 + biaya platform %s, fee mitra 10%%=%s) | ledger created=%s baris; completed: gross=%s partner_payable=%s revenue=%s (gross = partner + revenue: %s) | mitra Δ%s = partner_payable; pelanggan Δ%s',
+    log := log || format('S48a %s travel kursi SALDO %s: harga=%s (2×harga kursi acuan 0124 + biaya platform %s, fee mitra 10%%=%s) | ledger created=%s baris; completed: gross=%s partner_payable=%s revenue=%s (gross = partner + revenue: %s) | mitra Δ%s = partner_payable; pelanggan Δ%s',
       case when n > 0 and d0 = tb.price and b0 = tb.partner_earning and d0 = b0 + b1 and p1 - p0 = b0 and c1 - c0 = -tb.price
-                and v_pf = (select customer_platform_fee from service_economics where service = 'travel') and d1 = floor(300000 * 0.10) then 'OK' else 'BUG' end,
+                and v_pf = (select customer_platform_fee from service_economics where service = 'travel') and d1 = floor((tb.price - v_pf) * 0.10) then 'OK' else 'BUG' end,   -- 0124: fee mitra 10 % dari harga kursi acuan
       tb.code, tb.price, v_pf, d1, n, d0, b0, b1, d0 = b0 + b1, p1 - p0, c1 - c0) || E'\n';
     -- tunai
     perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
-    tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '3 days')::text, 'seats_total', 6, 'seat_price', 150000, 'allow_private', false));
+    tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '3 days')::text, 'seats_total', 6, 'allow_private', false));
     perform set_config('request.jwt.claims', json_build_object('sub', cust, 'role', 'authenticated')::text, true);
     p0 := pg_temp.v2_saldo(drv2);
     tb := travel_book(jsonb_build_object('trip_id', tt.id, 'pax', 1, 'pickup_address', 'V2 Jemput', 'pickup_lat', 0.5, 'pickup_lng', 101.44, 'passengers', jsonb_build_array(jsonb_build_object('name','C')), 'paid_via', 'cash'));
@@ -1041,10 +1042,10 @@ begin
     update app_settings set value = '-100000'::jsonb where key = 'driver_debt_limit';
     perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
     ok := true; alasan := '';
-    begin tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '4 days')::text, 'seats_total', 6, 'seat_price', 150000)); ok := false; alasan := 'jadwal diterima';
+    begin tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '4 days')::text, 'seats_total', 6)); ok := false; alasan := 'jadwal diterima';
     exception when others then alasan := left(sqlerrm, 60); if sqlerrm not like 'Saldo minus melebihi batas (Rp100.000)%' then ok := false; end if; end;
     update app_settings set value = '-500000'::jsonb where key = 'driver_debt_limit';
-    tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '4 days')::text, 'seats_total', 6, 'seat_price', 150000));
+    tt := travel_trip_create(jsonb_build_object('route_id', route1, 'depart_at', (now() + interval '4 days')::text, 'seats_total', 6));
     perform set_config('request.jwt.claims', json_build_object('sub', adm, 'role', 'authenticated')::text, true);
     perform admin_adjust_wallet(drv2, p0 + 150000, 'uji v2: pulihkan saldo mitra travel');
     log := log || format('S70 %s mitra travel saldo -150.000: batas -100.000 → travel_trip_create ditolak (%s); batas -500.000 → jadwal dibuat=%s', case when ok and tt.id is not null then 'OK' else 'BUG' end, alasan, tt.id is not null) || E'\n';

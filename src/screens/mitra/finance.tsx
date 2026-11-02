@@ -18,6 +18,8 @@ import type { Order } from '@/lib/types';
 import { ppnPart } from '@/lib/voucherV5';
 import { useTaxSettings } from '@/hooks/useVoucherV5';
 import { PayoutSlaLine } from '@/components/EarningBreakdown';
+import { IS_PARTNER_APP } from '@/lib/app';
+import { PAYOUT_ACCOUNT_ROUTE } from '@/lib/payout';
 
 type ReportOrder = Order & { settlement_status?: SettlementStatus | null };
 
@@ -26,6 +28,7 @@ type ReportOrder = Order & { settlement_status?: SettlementStatus | null };
  * Angka per pesanan yang final tetap di rincian buku besar (driver_order_breakdown / merchant_order_breakdown).
  */
 export function EarningsReportCard({ role, ownerId, accent = colors.primary }: { role: 'driver' | 'merchant'; ownerId?: string | null; accent?: string }) {
+  const router = useRouter();
   const [period, setPeriod] = useState<PeriodKey>('7d');
   const [rows, setRows] = useState<ReportOrder[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -120,6 +123,13 @@ export function EarningsReportCard({ role, ownerId, accent = colors.primary }: {
             </View>
           ) : <Text style={font.small}>Belum ada pesanan selesai pada periode ini.</Text>}
           <Button title="Ekspor CSV" size="sm" variant="secondary" icon="download-outline" color={accent} onPress={exportCsv} disabled={!sum.count} />
+          {/* 0126 & 0123 (hanya aplikasi Mitra — rute /potongan & /payout-account tidak ada di aplikasi lain) */}
+          {IS_PARTNER_APP ? (
+            <Row gap={8} style={{ flexWrap: 'wrap' }}>
+              <Button title="Rincian potongan" size="sm" variant="ghost" icon="receipt-outline" color={accent} onPress={() => router.push('/potongan' as never)} />
+              <Button title="Rekening pencairan" size="sm" variant="ghost" icon="card-outline" color={accent} onPress={() => router.push(PAYOUT_ACCOUNT_ROUTE as never)} />
+            </Row>
+          ) : null}
           <Text style={font.tiny}>Ringkasan dari pesanan selesai. Fee AntarKita & PPN di sini estimasi dari persen snapshot pesanan — tidak memotong hak Anda lebih dari yang tercatat; angka final per pesanan ada di buku besar tiap pesanan. Mode AntarVoucher: tidak ada biaya payment gateway.</Text>
           <PayoutSlaLine />
         </>

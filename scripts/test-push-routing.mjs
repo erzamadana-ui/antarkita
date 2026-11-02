@@ -43,6 +43,8 @@ function build({ app = 'pelanggan', call = { phase: 'idle', callId: null } } = {
   const store = new Map();
   const push = compile('src/lib/push.ts', {
     'react-native': { Platform: { OS: 'android' } },
+    // 0122 dispatch: push order_offer → emit ke hook driver (stub: catat saja)
+    './dispatch': { emitDispatchEvent: () => {}, isOrderOfferPush: (d) => (d && d.kind) === 'order_offer' },
     '@react-native-async-storage/async-storage': {
       __esModule: true,
       default: {
@@ -132,6 +134,14 @@ console.log('push.ts — uji rute notifikasi & pendaftaran token');
     assert.equal(mitra.routeForPushData({ call_id: 'c-1', order_id: 'o-5', caller_id: 'u-1', route: 'call' }), '/driver/order/o-5');
     assert.equal(mitra.routeForPushData({ order_id: 'o-5', message_id: '9', route: 'chat' }), '/order/o-5/chat');
   });
+  check('aplikasi Mitra (0122): push penawaran eksklusif & order dilepas → beranda driver, bukan detail order', () => {
+    assert.equal(mitra.routeForPushData({ kind: 'order_offer', offer_id: 'f-1', order_id: 'o-9', order_code: 'AK1', round: '1', expires_at: '2026-10-31T00:00:25Z', offer_seconds: '25' }), '/(driver)');
+    assert.equal(mitra.routeForPushData({ kind: 'accept_no_move', order_id: 'o-9', notification_id: '77' }), '/(driver)');
+  });
+  const pelangganApp = build({ app: 'pelanggan' }).push;
+  check('aplikasi Pelanggan: kind order_offer tidak berlaku (tetap aturan order_id → /order/:id)', () => {
+    assert.equal(pelangganApp.routeForPushData({ kind: 'order_offer', order_id: 'o-9' }), '/order/o-9');
+  });
   const admin = build({ app: 'admin' }).push;
   check('aplikasi Admin: tanpa tujuan → tidak memaksa membuka /inbox (rute itu tidak ada di Admin)', () => {
     assert.equal(admin.routeForPushData({ kind: 'system' }), null);
@@ -179,6 +189,7 @@ function compileBroken() {
   const store = new Map();
   return compile('src/lib/push.ts', {
     'react-native': { Platform: { OS: 'android' } },
+    './dispatch': { emitDispatchEvent: () => {}, isOrderOfferPush: (d) => (d && d.kind) === 'order_offer' },
     '@react-native-async-storage/async-storage': {
       __esModule: true,
       default: { getItem: async (k) => store.get(k) ?? null, setItem: async (k, v) => { store.set(k, v); }, removeItem: async (k) => { store.delete(k); } },

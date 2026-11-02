@@ -120,7 +120,7 @@ begin
     r := admin_set_gateway_order_payment(true);
     -- batas laju dilonggarkan untuk puluhan pesanan dalam satu transaksi (S33 menguji batasnya)
     insert into app_settings (key, value) values ('rate_limit_create_order_per_hour', '100000'), ('rate_limit_payment_prepare_per_hour', '100000'),
-      ('rate_limit_withdrawal_per_hour', '100000'), ('payments_simulation_enabled', 'false'), ('payment_provider_env', '"sandbox"'),
+      ('rate_limit_withdrawal_per_hour', '100000'), ('antifraud_orders_per_hour_max', '100000'), ('antifraud_new_account_hours', '0'), /* 0121: anti order fiktif diuji terpisah di uji_antifraud_0121.sql */ ('payments_simulation_enabled', 'false'), ('payment_provider_env', '"sandbox"'),
       ('payment_provider_active', '"midtrans"'), ('refund_dual_approval_min', '200000'), ('wallet_adjust_dual_approval_min', '100000'), ('disbursement_provider', '"manual"')
     on conflict (key) do update set value = excluded.value, updated_at = now();
     perform wallet_apply(cust, 'topup', 5000000, null, 'saldo uji v3');

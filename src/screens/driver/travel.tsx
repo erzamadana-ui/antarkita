@@ -17,6 +17,13 @@ import { colors, font, radius, shadow, motion } from '@/lib/theme';
 import { rupiah, formatSchedule, cityName, tripStatusLabel, travelStatusLabel, travelKindLabel, travelRequestStatusLabel, accommodationLabel } from '@/lib/format';
 import type { TravelPartner, TravelRoute, TravelManifestRow, TravelTrip, TravelOpenRequest, TravelSendOrder, Order } from '@/lib/types';
 import { DepositBanner, useDepositGate, handleDepositError } from '@/screens/driver/deposit';
+// 0124 tarif per km: quote acuan ±toleransi untuk jadwal & minimum tawaran carter (docs/KONTRAK-31OKT.md §0124)
+import { useTravelQuote } from '@/hooks/useTravelQuote';
+import { TravelQuoteCard } from '@/components/TravelQuoteCard';
+import { parseTravelPriceError, priceRange, offerMinPrice } from '@/lib/travelQuote';
+
+/** Model acuan quote mitra: rate card yang dipatok admin (travel_partners.rate_card_id) atau nama model mobil (regex server). */
+const partnerModelRef = (me: TravelPartner | null | undefined) => ((me as (TravelPartner & { rate_card_id?: string | null }) | null | undefined)?.rate_card_id ?? me?.vehicle_model ?? null);
 
 // AntarVoucher v5: status deposit mitra travel dibagikan ke tab (travel_offer_create / travel_accept_send dijaga server DEPOSIT_REQUIRED).
 type DepositGate = ReturnType<typeof useDepositGate>;
@@ -40,6 +47,13 @@ export default function TravelPartnerHome() {
   const [day, setDay] = useState(1); const [time, setTime] = useState('08:00');
   const [allowPrivate, setAllowPrivate] = useState(true);
   const [notes, setNotes] = useState('');
+  // 0124: harga opsional — kosong = default quote; diisi harus dalam ±travel_price_tolerance_pct dari acuan
+  const [seatPrice, setSeatPrice] = useState('');
+  const [privPrice, setPrivPrice] = useState('');
+  const selRoute = routes.find((r) => r.id === routeId) ?? null;
+  const modelRef = partnerModelRef(me);
+  const qShared = useTravelQuote(selRoute?.from_city, selRoute?.to_city, modelRef, 'shared', 1, !!selRoute);
+  const qCharter = useTravelQuote(selRoute?.from_city, selRoute?.to_city, modelRef, 'charter', 1, !!selRoute && allowPrivate);
   const [open, setOpen] = useState<string | null>(null);
   const [manifest, setManifest] = useState<Record<string, TravelManifestRow[]>>({});
   const deposit = useDepositGate(me?.status === 'approved');
@@ -53,9 +67,19 @@ export default function TravelPartnerHome() {
   const create = async () => {
     if (!routeId) return toast.error('Pilih rute');
     const d = new Date(days[day]); const [h, m] = time.split(':').map(Number); d.setHours(h, m, 0, 0);
+    // 0124: validasi klien rentang ±toleransi (server tetap penjaga akhir)
+    const sp = Number(seatPrice) || null; const pp = Number(privPrice) || null;
+    if (sp && qShared.quote) { const r = priceRange(qShared.quote.fare_per_seat, qShared.quote.tolerance_pct); if (sp < r.min || sp > r.max) return toast.error(`Harga kursi harus ${rupiah(r.min)}–${rupiah(r.max)} (acuan ${rupiah(qShared.quote.fare_per_seat)} ±${qShared.quote.tolerance_pct} %)`); }
+    if (pp && qCharter.quote) { const r = priceRange(qCharter.quote.fare_total, qCharter.quote.tolerance_pct); if (pp < r.min || pp > r.max) return toast.error(`Harga carter harus ${rupiah(r.min)}–${rupiah(r.max)} (acuan ${rupiah(qCharter.quote.fare_total)} ±${qCharter.quote.tolerance_pct} %)`); }
     setCreating(true);
-    try { await rpc('travel_trip_create', { p: { route_id: routeId, depart_at: d.toISOString(), allow_private: allowPrivate, notes: notes || null } }); toast.success('Jadwal dibuat'); setNotes(''); reload(); }
-    catch (e) { toast.error((e as Error).message); } finally { setCreating(false); }
+    try {
+      await rpc('travel_trip_create', { p: { route_id: routeId, depart_at: d.toISOString(), allow_private: allowPrivate, notes: notes || null, ...(sp ? { seat_price: sp } : {}), ...(pp && allowPrivate ? { private_price: pp } : {}) } });
+      toast.success('Jadwal dibuat'); setNotes(''); setSeatPrice(''); setPrivPrice(''); reload();
+    } catch (e) {
+      const pe = parseTravelPriceError(e);
+      if (pe?.code === 'TRAVEL_PRICE_OUT_OF_RANGE') { toast.error(pe.min != null && pe.max != null ? `Harga di luar rentang acuan — gunakan ${rupiah(pe.min)}–${rupiah(pe.max)} atau kosongkan agar memakai acuan.` : pe.text); return; }
+      toast.error((e as Error).message);
+    } finally { setCreating(false); }
   };
   const setStatus = (t: TravelTrip, st: 'departed' | 'arrived' | 'cancelled') => {
     // Pembatalan sepihak menjelang keberangkatan merugikan penumpang & menurunkan rating mitra:
@@ -141,6 +165,17 @@ export default function TravelPartnerHome() {
           </ScrollView>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>{TIMES.map((t) => <Chip key={t} label={t} active={time === t} onPress={() => setTime(t)} />)}</ScrollView>
           <Row gap={8}><Chip label={allowPrivate ? 'Terima carter private' : 'Tanpa carter private'} active={allowPrivate} onPress={() => setAllowPrivate(!allowPrivate)} /></Row>
+          {/* 0124: acuan tarif per km (rate card model mobil Anda) + rentang ±toleransi; harga kosong = acuan */}
+          {selRoute ? (
+            <View style={{ gap: 8 }}>
+              <TravelQuoteCard quote={qShared.quote} loading={qShared.loading} error={qShared.error} audience="partner" guard="range" title="Acuan harga per kursi" accent={colors.travel} />
+              {allowPrivate ? <TravelQuoteCard quote={qCharter.quote} loading={qCharter.loading} error={qCharter.error} audience="partner" guard="range" title="Acuan harga carter 1 mobil" accent={colors.travel} /> : null}
+              <Row gap={8}>
+                <Input label="Harga per kursi (opsional)" keyboardType="number-pad" placeholder={qShared.quote ? String(qShared.quote.fare_per_seat) : 'acuan'} value={seatPrice} onChangeText={(v) => setSeatPrice(v.replace(/\D/g, ''))} containerStyle={{ flex: 1 }} />
+                {allowPrivate ? <Input label="Harga carter (opsional)" keyboardType="number-pad" placeholder={qCharter.quote ? String(qCharter.quote.fare_total) : 'acuan'} value={privPrice} onChangeText={(v) => setPrivPrice(v.replace(/\D/g, ''))} containerStyle={{ flex: 1 }} /> : null}
+              </Row>
+            </View>
+          ) : null}
           <Input placeholder="Catatan (mis. berangkat dari pool, bagasi maks. 1 koper)" value={notes} onChangeText={setNotes} />
           <Button title="Buat jadwal" icon="add-circle-outline" loading={creating} onPress={create} />
         </Card></Entrance>
@@ -269,8 +304,13 @@ function RequestCard({ r, me, open, onToggle, onDone }: { r: TravelOpenRequest; 
   const router = useRouter();
   const deposit = useDeposit();
   const depositBlocked = !!deposit?.blocked;
+  // 0124: carter 1 hari dengan kota asal & tujuan diketahui → acuan quote carter (model pilihan pelanggan bila ada) + minimum 90 %
+  const guarded = r.kind === 'charter' && r.days <= 1 && !!r.from_city && !!r.to_city && canOffer;
+  const qCharter = useTravelQuote(r.from_city, r.to_city, r.vehicle_pref?.trim() || partnerModelRef(me), 'charter', r.pax, guarded);
+  const minOffer = qCharter.quote ? offerMinPrice(qCharter.quote.fare_total, qCharter.quote.offer_min_pct) : null;
   const send = async () => {
     if (total <= 0) return toast.error('Isi harga penawaran');
+    if (minOffer != null && total < minOffer) return toast.error(`Tawaran minimal ${rupiah(minOffer)} (${qCharter.quote?.offer_min_pct} % dari acuan ${rupiah(qCharter.quote?.fare_total ?? 0)}).`);
     if (busy) return;
     if (depositBlocked) { handleDepositError(new Error('DEPOSIT_REQUIRED'), deposit?.status, (h) => router.push(h as never)); return; }
     setBusy(true);
@@ -280,6 +320,8 @@ function RequestCard({ r, me, open, onToggle, onDone }: { r: TravelOpenRequest; 
       toast.success('Penawaran terkirim'); onDone();
     } catch (e) {
       if (handleDepositError(e, deposit?.status, (h) => router.push(h as never))) { void deposit?.reload(); return; }
+      const pe = parseTravelPriceError(e);
+      if (pe?.code === 'TRAVEL_OFFER_TOO_LOW') { toast.error(pe.min != null ? `Tawaran terlalu rendah — minimal ${rupiah(pe.min)} agar diterima server.` : pe.text); return; }
       toast.error((e as Error).message);
     } finally { setBusy(false); }
   };
@@ -333,6 +375,7 @@ function RequestCard({ r, me, open, onToggle, onDone }: { r: TravelOpenRequest; 
 
           {canOffer && (
             <View style={{ gap: 8 }}>
+              {guarded ? <TravelQuoteCard quote={qCharter.quote} loading={qCharter.loading} error={qCharter.error} audience="partner" guard="offer_min" title="Acuan tarif carter (per km)" accent={colors.travel} /> : null}
               <Text style={font.label}>Kalkulator penawaran</Text>
               <Row gap={8}>
                 <Input label="Harga/hari (12 jam)" keyboardType="number-pad" value={rate} onChangeText={(v) => setRate(v.replace(/\D/g, ''))} containerStyle={{ flex: 1 }} />
@@ -349,7 +392,8 @@ function RequestCard({ r, me, open, onToggle, onDone }: { r: TravelOpenRequest; 
               <Row gap={8}><Chip label="Pakai kalkulator" active={!manual} onPress={() => setManual(false)} /><Chip label="Harga total manual" active={manual} onPress={() => setManual(true)} /></Row>
               {manual && <Input label="Harga total" keyboardType="number-pad" value={price} onChangeText={(v) => setPrice(v.replace(/\D/g, ''))} />}
               <Input placeholder="Pesan untuk pelanggan (mobil, sopir, syarat)" value={message} onChangeText={setMessage} />
-              <Button title={depositBlocked ? 'Deposit AntarVoucher belum cukup' : `Kirim penawaran ${rupiah(total)}`} icon="paper-plane-outline" loading={busy} disabled={depositBlocked} onPress={send} />
+              {minOffer != null && total > 0 && total < minOffer ? <Text style={[font.tiny, { color: colors.danger }]}>Tawaran {rupiah(total)} di bawah minimum {rupiah(minOffer)} — server akan menolak.</Text> : null}
+              <Button title={depositBlocked ? 'Deposit AntarVoucher belum cukup' : `Kirim penawaran ${rupiah(total)}`} icon="paper-plane-outline" loading={busy} disabled={depositBlocked || (minOffer != null && total > 0 && total < minOffer)} onPress={send} />
               <Text style={font.tiny}>Komisi platform dipotong dari harga setelah perjalanan selesai. Pelanggan bebas memilih penawaran.</Text>
             </View>
           )}

@@ -29,6 +29,24 @@ declare
   v_pw text := nullif(current_setting('app.seed_password', true), '');
   t travel_partners;
 begin
+  -- (0) 0123: rekening pencairan WAJIB (PAYOUT_ACCOUNT_REQUIRED) sebelum driver online / merchant buka /
+  --     mitra travel daftar. Di produksi akun uji mengisinya lewat aplikasi (Saldo › Rekening pencairan);
+  --     di lokal diisi di sini supaya simulasi_e2e (S1 driver_set_online, S21 register_driver sebagai cust)
+  --     dan (a) travel_partner_register di bawah tetap berjalan. Isi juga oleh pasca/0123 untuk DB yang sudah di-seed.
+  if to_regclass('public.bank_accounts') is not null
+     and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'bank_accounts' and column_name = 'channel') then
+    insert into bank_accounts (user_id, bank_name, account_no, holder, channel, bank_code, verified)
+    select v.uid, v.bank, v.no, v.holder, 'bank', v.code, false
+      from (values ('a0000000-0000-4000-8000-000000000002'::uuid, 'BCA', '1234500002', 'Budi Santoso', 'bca'),
+                   ('a0000000-0000-4000-8000-000000000003'::uuid, 'BCA', '1234567890', 'Ahmad Fauzi', 'bca'),
+                   ('a0000000-0000-4000-8000-000000000004'::uuid, 'BRI', '1234500004', 'Rina Kartika', 'bri'),
+                   ('a0000000-0000-4000-8000-000000000005'::uuid, 'Bank Mandiri', '9876543210', 'Mak Syukur', 'mandiri'),
+                   ('a0000000-0000-4000-8000-000000000006'::uuid, 'BNI', '1234500006', 'Dedi Box', 'bni')) v(uid, bank, no, holder, code)
+     where exists (select 1 from profiles p where p.id = v.uid)
+    on conflict (user_id) do nothing;
+    raise notice 'pasca/seed: rekening pencairan akun uji diisi (0123)';
+  end if;
+
   -- (a) mitra travel drv2 (Pekanbaru), disetujui admin
   if not exists (select 1 from travel_partners where id = drv2) then
     perform set_config('request.jwt.claims', json_build_object('sub', drv2, 'role', 'authenticated')::text, true);
@@ -66,6 +84,13 @@ begin
     on conflict (id) do nothing;
     perform set_config('antaraja.bypass', 'off', true);
     raise notice 'pasca/seed: driver box uji driverbox@antaraja.id (%) dibuat', dbox;
+    -- 0123: driver box dibuat SETELAH blok (0) → rekening pencairannya diisi di sini (PAYOUT_ACCOUNT_REQUIRED saat online)
+    if to_regclass('public.bank_accounts') is not null
+       and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'bank_accounts' and column_name = 'channel') then
+      insert into bank_accounts (user_id, bank_name, account_no, holder, channel, bank_code, verified)
+      values (dbox, 'BNI', '1234500006', 'Dedi Box', 'bank', 'bni', false)
+      on conflict (user_id) do nothing;
+    end if;
   end if;
 
   -- (c) Setelan pembayaran LOKAL: AntarPay (0088) + semua saluran (0089) dinyalakan,

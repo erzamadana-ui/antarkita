@@ -11,6 +11,11 @@ import { AntarVoucherOffBanner } from '@/components/AntarVoucherNotice';
 import { rpc, supabase } from '@/lib/supabase';
 import { colors, font, radius } from '@/lib/theme';
 import { rupiah, formatDate } from '@/lib/format';
+// 0123 (aplikasi Mitra): penarikan memakai REKENING TERSIMPAN (partner_payout_account_mine) — request_withdrawal(p_amount, null, null, null).
+import { IS_PARTNER_APP } from '@/lib/app';
+import { usePayoutAccount } from '@/hooks/usePayoutAccount';
+import { PAYOUT_ACCOUNT_ROUTE, accountSummary, isPayoutRequiredError, sweepExplanation, verificationBadge } from '@/lib/payout';
+import { handlePayoutRequiredError } from '@/screens/mitra/payout-account';
 
 // v5-mitra (KONTRAK-V5 §3 request_withdrawal / §4): SLA pencairan ≤ 24 jam, status antrean & batch.
 // Dibaca dari tabel `withdrawal_requests` milik sendiri (RLS SELECT); kolom `sla_due_at`/`batch_id` baru di 0114 → bisa null/tidak ada.
@@ -76,6 +81,7 @@ function MyWithdrawalsCard({ uid, refreshKey }: { uid?: string; refreshKey: numb
 const wd = StyleSheet.create({
   row: { padding: 10, borderRadius: radius.md, backgroundColor: colors.bgSoft, borderWidth: 1, borderColor: colors.border },
   ok: { padding: 12, borderRadius: radius.md, backgroundColor: colors.success + '14', borderWidth: 1, borderColor: colors.success + '55', gap: 4 },
+  warn: { padding: 12, borderRadius: radius.md, backgroundColor: colors.warning + '14', borderWidth: 1, borderColor: colors.warning + '55', gap: 6 },
 });
 // akhir v5-mitra (deklarasi)
 
@@ -89,18 +95,26 @@ function WithdrawScreen() {
   const [refreshKey, setRefreshKey] = useState(0);
   const set = (k: keyof typeof f) => (v: string) => setF((p) => ({ ...p, [k]: v }));
   const { enabled: antarpayOn } = useAntarVoucher();   // 0088: pencairan ditolak server saat nonaktif
+  // 0123: di aplikasi Mitra rekening diambil dari partner_payout_account_mine(); field bank manual hanya untuk aplikasi lain.
+  const payout = usePayoutAccount(IS_PARTNER_APP);
+  const savedAccount = IS_PARTNER_APP ? payout.mine : null;
+  const needAccount = IS_PARTNER_APP && (!savedAccount || !savedAccount.exists);
 
   const submit = async () => {
     if (!antarpayOn) return toast.error(ANTARVOUCHER_OFF_TEXT);
     const n = Number(f.amount.replace(/\D/g, ''));
     if (n < 20000) return toast.error('Minimal penarikan Rp20.000');
     if (n > (wallet?.balance ?? 0)) return toast.error('Saldo tidak cukup');
-    if (!f.bank || !f.account || !f.name) return toast.error('Lengkapi data rekening');
+    if (IS_PARTNER_APP) {
+      if (needAccount) { handlePayoutRequiredError(new Error('PAYOUT_ACCOUNT_REQUIRED'), (h) => router.push(h as never)); return; }
+    } else if (!f.bank || !f.account || !f.name) return toast.error('Lengkapi data rekening');
     // v5-mitra: kunci tombol selama RPC berjalan; setelah sukses tampilkan sla_due_at (bukan langsung kembali)
     if (busy) return;
     setBusy(true);
     try {
-      const res = await rpc<MyWithdrawalRow | MyWithdrawalRow[] | null>('request_withdrawal', { p_amount: n, p_bank: f.bank, p_account: f.account, p_name: f.name });
+      const res = await rpc<MyWithdrawalRow | MyWithdrawalRow[] | null>('request_withdrawal', IS_PARTNER_APP
+        ? { p_amount: n, p_bank: null, p_account: null, p_name: null }
+        : { p_amount: n, p_bank: f.bank, p_account: f.account, p_name: f.name });
       await refreshWallet();
       let row: MyWithdrawalRow | null = Array.isArray(res) ? res[0] ?? null : (res && typeof res === 'object' && 'id' in res ? res : null);
       if (!row?.sla_due_at && session?.user.id) {
@@ -111,12 +125,21 @@ function WithdrawScreen() {
       setRefreshKey((k) => k + 1);
       setF((p) => ({ ...p, amount: '' }));
       toast.success('Permintaan penarikan dikirim — diproses ≤ 24 jam (SLA)');
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) {
+      // 0123: server menolak tanpa rekening tersimpan → dialog + tombol ke /payout-account
+      if (isPayoutRequiredError(e)) { handlePayoutRequiredError(e, (h) => router.push(h as never)); void payout.reload(); return; }
+      toast.error((e as Error).message);
+    }
     finally { setBusy(false); }
   };
+  const badge = verificationBadge(savedAccount);
 
   return (
-    <Screen title="Tarik Saldo" back footer={<Button title={antarpayOn ? 'Ajukan Penarikan' : 'Pencairan sementara nonaktif'} size="lg" loading={busy} disabled={!antarpayOn || busy} onPress={submit} />}>
+    <Screen title="Tarik Saldo" back footer={
+      !antarpayOn ? <Button title="Pencairan sementara nonaktif" size="lg" disabled />
+        : needAccount && payout.mine ? <Button title="Isi rekening pencairan dulu" size="lg" icon="card-outline" color={colors.warning} onPress={() => router.push(PAYOUT_ACCOUNT_ROUTE as never)} />
+        : <Button title={IS_PARTNER_APP ? 'Tarik saldo' : 'Ajukan Penarikan'} size="lg" icon={IS_PARTNER_APP ? 'cash-outline' : undefined} loading={busy} disabled={busy} onPress={submit} />
+    }>
       <View style={{ gap: 16 }}>
         {/* v5-mitra: hasil permintaan terakhir + SLA */}
         {last ? (
@@ -135,6 +158,36 @@ function WithdrawScreen() {
             <Text style={font.h1}>{rupiah(wallet?.balance ?? 0)}</Text>
           </Card>
         </Entrance>
+        {IS_PARTNER_APP ? (
+          <Entrance index={1}>
+            <Card style={{ gap: 12 }}>
+              {/* 0123: ringkasan rekening tersimpan (tanpa field manual) + CTA bila belum ada */}
+              <Row between><Text style={font.label}>Rekening tujuan</Text>{savedAccount?.exists ? <Badge text={badge.text} color={badge.tone === 'success' ? colors.success : colors.warning} /> : null}</Row>
+              {payout.error && !payout.mine ? (
+                <Row gap={8} style={wd.row}><Text style={[font.tiny, { flex: 1 }]}>Rekening pencairan belum bisa dimuat: {payout.error}</Text><Button title="Ulangi" size="sm" variant="ghost" onPress={payout.reload} /></Row>
+              ) : !payout.mine ? <Text style={font.tiny}>Memuat rekening…</Text>
+              : savedAccount?.exists ? (
+                <>
+                  <Row gap={10} style={wd.row}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={{ fontWeight: '700', color: colors.text }} numberOfLines={1}>{accountSummary(savedAccount)}</Text>
+                      <Text style={font.tiny}>{sweepExplanation(savedAccount)}</Text>
+                    </View>
+                    <Button title="Ubah" size="sm" variant="ghost" icon="create-outline" onPress={() => router.push(PAYOUT_ACCOUNT_ROUTE as never)} />
+                  </Row>
+                  <Input label="Nominal (min. Rp20.000)" keyboardType="number-pad" value={f.amount} onChangeText={(v) => set('amount')(v.replace(/\D/g, ''))} icon="cash-outline" />
+                  <Text style={font.tiny}>Saldo langsung ditahan saat pengajuan. Jika ditolak, saldo dikembalikan otomatis. Diproses pada sesi pencairan berikutnya (≤ 24 jam SLA), tanpa biaya payment gateway.</Text>
+                </>
+              ) : (
+                <View style={wd.warn}>
+                  <Text style={[font.body, { fontWeight: '700', color: colors.text }]}>Rekening pencairan belum diisi</Text>
+                  <Text style={font.small}>Penarikan dikirim ke rekening bank / e-wallet yang tersimpan di akun Anda. Isi sekali; selanjutnya saldo juga dicairkan otomatis tiap sesi (auto-sweep).</Text>
+                  <Button title="Isi rekening pencairan" size="sm" icon="card-outline" color={colors.warning} onPress={() => router.push(PAYOUT_ACCOUNT_ROUTE as never)} />
+                </View>
+              )}
+            </Card>
+          </Entrance>
+        ) : (
         <Entrance index={1}>
           <Card style={{ gap: 12 }}>
             <Input label="Nominal (min. Rp20.000)" keyboardType="number-pad" value={f.amount} onChangeText={(v) => set('amount')(v.replace(/\D/g, ''))} icon="cash-outline" />
@@ -144,6 +197,7 @@ function WithdrawScreen() {
             <Text style={font.tiny}>Saldo langsung ditahan saat pengajuan. Jika ditolak, saldo dikembalikan otomatis. Diproses ≤ 24 jam (SLA), tanpa biaya payment gateway.</Text>
           </Card>
         </Entrance>
+        )}
         {/* v5-mitra: daftar permintaan + status pending/approved/batch/settled/rejected */}
         <Entrance index={2}><MyWithdrawalsCard uid={session?.user.id} refreshKey={refreshKey} /></Entrance>
       </View>

@@ -189,6 +189,10 @@ export default function TravelRequestDetail() {
                         </View>
                         <View style={{ alignItems: 'flex-end', gap: 4 }}><Text style={{ fontWeight: '700', color: colors.primary, fontSize: 18 }}>{rupiah(o.price)}</Text><Badge text={isAcc ? 'Diterima' : o.status === 'rejected' ? 'Ditolak' : 'Penawaran'} color={isAcc ? colors.success : o.status === 'rejected' ? colors.danger : colors.accent} /></View>
                       </Row>
+                      {/* 0124: perbandingan tawaran vs estimasi tarif per km (travel_offers.quote) */}
+                      {o.quote?.fare_total && o.quote.offer_vs_quote_pct != null ? (
+                        <Row gap={6}><Ionicons name="calculator-outline" size={12} color={colors.textMuted} /><Text style={font.tiny}>{Math.round(Number(o.quote.offer_vs_quote_pct))} % dari estimasi tarif per km {rupiah(Number(o.quote.fare_total))}{o.quote.model ? ` (${o.quote.model})` : ''}</Text></Row>
+                      ) : null}
                       {(b.daily_rate || b.accommodation_fee || b.fuel_est) ? (
                         <View style={s.breakdown}>
                           {b.daily_rate ? <Row between><Text style={font.tiny}>{rupiah(b.daily_rate)}/hari × {b.days ?? r.days} hari</Text><Text style={font.tiny}>{rupiah(b.daily_rate * (b.days ?? r.days))}</Text></Row> : null}

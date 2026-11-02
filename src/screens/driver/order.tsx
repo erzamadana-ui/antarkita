@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Linking, Alert, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,6 +22,9 @@ import { rpc } from '@/lib/supabase';
 import { colors, font, radius, shadow, motion } from '@/lib/theme';
 import { statusLabel, statusColor, rupiah, serviceLabel, merchantStatusLabel, driverEarningOf, paidViaLabel } from '@/lib/format';
 import type { OrderStatus } from '@/lib/types';
+// 0121 no-show pelanggan + 0122 timer re-assign (docs/KONTRAK-31OKT.md)
+import { NoShowButton, NoMoveTimer } from '@/screens/driver/offer';
+import { haversineKm } from '@/lib/geo';
 
 const STEPS: { key: OrderStatus; label: string }[] = [
   { key: 'accepted', label: 'Diterima' }, { key: 'arrived', label: 'Tiba' }, { key: 'in_progress', label: 'Mengantar' }, { key: 'completed', label: 'Selesai' },
@@ -40,6 +43,10 @@ export default function DriverOrder() {
   const [busy, setBusy] = useState<null | 'status' | 'cancel'>(null);
   useWatchLocation(true, (p) => setLive(p));
   const me = live ?? (driver?.lat && driver.lng ? { lat: driver.lat, lng: driver.lng } : location);
+  // 0122: "sudah bergerak" lokal = posisi sekarang ≥ 300 m dari posisi saat layar dibuka (server menghitung dari accept_dist_m).
+  const [startPos, setStartPos] = useState<{ lat: number; lng: number } | null>(null);
+  useEffect(() => { if (live && !startPos) setStartPos({ lat: live.lat, lng: live.lng }); }, [live, startPos]);
+  const moved = !!(startPos && live && haversineKm(startPos, live) >= 0.3);
 
   const markers = useMemo<MapMarker[]>(() => order ? [
     { id: 'me', lat: me.lat, lng: me.lng, kind: driver?.vehicle_type === 'car' ? 'car' : 'motor', heading: live?.heading ?? driver?.heading },
@@ -156,6 +163,8 @@ export default function DriverOrder() {
         </Animated.View>
 
         <PinPrompt visible={pinAsk} onCancel={() => setPinAsk(false)} onSubmit={(pin) => update('in_progress', pin)} />
+        {/* 0122: ≥ 5 menit tanpa bergerak ≥ 300 m setelah accept → server melepas order (accept_no_move) */}
+        {order.status === 'accepted' && <NoMoveTimer acceptedAt={order.accepted_at} moved={moved} onNavigate={() => navigate(order.pickup_lat, order.pickup_lng)} />}
         <SafetyRow order={order} forDriver />
         {customer && <Animated.View entering={FadeInDown.delay(80).duration(motion.slow)}><PersonCard name={customer.full_name} subtitle={customerSubtitle(customer)} avatar={customer.avatar_url} onChat={active ? () => router.push(`/order/${id}/chat` as never) : undefined} badge="Pelanggan" callPeer={active ? { id: customer.id, name: customer.full_name, avatar: customer.avatar_url, role: 'customer' } : null} orderId={order.id} moderationUserId={customer.id} /></Animated.View>}
         {order.service === 'food' && order.merchant_status && (
@@ -179,6 +188,8 @@ export default function DriverOrder() {
           {order.status === 'accepted' && <Button title={order.service === 'food' ? 'Sudah tiba di merchant' : order.service === 'shop' ? 'Sudah tiba di toko' : order.service === 'market' ? 'Sudah tiba di pasar' : 'Sudah tiba di titik jemput'} size="lg" loading={busy === 'status'} disabled={!!busy} onPress={() => update('arrived')} />}
           {order.status === 'arrived' && <Button title={order.service === 'food' ? (foodNotReady ? 'Menunggu pesanan siap…' : 'Pesanan diambil, antar sekarang') : order.service === 'send' ? 'Paket diterima, antar sekarang' : isShopping ? (shopNotTotaled ? 'Masukkan total belanja dulu' : 'Belanja selesai, antar sekarang') : 'Penumpang naik, mulai perjalanan'} size="lg" loading={busy === 'status'} disabled={foodNotReady || shopNotTotaled || !!busy} onPress={() => update('in_progress')} />}
           {order.status === 'in_progress' && <Button title={order.service === 'ride_motor' || order.service === 'ride_car' ? 'Penumpang sampai, selesaikan' : 'Sudah diterima, selesaikan'} size="lg" loading={busy === 'status'} disabled={!!busy} onPress={complete} />}
+          {/* 0121: pelanggan tidak hadir — hanya saat `arrived`, server mewajibkan tunggu N menit (NOSHOW_WAIT:) + foto bukti */}
+          {order.status === 'arrived' && !(isShopping && order.payment_method !== 'cash') && <NoShowButton order={order} onDone={async () => { await reload(); await refreshWallet(); router.replace('/(driver)'); }} />}
           {(order.status === 'accepted' || order.status === 'arrived') && <Button title="Lepas order" variant="ghost" color={colors.danger} loading={busy === 'cancel'} disabled={!!busy} onPress={cancel} />}
           {active && <Button title="Laporkan masalah / insiden" variant="ghost" color={colors.textSecondary} icon="flag-outline" onPress={() => router.push({ pathname: '/support/new', params: { order_id: order.id, category: 'order' } } as never)} />}
         </Animated.View>

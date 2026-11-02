@@ -8,13 +8,17 @@ import { Screen, Card, Row, Input, Button, Badge, Stars, Chip, toast, type IconN
 import { WalletView } from '@/components/WalletView';
 import { useAuth } from '@/store/auth';
 import { useMode } from '@/store/mode';
-import { supabase } from '@/lib/supabase';
+import { supabase, rpc } from '@/lib/supabase';
 import { pickAndUpload } from '@/lib/upload';
 import { colors, font, radius, shadow } from '@/lib/theme';
 import { HalalBadge } from '@/components/MerchantStatus';
 import { EarningsReportCard, MyDisputesCard } from '@/screens/mitra/finance';
 import { PayoutSlaLine } from '@/components/EarningBreakdown';
 import { ApkBanner } from '@/components/ApkDownload';
+import { usePayoutAccount } from '@/hooks/usePayoutAccount';
+import { PayoutRequiredBanner, handlePayoutRequiredError } from '@/screens/mitra/payout-account';
+import { PAYOUT_ACCOUNT_ROUTE, accountSummary, verificationBadge } from '@/lib/payout';
+import type { Merchant } from '@/lib/types';
 
 type Item = { icon: IconName; color?: string; title: string; subtitle?: string; onPress: () => void; danger?: boolean };
 
@@ -24,12 +28,25 @@ export default function MerchantStore() {
   const setMode = useMode((s) => s.setMode);
   const [f, setF] = useState({ name: merchant?.name ?? '', description: merchant?.description ?? '', prep_minutes: String(merchant?.prep_minutes ?? 15), opening_hours: merchant?.opening_hours ?? '' });
   const [tab, setTab] = useState<'profile' | 'wallet'>('profile');
+  // 0123: rekening pencairan wajib sebelum toko bisa dibuka (trigger guard_merchant_update / merchant_set_open).
+  const payout = usePayoutAccount(!!merchant);
+  const [openBusy, setOpenBusy] = useState(false);
 
   const save = async (patch?: Record<string, unknown>) => {
     if (!merchant) return;
     const { error } = await supabase.from('merchants').update(patch ?? { ...f, prep_minutes: Number(f.prep_minutes) || 15 }).eq('id', merchant.id);
     if (error) return toast.error(error.message);
     await loadProfile(); if (!patch) toast.success('Profil toko disimpan');
+  };
+  /** Buka/tutup toko lewat RPC `merchant_set_open` (0123): memeriksa approved + rekening pencairan; galat PAYOUT_ACCOUNT_REQUIRED → CTA. */
+  const setOpenStore = async (v: boolean) => {
+    if (!merchant || openBusy) return;
+    setOpenBusy(true);
+    try { await rpc<Merchant>('merchant_set_open', { p_open: v }); await loadProfile(); toast.show(v ? 'Toko dibuka — pesanan AntarFood mulai masuk' : 'Toko ditutup'); }
+    catch (e) {
+      if (handlePayoutRequiredError(e, (h) => router.push(h as never))) { void payout.reload(); return; }
+      toast.error((e as Error).message);
+    } finally { setOpenBusy(false); }
   };
 
   const confirmSignOut = () => {
@@ -39,7 +56,11 @@ export default function MerchantStore() {
   };
 
   if (!merchant) return null;
+  const payoutSub = payout.mine ? (payout.mine.exists ? `${accountSummary(payout.mine)} · ${verificationBadge(payout.mine).text}` : payout.mine.required ? 'Belum diisi — wajib sebelum buka toko' : 'Belum diisi') : 'Bank / DANA / OVO / LinkAja / GoPay / ShopeePay';
   const items: Item[] = [
+    // 0123 & 0126: rekening pencairan terpusat (auto-sweep) dan laporan potongan per transaksi
+    { icon: 'card-outline', color: payout.missing ? colors.warning : undefined, title: 'Rekening pencairan', subtitle: payoutSub, onPress: () => router.push(PAYOUT_ACCOUNT_ROUTE as never) },
+    { icon: 'receipt-outline', title: 'Potongan per transaksi', subtitle: 'Fee merchant & PPN tiap pesanan, bersih yang diterima', onPress: () => router.push('/potongan' as never) },
     { icon: 'document-text-outline', title: 'Sertifikasi & dokumen usaha', subtitle: 'NPWP, izin usaha, sertifikat halal, rekening', onPress: () => router.push('/merchant/documents' as never) },
     { icon: 'megaphone-outline', color: colors.food, title: 'Iklan & kampanye', subtitle: 'Kampanye berlabel "Sponsored" · budget dari saldo pendapatan · laporan klik & ROAS', onPress: () => router.push('/merchant/ads' as never) },
     { icon: 'flag-outline', color: colors.warning, title: 'Laporan selisih', subtitle: 'Nominal tidak sesuai / pencairan belum masuk', onPress: () => router.push('/mitra/disputes' as never) },
@@ -95,8 +116,10 @@ export default function MerchantStore() {
                   <View style={[s.openIcon, merchant.is_open && { backgroundColor: colors.primary }]}><Ionicons name="storefront-outline" size={20} color={merchant.is_open ? '#fff' : colors.textMuted} /></View>
                   <View><Text style={[font.body, { fontWeight: '700' }]}>{merchant.is_open ? 'Toko buka' : 'Toko tutup'}</Text><Text style={font.tiny}>Matikan saat libur/stok habis</Text></View>
                 </Row>
-                <Switch value={merchant.is_open} onValueChange={(v) => save({ is_open: v })} trackColor={{ true: colors.primary, false: colors.border }} thumbColor="#fff" />
+                <Switch value={merchant.is_open} disabled={openBusy} onValueChange={setOpenStore} trackColor={{ true: colors.primary, false: colors.border }} thumbColor="#fff" />
               </Row>
+              {/* 0123: tanpa rekening pencairan server menolak is_open false→true */}
+              {(payout.missing || (payout.error && !payout.mine)) && <PayoutRequiredBanner mine={payout.mine} error={payout.error} onRetry={payout.reload} accent={colors.food} context="merchant" />}
               <Button title="Ganti foto sampul" variant="secondary" icon="image-outline" size="sm" onPress={async () => { if (!session) return; try { const r = await pickAndUpload('merchant-images', session.user.id); if (r) save({ image_url: r.url }); } catch (e) { toast.error((e as Error).message); } }} />
             </View>
           </View></Entrance>

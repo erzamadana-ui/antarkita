@@ -72,6 +72,9 @@ export function notifTargetFor(d: NotificationData, promoCode?: string | null): 
   const customer = APP === 'pelanggan';
   // 1. Tiket / percakapan dengan Admin & CS (mis. notifikasi "Pesan dari Admin AntarKita")
   if (d.ticket_id) return { route: `/support/${d.ticket_id}`, label: 'tiket bantuan' };
+  // 1b. 0122 dispatch (Mitra): penawaran eksklusif & order yang dilepas (accept_no_move) → BERANDA driver,
+  //     bukan detail order: driver belum/ tidak lagi memegang order itu, kartu penawaran ada di beranda.
+  if (APP === 'mitra' && (d.kind === 'order_offer' || d.kind === 'accept_no_move')) return { route: '/(driver)', label: d.kind === 'order_offer' ? 'penawaran order' : 'beranda driver' };
   // 2. Pesanan (Mitra → layar driver, lihat orderRoute)
   if (d.order_id) return { route: orderRoute(d.order_id), label: 'detail pesanan' };
   // 3. AntarTravel — permintaan carter/sopir harian & booking kursi

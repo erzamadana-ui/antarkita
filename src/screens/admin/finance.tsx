@@ -27,6 +27,7 @@ import { colors } from '@/lib/theme';
 import { rupiah } from '@/lib/format';
 import type { Profile, TopupRequest, WithdrawalRequest } from '@/lib/types';
 import { usePager, Pager, fmtDate, fmtAgo, Trunc, WideTableHint, ErrorNote } from './_shared';
+import { channelFromBank, isEwallet, PAYOUT_CHANNEL_LABEL } from '@/lib/admin31';
 
 type T = TopupRequest & { user?: Profile | null };
 type W = WithdrawalRequest & WithdrawalV3Extra & { user?: Profile | null; auto?: boolean; bank_verified?: boolean };
@@ -302,6 +303,8 @@ const slaText = (m: number | null | undefined, overdue: boolean) => {
   return overdue ? `LEWAT ${t}` : `sisa ${t}`;
 };
 type SettleDraft = Record<string, { status: 'ok' | 'failed'; bank_ref: string; reason: string }>;
+/** Kanal pencairan baris antrean (0123): kolom `channel` bila RPC mengirimnya, selain itu diturunkan dari kode/nama bank (kode e-wallet virtual DANA/OVO/…). */
+const queueChannel = (r: Record<string, unknown>) => (typeof r.channel === 'string' && r.channel ? String(r.channel) : channelFromBank((r.bank_code as string | null) ?? null, (r.bank_name as string | null) ?? null));
 
 function PayoutQueueV5({ onChanged }: { onChanged: () => Promise<void> | void }) {
   const can = useAdminCan();
@@ -381,7 +384,7 @@ function PayoutQueueV5({ onChanged }: { onChanged: () => Promise<void> | void })
       <Row gap={adminSpace.md} style={{ flexWrap: 'wrap' }}>
         <StatCard index={0} icon="time-outline" label="Antrean pencairan (SLA 24 jam)" value={queue.length} hint={`${rupiah(sumQ(queue))} · pending + disetujui belum sampai`} color={adminTone.blue} />
         <StatCard index={1} icon="alert-circle-outline" label="Lewat SLA" value={overdue.length} hint={overdue.length ? `${rupiah(sumQ(overdue))} — prioritaskan!` : 'semua dalam SLA'} color={overdue.length ? adminTone.red : adminTone.green} />
-        <StatCard index={2} icon="layers-outline" label="Siap masuk batch" value={unbatched.length} hint={`${rupiah(sumQ(unbatched))} disetujui tanpa batch`} color={adminTone.teal} />
+        <StatCard index={2} icon="layers-outline" label="Siap masuk batch" value={unbatched.length} hint={`${rupiah(sumQ(unbatched))} disetujui tanpa batch · ${queue.filter((r) => (r as unknown as Record<string, unknown>).source === 'auto_sweep').length} dari auto-sweep · ${queue.filter((r) => isEwallet(queueChannel(r as unknown as Record<string, unknown>))).length} e-wallet`} color={adminTone.teal} />
         <StatCard index={3} icon="albums-outline" label="Batch belum selesai" value={batches.filter((b) => b.status !== 'settled').length} hint={`cutoff ${config.payment_mode === 'voucher_only' ? 'mode AntarVoucher' : 'mode gateway'} · lihat tabel batch`} color={adminTone.amber} />
       </Row>
 
@@ -392,9 +395,10 @@ function PayoutQueueV5({ onChanged }: { onChanged: () => Promise<void> | void })
           columns={[
             { key: 'name', label: 'Mitra', width: 180, render: (r) => { const x = r as unknown as PayoutQueueRow; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.bodyStrong} title={x.name}>{x.name || '—'}</Trunc><Text style={font.tiny}>{x.role || '—'}</Text></View>; } },
             { key: 'amount', label: 'Nominal', width: 118, align: 'right', mono: true, render: (r) => <Text style={font.mono}>{rupiah(Number(r.amount))}</Text> },
-            { key: 'bank', label: 'Rekening', width: 200, render: (r) => { const x = r as unknown as PayoutQueueRow; return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.small} title={`${x.bank_code ?? ''} ${x.account_no ?? ''}`}>{x.bank_code ?? '—'} · {x.account_no ?? '—'}</Trunc><Trunc style={font.tiny} title={x.account_name ?? ''}>a.n. {x.account_name ?? '—'}</Trunc></View>; } },
+            { key: 'channel', label: 'Kanal', width: 96, render: (r) => { const ch = queueChannel(r); return <Pill text={PAYOUT_CHANNEL_LABEL[ch] ?? ch} tone={isEwallet(ch) ? 'info' : 'brand'} icon={isEwallet(ch) ? 'phone-portrait-outline' : 'business-outline'} />; } },
+            { key: 'bank', label: 'Rekening', width: 200, render: (r) => { const x = r as unknown as PayoutQueueRow; const raw = r as Record<string, unknown>; const code = x.bank_code ?? (raw.bank_name as string | undefined); const no = x.account_no ?? (raw.bank_account as string | undefined); return <View style={{ minWidth: 0, alignSelf: 'stretch' }}><Trunc style={font.small} title={`${code ?? ''} ${no ?? ''}`}>{code ?? '—'} · {no ?? '—'}</Trunc><Trunc style={font.tiny} title={x.account_name ?? ''}>a.n. {x.account_name ?? '—'}</Trunc></View>; } },
             { key: 'sla', label: 'SLA', width: 150, render: (r) => { const x = r as unknown as PayoutQueueRow; return <View style={{ gap: 3, alignItems: 'flex-start' }}><Pill text={slaText(x.sla_remaining_min, x.overdue)} tone={x.overdue ? 'bad' : (x.sla_remaining_min ?? 1e9) < 240 ? 'wait' : 'ok'} /><Text style={font.tiny}>jatuh tempo {fmtDate(x.sla_due_at)}</Text></View>; } },
-            { key: 'status', label: 'Status', width: 150, render: (r) => { const x = r as unknown as PayoutQueueRow; return <View style={{ gap: 3, alignItems: 'flex-start' }}><Pill text={sl[x.status] ?? x.status} tone={statusTone(x.status)} />{x.batch_id ? <Pill text={`batch ${x.batch_id.slice(0, 8)}`} tone="info" /> : x.status === 'approved' ? <Pill text="belum masuk batch" tone="wait" /> : null}</View>; } },
+            { key: 'status', label: 'Status', width: 170, render: (r) => { const x = r as unknown as PayoutQueueRow; const sweep = (r as Record<string, unknown>).source === 'auto_sweep'; return <View style={{ gap: 3, alignItems: 'flex-start' }}><Row gap={4}><Pill text={sl[x.status] ?? x.status} tone={statusTone(x.status)} />{sweep ? <Pill text="auto-sweep" tone="brand" icon="sync-outline" /> : null}</Row>{x.batch_id ? <Pill text={`batch ${x.batch_id.slice(0, 8)}`} tone="info" /> : x.status === 'approved' ? <Pill text="belum masuk batch" tone="wait" /> : null}</View>; } },
             { key: 'created_at', label: 'Request', width: 134, render: (r) => <Text style={font.tiny}>{fmtDate(String(r.created_at))} · {fmtAgo(String(r.created_at))}</Text> },
           ]} />
         <View style={{ padding: adminSpace.md, gap: 6 }}><WideTableHint /><Pager p={pg} noun="permintaan" /></View>

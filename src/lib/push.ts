@@ -43,6 +43,7 @@ import { APP } from './app';
 import { play as playSound, startRing, stopRing } from './sound';
 import { useCall } from './call';
 import { notificationData, notifTargetFor, orderRoute } from '@/hooks/useNotifications';
+import { emitDispatchEvent, isOrderOfferPush } from './dispatch';
 
 export type NotifyKind = 'order' | 'message' | 'call';
 
@@ -220,8 +221,11 @@ function attachListeners() {
       }, 12_000);
       return;
     }
-    const d = data as { route?: unknown } | null;
+    const d = data as { route?: unknown; kind?: unknown } | null;
     playSound(d?.route === 'chat' ? 'message' : 'order');
+    // 0122: penawaran eksklusif → hook driver menarik driver_offer_mine() seketika; order dilepas → segarkan feed/order aktif
+    if (isOrderOfferPush(data as Record<string, unknown>)) emitDispatchEvent('offer', data as Record<string, unknown>);
+    else if (d?.kind === 'accept_no_move') emitDispatchEvent('released', data as Record<string, unknown>);
   }));
 
   // Notifikasi DIKETUK (aplikasi di latar belakang atau sedang terbuka).

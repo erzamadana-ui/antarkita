@@ -15,6 +15,10 @@ import { colors, font, radius, shadow } from '@/lib/theme';
 import { rupiah, pctLabel } from '@/lib/format';
 import { useServiceEconomics } from '@/lib/mitra';
 import type { TravelPartner, TravelPartnerType, TravelAccommodation } from '@/lib/types';
+// 0123: travel_partner_register SELALU mewajibkan rekening pencairan → form rekening dikirim sebagai p.payout_account
+import { PayoutAccountForm, handlePayoutRequiredError } from '@/screens/mitra/payout-account';
+import { usePayoutAccount, usePayoutBanks } from '@/hooks/usePayoutAccount';
+import { accountSummary, formFromMine, payoutPayload, validatePayoutForm, type PayoutAccountForm as PayoutFormValue } from '@/lib/payout';
 
 const MODELS = [['Toyota Innova Reborn', 6], ['Toyota Hi-Ace Commuter', 14], ['Isuzu Elf Long', 15], ['Hyundai H-1', 8], ['Mitsubishi Xpander', 6], ['Toyota Avanza', 6], ['Honda Brio', 4], ['BYD M6 (EV)', 6], ['Lainnya', 6]] as const;
 const TYPES: { key: TravelPartnerType; title: string; sub: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
@@ -36,6 +40,11 @@ export default function BecomeTravel() {
     photo_url: '', license_url: '', permit_url: '',
   });
   const [busy, setBusy] = useState(false);
+  const payout = usePayoutAccount(!!session);
+  const hasPayout = !!payout.mine?.exists;
+  const payoutRequired = payout.mine ? payout.mine.required && !payout.mine.exists : true;
+  const [pf, setPf] = useState<PayoutFormValue>(() => formFromMine(null));
+  const banks = usePayoutBanks(payout.mine?.banks);
   useEffect(() => {
     if (!session) return;
     supabase.from('travel_partners').select('*').eq('id', session.user.id).maybeSingle().then(({ data }) => {
@@ -61,6 +70,12 @@ export default function BecomeTravel() {
     if (f.offers_daily && !Number(f.daily_rate)) return toast.error('Isi harga sopir harian per hari');
     if (f.accommodation.length === 0) return toast.error('Pilih minimal satu opsi akomodasi sopir');
     if (!f.license_url) return toast.error('Unggah foto SIM A/B1');
+    let payoutAccount: Record<string, unknown> | null = null;
+    if (!hasPayout) {
+      const pe = validatePayoutForm(pf);
+      if (pe && payoutRequired) return toast.error(`Rekening pencairan: ${pe}`);
+      if (!pe) payoutAccount = payoutPayload(pf);
+    }
     setBusy(true);
     try {
       await rpc('travel_partner_register', { p: {
@@ -68,9 +83,13 @@ export default function BecomeTravel() {
         company_name: f.company_name || null, driver_name: f.driver_name || null, bio: f.bio || null,
         daily_rate: Number(f.daily_rate) || null, overtime_rate: Number(f.overtime_rate) || null, accommodation_fee: Number(f.accommodation_fee) || 0,
         base_lat: hasFix ? location.lat : null, base_lng: hasFix ? location.lng : null,
+        ...(payoutAccount ? { payout_account: payoutAccount } : {}),
       } });
-      await loadProfile(); toast.success(me ? 'Data mitra travel diperbarui' : 'Pendaftaran mitra travel terkirim, menunggu verifikasi admin'); router.back();
-    } catch (e) { toast.error((e as Error).message); } finally { setBusy(false); }
+      await loadProfile(); void payout.reload(); toast.success(me ? 'Data mitra travel diperbarui' : 'Pendaftaran mitra travel terkirim, menunggu verifikasi admin'); router.back();
+    } catch (e) {
+      if (handlePayoutRequiredError(e, (h) => router.push(h as never))) return;
+      toast.error((e as Error).message);
+    } finally { setBusy(false); }
   };
   const st = me ? ({ pending: ['Menunggu verifikasi admin', colors.warning], approved: ['Mitra travel aktif', colors.success], suspended: ['Ditangguhkan', colors.danger], rejected: ['Ditolak', colors.danger] } as Record<string, [string, string]>)[me.status] : null;
   const dailyRate = Number(f.daily_rate) || 0;
@@ -164,6 +183,18 @@ export default function BecomeTravel() {
           <DocUpload label="Foto mobil (tampak samping)" value={f.photo_url} onChange={set('photo_url')} bucket="merchant-images" />
           <DocUpload label="SIM A / B1 pengemudi" required value={f.license_url} onChange={set('license_url')} />
           <DocUpload label={agency ? 'Izin angkutan / KIR (opsional)' : 'STNK (opsional)'} value={f.permit_url} onChange={set('permit_url')} />
+        </Card></Entrance>
+
+        {/* 0123: rekening pencairan (bank / e-wallet) — wajib untuk mitra travel */}
+        <Entrance index={6}><Card style={{ gap: 12 }}>
+          <Row between><Text style={font.label}>Rekening pencairan</Text>{hasPayout ? <Badge text="Sudah tersimpan" color={colors.success} /> : payoutRequired ? <Badge text="Wajib" color={colors.warning} /> : <Badge text="Opsional" color={colors.textMuted} />}</Row>
+          <Text style={font.tiny}>Pendapatan kursi, carter, dan titipan dicairkan otomatis ke rekening ini 3 sesi per hari (09.00 / 13.00 / 17.00 WIB).</Text>
+          {hasPayout ? (
+            <Row gap={10} style={s.note}>
+              <Ionicons name="card-outline" size={18} color={colors.primary} />
+              <View style={{ flex: 1, minWidth: 0 }}><Text style={[font.body, { fontWeight: '700' }]} numberOfLines={1}>{accountSummary(payout.mine)}</Text><Text style={font.tiny}>Ubah lewat menu Akun › Rekening pencairan.</Text></View>
+            </Row>
+          ) : <PayoutAccountForm value={pf} onChange={setPf} banks={banks} accent={colors.travel} compact />}
         </Card></Entrance>
       </View>
     </Screen>
